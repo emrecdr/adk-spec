@@ -6,7 +6,7 @@ import json
 
 import pytest
 from conftest import approved, run, seeded, state_of
-from samples import BRIEF, DELTA, SPEC, TASKS
+from samples import BRIEF, DELTA, SPEC, tasks_for
 
 from adk_spec.domain.spec_md import parse_spec
 from adk_spec.interfaces.cli import main
@@ -126,7 +126,7 @@ def test_a_second_change_to_one_requirement_is_stopped_at_archive(tmp_path, caps
     ws = seeded(tmp_path)
     folder = ws.new_change("stricter-lock", "lean")
     write_text(folder / "brief.md", BRIEF)
-    write_text(folder / "tasks.md", TASKS)
+    write_text(folder / "tasks.md", tasks_for("REQ-AUTH-002"))
     block = DELTA.split("## MODIFIED Requirements\n\n")[1].split("\n## REMOVED")[0].replace("three", "two")
     write_text(folder / "specs" / "auth" / "spec.md", "# Delta: auth\n\n## MODIFIED Requirements\n\n" + block)
     for change in ("passkeys", "stricter-lock"):
@@ -156,6 +156,8 @@ def test_an_archive_writes_no_capability_when_one_refuses(tmp_path) -> None:
     ws.write_specs({"billing": parse_spec(SPEC.replace("# auth", "# billing").replace("REQ-AUTH", "REQ-BILLING"))})
     billing = DELTA.replace("# Delta: auth", "# Delta: billing").replace("REQ-AUTH", "REQ-BILLING")
     write_text(tmp_path / ".spec/changes/passkeys/specs/billing/spec.md", billing)
+    served = ("REQ-AUTH-004", "REQ-AUTH-002", "REQ-BILLING-004", "REQ-BILLING-002")
+    write_text(tmp_path / ".spec/changes/passkeys/tasks.md", tasks_for(*served))
     approved(tmp_path)
     spec = tmp_path / ".spec/specs/billing/spec.md"
     write_text(spec, read_text(spec).replace("after five failed", "after nine failed"))
@@ -223,6 +225,8 @@ def test_an_archive_that_cannot_write_one_file_changes_none_and_says_so(tmp_path
     ws.write_specs({"billing": parse_spec(SPEC.replace("# auth", "# billing").replace("REQ-AUTH", "REQ-BILLING"))})
     billing = DELTA.replace("# Delta: auth", "# Delta: billing").replace("REQ-AUTH", "REQ-BILLING")
     write_text(tmp_path / ".spec/changes/passkeys/specs/billing/spec.md", billing)
+    served = ("REQ-AUTH-004", "REQ-AUTH-002", "REQ-BILLING-004", "REQ-BILLING-002")
+    write_text(tmp_path / ".spec/changes/passkeys/tasks.md", tasks_for(*served))
     approved(tmp_path)
     before = (living_bytes(tmp_path), living_bytes(tmp_path, "billing"), state_of(tmp_path))
     real, asked = os.replace, []

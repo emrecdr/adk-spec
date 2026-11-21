@@ -192,3 +192,23 @@ def test_requirement_ids_given_in_one_string_are_split() -> None:
     (group,) = to_tasks(TasksDraft(groups=[TaskGroupDraft(title="1. A", tasks=[task])]))
     assert group.tasks[0].requirements == ("REQ-AUTH-001", "REQ-AUTH-002") and group.tasks[0].files == ("a.py", "b.py")
     assert parse_tasks(render_tasks((group,))) == (group,)
+
+
+def test_a_modified_requirement_the_model_copied_unchanged_is_left_out() -> None:
+    """The first live run did this (`docs/confirmation/2026-11-propose.md`, finding 3): REQ-AUTH-002 stood under
+    MODIFIED word for word as the living spec has it."""
+    living = LIVING["auth"].requirements
+    changed = {
+        "name": living[0].name,
+        "statement": "The system SHALL let a user sign in, whatever the case.",
+        "scenarios": [{"name": "Valid", "steps": ["WHEN the user signs in", "THEN a session starts"]}],
+    }
+    copied = {
+        "name": living[1].name,
+        "statement": living[1].statement,
+        "scenarios": [{"name": s.name, "steps": list(s.steps)} for s in living[1].scenarios],
+    }
+    draft = one(
+        modified=[{"id": "REQ-AUTH-001", "requirement": changed}, {"id": "REQ-AUTH-002", "requirement": copied}]
+    )
+    assert [req.id for req in to_deltas(draft, LIVING, set())["auth"].modified] == ["REQ-AUTH-001"]

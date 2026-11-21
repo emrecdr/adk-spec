@@ -22,6 +22,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from ..domain.brief_md import parse_brief
+from ..domain.check import coverage_of
 from ..domain.delta_md import parse_delta
 from ..domain.ids import REQ_ID, slug_problem
 from ..domain.model import Change, ChangeState, Finding, GrammarError, Spec, Tier
@@ -97,6 +98,9 @@ def findings_of(loaded: LoadedChange, living: Mapping[str, Spec], unreadable: Co
         if file and any(path == file or path.startswith(f"{file}/") for path in unread):
             continue
         found.append(held)
+    # With a living spec or one of the change's own deltas unread, what a task may name is unknown.
+    if not blind and not any(path.startswith(f"{SPECS}/") for path in unread):
+        found += coverage_of(loaded.change, living)
     return found
 
 

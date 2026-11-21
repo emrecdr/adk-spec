@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from conftest import CANNED_TRIAGE, DELTAS_ON_A_MISSING_ID, approved, on_the_fake, run, seeded, state_of
+from samples import tasks_for
 
 from adk_spec.interfaces import cli
 from adk_spec.orchestration.stages import BOUNDARY
@@ -63,7 +64,7 @@ def test_a_modified_requirement_has_its_base_recorded_so_it_can_be_approved(tmp_
     fake_provider.answers_when(DELTAS, draft)
     assert proposed(tmp_path, "--id", "lock-sooner") == 0
     assert list(state_of(tmp_path, "lock-sooner")["bases"]) == ["REQ-AUTH-002"]
-    write_text(tmp_path / ".spec/changes/lock-sooner/tasks.md", read_text(tmp_path / ".spec/changes/passkeys/tasks.md"))
+    write_text(tmp_path / ".spec/changes/lock-sooner/tasks.md", tasks_for("REQ-AUTH-002"))
     assert run(tmp_path, "approve", "lock-sooner", "--by", "reviewer") == 0, "no rebase needed after propose"
     assert ws.load_change("lock-sooner").change.state.status == "approved"
 

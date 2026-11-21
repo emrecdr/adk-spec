@@ -41,6 +41,7 @@ SEVERITY: dict[str, Severity] = {
     "delta.base-stale": "ERROR",
     "delta.base-missing": "WARNING",
     "delta.drops-scenario": "WARNING",
+    "delta.modified-unchanged": "WARNING",
     "delta.removed-no-reason": "WARNING",
     "tasks.id-duplicate": "ERROR",
     "tasks.bad-requirement-id": "ERROR",
@@ -52,6 +53,8 @@ SEVERITY: dict[str, Severity] = {
     "change.missing-brief": "ERROR",
     "change.no-deltas": "ERROR",
     "change.missing-tasks": "WARNING",
+    "check.requirement-no-task": "ERROR",
+    "check.task-unknown-requirement": "ERROR",
 }
 STATEMENT_MAX = 500
 _OBLIGES = re.compile(r"\b(SHALL|MUST)\b")
@@ -172,6 +175,14 @@ def validate_delta(delta: Delta, living: Spec | None, bases: Mapping[str, str]) 
         if req.id in held
         for scenario in held[req.id].scenarios
         if scenario.name not in {kept.name for kept in req.scenarios}
+    ]
+    found += [
+        finding(
+            "delta.modified-unchanged",
+            f"{req.id} stands under MODIFIED and says what the spec says already. Take it out, or change it.",
+        )
+        for req in delta.modified
+        if req.id in held and fingerprint(req) == fingerprint(held[req.id])
     ]
     found += [
         finding("delta.removed-no-reason", f"{gone.id} is removed with no reason. Add a `Reason:` line.")

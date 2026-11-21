@@ -69,7 +69,8 @@ def to_brief(draft: BriefDraft) -> Brief:
 
 def to_deltas(draft: DeltasDraft, living: Mapping[str, Spec], taken: Iterable[str]) -> dict[str, Delta]:
     """One delta a capability. An added requirement is given the next ID no spec and no open change holds, and each
-    one given counts as held; a purpose is kept only for a capability that is not there yet."""
+    one given counts as held; a purpose is kept only for a capability that is not there yet. A requirement given as
+    modified that says what the living spec says is left out: a model restating a spec copies its neighbours."""
     held = set(taken)
     slots: dict[str, dict] = {}
     for one in draft.deltas:
@@ -77,15 +78,17 @@ def to_deltas(draft: DeltasDraft, living: Mapping[str, Spec], taken: Iterable[st
         slot = slots.setdefault(capability, {"purpose": None, "added": [], "modified": [], "removed": []})
         if capability not in living:
             slot["purpose"] = slot["purpose"] or _text(one.purpose) or None
-        names = {req.id: req.name for req in living[capability].requirements} if capability in living else {}
+        stands = {req.id: req for req in living[capability].requirements} if capability in living else {}
         for added in one.added:
             req_id = next_requirement_id(capability, held)
             held.add(req_id)
             slot["added"].append(_requirement(req_id, added))
-        slot["modified"] += [_requirement(changed.id.strip(), changed.requirement) for changed in one.modified]
+        restated = [_requirement(changed.id.strip(), changed.requirement) for changed in one.modified]
+        slot["modified"] += [req for req in restated if stands.get(req.id) != req]
         slot["removed"] += [
-            Removal(id=gone.id.strip(), name=names.get(gone.id.strip(), ""), reason=_line(gone.reason))
-            for gone in one.removed
+            Removal(id=gone, name=stands[gone].name if gone in stands else "", reason=_line(removed.reason))
+            for removed in one.removed
+            for gone in [removed.id.strip()]
         ]
     return {
         capability: Delta(

@@ -91,6 +91,10 @@ CASES: dict[str, Callable[[], list[Finding]]] = {
     "delta.base-stale": lambda: _change(bases={**BASES, "REQ-AUTH-002": "sha256:" + "0" * 64}),
     "delta.base-missing": lambda: _change(bases={}),
     "delta.drops-scenario": lambda: _change(delta=DELTA.replace("Scenario: Too many failures", "Scenario: Third")),
+    "delta.modified-unchanged": lambda: _change(
+        delta="# Delta: auth\n\n## MODIFIED Requirements\n\n"
+        + SPEC[SPEC.index("### REQ-AUTH-002") : SPEC.index("## Retired")]
+    ),
     "delta.removed-no-reason": lambda: _change(
         delta=DELTA.replace("Reason: Passwords are retired in favour of passkeys.\n", "")
     ),
@@ -118,6 +122,8 @@ def test_each_rule_fires_on_its_fault_with_its_severity(code: str) -> None:
 
 def test_every_code_has_a_case_and_a_severity() -> None:
     assert set(CASES) == set(SEVERITY) - {
+        "check.requirement-no-task",  # the two of `domain/check.py`, whose cases are in test_check.py
+        "check.task-unknown-requirement",
         "syntax",
         "constitution.long",
         "spec.folder-mismatch",

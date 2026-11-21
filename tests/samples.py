@@ -108,3 +108,12 @@ TASKS = """\
 - [ ] T003 Update the sign-in page copy
   - verify: read the page
 """
+
+
+def tasks_for(*ids: str) -> str:
+    """A task list that serves each of `ids` with one task: what a change needs to pass the coverage of its own
+    requirements, where a test is about something else."""
+    tasks = [
+        f"- [ ] T{n:03d} [{req}] Do the work of {req}\n  - verify: read the result\n" for n, req in enumerate(ids, 1)
+    ]
+    return "# Tasks\n\n## 1. Work\n\n" + "".join(tasks)
