@@ -73,6 +73,9 @@ CASES: dict[str, Callable[[], list[Finding]]] = {
     "spec.id-duplicate": lambda: _spec(SPEC.replace("REQ-AUTH-002", "REQ-AUTH-001")),
     "spec.id-retired-reused": lambda: _spec(SPEC.replace("REQ-AUTH-002", "REQ-AUTH-003")),
     "spec.no-scenario": lambda: _spec(SPEC.replace(SCENARIO_ONE, "")),
+    "spec.statement-empty": lambda: _spec(
+        SPEC.replace("The system SHALL let a registered user sign in with email and password.\n\n", "")
+    ),
     "spec.no-shall": lambda: _spec(SPEC.replace("The system SHALL let", "The system lets")),
     "spec.scenario-no-when-then": lambda: _spec(SPEC.replace("- THEN the system starts a session\n", "")),
     "spec.statement-long": lambda: _spec(SPEC.replace("email and password.", "email and password. " + "x" * 500)),
@@ -151,3 +154,9 @@ def test_a_task_list_that_holds_no_task_is_no_plan() -> None:
     """Found by review: a tasks.md holding its title alone met the gate that asks for a plan."""
     assert "change.missing-tasks" in {f.code for f in _change(tasks="# Tasks\n")}
     assert "change.missing-tasks" in {f.code for f in _change(tasks="# Tasks\n\n## 1. Nothing yet\n")}
+
+
+def test_a_requirement_with_no_statement_is_an_error_and_not_also_a_missing_obligation() -> None:
+    """Deferred by the review: a requirement holding a header and scenarios alone was only a warning."""
+    found = CASES["spec.statement-empty"]()
+    assert [(f.code, f.severity) for f in found] == [("spec.statement-empty", "ERROR")]

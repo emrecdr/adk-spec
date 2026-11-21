@@ -160,3 +160,35 @@ def test_each_arm_is_sent_the_triage_schema_as_it_is_written() -> None:
     )
     assert "additionalProperties" not in str(gemini)
     assert gemini["properties"]["reason"]["description"] == "One sentence: why this tier."
+
+
+def test_check_says_whether_the_arm_is_ready_and_calls_no_model(monkeypatch, capsys, fake_provider) -> None:
+    """Deferred by the review: a run meant to show "not ready" must never be able to spend a request."""
+    _on_the_fake(monkeypatch)
+    assert main(["smoke", "--check", "--json"]) == 0
+    said = json.loads(capsys.readouterr().out)
+    assert said == {"model": "fake on gemini", "ready": True, "why": None} and fake_provider.requests == []
+    monkeypatch.delenv("SPEC_PROVIDER")
+    assert main(["smoke", "--check"]) == 2
+    assert "adk-spec login" in capsys.readouterr().err and fake_provider.requests == []
+
+
+def test_a_providers_error_is_said_in_its_own_words(monkeypatch, capsys, fake_provider) -> None:
+    """Deferred by the review: `said` had no caller. Seen live: LiteLLM's wrapping stood before Copilot's sentence."""
+    _on_the_fake(monkeypatch)
+    wrapped = RuntimeError("litellm.RuntimeError: Github_copilotException - The requested model is not supported.")
+    fake_provider.raises_when("You size a change request", wrapped)
+    assert main(["smoke", "--request", REQUEST]) == 3
+    out = capsys.readouterr().out
+    assert "INVALID: RuntimeError: The requested model is not supported." in out and "Github_copilot" not in out
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_the_engines_log_level_is_put_back_after_a_run(monkeypatch) -> None:
+    """Deferred by the review: the engine's logger was quieted for a run and never restored."""
+    import logging
+
+    _on_the_fake(monkeypatch)
+    log = logging.getLogger("google_adk")
+    log.setLevel(logging.WARNING)
+    assert main(["smoke", "--request", REQUEST]) == 0 and log.level == logging.WARNING

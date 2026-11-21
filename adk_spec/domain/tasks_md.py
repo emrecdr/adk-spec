@@ -17,7 +17,7 @@ from .text import lines_of, normalise
 _TITLE = re.compile(r"# (Tasks)")
 _GROUP = re.compile(r"## (\S.*)")
 _TASK = re.compile(r"- \[( |x|X)\] (T\d{3,})( \[P\])?(?: \[([^\]]*)\])? (\S.*)")
-_DETAIL = re.compile(r"\s+- (\w+): (.*)")
+_DETAIL = re.compile(r"\s+- (\w+):\s*(.*)")
 _SHAPE = "- [ ] T001 [P] [REQ-<CAPABILITY>-<NNN>] description"
 
 
@@ -59,6 +59,8 @@ def _detail(groups: list[tuple[str, list[dict]]], detail: re.Match[str], at: int
     task = groups[-1][1][-1]
     if detail[1] in task:  # a later line would replace an earlier one in silence, past what an approval saw
         raise GrammarError(at + 1, f"a task holds one `{detail[1]}` line, and this is its second")
+    if detail[1] in ("files", "verify") and not detail[2].strip():
+        raise GrammarError(at + 1, f"this `{detail[1]}` line is empty: say what it names, or remove it")
     if detail[1] == "files":
         task["files"] = tuple(part.strip() for part in detail[2].split(",") if part.strip())
     elif detail[1] == "verify":

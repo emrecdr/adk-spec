@@ -78,3 +78,16 @@ def test_a_second_files_or_verify_line_under_one_task_is_refused() -> None:
     assert caught.value.line == 8 and "verify" in caught.value.message
     with pytest.raises(GrammarError):
         parse_tasks(TASKS.replace("  - files: tests/test_passkey.py\n", "  - files: a.py\n  - files: b.py\n"))
+
+
+def test_an_empty_files_or_verify_line_is_named_for_what_it_is() -> None:
+    """Deferred by the review: `  - verify:` with nothing after it was refused with the message for a task line."""
+    with pytest.raises(GrammarError) as caught:
+        parse_tasks(TASKS.replace("  - verify: read the page", "  - verify:"))
+    assert caught.value.line == 12 and "verify" in caught.value.message and "empty" in caught.value.message
+
+
+def test_a_marker_is_found_whatever_its_case_and_spacing() -> None:
+    """Deferred by the review: a lower-case marker, or one with a space before its colon, was not counted."""
+    text = "[needs clarification] [NEEDS CLARIFICATION : which?] [Needs Clarification: x]"
+    assert len(markers(text)) == 3

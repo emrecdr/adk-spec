@@ -282,3 +282,38 @@ def test_an_unreadable_living_spec_is_named_and_is_not_taken_for_a_missing_one(t
     assert "syntax" in capsys.readouterr().out and state_of(tmp_path) == before, "the bases and the approval stand"
     assert run(tmp_path, "status", "--json") == 0
     assert "fix what `adk-spec validate passkeys` lists" in capsys.readouterr().out
+
+
+def test_one_unreadable_file_does_not_hide_the_other_changes(tmp_path, capsys) -> None:
+    """Deferred by the review: a brief that is not UTF-8 ended `status` and `validate` for every change."""
+    ws = seeded(tmp_path)
+    ws.new_change("second", "lean")
+    (tmp_path / ".spec/changes/passkeys/brief.md").write_bytes("# x\n".encode("utf-16"))
+    assert run(tmp_path, "status", "--json") == 0
+    assert [row["id"] for row in json.loads(capsys.readouterr().out)["changes"]] == ["passkeys", "second"]
+    assert run(tmp_path, "validate") == 1
+    out = capsys.readouterr().out
+    assert "ERROR syntax .spec/changes/passkeys/brief.md" in out and ".spec/changes/second/" in out
+
+
+def test_rebase_says_which_base_it_dropped(tmp_path, capsys) -> None:
+    """Deferred by the review: a base for an ID the delta no longer touches went without a line."""
+    seeded(tmp_path)
+    run(tmp_path, "rebase", "passkeys")
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, read_text(delta).split("## REMOVED Requirements")[0])
+    capsys.readouterr()
+    assert run(tmp_path, "rebase", "passkeys") == 0
+    assert "REQ-AUTH-001  dropped" in capsys.readouterr().out and "REQ-AUTH-001" not in state_of(tmp_path)["bases"]
+
+
+def test_ctrl_c_is_one_sentence_and_130(monkeypatch, capsys) -> None:
+    """Deferred by the review: the process boundary had no test."""
+    from adk_spec.interfaces import cli
+
+    def interrupted(_argv):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "main", interrupted)
+    assert cli.run() == 130
+    assert "interrupted" in capsys.readouterr().err

@@ -243,7 +243,16 @@ class Workspace:
         folder = self._folder(change_id)
         paths = [BRIEF, DESIGN, TASKS]
         paths += [f"{SPECS}/{capability}/{SPEC_FILE}" for capability in self._holding(folder / SPECS, SPEC_FILE)]
-        return {path: read_text(folder / path) for path in paths if (folder / path).is_file()}
+        return {path: _text_or_bytes(folder / path) for path in paths if (folder / path).is_file()}
+
+
+def _text_or_bytes(path: Path) -> str:
+    """A file's text for a fingerprint. One that is not UTF-8 is read with its bad bytes replaced: the loader names
+    its fault as a finding, and its fingerprint must not stop every other change from being read."""
+    try:
+        return read_text(path)
+    except NotTextError:
+        return path.read_bytes().decode("utf-8", errors="replace")
 
 
 def _misnamed(why: str, shown: str) -> Finding:

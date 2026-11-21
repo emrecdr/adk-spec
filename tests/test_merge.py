@@ -79,3 +79,10 @@ def test_a_warning_alone_does_not_refuse_a_merge() -> None:
     renamed = DELTA.replace("Scenario: Too many failures", "Scenario: Third failure")
     merged = apply_delta(living(), parse_delta(renamed), bases=BASES, change="passkeys")
     assert merged.requirements[0].scenarios[0].name == "Third failure"
+
+
+def test_the_retired_list_records_the_living_name_whatever_the_delta_calls_it() -> None:
+    """Deferred by the review: `## Retired` recorded whatever name the delta's REMOVED block wrote."""
+    misnamed = DELTA.replace("### REQ-AUTH-001: Sign in with email", "### REQ-AUTH-001: Some other name")
+    merged = apply_delta(living(), parse_delta(misnamed), bases=BASES, change="passkeys")
+    assert merged.retired[-1] == Retired(id="REQ-AUTH-001", name="Sign in with email", change="passkeys")

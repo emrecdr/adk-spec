@@ -18,7 +18,7 @@ from google.adk.apps.app import App
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from .models import RUN_DEADLINE_S
+from .models import RUN_DEADLINE_S, said
 
 USER = "adk-spec"
 
@@ -69,7 +69,7 @@ async def run_seeded(app: App, *, state: dict[str, Any], prompt: str) -> Run:
     except TimeoutError:
         failure = f"the run did not finish within {RUN_DEADLINE_S:g} s"
     except Exception as exc:  # noqa: BLE001 -- the engine itself: a reply off its schema, or a provider that raised
-        failure = f"{type(exc).__name__}: {exc}"
+        failure = f"{type(exc).__name__}: {said(exc)}"
     seconds = time.perf_counter() - started
     session = await runner.session_service.get_session(**ids)
     usage = Usage(calls, prompt_tokens, output_tokens, total_tokens)

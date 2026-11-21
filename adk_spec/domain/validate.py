@@ -25,6 +25,7 @@ SEVERITY: dict[str, Severity] = {
     "spec.id-duplicate": "ERROR",
     "spec.id-retired-reused": "ERROR",
     "spec.no-scenario": "ERROR",
+    "spec.statement-empty": "ERROR",
     "spec.no-shall": "WARNING",
     "spec.scenario-no-when-then": "WARNING",
     "spec.statement-long": "WARNING",
@@ -78,7 +79,11 @@ def _of_requirement(req: Requirement, capability: str) -> list[Finding]:
         )
     if not req.scenarios:
         found.append(finding("spec.no-scenario", f"{req.id} has no scenario. Add one `#### Scenario:` at least."))
-    if not _OBLIGES.search(req.statement):
+    if not req.statement:
+        found.append(
+            finding("spec.statement-empty", f"{req.id} has no statement. Say what the system SHALL or MUST do.")
+        )
+    elif not _OBLIGES.search(req.statement):
         found.append(finding("spec.no-shall", f"{req.id} states no obligation. Write it with SHALL or MUST."))
     if len(req.statement) > STATEMENT_MAX:
         found.append(

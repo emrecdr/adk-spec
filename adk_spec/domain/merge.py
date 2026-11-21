@@ -37,7 +37,9 @@ def apply_delta(living: Spec | None, delta: Delta, *, bases: Mapping[str, str], 
     replaced = {req.id: req for req in delta.modified}
     kept = [replaced.get(req.id, req) for req in (living.requirements if living else ()) if req.id not in gone]
     retired = [*(living.retired if living else ())]
-    retired += [Retired(id=removal.id, name=removal.name, change=change) for removal in delta.removed]
+    # The living requirement's own name, whatever the delta's block calls it: the list is the spec's record.
+    names = {req.id: req.name for req in (living.requirements if living else ())}
+    retired += [Retired(id=gone.id, name=names.get(gone.id, gone.name), change=change) for gone in delta.removed]
     merged = Spec(
         capability=delta.capability,
         purpose=living.purpose if living else (delta.purpose or ""),

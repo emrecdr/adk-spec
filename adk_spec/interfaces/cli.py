@@ -113,6 +113,7 @@ def _parser() -> argparse.ArgumentParser:
     smoke = commands.add_parser("smoke", help="run the triage stage alone, to prove an arm answers in a schema")
     smoke.add_argument("--model", help="the model for this run alone, in place of the arm's")
     smoke.add_argument("--request", default=SMOKE_REQUEST, help="the change request to size")
+    smoke.add_argument("--check", action="store_true", help="say whether the arm is ready, and call no model")
     smoke.add_argument("--json", action="store_true", help="print the result as JSON")
     smoke.set_defaults(handler=_smoke)
 
@@ -246,6 +247,10 @@ def _rebase(args: argparse.Namespace) -> int:
     for req_id in sorted(held):
         was = state.bases.get(req_id)
         print(f"{req_id}  {'recorded' if was is None else 'unchanged' if was == held[req_id] else 'was stale'}")
+    for req_id in sorted(
+        set(state.bases) - set(held)
+    ):  # the delta no longer changes it, or the spec no longer holds it
+        print(f"{req_id}  dropped")
     if held == state.bases:
         print("nothing to record: every base stands")
         return EXIT_OK
@@ -353,15 +358,29 @@ def _smoked(args: argparse.Namespace) -> int:
 
     from ..orchestration.models import require_ready, serving
 
-    if why := require_ready(roles=("triage",)):
+    why = require_ready(roles=("triage",))
+    if args.check:  # readiness alone: nothing is built and nothing is sent
+        if args.json:
+            print(json.dumps({"model": serving("triage") if why is None else None, "ready": why is None, "why": why}))
+        elif why is None:
+            print(f"ready: {serving('triage')}")
+        if why is not None:
+            print(f"{PROG}: {why}", file=sys.stderr)
+        return EXIT_OK if why is None else EXIT_USAGE
+    if why:
         raise UsageError(why)
     from ..orchestration.graph import build_smoke_app
     from ..orchestration.run import run_seeded
     from ..orchestration.stages.triage import CAPABILITIES, KEY, REQUEST, read_triage
 
     # ADK logs a failed node with its whole traceback; the failure is said below, in one line.
-    logging.getLogger("google_adk").setLevel(logging.CRITICAL)
-    run = asyncio.run(run_seeded(build_smoke_app(), state={REQUEST: args.request, CAPABILITIES: ""}, prompt=KEY))
+    engine_log = logging.getLogger("google_adk")
+    level = engine_log.level
+    engine_log.setLevel(logging.CRITICAL)
+    try:
+        run = asyncio.run(run_seeded(build_smoke_app(), state={REQUEST: args.request, CAPABILITIES: ""}, prompt=KEY))
+    finally:
+        engine_log.setLevel(level)
     answer = read_triage(run.state)
     failure = None
     if isinstance(answer, str):

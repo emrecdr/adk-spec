@@ -77,7 +77,7 @@ def sections_of(
     order: list[tuple[str, int]] = []
     for at in range(after + 1, len(lines)):
         if fenced[at] or not lines[at].startswith("## "):
-            if not order and lines[at] and not fenced[at]:
+            if not order and lines[at]:  # inside a fence too: it would parse, and be gone on the next render
                 raise GrammarError(at + 1, f"text stands before the first section of {what}")
             continue
         name = lines[at]

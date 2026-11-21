@@ -87,3 +87,10 @@ def test_a_code_fence_that_is_never_closed_is_refused_at_its_opening_line() -> N
     with pytest.raises(GrammarError) as caught:
         parse_spec(unclosed)
     assert caught.value.line == 13 and "never closed" in caught.value.message
+
+
+def test_text_before_the_first_section_is_refused_inside_a_fence_too() -> None:
+    """Deferred by the review: fenced text between the title and the purpose parsed, and was gone on the next render."""
+    with pytest.raises(GrammarError) as caught:
+        parse_spec(SPEC.replace("# auth\n", f"# auth\n\n{FENCE}\nkept nowhere\n{FENCE}\n"))
+    assert caught.value.line == 3

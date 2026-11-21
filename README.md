@@ -69,6 +69,7 @@ uv run adk-spec smoke
 
 - `login` logs in to GitHub Copilot once, with GitHub's device flow.
 - `smoke` runs the triage stage alone, to prove the chosen arm answers in a schema.
+  `smoke --check` says whether the arm is ready and sends nothing. `smoke --model <name>` tries one model.
 
 ## Notes for each system
 

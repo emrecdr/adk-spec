@@ -15,7 +15,7 @@ from .text import lines_of, normalise
 
 SECTIONS = ("Why", "What changes", "Non-goals", "Capabilities", "Impact", "Assumptions")
 #: A point left open for a person to settle, with or without its question.
-MARKER = re.compile(r"\[NEEDS CLARIFICATION(?::[^\]]*)?\]")
+MARKER = re.compile(r"\[\s*NEEDS\s+CLARIFICATION\s*(?::[^\]]*)?\]", re.IGNORECASE)
 #: How many markers a brief may hold: past it, the request is not ready to be specified.
 MARKER_BUDGET = 3
 _TITLE = re.compile(r"# (\S.*)")
