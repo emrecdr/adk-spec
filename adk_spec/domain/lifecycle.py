@@ -100,6 +100,8 @@ def next_action(state: ChangeState, findings: Sequence[Finding], stale: Sequence
     if state.status in ("approved", "verified"):
         if stale:
             return f"approve again: {', '.join(stale)} changed since the approval"
+        if any(found.severity == "ERROR" for found in findings):  # a base that moved, a spec that no longer reads
+            return f"fix what `adk-spec validate {cid}` lists"
         if state.status == "verified" or state.tier == "lean":
             step = "run" if state.status == "verified" else "implement tasks.md, then run"
             return f"{step} `adk-spec archive {cid}`"

@@ -35,7 +35,7 @@ def fenced_lines(lines: list[str]) -> list[bool]:
             inside = not inside
             opened = at
     if inside:
-        raise GrammarError(opened + 1, f"this code fence is never closed: end it with a line of `{FENCE}`")
+        raise GrammarError(opened + 1, "this code fence is never closed: end it with a line of three backticks")
     return held
 
 

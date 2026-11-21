@@ -168,7 +168,9 @@ def _assessed(
     approval no longer covers."""
     loaded = workspace.load_change(change_id)
     prefix = f"{ROOT_NAME}/{CHANGES}/{change_id}/"
-    found = [held.model_copy(update={"path": prefix + (held.path or "")}) for held in findings_of(loaded, living)]
+    unreadable = set(workspace.capabilities()) - set(living)  # a spec that is there and does not read
+    of_change = findings_of(loaded, living, unreadable)
+    found = [held.model_copy(update={"path": prefix + (held.path or "")}) for held in of_change]
     stale = approval_stale(loaded.change.state, approval_files(workspace.approval_texts(change_id)))
     return loaded, found, stale
 
@@ -235,7 +237,11 @@ def _rebase(args: argparse.Namespace) -> int:
     if state.status == "archived":
         print(f"{PROG}: `{args.id}` is archived already: nothing to rebase", file=sys.stderr)
         return EXIT_FINDINGS
-    living, _found = workspace.specs()
+    living, of_specs = workspace.specs()
+    if of_specs:  # a spec that does not read would pass for one not there, and every base on it would be dropped
+        _printed(of_specs)
+        print(f"{PROG}: `{args.id}` is not rebased: a living spec does not read. Fix it first", file=sys.stderr)
+        return EXIT_FINDINGS
     held = capture_bases(workspace.load_change(args.id).change.deltas, living)
     for req_id in sorted(held):
         was = state.bases.get(req_id)

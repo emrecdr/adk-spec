@@ -114,7 +114,12 @@ def test_each_rule_fires_on_its_fault_with_its_severity(code: str) -> None:
 
 
 def test_every_code_has_a_case_and_a_severity() -> None:
-    assert set(CASES) == set(SEVERITY) - {"syntax", "spec.folder-mismatch", "spec.folder-bad-name"}
+    assert set(CASES) == set(SEVERITY) - {
+        "syntax",
+        "spec.folder-mismatch",
+        "spec.folder-bad-name",
+        "delta.living-unreadable",
+    }
 
 
 @pytest.mark.parametrize(

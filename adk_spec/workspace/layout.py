@@ -14,7 +14,7 @@ others show. The state file is the code's own, so one that does not read as it w
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -68,12 +68,30 @@ class LoadedChange:
     problems: list[Finding]
 
 
-def findings_of(loaded: LoadedChange, living: Mapping[str, Spec]) -> list[Finding]:
+def findings_of(loaded: LoadedChange, living: Mapping[str, Spec], unreadable: Collection[str] = ()) -> list[Finding]:
     """Everything a change shows: the faults of its files, then what the validator finds in the ones that read. A
-    file that did not read is not also reported as missing."""
+    file that did not read is not also reported as missing. `unreadable` names the capabilities whose living spec is
+    there and does not read: a delta on one cannot be checked, and is said so once, never taken for a delta that
+    creates the capability."""
     unread = {problem.path or "" for problem in loaded.problems}
+    blind = {
+        f"{SPECS}/{capability}/{SPEC_FILE}": capability
+        for capability in unreadable
+        if capability in loaded.change.deltas
+    }
     found = list(loaded.problems)
+    found += [
+        finding(
+            "delta.living-unreadable",
+            f"The living spec of `{capability}` does not read, so this delta cannot be checked. Fix that spec first: "
+            "`adk-spec validate` names its fault.",
+            path=path,
+        )
+        for path, capability in sorted(blind.items())
+    ]
     for held in validate_change(loaded.change, living):
+        if held.path in blind:
+            continue
         file = _MISSING.get(held.code)
         if file and any(path == file or path.startswith(f"{file}/") for path in unread):
             continue

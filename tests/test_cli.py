@@ -263,3 +263,22 @@ def test_an_account_with_no_name_is_asked_to_name_the_approver(tmp_path, monkeyp
     capsys.readouterr()
     assert run(tmp_path, "approve", "passkeys") == 2 and "--by" in capsys.readouterr().err
     assert state_of(tmp_path)["approval"] is None
+
+
+def test_an_unreadable_living_spec_is_named_and_is_not_taken_for_a_missing_one(tmp_path, capsys) -> None:
+    """Found by validating by hand: a living spec that did not read was treated as absent, so each change on it was
+    reported as creating the capability, and `rebase` recorded no bases and voided the approval."""
+    seeded(tmp_path)
+    approved(tmp_path)
+    spec = tmp_path / ".spec/specs/auth/spec.md"
+    write_text(spec, read_text(spec) + "\n" + "`" * 3 + "\nexample\n")
+    before = state_of(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "validate") == 1
+    out = capsys.readouterr().out
+    assert "ERROR syntax .spec/specs/auth/spec.md" in out and "ERROR delta.living-unreadable" in out
+    assert "delta.purpose-missing" not in out and "delta.target-missing" not in out
+    assert run(tmp_path, "rebase", "passkeys") == 1
+    assert "syntax" in capsys.readouterr().out and state_of(tmp_path) == before, "the bases and the approval stand"
+    assert run(tmp_path, "status", "--json") == 0
+    assert "fix what `adk-spec validate passkeys` lists" in capsys.readouterr().out

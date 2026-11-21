@@ -29,6 +29,7 @@ SEVERITY: dict[str, Severity] = {
     "spec.scenario-no-when-then": "WARNING",
     "spec.statement-long": "WARNING",
     "spec.purpose-empty": "WARNING",
+    "delta.living-unreadable": "ERROR",
     "delta.empty": "ERROR",
     "delta.added-exists": "ERROR",
     "delta.target-missing": "ERROR",

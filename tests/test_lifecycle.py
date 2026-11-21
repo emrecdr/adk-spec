@@ -93,6 +93,8 @@ def test_what_an_archive_waits_for() -> None:
         (DRAFT, [], ["approval"], "run `adk-spec approve passkeys`"),
         (approved(), [], ["tasks.md"], "approve again: tasks.md changed since the approval"),
         (approved(), [], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
+        (approved(), [ERROR], [], "fix what `adk-spec validate passkeys` lists"),
+        (approved(), [OTHER], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
         (approved("standard"), [], [], "implement tasks.md, then run `adk-spec verify passkeys`"),
         (approved("standard").model_copy(update={"status": "verified"}), [], [], "run `adk-spec archive passkeys`"),
         (approved().model_copy(update={"status": "archived"}), [], [], "nothing: archived"),
