@@ -76,7 +76,7 @@ def test_a_write_that_fails_leaves_the_old_file_and_no_temporary_one(tmp_path, m
 def test_write_all_replaces_nothing_when_one_text_cannot_be_written(tmp_path) -> None:
     write_text(tmp_path / "a.md", "old")
     (tmp_path / "blocked").write_text("a file where a folder is needed", encoding="utf-8")
-    with pytest.raises(OSError):
+    with pytest.raises(OSError):  # noqa: PT011 -- which OSError it is differs by system
         write_all({tmp_path / "a.md": "new", tmp_path / "blocked" / "b.md": "new"})
     assert (tmp_path / "a.md").read_text(encoding="utf-8") == "old\n"
     assert sorted(p.name for p in tmp_path.iterdir()) == ["a.md", "blocked"]

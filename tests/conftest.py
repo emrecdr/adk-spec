@@ -83,7 +83,7 @@ class FakeModel(Gemini):
     async def generate_content_async(
         self,
         llm_request: LlmRequest,
-        stream: bool = False,
+        stream: bool = False,  # noqa: ARG002 -- the BaseLlm contract
     ) -> AsyncGenerator[LlmResponse]:
         PROVIDER.requests.append(llm_request)
         payload = PROVIDER.answer(llm_request)
