@@ -286,14 +286,27 @@ PACKAGE = ROOT / "adk_spec"
 ```python
 LAYERS = ("domain", "workspace", "orchestration", "interfaces")
 FORBIDDEN = {
-    "domain": ("google", "litellm", "subprocess", "httpx", "asyncio", "os", "socket", "urllib", "http", "ssl",
-               "pathlib", "shutil", "tempfile"),
+    "domain": (
+        "google",
+        "litellm",
+        "subprocess",
+        "httpx",
+        "asyncio",
+        "os",
+        "socket",
+        "urllib",
+        "http",
+        "ssl",
+        "pathlib",
+        "shutil",
+        "tempfile",
+    ),
     "workspace": ("google", "litellm", "httpx", "asyncio", "socket", "urllib", "http", "ssl"),
 }
 ENGINE = ("google.", "litellm")
 
 
-def test_no_layer_imports_a_layer_after_it() -> None: ...            # ported
+def test_no_layer_imports_a_layer_after_it() -> None: ...  # ported
 def test_the_package_imports_its_own_modules_only_relatively() -> None: ...  # ported
 
 
@@ -315,12 +328,16 @@ def test_no_module_below_the_root_is_named_agent() -> None:
 
 def test_each_layer_says_what_it_may_import() -> None:
     for layer in LAYERS:
-        assert "may import" in (ast.get_docstring(ast.parse((PACKAGE / layer / "__init__.py").read_text(encoding="utf-8"))) or "")
+        assert "may import" in (
+            ast.get_docstring(ast.parse((PACKAGE / layer / "__init__.py").read_text(encoding="utf-8"))) or ""
+        )
 
 
 def _probe(body: str) -> str:
     blocked = "import sys\nsys.modules['google'] = None\nsys.modules['litellm'] = None\n"
-    done = subprocess.run([sys.executable, "-c", blocked + body], cwd=ROOT, capture_output=True, encoding="utf-8", check=False)
+    done = subprocess.run(
+        [sys.executable, "-c", blocked + body], cwd=ROOT, capture_output=True, encoding="utf-8", check=False
+    )
     assert done.returncode == 0, done.stderr
     return done.stdout.strip()
 
@@ -414,7 +431,9 @@ def _fresh(name: str):
     return importlib.import_module(f"adk_spec.orchestration.{name}")
 
 
-@pytest.mark.parametrize(("provider", "expected"), [("gemini", str), ("copilot", LiteLlm), (None, LiteLlm), ("", LiteLlm), ("  ", LiteLlm)])
+@pytest.mark.parametrize(
+    ("provider", "expected"), [("gemini", str), ("copilot", LiteLlm), (None, LiteLlm), ("", LiteLlm), ("  ", LiteLlm)]
+)
 def test_both_arms_build_a_model(provider, expected, monkeypatch) -> None:
     if provider is not None:
         monkeypatch.setenv("SPEC_PROVIDER", provider)
@@ -462,7 +481,9 @@ def test_the_copilot_arm_is_ready_with_a_token_and_a_model_the_map_holds(monkeyp
 
 
 @pytest.mark.parametrize(("installed", "ready"), [(False, False), (True, True)])
-def test_a_copilot_gpt_model_needs_the_mcp_package_on_the_pinned_litellm(monkeypatch, tmp_path, installed, ready) -> None:
+def test_a_copilot_gpt_model_needs_the_mcp_package_on_the_pinned_litellm(
+    monkeypatch, tmp_path, installed, ready
+) -> None:
     """Run on the pinned pair: LiteLLM 1.106.2 imports its MCP gateway on every Responses call, whatever the flag."""
     cached_copilot_token(monkeypatch, tmp_path)
     monkeypatch.setenv("SPEC_MODEL", "gpt-5.3-codex")
@@ -625,7 +646,9 @@ def test_every_placeholder_names_a_key_the_command_seeds(monkeypatch) -> None:
     assert set(re.findall(r"\{(\w+)\??\}", build_triage().instruction)) == {"request", "capabilities"}
 
 
-def test_the_request_reaches_the_model_between_the_markers_and_is_not_expanded(monkeypatch, capsys, fake_provider) -> None:
+def test_the_request_reaches_the_model_between_the_markers_and_is_not_expanded(
+    monkeypatch, capsys, fake_provider
+) -> None:
     _on_the_fake(monkeypatch)
     assert main(["smoke", "--request", "Add {braces} and `{request}`"]) == 0
     instruction = str(fake_provider.requests[0].config.system_instruction)
@@ -674,8 +697,12 @@ def test_smoke_runs_on_the_copilot_arm_with_only_the_client_replaced(monkeypatch
     cached_copilot_token(monkeypatch, tmp_path)
     assert main(["smoke", "--request", REQUEST, "--json"]) == 0
     said = json.loads(capsys.readouterr().out)
-    assert said["model"] == "claude-sonnet-5.5 on copilot" and said["schema"] == "valid" and said["tokens"]["total"] == 120
-    assert sent[0]["model"] == "github_copilot/claude-sonnet-5.5" and sent[0]["response_format"]["type"] == "json_schema"
+    assert (
+        said["model"] == "claude-sonnet-5.5 on copilot" and said["schema"] == "valid" and said["tokens"]["total"] == 120
+    )
+    assert (
+        sent[0]["model"] == "github_copilot/claude-sonnet-5.5" and sent[0]["response_format"]["type"] == "json_schema"
+    )
     assert sent[0]["messages"][0]["role"] == "system" and "temperature" not in sent[0]
 
 
@@ -689,13 +716,27 @@ async def test_below_litellm_copilot_is_sent_a_system_turn_and_the_strict_schema
 
     async def send(_client, request, *_args, **_kwargs):
         sent.append((str(request.url), json.loads(request.content)))
-        choice = {"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": json.dumps(CANNED[0])}}
-        reply = {"id": "1", "object": "chat.completion", "created": 1, "model": "claude-sonnet-5.5", "choices": [choice]}
+        choice = {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": json.dumps(CANNED[0])},
+        }
+        reply = {
+            "id": "1",
+            "object": "chat.completion",
+            "created": 1,
+            "model": "claude-sonnet-5.5",
+            "choices": [choice],
+        }
         return httpx.Response(200, json=reply, request=request)
 
     monkeypatch.setattr(httpx.AsyncClient, "send", send)
     model, config = build_model(), request_config()
-    config.system_instruction, config.response_schema, config.response_mime_type = "You size.", Triage, "application/json"
+    config.system_instruction, config.response_schema, config.response_mime_type = (
+        "You size.",
+        Triage,
+        "application/json",
+    )
     request = LlmRequest(model=model.model, contents=[types.UserContent("triage")], config=config)
     answered = [response async for response in model.generate_content_async(request)]
     ((url, body),) = sent
@@ -713,8 +754,13 @@ def test_each_arm_is_sent_the_triage_schema_as_it_is_written() -> None:
     copilot = _to_litellm_response_format(Triage, "github_copilot/claude-sonnet-5.5")["json_schema"]
     assert copilot["strict"] is True and sorted(copilot["schema"]["required"]) == ["capabilities", "reason", "tier"]
     assert copilot["schema"]["properties"]["tier"]["enum"] == ["none", "lean", "standard", "strict"]
-    gemini = _transformers.t_schema(Client(api_key="offline")._api_client, Triage).model_dump(exclude_none=True, by_alias=True, mode="json")
-    assert "additionalProperties" not in str(gemini) and gemini["properties"]["reason"]["description"] == "One sentence: why this tier."
+    gemini = _transformers.t_schema(Client(api_key="offline")._api_client, Triage).model_dump(
+        exclude_none=True, by_alias=True, mode="json"
+    )
+    assert (
+        "additionalProperties" not in str(gemini)
+        and gemini["properties"]["reason"]["description"] == "One sentence: why this tier."
+    )
 ```
 
 The tests that call `main(["smoke", ...])` must not read the developer's `.env`: the command's `.env` loader is one function, `_load_env()`, and an autouse fixture in `tests/conftest.py` replaces it with a no-op.
@@ -1013,7 +1059,10 @@ def test_a_slug_is_lowercase_ascii_words_joined_by_hyphens(slug: str) -> None:
     assert slug_problem(slug) is None
 
 
-@pytest.mark.parametrize("slug", ["", "Auth", "auth_export", "-auth", "auth-", "2fa", "auth--x", "é", "a" * 41, "con", "nul", "com1", "aux", "prn"])
+@pytest.mark.parametrize(
+    "slug",
+    ["", "Auth", "auth_export", "-auth", "auth-", "2fa", "auth--x", "é", "a" * 41, "con", "nul", "com1", "aux", "prn"],
+)
 def test_a_slug_no_folder_holds_safely_is_refused_with_its_reason(slug: str) -> None:
     assert isinstance(slug_problem(slug), str)
 
@@ -1149,10 +1198,21 @@ def test_a_canonical_spec_survives_parse_and_render_unchanged() -> None:
 def test_parse_reads_ids_names_statements_scenarios_and_the_retired() -> None:
     spec = parse_spec(SPEC)
     assert spec.capability == "auth" and spec.purpose == "Sign-in and session handling."
-    assert [(r.id, r.name) for r in spec.requirements] == [("REQ-AUTH-001", "Sign in with email"), ("REQ-AUTH-002", "Lock after failures")]
+    assert [(r.id, r.name) for r in spec.requirements] == [
+        ("REQ-AUTH-001", "Sign in with email"),
+        ("REQ-AUTH-002", "Lock after failures"),
+    ]
     assert spec.requirements[0].statement == "The system SHALL let a registered user sign in with email and password."
     assert spec.requirements[1].scenarios == (
-        Scenario(name="Too many failures", steps=("GIVEN four failed attempts", "WHEN a fifth attempt fails", "THEN the account is locked", "AND the user is told why")),
+        Scenario(
+            name="Too many failures",
+            steps=(
+                "GIVEN four failed attempts",
+                "WHEN a fifth attempt fails",
+                "THEN the account is locked",
+                "AND the user is told why",
+            ),
+        ),
     )
     assert spec.retired == (Retired(id="REQ-AUTH-003", name="Remember me", change="drop-remember-me"),)
 
@@ -1163,7 +1223,9 @@ def test_a_hand_edited_spec_renders_to_the_canonical_form() -> None:
 
 
 def test_a_heading_inside_a_code_fence_stays_in_the_statement() -> None:
-    fenced = SPEC.replace("email and password.", f"email and password.\n\n{FENCE}\n### not a heading\n## Retired\n{FENCE}")
+    fenced = SPEC.replace(
+        "email and password.", f"email and password.\n\n{FENCE}\n### not a heading\n## Retired\n{FENCE}"
+    )
     spec = parse_spec(fenced)
     assert len(spec.requirements) == 2 and "### not a heading\n## Retired" in spec.requirements[0].statement
     assert parse_spec(render_spec(spec)) == spec
@@ -1196,7 +1258,9 @@ def test_a_fingerprint_is_of_the_canonical_block_alone() -> None:
     one, two = parse_spec(SPEC).requirements
     assert fingerprint(one) == sha256_of(render_requirement(one)) != fingerprint(two)
     assert fingerprint(parse_spec(SPEC.replace("\n", "\r\n")).requirements[0]) == fingerprint(one)
-    assert fingerprint(parse_spec(SPEC.replace("Sign-in and session handling.", "Another purpose.")).requirements[0]) == fingerprint(one)
+    assert fingerprint(
+        parse_spec(SPEC.replace("Sign-in and session handling.", "Another purpose.")).requirements[0]
+    ) == fingerprint(one)
 ```
 
 - [ ] **Step 3: Run to see them fail**
@@ -1278,16 +1342,22 @@ def test_parse_reads_each_operation() -> None:
     delta = parse_delta(DELTA)
     assert delta.capability == "auth" and delta.purpose is None
     assert [r.id for r in delta.added] == ["REQ-AUTH-004"] and [r.id for r in delta.modified] == ["REQ-AUTH-002"]
-    assert delta.removed == (Removal(id="REQ-AUTH-001", name="Sign in with email", reason="Passwords are retired in favour of passkeys."),)
+    assert delta.removed == (
+        Removal(id="REQ-AUTH-001", name="Sign in with email", reason="Passwords are retired in favour of passkeys."),
+    )
 
 
 def test_a_new_capabilitys_delta_carries_its_purpose() -> None:
-    new = "# Delta: search\n\n## Purpose\n\nFind things.\n\n## ADDED Requirements\n\n" + DELTA.split("## ADDED Requirements\n\n")[1].split("\n## MODIFIED")[0].replace("AUTH", "SEARCH")
+    new = "# Delta: search\n\n## Purpose\n\nFind things.\n\n## ADDED Requirements\n\n" + DELTA.split(
+        "## ADDED Requirements\n\n"
+    )[1].split("\n## MODIFIED")[0].replace("AUTH", "SEARCH")
     assert parse_delta(new).purpose == "Find things." and render_delta(parse_delta(new)) == new
 
 
 def test_a_removal_with_no_reason_parses_for_the_validator_to_judge() -> None:
-    assert parse_delta(DELTA.replace("Reason: Passwords are retired in favour of passkeys.\n", "")).removed[0].reason == ""
+    assert (
+        parse_delta(DELTA.replace("Reason: Passwords are retired in favour of passkeys.\n", "")).removed[0].reason == ""
+    )
 
 
 def test_a_renamed_section_is_refused_and_told_what_to_write() -> None:
@@ -1413,7 +1483,10 @@ def test_parse_reads_each_tasks_fields() -> None:
     assert group.title == "1. Passkey sign-in"
     assert (one.id, one.done, one.parallel, one.requirements) == ("T001", False, False, ("REQ-AUTH-004",))
     assert (two.done, two.parallel, two.requirements) == (True, True, ("REQ-AUTH-004", "REQ-AUTH-002"))
-    assert two.files == ("src/auth/passkey.py", "src/auth/lockout.py") and one.verify == "uv run pytest tests/test_passkey.py"
+    assert (
+        two.files == ("src/auth/passkey.py", "src/auth/lockout.py")
+        and one.verify == "uv run pytest tests/test_passkey.py"
+    )
     assert (three.requirements, three.files, three.verify) == ((), (), "read the page")
 
 
@@ -1496,7 +1569,9 @@ def valid() -> tuple[Change, dict[str, Spec]]:
     delta = parse_delta(DELTA)
     bases = {r.id: fingerprint(r) for r in living["auth"].requirements}
     state = ChangeState(id="passkeys", tier="lean", bases=bases)
-    change = Change(state=state, brief=parse_brief(BRIEF), brief_raw=BRIEF, deltas={"auth": delta}, tasks=parse_tasks(TASKS))
+    change = Change(
+        state=state, brief=parse_brief(BRIEF), brief_raw=BRIEF, deltas={"auth": delta}, tasks=parse_tasks(TASKS)
+    )
     return change, living
 
 
@@ -1507,9 +1582,18 @@ def test_the_valid_change_and_the_valid_spec_have_no_findings() -> None:
 
 #: One case a code: the code, and the valid input changed in exactly the way the table's row says.
 CASES: dict[str, Callable[[], list[Finding]]] = {
-    "spec.no-scenario": lambda: validate_spec(parse_spec(SPEC.replace("#### Scenario: Valid credentials\n\n- WHEN the user submits a valid email and password\n- THEN the system starts a session\n\n", ""))),
+    "spec.no-scenario": lambda: validate_spec(
+        parse_spec(
+            SPEC.replace(
+                "#### Scenario: Valid credentials\n\n- WHEN the user submits a valid email and password\n- THEN the system starts a session\n\n",
+                "",
+            )
+        )
+    ),
     "spec.no-shall": lambda: validate_spec(parse_spec(SPEC.replace("The system SHALL let", "The system lets"))),
-    "delta.base-stale": lambda: _change(bases={"REQ-AUTH-002": "sha256:" + "0" * 64, "REQ-AUTH-001": fingerprint(parse_spec(SPEC).requirements[0])}),
+    "delta.base-stale": lambda: _change(
+        bases={"REQ-AUTH-002": "sha256:" + "0" * 64, "REQ-AUTH-001": fingerprint(parse_spec(SPEC).requirements[0])}
+    ),
     "brief.marker-unresolved": lambda: _change(brief=BRIEF + "[NEEDS CLARIFICATION: which browsers?]\n"),
     # ... one entry for every other row of the table except the two the loader raises
 }
@@ -1578,7 +1662,10 @@ def test_a_delta_folds_in_removed_then_modified_then_added() -> None:
     merged = apply_delta(living(), parse_delta(DELTA), bases=BASES, change="passkeys")
     assert [r.id for r in merged.requirements] == ["REQ-AUTH-002", "REQ-AUTH-004"]
     assert "three failed attempts" in merged.requirements[0].statement
-    assert merged.retired == (*living().retired, Retired(id="REQ-AUTH-001", name="Sign in with email", change="passkeys"))
+    assert merged.retired == (
+        *living().retired,
+        Retired(id="REQ-AUTH-001", name="Sign in with email", change="passkeys"),
+    )
     assert merged.purpose == living().purpose and validate_spec(merged) == []
 
 
@@ -1605,12 +1692,17 @@ def test_every_reason_is_reported_at_once() -> None:
 
 def test_a_new_capability_starts_from_its_delta() -> None:
     added = parse_delta(DELTA).added[0].model_copy(update={"id": "REQ-SEARCH-001"})
-    merged = apply_delta(None, Delta(capability="search", purpose="Find things.", added=(added,)), bases={}, change="add-search")
+    merged = apply_delta(
+        None, Delta(capability="search", purpose="Find things.", added=(added,)), bases={}, change="add-search"
+    )
     assert merged == Spec(capability="search", purpose="Find things.", requirements=(added,))
 
 
 def test_a_merge_that_would_break_the_spec_is_refused() -> None:
-    bare = DELTA.replace("#### Scenario: Registered passkey\n\n- WHEN the user presents a registered passkey\n- THEN the system starts a session\n\n", "")
+    bare = DELTA.replace(
+        "#### Scenario: Registered passkey\n\n- WHEN the user presents a registered passkey\n- THEN the system starts a session\n\n",
+        "",
+    )
     with pytest.raises(MergeRefused) as refused:
         apply_delta(living(), parse_delta(bare), bases=BASES, change="passkeys")
     assert "spec.no-scenario" in {f.code for f in refused.value.findings}
@@ -1673,7 +1765,10 @@ def approved(tier: str = "lean") -> ChangeState:
 
 def test_bases_are_the_fingerprints_of_what_a_delta_changes_or_removes() -> None:
     one, two = parse_spec(SPEC).requirements
-    assert capture_bases({"auth": parse_delta(DELTA)}, {"auth": parse_spec(SPEC)}) == {"REQ-AUTH-002": fingerprint(two), "REQ-AUTH-001": fingerprint(one)}
+    assert capture_bases({"auth": parse_delta(DELTA)}, {"auth": parse_spec(SPEC)}) == {
+        "REQ-AUTH-002": fingerprint(two),
+        "REQ-AUTH-001": fingerprint(one),
+    }
     assert capture_bases({"search": Delta(capability="search", purpose="p")}, {}) == {}
 
 
@@ -1689,7 +1784,9 @@ def test_ticking_a_task_keeps_the_approval_and_any_other_edit_voids_it() -> None
     reworded = {**TEXTS, "tasks.md": TASKS.replace("Write the failing", "Skip the")}
     assert approval_stale(approved(), approval_files(reworded)) == ["tasks.md"]
     assert approval_stale(approved(), approval_files({**TEXTS, "design.md": "# Design\n"})) == ["design.md"]
-    assert approval_stale(approved(), approval_files({k: v for k, v in TEXTS.items() if k != "brief.md"})) == ["brief.md"]
+    assert approval_stale(approved(), approval_files({k: v for k, v in TEXTS.items() if k != "brief.md"})) == [
+        "brief.md"
+    ]
 
 
 def test_new_bases_void_an_approval_and_no_approval_is_stale() -> None:
@@ -1704,7 +1801,9 @@ def test_what_blocks_an_approval() -> None:
     other = Finding(severity="WARNING", code="spec.no-shall", message="m")
     assert approve_blockers(DRAFT, [other]) == [] and approve_blockers(DRAFT, [error, marker, other]) == [error, marker]
     assert approve_blockers(DRAFT, [other], strict=True) == [other]
-    assert [f.code for f in approve_blockers(DRAFT.model_copy(update={"status": "archived"}), [])] == ["change.archived"]
+    assert [f.code for f in approve_blockers(DRAFT.model_copy(update={"status": "archived"}), [])] == [
+        "change.archived"
+    ]
 
 
 def test_what_an_archive_waits_for() -> None:
@@ -1772,7 +1871,28 @@ git commit -m "feat(domain): recorded approval, base capture, gate blockers and 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-@pytest.mark.parametrize("part", ["", ".", "..", "a/b", "a\\b", "x\x00y", "con", "NUL.md", "auth.", "auth ", "a:b", "a*b", "a?b", 'a"b', "a<b", "a|b", "CONIN$"])
+@pytest.mark.parametrize(
+    "part",
+    [
+        "",
+        ".",
+        "..",
+        "a/b",
+        "a\\b",
+        "x\x00y",
+        "con",
+        "NUL.md",
+        "auth.",
+        "auth ",
+        "a:b",
+        "a*b",
+        "a?b",
+        'a"b',
+        "a<b",
+        "a|b",
+        "CONIN$",
+    ],
+)
 def test_a_part_no_system_holds_safely_is_refused_on_every_system(tmp_path, part: str) -> None:
     with pytest.raises(PathRefused):
         inside(tmp_path, "specs", part)
@@ -1823,7 +1943,9 @@ def test_a_write_that_fails_leaves_the_old_file_and_no_temporary_one(tmp_path, m
     monkeypatch.setattr(os, "replace", _held_open)
     with pytest.raises(PermissionError):
         write_text(tmp_path / "s.md", "new")
-    assert (tmp_path / "s.md").read_text(encoding="utf-8") == "old\n" and [p.name for p in tmp_path.iterdir()] == ["s.md"]
+    assert (tmp_path / "s.md").read_text(encoding="utf-8") == "old\n" and [p.name for p in tmp_path.iterdir()] == [
+        "s.md"
+    ]
 
 
 def test_write_all_replaces_nothing_when_one_text_cannot_be_written(tmp_path) -> None:
@@ -1879,29 +2001,39 @@ git commit -m "feat(workspace): the path policy and atomic LF text files"
 ```python
 ROOT_NAME = ".spec"
 
+
 class WorkspaceError(ValueError): ...
+
 
 @dataclass(frozen=True)
 class LoadedChange:
     change: Change
-    problems: list[Finding]      # syntax and folder faults, paths relative to the change's folder
+    problems: list[Finding]  # syntax and folder faults, paths relative to the change's folder
+
 
 class Workspace:
-    root: Path                                             # the folder that holds .spec
+    root: Path  # the folder that holds .spec
+
     @classmethod
-    def find(cls, start: Path) -> Workspace: ...           # walks up from start; WorkspaceError names `adk-spec init`
+    def find(cls, start: Path) -> Workspace: ...  # walks up from start; WorkspaceError names `adk-spec init`
     @classmethod
-    def init(cls, repo: Path) -> Workspace: ...            # makes the tree; WorkspaceError where .spec already exists
+    def init(cls, repo: Path) -> Workspace: ...  # makes the tree; WorkspaceError where .spec already exists
     def config(self) -> Config: ...
-    def capabilities(self) -> list[str]: ...               # sorted
-    def specs(self) -> tuple[dict[str, Spec], list[Finding]]: ...   # every living spec that parses, and the faults of the rest, paths from root
-    def changes(self) -> list[str]: ...                    # sorted change ids
+    def capabilities(self) -> list[str]: ...  # sorted
+    def specs(
+        self,
+    ) -> tuple[
+        dict[str, Spec], list[Finding]
+    ]: ...  # every living spec that parses, and the faults of the rest, paths from root
+    def changes(self) -> list[str]: ...  # sorted change ids
     def new_change(self, change_id: str, tier: Tier) -> Path: ...
     def load_change(self, change_id: str) -> LoadedChange: ...
     def save_state(self, state: ChangeState) -> None: ...
-    def approval_texts(self, change_id: str) -> dict[str, str]: ...  # brief.md, design.md, tasks.md, specs/<cap>/spec.md that exist
-    def write_specs(self, specs: Mapping[str, Spec]) -> None: ...     # all or nothing, through write_all
-    def shown(self, path: Path) -> str: ...                # the path relative to root, with forward slashes
+    def approval_texts(
+        self, change_id: str
+    ) -> dict[str, str]: ...  # brief.md, design.md, tasks.md, specs/<cap>/spec.md that exist
+    def write_specs(self, specs: Mapping[str, Spec]) -> None: ...  # all or nothing, through write_all
+    def shown(self, path: Path) -> str: ...  # the path relative to root, with forward slashes
 ```
 
 The tree `init` makes:
@@ -1932,7 +2064,12 @@ def seeded(tmp_path) -> Workspace:
 
 def test_init_makes_the_tree_and_refuses_a_second_time(tmp_path) -> None:
     ws = Workspace.init(tmp_path)
-    assert sorted(p.name for p in (tmp_path / ".spec").iterdir()) == ["changes", "config.toml", "constitution.md", "specs"]
+    assert sorted(p.name for p in (tmp_path / ".spec").iterdir()) == [
+        "changes",
+        "config.toml",
+        "constitution.md",
+        "specs",
+    ]
     assert ws.config() == Config(default_tier="standard") and ws.capabilities() == [] and ws.changes() == []
     with pytest.raises(WorkspaceError, match="already"):
         Workspace.init(tmp_path)
@@ -1948,7 +2085,12 @@ def test_the_workspace_is_found_from_any_folder_below_it(tmp_path) -> None:
 
 @pytest.mark.parametrize(
     ("text", "named"),
-    [('[project]\ndefault_teir = "lean"\n', "default_teir"), ('[project]\ndefault_tier = "huge"\n', "huge"), ("[projct]\n", "projct"), ("", "default_tier")],
+    [
+        ('[project]\ndefault_teir = "lean"\n', "default_teir"),
+        ('[project]\ndefault_tier = "huge"\n', "huge"),
+        ("[projct]\n", "projct"),
+        ("", "default_tier"),
+    ],
 )
 def test_a_config_that_is_not_what_the_code_reads_is_named(tmp_path, text: str, named: str) -> None:
     ws = Workspace.init(tmp_path)
@@ -1973,7 +2115,10 @@ def test_a_change_round_trips_through_its_folder(tmp_path) -> None:
 
 def test_a_file_off_its_grammar_is_a_finding_with_its_path_and_line(tmp_path) -> None:
     ws = seeded(tmp_path)
-    write_text(tmp_path / ".spec" / "changes" / "passkeys" / "specs" / "auth" / "spec.md", DELTA.replace("## REMOVED", "## RENAMED"))
+    write_text(
+        tmp_path / ".spec" / "changes" / "passkeys" / "specs" / "auth" / "spec.md",
+        DELTA.replace("## REMOVED", "## RENAMED"),
+    )
     (problem,) = ws.load_change("passkeys").problems
     assert (problem.severity, problem.code, problem.path, problem.line) == ("ERROR", "syntax", "specs/auth/spec.md", 25)
 
@@ -1982,12 +2127,17 @@ def test_a_living_spec_titled_for_another_folder_is_a_finding(tmp_path) -> None:
     ws = Workspace.init(tmp_path)
     write_text(tmp_path / ".spec" / "specs" / "billing" / "spec.md", SPEC)
     specs, problems = ws.specs()
-    assert specs == {} and [(p.code, p.path) for p in problems] == [("spec.folder-mismatch", ".spec/specs/billing/spec.md")]
+    assert specs == {} and [(p.code, p.path) for p in problems] == [
+        ("spec.folder-mismatch", ".spec/specs/billing/spec.md")
+    ]
 
 
 def test_a_state_file_with_a_key_nobody_wrote_is_refused_by_name(tmp_path) -> None:
     ws = seeded(tmp_path)
-    write_text(tmp_path / ".spec" / "changes" / "passkeys" / "change.json", '{"id": "passkeys", "tier": "lean", "aproved": true}')
+    write_text(
+        tmp_path / ".spec" / "changes" / "passkeys" / "change.json",
+        '{"id": "passkeys", "tier": "lean", "aproved": true}',
+    )
     with pytest.raises(WorkspaceError, match="aproved"):
         ws.load_change("passkeys")
 
@@ -2057,7 +2207,10 @@ def test_new_makes_a_draft_at_the_configs_tier(tmp_path, capsys) -> None:
 
 def test_validate_lists_each_finding_with_its_place_and_fails_on_an_error(tmp_path, capsys) -> None:
     Workspace.init(tmp_path)
-    write_text(tmp_path / ".spec/specs/auth/spec.md", SPEC.replace("#### Scenario: Too many failures", "#### Scenario Too many failures"))
+    write_text(
+        tmp_path / ".spec/specs/auth/spec.md",
+        SPEC.replace("#### Scenario: Too many failures", "#### Scenario Too many failures"),
+    )
     assert run(tmp_path, "validate") == 1
     out = capsys.readouterr().out
     assert "ERROR syntax .spec/specs/auth/spec.md:22" in out and "1 errors, 0 warnings" in out
@@ -2082,7 +2235,9 @@ def test_validate_json_is_the_findings_as_data(tmp_path, capsys) -> None:
 def test_status_names_the_next_step_of_each_change(tmp_path, capsys) -> None:
     seeded(tmp_path)
     assert run(tmp_path, "status", "--json") == 0
-    assert json.loads(capsys.readouterr().out) == {"changes": [{"id": "passkeys", "tier": "lean", "status": "draft", "next": "run `adk-spec rebase passkeys`"}]}
+    assert json.loads(capsys.readouterr().out) == {
+        "changes": [{"id": "passkeys", "tier": "lean", "status": "draft", "next": "run `adk-spec rebase passkeys`"}]
+    }
 
 
 def test_outside_a_workspace_is_a_sentence_and_exit_2(tmp_path, capsys) -> None:
@@ -2136,7 +2291,10 @@ def living_bytes(tmp_path) -> bytes:
 def test_the_whole_lean_lifecycle_runs_without_a_model(tmp_path, capsys) -> None:
     seeded(tmp_path)
     assert run(tmp_path, "validate", "passkeys") == 0
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1 and "delta.base-missing" in capsys.readouterr().out
+    assert (
+        run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+        and "delta.base-missing" in capsys.readouterr().out
+    )
     assert run(tmp_path, "rebase", "passkeys") == 0
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
     state = state_of(tmp_path)
@@ -2146,7 +2304,9 @@ def test_the_whole_lean_lifecycle_runs_without_a_model(tmp_path, capsys) -> None
     write_text(tasks, read_text(tasks).replace("- [ ] T001", "- [x] T001"))
     assert run(tmp_path, "archive", "passkeys") == 0
     merged = parse_spec(living_bytes(tmp_path).decode())
-    assert [r.id for r in merged.requirements] == ["REQ-AUTH-002", "REQ-AUTH-004"] and merged.retired[-1].change == "passkeys"
+    assert [r.id for r in merged.requirements] == ["REQ-AUTH-002", "REQ-AUTH-004"] and merged.retired[
+        -1
+    ].change == "passkeys"
     assert state_of(tmp_path)["status"] == "archived" and run(tmp_path, "validate") == 0
     assert run(tmp_path, "status") == 0 and "no open changes" in capsys.readouterr().out
 
@@ -2168,7 +2328,9 @@ def test_a_second_change_to_one_requirement_is_stopped_at_archive(tmp_path, caps
     folder = ws.new_change("stricter-lock", "lean")
     write_text(folder / "brief.md", BRIEF)
     write_text(folder / "tasks.md", TASKS)
-    only_modified = "# Delta: auth\n\n## MODIFIED Requirements\n\n" + DELTA.split("## MODIFIED Requirements\n\n")[1].split("\n## REMOVED")[0].replace("three", "two")
+    only_modified = "# Delta: auth\n\n## MODIFIED Requirements\n\n" + DELTA.split("## MODIFIED Requirements\n\n")[
+        1
+    ].split("\n## REMOVED")[0].replace("three", "two")
     write_text(folder / "specs" / "auth" / "spec.md", only_modified)
     for change in ("passkeys", "stricter-lock"):
         assert run(tmp_path, "rebase", change) == 0 and run(tmp_path, "approve", change, "--by", "reviewer") == 0
@@ -2197,7 +2359,10 @@ def test_an_archive_writes_no_capability_when_one_refuses(tmp_path) -> None:
     write_text(tmp_path / ".spec/changes/passkeys/specs/billing/spec.md", billing)
     run(tmp_path, "rebase", "passkeys")
     run(tmp_path, "approve", "passkeys", "--by", "reviewer")
-    write_text(tmp_path / ".spec/specs/billing/spec.md", read_text(tmp_path / ".spec/specs/billing/spec.md").replace("after five failed", "after nine failed"))
+    write_text(
+        tmp_path / ".spec/specs/billing/spec.md",
+        read_text(tmp_path / ".spec/specs/billing/spec.md").replace("after five failed", "after nine failed"),
+    )
     before = living_bytes(tmp_path)
     assert run(tmp_path, "archive", "passkeys") == 1 and living_bytes(tmp_path) == before
 

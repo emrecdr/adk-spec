@@ -1,0 +1,71 @@
+[project]
+name = "adk-spec"
+version = "0.1.0"
+description = "Spec-driven development on Google ADK: models draft the specs, code decides."
+# Below 3.15: the held LiteLLM names Python below 3.15, and uv 0.13 downloads 3.15 by default.
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    # Pinned: a bump lands only measured live on both arms.
+    "google-adk==2.14.1",
+    # Held: ADK declares litellm below 1.106.3, and 1.110.0 removed the names the login imports.
+    "litellm==1.106.2",
+    "pydantic>=2.12",
+    "python-dotenv>=1.0",
+    # Certificates through the operating system's store, for a company proxy that re-signs HTTPS.
+    "truststore>=0.10",
+]
+
+[project.scripts]
+adk-spec = "adk_spec.interfaces.cli:run"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["adk_spec"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff==0.17.5", "pyrefly==1.4.1"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+faulthandler_timeout = 300
+faulthandler_exit_on_timeout = true
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore:.*EXPERIMENTAL.*:UserWarning",
+    "ignore:Item 'summary' on TypedDict class 'ChatCompletionReasoningItem':UserWarning",
+    "ignore:Items 'device_code', 'user_code', 'verification_uri' on TypedDict class '_DeviceCode':UserWarning",
+    "ignore:Items 'access_token', 'error' on TypedDict class '_AccessTokenPoll':UserWarning",
+]
+
+[tool.uv]
+# A release is taken three days after it is published, never sooner.
+exclude-newer = "P3D"
+required-version = ">=0.12"
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+extend-exclude = ["research_notes", "reports"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "ARG", "ASYNC", "RUF", "BLE001", "S607", "SIM", "RET", "C4", "PIE", "PT", "C90", "PERF", "FURB"]
+ignore = ["SIM112", "PT018"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S607"]
+
+[tool.pyrefly]
+project-excludes = ["tests/**", "research_notes/**"]
+
+[tool.pyrefly.errors]
+# ADK declares LlmAgent(BaseAgent, abc.ABC) with no abstract method.
+direct-abstract-base-instantiation = "ignore"
