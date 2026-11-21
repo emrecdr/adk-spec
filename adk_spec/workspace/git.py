@@ -1,0 +1,157 @@
+"""Read-only git, run as a program and never through a shell.
+
+Ported from the reference project's collector (`adk_review/collect/git.py`): the part that starts git, and nothing
+of what it gathers. What that project measured, each before it was fixed, is why each rule is here:
+
+- Git is started by its full path, found among PATH's absolute entries. Windows looks in the current folder first,
+  and the current folder can be the checkout being read, whose own `git.exe` must never run.
+- Its environment is the caller's with every `GIT_*` variable left out, and no config but the repository's own and
+  what is fixed here. `GIT_DIR` read another repository under the requested folder's name; `GIT_DIFF_OPTS=-u0` took
+  every context line out of a diff; a person's `core.fsmonitor` started a program beside a diff.
+- Every call has a timeout. On Windows `git.exe` runs the real git as its child, which holds the output open, so
+  the whole process tree is stopped before the output is read to its end.
+
+Only verbs that read are used here, and `GIT_OPTIONAL_LOCKS=0` keeps even those from refreshing the index.
+"""
+
+from __future__ import annotations
+
+import functools
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+#: How long one git command may run, in seconds.
+GIT_TIMEOUT_S: float = 30
+#: Past this many files that git neither tracks nor ignores, a diff is refused: a virtual environment or a build
+#: folder nobody ignored would be read file by file as new work.
+UNTRACKED_MAX = 500
+#: Settings that change what git prints, reads or runs, fixed for every call. Set through the environment, they
+#: outrank every config file, the repository's own included.
+_SETTLED = {
+    "core.fsmonitor": "false",
+    "core.attributesFile": os.devnull,
+    "core.autocrlf": "input",
+    "core.quotePath": "false",
+    "core.precomposeUnicode": "false",
+    "diff.suppressBlankEmpty": "false",
+}
+_PLAIN = ("--no-color", "--no-ext-diff", "--no-textconv", "-M")
+#: The folder's own files, without this package's tree: a pathspec git reads from the folder it runs in.
+_HERE = ("--", ".", ":(exclude).spec")
+
+
+class GitError(Exception):
+    """git could not answer: a reason to say, never an empty answer to read."""
+
+
+def on_path(name: str) -> str | None:
+    """`name` by its full path, as PATH's absolute entries find it, or nothing: never from the current folder."""
+    return _found(name, os.environ.get("PATH", ""))
+
+
+@functools.cache
+def _found(name: str, path: str) -> str | None:
+    """Once per PATH: on Windows each lookup tries every PATHEXT. An empty entry or a relative one names the
+    current folder, and is left out."""
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"  # read by `shutil.which` on Windows, ignored elsewhere
+    absolute = os.pathsep.join(entry for entry in path.split(os.pathsep) if os.path.isabs(entry))
+    return shutil.which(name, path=absolute)
+
+
+def _environment(root: Path) -> dict[str, str]:
+    env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+    env |= {"LC_ALL": "C", "LANGUAGE": ""}  # git's messages as written, whatever the person's language
+    env |= {"GIT_NO_LAZY_FETCH": "1", "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0"}
+    env |= {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_ATTR_NOSYSTEM": "1"}
+    env |= {"GIT_TERMINAL_PROMPT": "0"}
+    # With a person's own config unread, so is their list of safe folders: the folder the person named is trusted.
+    settled = _SETTLED | {"safe.directory": Path(os.path.realpath(root)).as_posix()}
+    env["GIT_CONFIG_COUNT"] = str(len(settled))
+    for at, (key, value) in enumerate(settled.items()):
+        env[f"GIT_CONFIG_KEY_{at}"], env[f"GIT_CONFIG_VALUE_{at}"] = key, value
+    return env
+
+
+def _run(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[bytes]:
+    """One command, bytes out, stopped whole past `GIT_TIMEOUT_S`."""
+    with subprocess.Popen(
+        argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
+    ) as process:
+        try:
+            out, err = process.communicate(timeout=GIT_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            if os.name == "nt":  # the tree first, then the output to its end, which Windows reads on threads
+                taskkill = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "taskkill.exe")
+                subprocess.run([taskkill, "/F", "/T", "/PID", str(process.pid)], capture_output=True, check=False)
+                process.communicate()
+            process.kill()
+            raise
+    return subprocess.CompletedProcess(argv, process.returncode, out, err)
+
+
+def git(root: Path, *args: str, ok: tuple[int, ...] = (0,)) -> str:
+    """One git command in `root`: its output as text. `GitError` where git is not found, does not answer in time,
+    or ends with a code outside `ok`, with git's own first line as the reason."""
+    verb = next((arg for arg in args if not arg.startswith("-")), "")
+    program = on_path("git")
+    if program is None:  # Git for Windows can be installed for Git Bash alone
+        raise GitError("git is not on PATH. Install git, with its folder among PATH's absolute entries")
+    try:
+        done = _run([program, "-C", str(root), *args], _environment(root))
+    except subprocess.TimeoutExpired:
+        raise GitError(f"git {verb} did not answer within {GIT_TIMEOUT_S:g} s") from None
+    except OSError as exc:  # found, and still could not start
+        raise GitError(f"git {verb} could not start: {exc.strerror or exc}") from None
+    if done.returncode not in ok:
+        said = done.stderr.decode("utf-8", "replace").split("\n")
+        lines = [line.strip() for line in said if line.strip() and not line.startswith("hint:")]
+        raise GitError(f"git {verb} failed: {lines[0] if lines else f'exit {done.returncode}'}")
+    return done.stdout.decode("utf-8", "replace")
+
+
+def is_repository(root: Path) -> bool:
+    """Whether `root` is inside a git work tree."""
+    return git(root, "rev-parse", "--is-inside-work-tree", ok=(0, 128)).strip() == "true"
+
+
+def resolves(root: Path, ref: str) -> str | None:
+    """The full ID of the commit `ref` names in `root`, or nothing where it names none. A name that starts with a
+    hyphen is an option to git and a revision to nobody."""
+    if not ref or ref.startswith("-"):
+        return None
+    return git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", ok=(0, 1, 128)).strip() or None
+
+
+def head(root: Path) -> str | None:
+    """The commit checked out in `root`, or nothing: no repository, or no commit yet."""
+    return resolves(root, "HEAD")
+
+
+def _listed(root: Path, *which: str) -> list[str]:
+    return sorted(path for path in git(root, "ls-files", "-z", *which, *_HERE).split("\0") if path)
+
+
+def files(root: Path) -> list[str]:
+    """Every file under `root` that git tracks or would: nothing it ignores, and nothing of `.spec/`. Paths from
+    `root`, with forward slashes."""
+    return sorted(set(_listed(root, "--cached", "--others", "--exclude-standard")))
+
+
+def diff(root: Path, base: str) -> str:
+    """`base` against the working tree under `root`, as one unified diff with paths from `root`. A file git does
+    not track yet reads as added: new work is new files, and a person may not have added them. `.spec/` is left
+    out. `GitError` where `base` names no commit, or too many files are neither tracked nor ignored."""
+    commit = resolves(root, base)
+    if commit is None:
+        raise GitError(f"`{base}` names no commit in {root}")
+    changed = git(root, "diff", *_PLAIN, "--relative", commit, *_HERE)
+    new = _listed(root, "--others", "--exclude-standard")
+    if len(new) > UNTRACKED_MAX:
+        raise GitError(
+            f"{len(new):,} files under {root} are neither tracked nor ignored. Add them to git, or ignore what is "
+            "no source, such as a virtual environment or a build folder"
+        )
+    added = [git(root, "diff", *_PLAIN, "--no-index", "--", "/dev/null", path, ok=(0, 1)) for path in new]
+    return changed + "".join(added)

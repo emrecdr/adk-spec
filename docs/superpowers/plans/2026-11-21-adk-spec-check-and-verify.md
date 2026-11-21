@@ -280,8 +280,8 @@ def test_a_report_is_no_part_of_an_approval(tmp_path) -> None:                  
   - `on_path(name: str) -> str | None`: the program's full path from PATH's absolute entries, never from the current folder.
   - `git(root: Path, *args: str, ok: tuple[int, ...] = (0,)) -> str`: stdout decoded as UTF-8. `GitError` for a code outside `ok`, for a timeout, and where git is not found.
   - `is_repository(root) -> bool`, `head(root) -> str | None`, `resolves(root, ref) -> str | None` (the commit's full ID).
-  - `diff(root: Path, base: str) -> str`: `base` against the working tree, tracked files only, with `.spec/` left out, no colour, no external diff, no textconv.
-  - `tracked(root: Path) -> list[str]`: `ls-files`, forward slashes.
+  - `diff(root: Path, base: str) -> str`: `base` against the working tree, paths from `root`, with `.spec/` left out, no colour, no external diff, no textconv. A file git does not track yet reads as added; past `UNTRACKED_MAX = 500` such files it is a `GitError`.
+  - `files(root: Path) -> list[str]`: every file git tracks or would, nothing it ignores, forward slashes.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -431,7 +431,7 @@ Findings 6 and 7 of the first live run (file paths were invented, and a design t
 - Test: `tests/test_plan.py`, `tests/test_context.py`
 
 **Interfaces:**
-- Consumes: Task 4's `tracked`, `is_repository`.
+- Consumes: Task 4's `files`, `is_repository`.
 - Produces:
   - `context.TREE_MAX_PATHS = 300`; `context.tree_text(paths: Sequence[str]) -> str`: every path, one a line, where there are `TREE_MAX_PATHS` at most; past that, a first line saying so and each folder two levels deep with the number of files under it. Nothing where there is no path.
   - `stages.TREE = "tree"` and `stages.FILES`, a section `## The files of this repository`, read by the design's and the tasks' instructions. The tasks' guide gains `Name files by the paths the repository uses. Where a file is new, put it beside its kind.` The design's gains `Call existing only what the files or the living specs show.`

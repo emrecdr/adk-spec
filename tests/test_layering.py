@@ -100,6 +100,16 @@ def test_a_pure_layer_names_nothing_it_may_not(layer: str) -> None:
     assert offenders == [], offenders
 
 
+def test_only_the_git_layer_starts_a_program() -> None:
+    """A program is started in one place, where its path, its environment and its time are all decided."""
+    starters = [
+        path.relative_to(PACKAGE).as_posix()
+        for path in sorted(PACKAGE.rglob("*.py"))
+        if "subprocess" in _absolute_imports(path)
+    ]
+    assert starters == ["workspace/git.py"]
+
+
 def test_no_module_below_the_root_is_named_agent() -> None:
     """`adk web`'s loader reads any folder holding an `agent.py` as an agent of its own."""
     assert [p for p in PACKAGE.rglob("agent.py") if p.parent != PACKAGE] == []
