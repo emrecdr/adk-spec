@@ -117,6 +117,10 @@ def _parser() -> argparse.ArgumentParser:
     smoke.add_argument("--json", action="store_true", help="print the result as JSON")
     smoke.set_defaults(handler=_smoke)
 
+    models = commands.add_parser("models", help="list the models the chosen arm serves: one request, no model call")
+    models.add_argument("--json", action="store_true", help="print the list as JSON")
+    models.set_defaults(handler=_models)
+
     login = commands.add_parser("login", help="log in to GitHub Copilot once, with GitHub's device flow")
     login.add_argument("--force", action="store_true", help="log in again although a token is cached")
     login.set_defaults(handler=_login)
@@ -334,6 +338,24 @@ def _login(args: argparse.Namespace) -> int:
     from .login import main as login
 
     return login(["--force"] if args.force else [])
+
+
+def _models(args: argparse.Namespace) -> int:
+    _load_env()
+    import httpx
+
+    from ..orchestration.catalog import CatalogError, list_models, shown
+    from ..orchestration.models import require_ready
+
+    if why := require_ready():
+        raise UsageError(why)
+    try:
+        models = list_models()
+    except (CatalogError, httpx.HTTPError) as exc:
+        print(f"{PROG}: the models could not be listed: {exc}", file=sys.stderr)
+        return EXIT_ENGINE
+    print(json.dumps({"models": models}, indent=2) if args.json else "\n".join(shown(models)))
+    return EXIT_OK
 
 
 def _smoke(args: argparse.Namespace) -> int:

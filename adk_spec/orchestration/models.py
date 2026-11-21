@@ -37,6 +37,8 @@ truststore.inject_into_ssl()
 
 #: The Copilot arm's provider, as LiteLLM names it.
 COPILOT = "github_copilot"
+#: Where Copilot's calls go where the cached key names no endpoint of its own.
+COPILOT_API = "https://api.githubcopilot.com"
 #: Attempts per model call on a transient failure: the original plus two.
 RETRY_ATTEMPTS = 3
 #: Seconds one model call may take, its retries included on the Copilot arm.

@@ -60,14 +60,16 @@ This is the `lean` tier, which needs one approval. A `standard` change also wait
 
 `adk-spec status` names the next step at any point.
 
-Two commands reach a model provider:
+Three commands reach a model provider:
 
 ```
 uv run adk-spec login
+uv run adk-spec models
 uv run adk-spec smoke
 ```
 
 - `login` logs in to GitHub Copilot once, with GitHub's device flow.
+- `models` lists the models the chosen arm serves. It sends one read-only request and calls no model.
 - `smoke` runs the triage stage alone, to prove the chosen arm answers in a schema.
   `smoke --check` says whether the arm is ready and sends nothing. `smoke --model <name>` tries one model.
 

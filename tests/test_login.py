@@ -85,6 +85,9 @@ def test_the_login_finds_every_litellm_name_it_uses() -> None:
     for name in ("_get_device_code", "_get_github_headers", "_ensure_token_dir", "get_api_key"):
         assert hasattr(Authenticator, name), name
     assert hasattr(Authenticator(), "api_key_file")
+    from litellm.llms.github_copilot.common_utils import get_copilot_default_headers
+
+    assert hasattr(Authenticator, "get_api_base") and "Authorization" in get_copilot_default_headers("k")
 
 
 @pytest.mark.skipif(os.name == "nt", reason="a Windows file has no owner, group and other modes to narrow")
