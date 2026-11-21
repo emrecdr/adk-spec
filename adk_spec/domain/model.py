@@ -119,6 +119,9 @@ class Approval(_Held):
     bases: dict[str, str]
     #: Why the approver set a blocking finding of the check aside, in their words. None where nothing was.
     override: str | None = None
+    #: The commit checked out when the approval was made, where the repository is git's: what `verify` compares
+    #: the work with.
+    commit: str | None = None
 
 
 class Checked(_Held):
@@ -128,6 +131,18 @@ class Checked(_Held):
     at: str
     files: dict[str, str]
     blocking: int
+    model: str | None = None
+
+
+class Verification(_Held):
+    """What a verification of a change judged and found: the commit the work was compared with, the fingerprint of
+    the diff, a verdict for each requirement, and the reason where a person verified it over a verdict."""
+
+    at: str
+    base: str
+    diff: str
+    verdicts: dict[str, str]
+    override: str | None = None
     model: str | None = None
 
 
@@ -145,6 +160,8 @@ class ChangeState(_Held):
     needs_design: bool = False
     #: The last check of the change's files against each other. Void once one of them changes.
     check: Checked | None = None
+    #: The last verification of the work against the change's requirements.
+    verification: Verification | None = None
 
 
 class Change(_Held):

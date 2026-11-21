@@ -23,7 +23,7 @@ def main() -> int:
     importlib.import_module("conftest")  # the suite's own: it registers the fake model
 
     from adk_spec.orchestration import stages
-    from adk_spec.orchestration.stages import brief, check, deltas, design, questions, tasks, triage
+    from adk_spec.orchestration.stages import brief, check, deltas, design, questions, tasks, triage, verify
 
     built = {
         "triage": triage.build_triage(),
@@ -33,6 +33,7 @@ def main() -> int:
         "design": design.build_design(),
         "tasks": tasks.build_tasks(),
         "check": check.build_check(),
+        "verify": verify.build_verify(),
     }
     for name, agent in built.items():
         print(f"##### {name}")

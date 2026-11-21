@@ -165,3 +165,30 @@ class FindingsDraft(BaseModel):
     """What a review of a change's files found. An empty list where it found nothing."""
 
     findings: list[FindingDraft] = Field(description="Each finding. Empty where the files agree.")
+
+
+class EvidenceDraft(BaseModel):
+    """One line of a diff that shows a requirement met, or gone."""
+
+    path: str = Field(description="The file's path, exactly as the diff gives it.")
+    quote: str = Field(description="The line, copied word for word, without its + or - sign.")
+
+
+class VerdictDraft(BaseModel):
+    """Whether a diff meets one requirement."""
+
+    id: str = Field(description="The requirement's ID, exactly as it is listed.")
+    verdict: Literal["met", "unmet", "unclear"] = Field(
+        description=(
+            "met: the diff shows the requirement done, every scenario of it. unmet: the diff shows it not done, or "
+            "done wrong. unclear: the diff does not let you tell."
+        )
+    )
+    evidence: list[EvidenceDraft] = Field(description="The lines of the diff that show it. Empty where none does.")
+    reason: str = Field(description="One or two sentences: why this verdict, and for unmet or unclear what is missing.")
+
+
+class VerdictsDraft(BaseModel):
+    """One verdict for each requirement to judge."""
+
+    verdicts: list[VerdictDraft] = Field(description="One verdict for each requirement listed, and for no other.")

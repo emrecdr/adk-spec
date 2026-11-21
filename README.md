@@ -60,12 +60,13 @@ This is the `lean` tier, which needs one approval. A `standard` change also wait
 
 `adk-spec status` names the next step at any point.
 
-Three commands call a model:
+Four commands call a model:
 
 ```
 uv run adk-spec propose "Let users sign in with a passkey."
 uv run adk-spec plan <id>
 uv run adk-spec check <id>
+uv run adk-spec verify <id>
 ```
 
 - `propose` drafts a change from a request: its brief and one delta for each capability it touches. A model writes
@@ -95,6 +96,18 @@ uv run adk-spec check <id>
   A standard change must be checked before it is approved, and a finding marked blocking holds the approval. Fix
   it and check again, or approve with `--override "<your reason>"`, which is recorded in the approval. An edit
   after the check makes it stale. A lean change owes no check.
+
+- `verify` judges the work once it is done. It reads what changed in the repository since the change was approved
+  (the commit is recorded at approval; `--base <ref>` names another), as one diff: tracked files, and files git
+  does not track yet and does not ignore. A model gives each requirement of the change a verdict, `met`, `unmet` or
+  `unclear`, and quotes the lines that show it. Code then keeps a `met` only where a quoted line is really in the
+  diff: an added line for a requirement the change adds or modifies, a removed line for one it removes. Anything
+  else is `unclear`, so a missing or an invented piece of evidence never reads as a pass. The verdicts are written
+  to `reports/verify.md`.
+
+  A change is `verified` where every requirement is shown met, or where you say so with
+  `--override "<your reason>"`, which is recorded. A standard change is archived only once verified. `verify`
+  needs a git repository and reads it only; it never cuts a diff, and refuses one past 200,000 characters.
 
 On the standard tier `propose` puts each point the brief leaves open to you as a question, at most five a round and
 three rounds, each with a suggested answer. A line answers, `=` takes the suggestion, and an empty line leaves the

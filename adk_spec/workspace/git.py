@@ -24,6 +24,9 @@ from pathlib import Path
 
 #: How long one git command may run, in seconds.
 GIT_TIMEOUT_S: float = 30
+#: What a stage may be given of a diff, in characters. A diff past it is refused, never cut: half a diff would be
+#: judged as the whole.
+DIFF_MAX_CHARS = 200_000
 #: Past this many files that git neither tracks nor ignores, a diff is refused: a virtual environment or a build
 #: folder nobody ignored would be read file by file as new work.
 UNTRACKED_MAX = 500

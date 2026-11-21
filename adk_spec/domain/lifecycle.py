@@ -48,11 +48,17 @@ def approval_files(texts: Mapping[str, str]) -> dict[str, str]:
 
 
 def approve(
-    state: ChangeState, *, files: Mapping[str, str], by: str, at: str, override: str | None = None
+    state: ChangeState,
+    *,
+    files: Mapping[str, str],
+    by: str,
+    at: str,
+    override: str | None = None,
+    commit: str | None = None,
 ) -> ChangeState:
-    """The state with the approval recorded: who, when, each file's fingerprint and the bases as they stand, and
-    the reason where the approver set a blocking finding of the check aside."""
-    approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override)
+    """The state with the approval recorded: who, when, each file's fingerprint and the bases as they stand, the
+    reason where the approver set a blocking finding of the check aside, and the commit the work starts from."""
+    approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override, commit=commit)
     return state.model_copy(update={"status": "approved", "approval": approval})
 
 

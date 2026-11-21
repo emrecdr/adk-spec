@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from .model import Finding
+from .verify import Verdict
 
 _HEADINGS = (("ERROR", "Blocking"), ("WARNING", "Worth a look"), ("INFO", "Notes"))
 
@@ -31,4 +32,25 @@ def render_check(change_id: str, at: str, findings: Sequence[Finding], *, model:
     if dropped:
         were = "finding of the model was" if dropped == 1 else "findings of the model were"
         lines += [f"{dropped} {were} left out: the text quoted is not in the file named.", ""]
+    return "\n".join(lines)
+
+
+def render_verify(
+    change_id: str, at: str, base: str, verdicts: Sequence[Verdict], *, model: str | None, override: str | None = None
+) -> str:
+    """`reports/verify.md`: what the work was compared with, and for each requirement its verdict, the reason, and
+    the lines of the diff that show it."""
+    judge = f"by {model}" if model else "with no requirement to judge"
+    lines = [f"# Verification of `{change_id}`", "", f"Judged {at} against the commit {base[:12]}, {judge}.", ""]
+    open_ = [one for one in verdicts if one.verdict != "met"]
+    if not open_:
+        lines += ["Every requirement is shown met.", ""]
+    else:
+        lines += [f"{len(open_)} of {len(verdicts)} requirements are not shown met.", ""]
+    if override:
+        lines += [f"Verified all the same, by a person's decision: {override}", ""]
+    for one in verdicts:
+        lines += [f"## {one.id}: {one.verdict}", "", one.reason, ""]
+        if one.evidence:
+            lines += [*(f"- {path}: {quote}" for path, quote in one.evidence), ""]
     return "\n".join(lines)

@@ -28,7 +28,7 @@ from ..domain.brief_md import markers, parse_brief, render_brief
 from ..domain.check import coverage
 from ..domain.convert import DESIGN_SECTIONS, render_design, to_brief, to_deltas, to_tasks
 from ..domain.delta_md import parse_delta, render_delta
-from ..domain.drafts import BriefDraft, DeltasDraft, DesignDraft, QuestionsDraft, TasksDraft, Triage
+from ..domain.drafts import BriefDraft, DeltasDraft, DesignDraft, QuestionsDraft, TasksDraft, Triage, VerdictsDraft
 from ..domain.ids import slug_problem
 from ..domain.lifecycle import capture_bases
 from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
@@ -45,6 +45,7 @@ from .stages import design as design_stage
 from .stages import questions as questions_stage
 from .stages import tasks as tasks_stage
 from .stages import triage as triage_stage
+from .stages import verify as verify_stage
 
 NAME = "adk_spec"
 #: The state key the tier a run settled on is left under: a tier, or `none` where no spec is owed.
@@ -359,4 +360,20 @@ def build_check_app(*, ledger: UsageLedger, recorder: BasePlugin | None = None) 
     points at nothing is left out by code afterwards, not sent back."""
     check, check_gate = check_stage.build_check(), checked(check_stage.KEY, lambda _state: [])
     edges: list[Any] = [("START", check, check_gate), (check_gate, {OK: _ended, AGAIN: check, GIVE_UP: _ended})]
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
+
+
+def build_verify_app(*, ledger: UsageLedger, required: frozenset[str], recorder: BasePlugin | None = None) -> App:
+    """The verify stage behind its gate, which holds it to one thing code can see: a verdict for each requirement
+    of `required`. Whether a verdict stands is decided afterwards, against the diff."""
+
+    def check_verdicts(state: Mapping[str, Any]) -> list[str]:
+        given = {one.id.strip() for one in VerdictsDraft.model_validate(state[verify_stage.KEY]).verdicts}
+        missing = sorted(required - given)
+        return (
+            [f"no verdict was given for {', '.join(missing)}. Give one for each requirement listed."] if missing else []
+        )
+
+    verify, verify_gate = verify_stage.build_verify(), checked(verify_stage.KEY, check_verdicts)
+    edges: list[Any] = [("START", verify, verify_gate), (verify_gate, {OK: _ended, AGAIN: verify, GIVE_UP: _ended})]
     return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))

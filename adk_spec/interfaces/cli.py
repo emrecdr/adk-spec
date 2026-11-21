@@ -35,10 +35,12 @@ from ..domain.lifecycle import (
     next_action,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import ChangeState, Checked, Finding, Spec, Tier
-from ..domain.report_md import render_check
+from ..domain.model import ChangeState, Checked, Finding, Spec, Tier, Verification
+from ..domain.report_md import render_check, render_verify
 from ..domain.tasks_md import render_tasks
+from ..domain.text import sha256_of
 from ..domain.validate import failed, finding, validate_spec
+from ..domain.verify import Verdict, grounded
 from ..workspace.config import ConfigError
 from ..workspace.context import (
     CONSTITUTION_MAX_CHARS,
@@ -48,6 +50,7 @@ from ..workspace.context import (
     living_text,
 )
 from ..workspace.files import NotTextError
+from ..workspace.git import DIFF_MAX_CHARS, GitError, diff, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGES,
@@ -82,6 +85,10 @@ CHECKOUT = Path(__file__).resolve().parents[2]
 SMOKE_REQUEST = "Let users reset a forgotten password by email."
 #: What the workspace refuses with one sentence: said to the person, and `EXIT_USAGE`.
 REFUSALS = (WorkspaceError, ConfigError, PathError, NotTextError)
+
+
+class NotYetError(Exception):
+    """A command that cannot do its work yet, for a reason in the change itself: said, and exit code 1."""
 
 
 class UsageError(Exception):
@@ -152,6 +159,14 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("id", help="the change")
     check.add_argument("--no-model", action="store_true", help="run the checks code makes, and call no model")
     check.set_defaults(handler=_check)
+
+    verify = commands.add_parser("verify", help="judge what changed in the repository against a change's requirements")
+    verify.add_argument("id", help="the change")
+    verify.add_argument("--base", metavar="REF", help="the commit the work started from (default: the approval's)")
+    verify.add_argument(
+        "--override", metavar="REASON", help="verify although a requirement is not shown met, and record why"
+    )
+    verify.set_defaults(handler=_verify)
 
     smoke = commands.add_parser("smoke", help="run the triage stage alone, to prove an arm answers in a schema")
     smoke.add_argument("--model", help="the model for this run alone, in place of the arm's")
@@ -351,9 +366,18 @@ def _approve(args: argparse.Namespace) -> int:
         raise UsageError("this account has no name: name the approver with --by") from exc
     at = datetime.now(UTC).isoformat(timespec="seconds")
     override = args.override if overridden else None
-    workspace.save_state(approve(loaded.change.state, files=files, by=by, at=at, override=override))
+    recorded = approve(loaded.change.state, files=files, by=by, at=at, override=override, commit=_commit(workspace))
+    workspace.save_state(recorded)
     print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
     return EXIT_OK
+
+
+def _commit(workspace: Workspace) -> str | None:
+    """The commit checked out where an approval is made, or nothing: no repository here, or no git to ask."""
+    try:
+        return head(workspace.root) if is_repository(workspace.root) else None
+    except GitError:
+        return None
 
 
 def _archive(args: argparse.Namespace) -> int:
@@ -669,6 +693,138 @@ def _judged(
         return [], 0, ledger, str(failure)
     judged, dropped = to_findings(answer, texts)
     return judged, dropped, ledger, None
+
+
+def _verify(args: argparse.Namespace) -> int:
+    _load_env()
+    workspace = _workspace(args)
+    with lock_held(workspace):
+        try:
+            return _verified(args, workspace)
+        except NotYetError as exc:
+            print(f"{PROG}: {exc}", file=sys.stderr)
+            return EXIT_FINDINGS
+        except GitError as exc:
+            raise UsageError(str(exc)) from exc
+
+
+def _implementation(
+    args: argparse.Namespace, workspace: Workspace, state: ChangeState, stale: list[str]
+) -> tuple[str, str]:
+    """The commit a change's work is compared with, and the diff from it to the working tree. `NotYetError` where
+    the change is not ready to be verified or nothing was done; `UsageError` where there is nothing to compare."""
+    cid, root = state.id, workspace.root
+    if state.status == "archived":
+        raise NotYetError(f"`{cid}` is archived already")
+    if state.approval is None or state.status == "draft":
+        raise NotYetError(f"`{cid}` is not approved: run `adk-spec approve {cid}` first")
+    if stale:
+        raise NotYetError(
+            f"the approval of `{cid}` is void: {', '.join(stale)} changed since. Run `adk-spec approve {cid}` again"
+        )
+    if not is_repository(root):
+        raise UsageError(f"{root} is in no git repository: verify reads what changed since the approval")
+    named = args.base or state.approval.commit
+    if not named:
+        raise UsageError(
+            f"no commit was recorded when `{cid}` was approved. Name the commit the work started from with --base"
+        )
+    base = resolves(root, named)
+    if base is None:
+        raise UsageError(f"`{named}` names no commit in this repository")
+    text = diff(root, base)
+    if not text.strip():
+        raise NotYetError(f"nothing under {root} changed since {base[:12]}: there is nothing to verify")
+    if len(text) > DIFF_MAX_CHARS:
+        raise UsageError(
+            f"the diff since {base[:12]} holds {len(text):,} characters, past the {DIFF_MAX_CHARS:,} a stage is "
+            "given. It is never cut. Verify a smaller change, or name a later commit with --base"
+        )
+    return base, text
+
+
+def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
+    """The work judged against the change's requirements, one verdict each. The report is written and the
+    verification recorded; the change is `verified` where every requirement is shown met, or a person says so
+    with a reason."""
+    specs, _of_living = workspace.specs()
+    loaded, _found, stale, _owed = _assessed(workspace, args.id, specs)
+    change, state = loaded.change, loaded.change.state
+    base, text = _implementation(args, workspace, state, stale)
+    added = owed(change.deltas)
+    removed = frozenset(gone.id for delta in change.deltas.values() for gone in delta.removed)
+    verdicts: list[Verdict] = []
+    ledger, model = None, None
+    if added or removed:  # a change with no delta has no requirement to judge
+        from ..orchestration.models import serving
+
+        verdicts, ledger, failure = _verdicts(workspace, change, text, added, removed)
+        if failure:
+            print(f"{PROG}: the verification did not finish, and nothing was recorded: {failure}", file=sys.stderr)
+            print(f"tokens    {_spent(ledger)}")
+            return EXIT_ENGINE
+        model = serving("verify")
+    at = datetime.now(UTC).isoformat(timespec="seconds")
+    met = all(one.verdict == "met" for one in verdicts)
+    override = None if met else (args.override or None)
+    verified = met or override is not None
+    report = render_verify(args.id, at, base, verdicts, model=model, override=override)
+    path = workspace.write_report(args.id, "verify.md", report)
+    held = Verification(
+        at=at,
+        base=base,
+        diff=sha256_of(text),
+        verdicts={v.id: v.verdict for v in verdicts},
+        override=override,
+        model=model,
+    )
+    status = "verified" if verified else "approved"
+    workspace.save_state(state.model_copy(update={"verification": held, "status": status}))
+    for one in verdicts:
+        print(f"{one.verdict:<8}  {one.id}  {one.reason}")
+    print(f"wrote     {workspace.shown(path)}")
+    if ledger is not None:
+        print(f"tokens    {_spent(ledger)}")
+    loaded, found, stale, unchecked = _assessed(workspace, args.id, specs)
+    print(f"next      {next_action(loaded.change.state, found, stale, check=unchecked)}")
+    return EXIT_OK if verified else EXIT_FINDINGS
+
+
+def _verdicts(
+    workspace: Workspace, change: Any, text: str, added: frozenset[str], removed: frozenset[str]
+) -> tuple[list[Verdict], Any, str | None]:
+    """The model's verdicts on a diff, each held to the lines the diff really holds; the ledger; and the failure,
+    where the run did not end well."""
+    from ..orchestration.models import require_ready
+
+    if why := require_ready(roles=("verify",)):
+        raise UsageError(why)
+    from ..orchestration.gate import FAILURE
+    from ..orchestration.graph import build_verify_app
+    from ..orchestration.plugins import UsageLedger
+    from ..orchestration.stages import DELTAS_TEXT
+    from ..orchestration.stages.verify import DIFF, REQUIRED, TASKS_TEXT, read_verify
+
+    sides = [
+        ("added or modified, shown by lines the diff adds", added),
+        ("removed, shown by lines the diff removes", removed),
+    ]
+    seed = {
+        DELTAS_TEXT: "\n".join(render_delta(delta) for _capability, delta in sorted(change.deltas.items())),
+        TASKS_TEXT: render_tasks(change.tasks) if change.tasks else "",
+        REQUIRED: "\n".join(f"{what}: {', '.join(sorted(ids))}" for what, ids in sides if ids),
+        DIFF: text,
+    }
+    ledger = UsageLedger(workspace.config().max_tokens or None)
+    with _recording(workspace, "verify", change.state.id) as kept:
+        app = build_verify_app(ledger=ledger, required=added | removed, recorder=kept.recorder)
+        run = _ran(app, seed, "verify")
+        answer = read_verify(run.state)
+        failure = run.state.get(FAILURE) or run.failure or (answer if isinstance(answer, str) else None)
+        kept.outcome = f"failed: {failure}" if failure else "written"
+    if failure or isinstance(answer, str):
+        return [], ledger, str(failure)
+    return grounded(answer, text, added=added, removed=removed), ledger, None
 
 
 def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:

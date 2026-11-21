@@ -118,6 +118,30 @@ CANNED_FINDINGS = {
         }
     ]
 }
+#: A verdict for each requirement the sample delta touches, each quoting a line of `test_verify.py`'s diff: 004 is
+#: added and 002 modified, so they quote added lines; 001 is removed, so it quotes a removed one.
+CANNED_VERDICTS = {
+    "verdicts": [
+        {
+            "id": "REQ-AUTH-004",
+            "verdict": "met",
+            "evidence": [{"path": "src/auth.py", "quote": "return passkey(user)"}],
+            "reason": "Sign-in now goes through the passkey.",
+        },
+        {
+            "id": "REQ-AUTH-002",
+            "verdict": "met",
+            "evidence": [{"path": "src/auth.py", "quote": "return account.failures >= 3"}],
+            "reason": "The lock now falls at three failures.",
+        },
+        {
+            "id": "REQ-AUTH-001",
+            "verdict": "met",
+            "evidence": [{"path": "src/auth.py", "quote": "return password(user)"}],
+            "reason": "The password path is gone.",
+        },
+    ]
+}
 CANNED: tuple[dict, ...] = (
     CANNED_TRIAGE,
     CANNED_BRIEF,
@@ -126,6 +150,7 @@ CANNED: tuple[dict, ...] = (
     CANNED_TASKS,
     CANNED_DESIGN,
     CANNED_FINDINGS,
+    CANNED_VERDICTS,
 )
 
 
