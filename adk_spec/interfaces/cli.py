@@ -384,7 +384,8 @@ def _answered(payload: dict[str, Any]) -> dict[str, Any]:
     suggestion; an empty line leaves the point open; the end of the input answers every question still to come with
     nothing. The answers go back as data, never as text a run could take for a new request."""
     questions = payload.get("questions") or []
-    print(f"The brief leaves {len(questions)} open. A line answers. `=` takes the suggestion.")
+    points = "1 point" if len(questions) == 1 else f"{len(questions)} points"
+    print(f"The brief leaves {points} open. A line answers. `=` takes the suggestion.")
     print("An empty line leaves the point open.")
     answers: list[str] = []
     ended = False

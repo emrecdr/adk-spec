@@ -45,6 +45,7 @@ def test_a_marker_becomes_a_question_and_the_answer_reaches_the_next_brief(
     assert markers(read_text(tmp_path / ".spec/changes/asked/brief.md")) == []
     out = capsys.readouterr().out
     assert "Which browsers are in scope?" in out and "Evergreen browsers only" in out
+    assert "The brief leaves 1 point open." in out
     assert len(asked(fake_provider, QUESTIONS)) == 1 and len(asked(fake_provider, TRIAGE)) == 1
 
 
