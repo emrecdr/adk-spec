@@ -23,6 +23,7 @@ from google.adk.apps.app import App
 from google.adk.events import Event
 from google.adk.plugins.base_plugin import BasePlugin
 from google.adk.workflow import Workflow
+from google.genai import types
 
 from ..domain.brief_md import markers, parse_brief, render_brief
 from ..domain.check import coverage
@@ -37,7 +38,7 @@ from ..domain.validate import validate_brief, validate_delta, validate_tasks
 from ..workspace.context import ContextTooLargeError, living_text
 from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked
 from .plugins import UsageLedger, roster
-from .stages import BRIEF_TEXT, LIVING, TIER
+from .stages import BRIEF_TEXT, LIVING, REQUEST, TIER
 from .stages import brief as brief_stage
 from .stages import check as check_stage
 from .stages import deltas as deltas_stage
@@ -291,6 +292,48 @@ def _designed(ctx: Context) -> Event:
     return Event(state={tasks_stage.DESIGN_TEXT: render_design(draft)})
 
 
+def _propose_edges(
+    known: Known, *, ask: bool, entry: Entry, start: Any = "START", done: Any = _ended, ended: Any = _ended
+) -> list[Any]:
+    """The edges of a propose run from `entry` on: triage, the brief and the deltas, each behind its gate. The run
+    begins after `start`, goes to `done` once the deltas pass their gate, and to `ended` wherever it stops short:
+    a stage given up, or a request that owes no spec."""
+    gathered = _gathering(known)
+    deltas, deltas_gate = deltas_stage.build_deltas(), checked(deltas_stage.KEY, _deltas_check(known))
+    edges: list[Any] = [
+        (gathered, {GO: deltas, STOP: ended}),
+        (deltas, deltas_gate),
+        (deltas_gate, {OK: done, AGAIN: deltas, GIVE_UP: ended}),
+    ]
+    if entry == "deltas":
+        return [(start, gathered), *edges]
+    open_points = _open_points(ask)
+    brief, brief_gate = brief_stage.build_brief(), checked(brief_stage.KEY, _check_brief)
+    questions, questions_gate = questions_stage.build_questions(), checked(questions_stage.KEY, _check_questions)
+    return [
+        *_opening(brief, entry, start, ended),
+        (brief, brief_gate),
+        (brief_gate, {OK: open_points, AGAIN: brief, GIVE_UP: ended}),
+        (open_points, {NONE: gathered, SOME: questions}),
+        (questions, questions_gate),
+        (questions_gate, {OK: _pending, AGAIN: questions, GIVE_UP: _unasked}),
+        (_unasked, gathered),
+        *edges,
+    ]
+
+
+def _opening(brief: Any, entry: Entry, start: Any, ended: Any) -> list[Any]:
+    """The edges up to the brief: through triage for a request to size, straight to it otherwise."""
+    if entry == "brief":
+        return [(start, brief)]
+    triage, triage_gate = triage_stage.build_triage(), checked(triage_stage.KEY, lambda _state: [])
+    return [
+        (start, triage, triage_gate),
+        (triage_gate, {OK: _sized, AGAIN: triage, GIVE_UP: ended}),
+        (_sized, {GO: brief, NONE: ended}),
+    ]
+
+
 def build_propose_app(
     known: Known, *, ask: bool, entry: Entry, ledger: UsageLedger, recorder: BasePlugin | None = None
 ) -> App:
@@ -299,42 +342,43 @@ def build_propose_app(
 
     With `ask`, a standard change whose brief leaves a point open ends its run on the questions, under `ASKING`.
     `first_run` and `next_run` say which entry a run takes and what it is seeded with."""
-    gathered = _gathering(known)
-    deltas, deltas_gate = deltas_stage.build_deltas(), checked(deltas_stage.KEY, _deltas_check(known))
-    edges: list[Any] = [
-        (gathered, {GO: deltas, STOP: _ended}),
-        (deltas, deltas_gate),
-        (deltas_gate, {OK: _ended, AGAIN: deltas, GIVE_UP: _ended}),
-    ]
-    if entry == "deltas":
-        edges = [("START", gathered), *edges]
-    else:
-        open_points = _open_points(ask)
-        brief, brief_gate = brief_stage.build_brief(), checked(brief_stage.KEY, _check_brief)
-        questions, questions_gate = questions_stage.build_questions(), checked(questions_stage.KEY, _check_questions)
-        edges = [
-            *_opening(brief, entry),
-            (brief, brief_gate),
-            (brief_gate, {OK: open_points, AGAIN: brief, GIVE_UP: _ended}),
-            (open_points, {NONE: gathered, SOME: questions}),
-            (questions, questions_gate),
-            (questions_gate, {OK: _pending, AGAIN: questions, GIVE_UP: _unasked}),
-            (_unasked, gathered),
-            *edges,
-        ]
+    edges = _propose_edges(known, ask=ask, entry=entry)
     return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
 
 
-def _opening(brief: Any, entry: Entry) -> list[Any]:
-    """The edges up to the brief: through triage for a request to size, straight to it otherwise."""
-    if entry == "brief":
-        return [("START", brief)]
-    triage, triage_gate = triage_stage.build_triage(), checked(triage_stage.KEY, lambda _state: [])
-    return [
-        ("START", triage, triage_gate),
-        (triage_gate, {OK: _sized, AGAIN: triage, GIVE_UP: _ended}),
-        (_sized, {GO: brief, NONE: _ended}),
+def build_chat_app(known: Known, told: Mapping[str, Any], *, ledger: UsageLedger) -> App:
+    """The shape ADK's own interface loads: one message typed is one request. It is drafted as `propose` drafts it
+    with no question asked, and the run ends on one message that holds the drafts as their files, or the reason
+    there are none. Nothing is written: a chat is for watching a run, and `adk-spec propose` is what writes.
+
+    `told` is what every run is seeded with of the workspace: the capability index and the repository's rules."""
+
+    def opened(node_input: Any = None) -> Event:
+        """The message typed becomes the request, beside what the workspace says."""
+        parts = getattr(node_input, "parts", None) or ()
+        typed = " ".join(part.text for part in parts if part.text) or str(node_input or "")
+        return Event(state={**told, REQUEST: typed})
+
+    def shown(ctx: Context) -> Event:
+        made = drafted(ctx.state.to_dict(), known)
+        files = {"brief.md": render_brief(made.brief)}
+        files |= {f"specs/{capability}/spec.md": render_delta(delta) for capability, delta in made.deltas.items()}
+        pages = "\n\n".join(f"--- {path}\n{text}" for path, text in files.items())
+        return Event(
+            content=types.ModelContent(f"Drafted, and not written. `adk-spec propose` writes a change.\n\n{pages}")
+        )
+
+    def closed(ctx: Context) -> Event:
+        why = ctx.state.get(FAILURE)
+        if not why and ctx.state.get(TIER) == "none":
+            why = f"no spec is owed. {Triage.model_validate(ctx.state[triage_stage.KEY]).reason}"
+        return Event(content=types.ModelContent(f"Nothing was drafted: {why or 'the run ended early'}"))
+
+    edges = [
+        ("START", opened),
+        *_propose_edges(known, ask=False, entry="triage", start=opened, done=shown, ended=closed),
     ]
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger))
 
 
 def build_plan_app(

@@ -1,0 +1,3 @@
+the loader found: App | names: ['probe_pkg']
+the first node received: [('UserContent', 'Let users sign in.')]
+messages in the stream: [('probe_pkg', 'drafted: Let users sign in.')]

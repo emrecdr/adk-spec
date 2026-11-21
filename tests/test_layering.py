@@ -110,6 +110,20 @@ def test_only_the_git_layer_starts_a_program() -> None:
     assert starters == ["workspace/git.py"]
 
 
+def test_the_package_builds_nothing_until_adks_loader_asks_for_its_agent() -> None:
+    """`agent.py` builds at import, as ADK's loader requires of it, and is the one module that does: nothing of the
+    package imports it, so a command never pays for it."""
+    importers = [
+        path.relative_to(PACKAGE).as_posix()
+        for path in sorted(PACKAGE.rglob("*.py"))
+        for node, target in _relative_imports(path)
+        if target == PACKAGE / "agent" or (node.module is None and any(alias.name == "agent" for alias in node.names))
+    ]
+    assert importers == []
+    body = "import adk_spec, adk_spec.interfaces.cli\nprint('adk_spec.agent' in sys.modules)\n"
+    assert _probe(body) == "False"
+
+
 def test_no_module_below_the_root_is_named_agent() -> None:
     """`adk web`'s loader reads any folder holding an `agent.py` as an agent of its own."""
     assert [p for p in PACKAGE.rglob("agent.py") if p.parent != PACKAGE] == []

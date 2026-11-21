@@ -136,6 +136,13 @@ uv run adk-spec smoke
 - `smoke` runs the triage stage alone, to prove the chosen arm answers in a schema.
   `smoke --check` says whether the arm is ready and sends nothing. `smoke --model <name>` tries one model.
 
+## Watching a run in ADK's own interface
+
+`adk_spec/agent.py` is the shape ADK's interface loads. From inside a repository that holds `.spec/`, run
+`uv run --project <this checkout> adk web <this checkout>` and choose `adk_spec`. One message you type is one
+request: it is drafted as `propose --no-input` drafts it, stage by stage in the event view, and the chat ends on the
+drafts. Nothing is written and no question is asked. The commands are the product; this is for watching.
+
 ## Measuring the model's stages
 
 `uv run python -m scripts.measure` builds six small changes, five with one fault planted, runs `check` or `verify`
