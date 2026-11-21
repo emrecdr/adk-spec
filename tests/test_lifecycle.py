@@ -24,6 +24,7 @@ DRAFT = ChangeState(id="passkeys", tier="lean", bases={"REQ-AUTH-002": "sha256:"
 AT = "2026-11-21T10:00:00+00:00"
 ERROR = Finding(severity="ERROR", code="spec.no-scenario", message="m")
 NO_BASE = Finding(severity="WARNING", code="delta.base-missing", message="m")
+NO_TASKS = Finding(severity="WARNING", code="change.missing-tasks", message="m")
 MARKER = Finding(severity="WARNING", code="brief.marker-unresolved", message="m")
 OTHER = Finding(severity="WARNING", code="spec.no-shall", message="m")
 
@@ -88,6 +89,10 @@ def test_what_an_archive_waits_for() -> None:
     [
         (DRAFT, [ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_BASE], ["approval"], "run `adk-spec rebase passkeys`"),
+        (DRAFT, [NO_TASKS], ["approval"], "run `adk-spec plan passkeys`"),
+        (DRAFT, [NO_TASKS, NO_BASE], ["approval"], "run `adk-spec plan passkeys`"),
+        (DRAFT, [NO_TASKS, MARKER], ["approval"], "fix what `adk-spec validate passkeys` lists"),
+        (DRAFT, [NO_TASKS, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [MARKER], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [OTHER], ["approval"], "run `adk-spec approve passkeys`"),
         (DRAFT, [], ["approval"], "run `adk-spec approve passkeys`"),

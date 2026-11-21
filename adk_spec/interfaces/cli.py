@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, NoReturn, get_args
 
 from ..domain.brief_md import render_brief
-from ..domain.convert import slug_of
+from ..domain.convert import render_design, slug_of, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.ids import slug_problem
 from ..domain.lifecycle import (
@@ -33,9 +33,11 @@ from ..domain.lifecycle import (
 )
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import ChangeState, Finding, Spec, Tier
+from ..domain.spec_md import render_spec
+from ..domain.tasks_md import render_tasks
 from ..domain.validate import failed, finding, validate_spec
 from ..workspace.config import ConfigError
-from ..workspace.context import CONSTITUTION_MAX_CHARS, capability_index, constitution_text
+from ..workspace.context import CONSTITUTION_MAX_CHARS, capability_index, constitution_text, joined
 from ..workspace.files import NotTextError
 from ..workspace.layout import (
     CHANGES,
@@ -124,6 +126,10 @@ def _parser() -> argparse.ArgumentParser:
     propose.add_argument("--tier", choices=("lean", "standard"), help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
     propose.set_defaults(handler=_propose)
+
+    plan = commands.add_parser("plan", help="draft a change's tasks, and its design where one is owed")
+    plan.add_argument("id", help="the change")
+    plan.set_defaults(handler=_plan)
 
     smoke = commands.add_parser("smoke", help="run the triage stage alone, to prove an arm answers in a schema")
     smoke.add_argument("--model", help="the model for this run alone, in place of the arm's")
@@ -434,6 +440,65 @@ def _propose(args: argparse.Namespace) -> int:
         raise UsageError(why)
     with lock_held(workspace):
         return _proposed(args, workspace)
+
+
+def _plan(args: argparse.Namespace) -> int:
+    _load_env()
+    workspace = _workspace(args)
+    with lock_held(workspace):
+        return _planned(args, workspace)
+
+
+def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
+    specs, _of_living = workspace.specs()
+    loaded, found, _stale = _assessed(workspace, args.id, specs)
+    change, state = loaded.change, loaded.change.state
+    if state.status != "draft":  # new tasks would void what was approved
+        print(f"{PROG}: `{args.id}` is {state.status}: a plan is drafted while a change is a draft", file=sys.stderr)
+        return EXIT_FINDINGS
+    # What must be right before tasks are worth drafting: everything but the tasks themselves.
+    blocking = [held for held in found if held.severity == "ERROR" and not held.code.startswith("tasks.")]
+    if blocking or change.brief is None:
+        _printed(blocking)
+        print(f"{PROG}: `{args.id}` is not planned: its brief and deltas have errors. Fix them first", file=sys.stderr)
+        return EXIT_FINDINGS
+    from ..orchestration.models import require_ready
+
+    roles = ("design", "tasks") if state.needs_design else ("tasks",)
+    if why := require_ready(roles=roles):
+        raise UsageError(why)
+    from ..orchestration.gate import FAILURE
+    from ..orchestration.graph import Known, build_plan_app
+    from ..orchestration.stages.brief import CONSTITUTION as RULES
+    from ..orchestration.stages.deltas import BRIEF_TEXT, LIVING
+    from ..orchestration.stages.design import DELTAS_TEXT, read_design
+    from ..orchestration.stages.tasks import read_tasks
+
+    seed = {
+        RULES: constitution_text(workspace),
+        BRIEF_TEXT: render_brief(change.brief),
+        DELTAS_TEXT: "\n".join(render_delta(delta) for _capability, delta in sorted(change.deltas.items())),
+        LIVING: joined({slug: render_spec(specs[slug]) for slug in sorted(change.deltas) if slug in specs}),
+    }
+    known = Known(living=specs, taken={}, ceiling=workspace.config().max_tokens or None)
+    app = build_plan_app(known, design=state.needs_design)
+    run = _ran(app, seed, "plan")
+    tasks = read_tasks(run.state)
+    failure = run.state.get(FAILURE) or run.failure or (tasks if isinstance(tasks, str) else None)
+    if failure or isinstance(tasks, str):
+        print(f"{PROG}: no plan was written: {failure}", file=sys.stderr)
+        print(f"tokens    {_spent(app)}")
+        return EXIT_ENGINE
+    files = {"tasks.md": render_tasks(to_tasks(tasks))}
+    design = read_design(run.state) if state.needs_design else None
+    if design is not None and not isinstance(design, str):
+        files["design.md"] = render_design(design)
+    for path in workspace.write_into(args.id, files):
+        print(f"wrote     {workspace.shown(path)}")
+    print(f"tokens    {_spent(app)}")
+    loaded, found, stale = _assessed(workspace, args.id, specs)
+    print(f"next      {next_action(loaded.change.state, found, stale)}")
+    return EXIT_OK
 
 
 def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:

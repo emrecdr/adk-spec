@@ -235,6 +235,16 @@ class Workspace:
             raise
         return folder
 
+    def write_into(self, change_id: str, files: Mapping[str, str]) -> list[Path]:
+        """Each of `files` written into an existing change's folder, by its path there, as one set."""
+        folder = self._folder(change_id)
+        try:
+            texts = {inside(folder, *path.split("/")): text for path, text in files.items()}
+        except PathError as exc:
+            raise WorkspaceError(f"the change cannot be written: {exc}") from exc
+        write_all(texts)
+        return list(texts)
+
     def save_state(self, state: ChangeState) -> None:
         write_text(inside(self.home, CHANGES, state.id, STATE), state.model_dump_json(indent=2))
 

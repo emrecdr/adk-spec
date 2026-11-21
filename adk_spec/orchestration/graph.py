@@ -20,20 +20,23 @@ from google.adk.events.request_input import RequestInput
 from google.adk.workflow import Workflow
 
 from ..domain.brief_md import markers, render_brief
-from ..domain.convert import to_brief, to_deltas
+from ..domain.convert import render_design, to_brief, to_deltas, to_tasks
 from ..domain.delta_md import parse_delta, render_delta
-from ..domain.drafts import BriefDraft, DeltasDraft, QuestionsDraft, Triage
+from ..domain.drafts import BriefDraft, DeltasDraft, DesignDraft, QuestionsDraft, TasksDraft, Triage
 from ..domain.ids import slug_problem
 from ..domain.lifecycle import capture_bases
 from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.spec_md import render_spec
-from ..domain.validate import validate_brief, validate_delta
+from ..domain.tasks_md import parse_tasks, render_tasks
+from ..domain.validate import validate_brief, validate_delta, validate_tasks
 from ..workspace.context import ContextTooLargeError, joined
 from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked, tries_key
 from .plugins import roster
 from .stages import brief as brief_stage
 from .stages import deltas as deltas_stage
+from .stages import design as design_stage
 from .stages import questions as questions_stage
+from .stages import tasks as tasks_stage
 from .stages import triage as triage_stage
 
 NAME = "adk_spec"
@@ -224,6 +227,48 @@ def build_propose_app(known: Known, *, tier: Tier | None, ask: bool) -> App:
         (deltas, deltas_gate),
         (deltas_gate, {OK: _ended, AGAIN: deltas, GIVE_UP: _ended}),
     ]
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(known.ceiling))
+
+
+def _check_design(state: Mapping[str, Any]) -> list[str]:
+    draft = DesignDraft.model_validate(state[design_stage.KEY])
+    sections = {"context": draft.context, "goals": draft.goals, "decisions": draft.decisions, "risks": draft.risks}
+    return [f"the design's {name} section is empty. Write it." for name, text in sections.items() if not text.strip()]
+
+
+def _check_tasks(state: Mapping[str, Any]) -> list[str]:
+    groups = to_tasks(TasksDraft.model_validate(state[tasks_stage.KEY]))
+    if not any(group.tasks for group in groups):
+        return ["the plan holds no task. Write one task at least for each requirement the deltas add or change."]
+    try:
+        same = parse_tasks(render_tasks(groups)) == groups
+    except GrammarError as exc:
+        return [f"the tasks cannot be written as their file: {exc.message}."]
+    if not same:
+        return ["the tasks do not read back as written: keep each description, file and check on one line."]
+    return _errors(validate_tasks(groups))
+
+
+def _designed(ctx: Context) -> Event:
+    """The design as its file, for the tasks stage to read."""
+    draft = DesignDraft.model_validate(ctx.state[design_stage.KEY])
+    return Event(state={tasks_stage.DESIGN_TEXT: render_design(draft)})
+
+
+def build_plan_app(known: Known, *, design: bool) -> App:
+    """The design, where the change owes one, and then the tasks, each behind its gate."""
+    tasks, tasks_gate = tasks_stage.build_tasks(), checked(tasks_stage.KEY, _check_tasks)
+    edges: list[Any] = [(tasks, tasks_gate), (tasks_gate, {OK: _ended, AGAIN: tasks, GIVE_UP: _ended})]
+    if design:
+        drafting, design_gate = design_stage.build_design(), checked(design_stage.KEY, _check_design)
+        edges = [
+            ("START", drafting, design_gate),
+            (design_gate, {OK: _designed, AGAIN: drafting, GIVE_UP: _ended}),
+            (_designed, tasks),
+            *edges,
+        ]
+    else:
+        edges = [("START", tasks), *edges]
     return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(known.ceiling))
 
 

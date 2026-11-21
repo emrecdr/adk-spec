@@ -108,6 +108,9 @@ def next_action(state: ChangeState, findings: Sequence[Finding], stale: Sequence
         return f"implement tasks.md, then run `adk-spec verify {cid}`"
     blockers = approve_blockers(state, findings)
     errors = any(found.severity == "ERROR" for found in findings)
+    codes = {found.code for found in blockers}
+    if not errors and "change.missing-tasks" in codes and codes <= {"change.missing-tasks", "delta.base-missing"}:
+        return f"run `adk-spec plan {cid}`"
     if not errors and any(found.code == "delta.base-missing" for found in blockers):
         return f"run `adk-spec rebase {cid}`"
     if blockers:

@@ -77,7 +77,36 @@ CANNED_QUESTIONS = {
         }
     ]
 }
-CANNED: tuple[dict, ...] = (CANNED_TRIAGE, CANNED_BRIEF, CANNED_DELTAS, CANNED_QUESTIONS)
+CANNED_TASKS = {
+    "groups": [
+        {
+            "title": "1. Passkey sign-in",
+            "tasks": [
+                {
+                    "description": "Write the failing passkey sign-in test",
+                    "requirements": ["REQ-AUTH-004"],
+                    "files": ["tests/test_passkey.py"],
+                    "verify": "uv run pytest tests/test_passkey.py",
+                    "parallel": False,
+                },
+                {
+                    "description": "Implement the passkey handler",
+                    "requirements": ["REQ-AUTH-004", "REQ-AUTH-002"],
+                    "files": ["src/auth/passkey.py"],
+                    "verify": "uv run pytest tests/test_passkey.py",
+                    "parallel": False,
+                },
+            ],
+        }
+    ]
+}
+CANNED_DESIGN = {
+    "context": "Sign-in is one handler behind the session service.",
+    "goals": "Passkeys beside passwords, with no change to sessions.",
+    "decisions": "WebAuthn through the platform API, not a library: one less dependency.",
+    "risks": "Older browsers lack WebAuthn: the password path stays.",
+}
+CANNED: tuple[dict, ...] = (CANNED_TRIAGE, CANNED_BRIEF, CANNED_DELTAS, CANNED_QUESTIONS, CANNED_TASKS, CANNED_DESIGN)
 
 
 def canned_for(schema: type[BaseModel]) -> dict:
