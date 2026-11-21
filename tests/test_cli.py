@@ -6,10 +6,11 @@ import json
 
 import pytest
 from conftest import seeded
-from samples import SPEC
+from samples import BRIEF, DELTA, SPEC, TASKS
 
+from adk_spec.domain.spec_md import parse_spec
 from adk_spec.interfaces.cli import main
-from adk_spec.workspace.files import write_text
+from adk_spec.workspace.files import read_text, write_text
 from adk_spec.workspace.layout import Workspace
 
 
@@ -86,3 +87,125 @@ def test_a_change_that_is_not_there_is_a_sentence_and_exit_2(tmp_path, capsys) -
     seeded(tmp_path)
     assert run(tmp_path, "validate", "no-such") == 2
     assert "no change `no-such`" in capsys.readouterr().err
+
+
+def state_of(tmp_path, change: str = "passkeys") -> dict:
+    return json.loads((tmp_path / f".spec/changes/{change}/change.json").read_text(encoding="utf-8"))
+
+
+def living_bytes(tmp_path, capability: str = "auth") -> bytes:
+    return (tmp_path / f".spec/specs/{capability}/spec.md").read_bytes()
+
+
+def approved(tmp_path, change: str = "passkeys") -> None:
+    assert run(tmp_path, "rebase", change) == 0 and run(tmp_path, "approve", change, "--by", "reviewer") == 0
+
+
+def test_the_whole_lean_lifecycle_runs_without_a_model(tmp_path, capsys) -> None:
+    seeded(tmp_path)
+    assert run(tmp_path, "validate", "passkeys") == 0
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    assert "delta.base-missing" in capsys.readouterr().out and state_of(tmp_path)["approval"] is None
+    assert run(tmp_path, "rebase", "passkeys") == 0
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    state = state_of(tmp_path)
+    assert state["status"] == "approved" and state["approval"]["by"] == "reviewer"
+    assert set(state["approval"]["files"]) == {"brief.md", "tasks.md", "specs/auth/spec.md"}
+    tasks = tmp_path / ".spec/changes/passkeys/tasks.md"
+    write_text(tasks, read_text(tasks).replace("- [ ] T001", "- [x] T001"))
+    assert run(tmp_path, "archive", "passkeys") == 0
+    merged = parse_spec(living_bytes(tmp_path).decode())
+    assert [r.id for r in merged.requirements] == ["REQ-AUTH-002", "REQ-AUTH-004"]
+    assert merged.retired[-1].change == "passkeys"
+    assert state_of(tmp_path)["status"] == "archived" and run(tmp_path, "validate") == 0
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0 and "no open changes" in capsys.readouterr().out
+    assert run(tmp_path, "status", "--all") == 0 and "archived" in capsys.readouterr().out
+
+
+def test_an_edit_after_approval_stops_the_archive_and_writes_nothing(tmp_path, capsys) -> None:
+    seeded(tmp_path)
+    approved(tmp_path)
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, read_text(delta).replace("three failed attempts", "two failed attempts"))
+    before = living_bytes(tmp_path)
+    assert run(tmp_path, "archive", "passkeys") == 1
+    assert "specs/auth/spec.md" in capsys.readouterr().err and living_bytes(tmp_path) == before
+    assert state_of(tmp_path)["status"] == "approved"
+
+
+def test_a_second_change_to_one_requirement_is_stopped_at_archive(tmp_path, capsys) -> None:
+    ws = seeded(tmp_path)
+    folder = ws.new_change("stricter-lock", "lean")
+    write_text(folder / "brief.md", BRIEF)
+    write_text(folder / "tasks.md", TASKS)
+    block = DELTA.split("## MODIFIED Requirements\n\n")[1].split("\n## REMOVED")[0].replace("three", "two")
+    write_text(folder / "specs" / "auth" / "spec.md", "# Delta: auth\n\n## MODIFIED Requirements\n\n" + block)
+    for change in ("passkeys", "stricter-lock"):
+        approved(tmp_path, change)
+    assert run(tmp_path, "archive", "passkeys") == 0
+    after_first = living_bytes(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "archive", "stricter-lock") == 1
+    said = capsys.readouterr()
+    assert "delta.base-stale" in said.out and "rebase" in said.err and living_bytes(tmp_path) == after_first
+    assert state_of(tmp_path, "stricter-lock")["status"] == "approved"
+
+
+def test_a_standard_change_waits_for_verify(tmp_path, capsys) -> None:
+    seeded(tmp_path)
+    run(tmp_path, "new", "audited", "--tier", "standard")
+    source, target = tmp_path / ".spec/changes/passkeys", tmp_path / ".spec/changes/audited"
+    for name in ("brief.md", "tasks.md", "specs/auth/spec.md"):
+        write_text(target / name, read_text(source / name))
+    approved(tmp_path, "audited")
+    capsys.readouterr()
+    assert run(tmp_path, "archive", "audited") == 1 and "verify" in capsys.readouterr().err
+
+
+def test_an_archive_writes_no_capability_when_one_refuses(tmp_path) -> None:
+    ws = seeded(tmp_path)
+    ws.write_specs({"billing": parse_spec(SPEC.replace("# auth", "# billing").replace("REQ-AUTH", "REQ-BILLING"))})
+    billing = DELTA.replace("# Delta: auth", "# Delta: billing").replace("REQ-AUTH", "REQ-BILLING")
+    write_text(tmp_path / ".spec/changes/passkeys/specs/billing/spec.md", billing)
+    approved(tmp_path)
+    spec = tmp_path / ".spec/specs/billing/spec.md"
+    write_text(spec, read_text(spec).replace("after five failed", "after nine failed"))
+    before = living_bytes(tmp_path)
+    assert run(tmp_path, "archive", "passkeys") == 1 and living_bytes(tmp_path) == before
+    assert state_of(tmp_path)["status"] == "approved"
+
+
+def test_a_rebase_voids_an_approval_and_says_what_was_stale(tmp_path, capsys) -> None:
+    seeded(tmp_path)
+    approved(tmp_path)
+    write_text(tmp_path / ".spec/specs/auth/spec.md", SPEC.replace("after five failed", "after nine failed"))
+    capsys.readouterr()
+    assert run(tmp_path, "rebase", "passkeys") == 0
+    out = capsys.readouterr().out
+    assert "REQ-AUTH-002  was stale" in out and "REQ-AUTH-001  unchanged" in out
+    assert state_of(tmp_path)["status"] == "draft" and state_of(tmp_path)["approval"] is None
+
+
+def test_a_rebase_that_changes_nothing_keeps_the_approval(tmp_path) -> None:
+    seeded(tmp_path)
+    approved(tmp_path)
+    assert run(tmp_path, "rebase", "passkeys") == 0 and state_of(tmp_path)["status"] == "approved"
+
+
+def test_an_approval_names_the_account_where_no_name_is_given(tmp_path, monkeypatch) -> None:
+    seeded(tmp_path)
+    monkeypatch.setattr("getpass.getuser", lambda: "the-account")
+    assert run(tmp_path, "rebase", "passkeys") == 0 and run(tmp_path, "approve", "passkeys") == 0
+    approval = state_of(tmp_path)["approval"]
+    assert approval["by"] == "the-account" and approval["at"].endswith("+00:00")
+
+
+def test_an_archived_change_is_archived_once(tmp_path, capsys) -> None:
+    seeded(tmp_path)
+    approved(tmp_path)
+    assert run(tmp_path, "archive", "passkeys") == 0
+    after = living_bytes(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "archive", "passkeys") == 1 and "already" in capsys.readouterr().err
+    assert run(tmp_path, "approve", "passkeys") == 1 and living_bytes(tmp_path) == after

@@ -8,14 +8,25 @@ usage error and every command that calls no model start without it.
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import sys
+from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 from typing import NoReturn, get_args
 
-from ..domain.lifecycle import approval_files, approval_stale, next_action
+from ..domain.lifecycle import (
+    approval_files,
+    approval_stale,
+    approve,
+    approve_blockers,
+    archive_blockers,
+    capture_bases,
+    next_action,
+)
+from ..domain.merge import MergeError, apply_delta
 from ..domain.model import Finding, Spec, Tier
 from ..domain.validate import failed, validate_spec
 from ..workspace.config import ConfigError
@@ -84,6 +95,20 @@ def _parser() -> argparse.ArgumentParser:
     status.add_argument("--all", action="store_true", help="list archived changes too")
     status.add_argument("--json", action="store_true", help="print the list as JSON")
     status.set_defaults(handler=_status)
+
+    rebase = commands.add_parser("rebase", help="record what a change's deltas are written against")
+    rebase.add_argument("id", help="the change")
+    rebase.set_defaults(handler=_rebase)
+
+    approval = commands.add_parser("approve", help="record an approval of a change's files as they stand")
+    approval.add_argument("id", help="the change")
+    approval.add_argument("--by", help="who approves: a recorded claim, not an authentication (default: this account)")
+    approval.add_argument("--strict", action="store_true", help="refuse on a warning too")
+    approval.set_defaults(handler=_approve)
+
+    archive = commands.add_parser("archive", help="fold an approved change's deltas into the living specs")
+    archive.add_argument("id", help="the change")
+    archive.set_defaults(handler=_archive)
 
     smoke = commands.add_parser("smoke", help="run the triage stage alone, to prove an arm answers in a schema")
     smoke.add_argument("--model", help="the model for this run alone, in place of the arm's")
@@ -195,6 +220,79 @@ def _status(args: argparse.Namespace) -> int:
         width = max(len(row["id"]) for row in rows)
         for row in rows:
             print(f"{row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
+    return EXIT_OK
+
+
+def _rebase(args: argparse.Namespace) -> int:
+    """Record the fingerprint each modified or removed requirement has in the living spec now. New bases void an
+    approval, since it was given against the old ones; unchanged bases leave everything as it was."""
+    workspace = _workspace(args)
+    state = workspace.load_change(args.id).change.state
+    if state.status == "archived":
+        print(f"{PROG}: `{args.id}` is archived already: nothing to rebase", file=sys.stderr)
+        return EXIT_FINDINGS
+    living, _found = workspace.specs()
+    held = capture_bases(workspace.load_change(args.id).change.deltas, living)
+    for req_id in sorted(held):
+        was = state.bases.get(req_id)
+        print(f"{req_id}  {'recorded' if was is None else 'unchanged' if was == held[req_id] else 'was stale'}")
+    if held == state.bases:
+        print("nothing to record: every base stands")
+        return EXIT_OK
+    workspace.save_state(state.model_copy(update={"bases": held, "status": "draft", "approval": None}))
+    if state.approval is not None:
+        print(f"the approval is void: read what was stale, then run `{PROG} approve {args.id}` again")
+    return EXIT_OK
+
+
+def _approve(args: argparse.Namespace) -> int:
+    workspace = _workspace(args)
+    living, _found = workspace.specs()
+    loaded, found, _stale = _assessed(workspace, args.id, living)
+    if blockers := approve_blockers(loaded.change.state, found, strict=args.strict):
+        _printed(blockers)
+        print(f"{PROG}: `{args.id}` is not approved: {len(blockers)} findings block it", file=sys.stderr)
+        return EXIT_FINDINGS
+    files = approval_files(workspace.approval_texts(args.id))
+    by = args.by or getpass.getuser()
+    at = datetime.now(UTC).isoformat(timespec="seconds")
+    workspace.save_state(approve(loaded.change.state, files=files, by=by, at=at))
+    print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
+    return EXIT_OK
+
+
+def _archive(args: argparse.Namespace) -> int:
+    """Every capability's merge is computed before any file is written, so a change is folded in whole or not at
+    all; the state is written last."""
+    workspace = _workspace(args)
+    living, of_specs = workspace.specs()
+    loaded, _found, stale = _assessed(workspace, args.id, living)
+    state = loaded.change.state
+    if blockers := archive_blockers(state, stale):
+        for sentence in blockers:
+            print(f"{PROG}: {sentence}", file=sys.stderr)
+        return EXIT_FINDINGS
+    refused = [*of_specs]  # a living spec that does not read would be taken for a capability not yet there
+    merged: dict[str, Spec] = {}
+    for capability, delta in sorted(loaded.change.deltas.items()):
+        path = f"{ROOT_NAME}/{CHANGES}/{args.id}/{SPECS}/{capability}/{SPEC_FILE}"
+        try:
+            merged[capability] = apply_delta(living.get(capability), delta, bases=state.bases, change=state.id)
+        except MergeError as exc:
+            refused += [held.model_copy(update={"path": path}) for held in exc.findings]
+    if refused:
+        _printed(refused)
+        print(f"{PROG}: `{args.id}` is not archived, and no file was written", file=sys.stderr)
+        if any(held.code == "delta.base-stale" for held in refused):
+            print(
+                f"{PROG}: the living spec changed after this delta was based on it: read the current requirement, "
+                f"update the delta, then run {PROG} rebase and approve again",
+                file=sys.stderr,
+            )
+        return EXIT_FINDINGS
+    workspace.write_specs(merged)
+    workspace.save_state(state.model_copy(update={"status": "archived"}))
+    print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
     return EXIT_OK
 
 
