@@ -162,3 +162,37 @@ def _no_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     from adk_spec.interfaces import cli
 
     monkeypatch.setattr(cli, "_load_env", lambda: None)
+
+
+def device_flow(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Copilot login's device flow with no network and no wait: GitHub's code for the person to enter, then each
+    poll answered as `github_answers` says."""
+    import importlib
+
+    from litellm.llms.github_copilot import authenticator
+
+    code = {"device_code": "d", "user_code": "ABCD-1234", "verification_uri": "https://github.com/login/device"}
+    monkeypatch.setattr(authenticator.Authenticator, "_get_device_code", lambda _self: code)
+    monkeypatch.setattr(importlib.import_module("adk_spec.interfaces.login").time, "sleep", lambda _seconds: None)
+
+
+def github_answers(monkeypatch: pytest.MonkeyPatch, reply: object) -> None:
+    """GitHub's token endpoint, answering `reply` to each poll of the login: no network in the suite. A dict is the
+    JSON object GitHub sends; an `httpx.Response` is handed over as it is, a page that is no JSON among them."""
+    from types import SimpleNamespace
+
+    import httpx
+
+    class Client:
+        def __init__(self, **_kwargs) -> None: ...
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc) -> bool:
+            return False
+
+        def post(self, *_args, **_kwargs):
+            return reply if isinstance(reply, httpx.Response) else SimpleNamespace(json=lambda: reply)
+
+    monkeypatch.setattr(httpx, "Client", Client)  # the login imports httpx and resolves Client at the call

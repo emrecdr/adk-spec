@@ -51,6 +51,10 @@ def _parser() -> argparse.ArgumentParser:
     smoke.add_argument("--request", default=SMOKE_REQUEST, help="the change request to size")
     smoke.add_argument("--json", action="store_true", help="print the result as JSON")
     smoke.set_defaults(handler=_smoke)
+
+    login = commands.add_parser("login", help="log in to GitHub Copilot once, with GitHub's device flow")
+    login.add_argument("--force", action="store_true", help="log in again although a token is cached")
+    login.set_defaults(handler=_login)
     return parser
 
 
@@ -78,6 +82,14 @@ def _load_env() -> None:
         raise UsageError(
             f"{CHECKOUT / '.env'} is not UTF-8. Save it as UTF-8: Windows PowerShell 5.1's `>` writes UTF-16"
         ) from exc
+
+
+def _login(args: argparse.Namespace) -> int:
+    """The Copilot login, which reads the checkout's `.env` for an enterprise tenant's endpoints as a run does."""
+    _load_env()
+    from .login import main as login
+
+    return login(["--force"] if args.force else [])
 
 
 def _smoke(args: argparse.Namespace) -> int:
