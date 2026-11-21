@@ -136,6 +136,16 @@ uv run adk-spec smoke
 - `smoke` runs the triage stage alone, to prove the chosen arm answers in a schema.
   `smoke --check` says whether the arm is ready and sends nothing. `smoke --model <name>` tries one model.
 
+## Measuring the model's stages
+
+`uv run python -m scripts.measure` builds six small changes, five with one fault planted, runs `check` or `verify`
+on each a few times on the arm your environment names, and reports how often each fault was caught. It calls a
+model: about five calls a run of the set, and it says the number before the first. `docs/measurements/README.md`
+says what each case plants.
+
+`uv run python scripts/dump_instructions.py` prints every stage's instruction, to compare before and after a change
+to one.
+
 ## Notes for each system
 
 - Windows: set `PYTHONUTF8=1` in the user environment. LiteLLM may otherwise read its own files as cp1252.

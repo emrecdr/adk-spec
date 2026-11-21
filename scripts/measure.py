@@ -1,0 +1,198 @@
+"""How often a check or a verification finds what the labelled set plants:
+`uv run python -m scripts.measure [--runs N] [--case NAME] [--out FILE]`.
+
+What code finds is found every run. What a model finds varies, so each case is built anew and run N times on the arm
+the environment names, and the table says for each planted fault in how many runs it was caught; the blocking
+findings on nothing planted, an upper bound on the false ones; the model's findings left out for quoting text that
+is not there; and the tokens and the time. A measurement holds for the model it ran on, which the report names
+beside this package's commit.
+
+Each run calls a model with the account the environment names. The script says how many calls it is about to make
+before the first.
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import io
+import json
+import sys
+import tempfile
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+from adk_spec.domain.convert import quoted_at
+from adk_spec.interfaces import cli
+from adk_spec.workspace.git import GitError, head
+from adk_spec.workspace.layout import Workspace, findings_of
+from adk_spec.workspace.runs import listed, read
+
+from .cases import CASES, Case
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@dataclass(frozen=True)
+class Seen:
+    """One thing a run found: a finding of code or of the model, or a verdict."""
+
+    code: str
+    path: str
+    text: str
+    blocking: bool
+
+
+@dataclass(frozen=True)
+class Score:
+    caught: int
+    missed: int
+    false_blocking: int
+
+
+@dataclass
+class Row:
+    """One case over its runs."""
+
+    name: str
+    command: str
+    runs: int
+    #: For each planted fault of the case, in how many runs it was caught.
+    caught: list[int]
+    false_blocking: int = 0
+    dropped: int = 0
+    tokens: int = 0
+    seconds: float = 0.0
+    #: Runs whose command did not end in a report: a refusal, or the engine's failure.
+    failed: int = 0
+
+
+def scored(case: Case, seen: list[Seen]) -> Score:
+    """What one run's findings are worth against a case: each planted fault caught or missed, and each blocking
+    finding that is about nothing planted."""
+    caught = sum(any(wanted.met_by(one) for one in seen) for wanted in case.expect)
+    stray = sum(one.blocking and not any(wanted.met_by(one) for wanted in case.expect) for one in seen)
+    return Score(caught, len(case.expect) - caught, stray)
+
+
+def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], int, int, float]:
+    """What a run of `case` left: what was found, how many of the model's findings quoted nothing real, and the
+    tokens and seconds of its model calls."""
+    workspace = Workspace.find(root)
+    loaded = workspace.load_change(change)
+    kept = [read(path) for path in listed(workspace)]
+    calls = [call for held in kept if held.command == case.command for call in held.calls]
+    tokens, seconds = sum(call.tokens for call in calls), sum(call.seconds for call in calls)
+    if case.command == "verify":
+        verdicts = loaded.change.state.verification.verdicts if loaded.change.state.verification else {}
+        return [Seen(f"verdict.{verdict}", req, "", False) for req, verdict in verdicts.items()], 0, tokens, seconds
+    found = findings_of(loaded, workspace.specs()[0])
+    seen = [Seen(one.code, one.path or "", one.message, one.severity == "ERROR") for one in found]
+    texts, dropped = workspace.approval_texts(change), 0
+    answer = next((call.answer for call in reversed(calls) if call.answer and not call.error), None)
+    for one in json.loads(answer)["findings"] if answer else ():
+        if one["file"] in texts and quoted_at(one["quote"], texts[one["file"]]) is not None:
+            text = f"{one['quote']} {one['message']}"
+            seen.append(Seen(f"check.{one['kind']}", one["file"], text, one["severity"] == "critical"))
+        else:
+            dropped += 1
+    return seen, dropped, tokens, seconds
+
+
+def measured(case: Case, *, runs: int, folder: Path) -> Row:
+    """`case` built anew and run `runs` times, each in a folder of its own under `folder`."""
+    row = Row(case.name, case.command, runs, [0] * len(case.expect))
+    for run in range(runs):
+        root = folder / f"{case.name}-{run}"
+        root.mkdir(parents=True)
+        change = case.build(root)
+        quiet = io.StringIO()
+        with contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
+            code = cli.main(["--root", str(root), case.command, change])
+        row.failed += code not in (cli.EXIT_OK, cli.EXIT_FINDINGS)
+        seen, dropped, tokens, seconds = observed(case, root, change)
+        for at, wanted in enumerate(case.expect):
+            row.caught[at] += any(wanted.met_by(one) for one in seen)
+        row.false_blocking += scored(case, seen).false_blocking
+        row.dropped += dropped
+        row.tokens += tokens
+        row.seconds += seconds
+    return row
+
+
+def rendered(rows: list[Row], *, model: str, commit: str | None, at: str) -> str:
+    """The measurement as a page: what was measured, on what, and a row a case."""
+    runs = rows[0].runs if rows else 0
+    lines = [
+        "# How often the labelled set's faults are caught",
+        "",
+        f"Measured {at} on {model}, {runs} runs a case, at commit {commit[:12] if commit else 'none'}.",
+        "",
+        "| Case | Command | Caught | Blocking on nothing planted | Left out, no such quote | Tokens a run "
+        "| Seconds a run | Failed |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for row in rows:
+        caught = ", ".join(f"{times}/{row.runs}" for times in row.caught) or "nothing planted"
+        lines.append(
+            f"| `{row.name}` | {row.command} | {caught} | {row.false_blocking} | {row.dropped} | "
+            f"{row.tokens // row.runs:,} | {row.seconds / row.runs:.1f} | {row.failed} |"
+        )
+    lines += [
+        "",
+        "Caught: in how many runs a finding on the planted fault's file named it; one figure a planted fault.",
+        "Blocking on nothing planted: blocking findings that match no planted fault, over all runs; an upper bound on",
+        "the false ones, since a model may find a real fault nobody planted.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="measure", description=__doc__)
+    parser.add_argument("--runs", type=int, default=3, help="how often each case is run (default 3)")
+    parser.add_argument("--case", help="one case of the set, by its name")
+    parser.add_argument("--out", type=Path, help="write the report here, where it is otherwise printed")
+    args = parser.parse_args(argv)
+    cases = [case for case in CASES if args.case in (None, case.name)]
+    if not cases:
+        print(
+            f"measure: no case is named `{args.case}`. The cases: {', '.join(case.name for case in CASES)}",
+            file=sys.stderr,
+        )
+        return 2
+    from adk_spec.orchestration.models import require_ready, serving
+
+    cli._load_env()  # the checkout's .env, as the commands read it
+    if why := require_ready(roles=("check", "verify")):
+        print(f"measure: {why}", file=sys.stderr)
+        return 2
+    calls = args.runs * sum(not case.by_code for case in cases)
+    print(
+        f"measuring {len(cases)} cases, {args.runs} runs each, on {serving('check')}: about {calls} model calls",
+        flush=True,
+    )
+    with tempfile.TemporaryDirectory(prefix="adk-spec-measure-") as folder:
+        rows = []
+        for case in cases:
+            rows.append(measured(case, runs=args.runs, folder=Path(folder)))
+            caught = ", ".join(f"{times}/{args.runs}" for times in rows[-1].caught) or "nothing planted"
+            print(f"  {case.name}: {caught}", flush=True)
+    try:
+        commit = head(ROOT)
+    except GitError:
+        commit = None
+    at = datetime.now(UTC).isoformat(timespec="seconds")
+    report = rendered(rows, model=serving("check"), commit=commit, at=at)
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(report, encoding="utf-8", newline="\n")
+        print(f"wrote {args.out}")
+    else:
+        print(report)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
