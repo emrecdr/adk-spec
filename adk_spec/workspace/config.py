@@ -28,6 +28,12 @@ class ConfigError(ValueError):
 @dataclass(frozen=True)
 class Config:
     default_tier: Tier
+    #: The tokens one run may spend, every stage of it. 0 means no ceiling.
+    max_tokens: int = 0
+
+
+#: Each table the code reads, and the keys it reads there.
+KNOWN = {"project": ("default_tier",), "limits": ("max_tokens",)}
 
 
 def load_config(path: Path) -> Config:
@@ -36,16 +42,22 @@ def load_config(path: Path) -> Config:
         held = tomllib.loads(read_text(path))
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path} is not valid TOML: {exc}") from exc
-    for table in held:
-        if table != "project":
-            raise ConfigError(f"{path} holds `{table}`, which adk-spec does not read. Its one table is [project]")
+    for table, keys in held.items():
+        if table not in KNOWN:
+            raise ConfigError(
+                f"{path} holds `{table}`, which adk-spec does not read. Its tables are {', '.join(KNOWN)}"
+            )
+        for key in keys if isinstance(keys, dict) else ():
+            if key not in KNOWN[table]:
+                raise ConfigError(f"{path} holds `{key}` under [{table}], which adk-spec does not read")
     project = held.get("project", {})
-    for key in project if isinstance(project, dict) else ():
-        if key != "default_tier":
-            raise ConfigError(f"{path} holds `{key}` under [project], which adk-spec does not read")
     if not isinstance(project, dict) or "default_tier" not in project:
         raise ConfigError(f"{path} lacks `default_tier` under [project]: one of {', '.join(TIERS)}")
     tier = project["default_tier"]
     if tier not in TIERS:
         raise ConfigError(f"{path} sets default_tier to `{tier}`, which is none of {', '.join(TIERS)}")
-    return Config(default_tier=tier)
+    limits = held.get("limits", {})
+    ceiling = limits.get("max_tokens", 0) if isinstance(limits, dict) else 0
+    if type(ceiling) is not int or ceiling < 0:
+        raise ConfigError(f"{path} sets max_tokens to `{ceiling}`: a whole number of tokens, 0 for no ceiling")
+    return Config(default_tier=tier, max_tokens=ceiling)

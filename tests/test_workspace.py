@@ -153,3 +153,17 @@ def test_a_folder_no_capability_may_be_named_is_a_finding_when_it_is_read(tmp_pa
     loaded = ws.load_change("passkeys")
     assert [(p.code, p.path) for p in loaded.problems] == [("spec.folder-bad-name", "specs/Billing_v2/spec.md")]
     assert sorted(loaded.change.deltas) == ["auth"]
+
+
+def test_the_config_takes_an_optional_token_ceiling(tmp_path) -> None:
+    ws = Workspace.init(tmp_path)
+    assert ws.config().max_tokens == 0
+    config = tmp_path / ".spec" / "config.toml"
+    write_text(config, '[project]\ndefault_tier = "lean"\n\n[limits]\nmax_tokens = 50000\n')
+    assert ws.config() == Config(default_tier="lean", max_tokens=50000)
+    write_text(config, '[project]\ndefault_tier = "lean"\n\n[limits]\nmax_tokns = 1\n')
+    with pytest.raises(ConfigError, match="max_tokns"):
+        ws.config()
+    write_text(config, '[project]\ndefault_tier = "lean"\n\n[limits]\nmax_tokens = -5\n')
+    with pytest.raises(ConfigError, match="max_tokens"):
+        ws.config()
