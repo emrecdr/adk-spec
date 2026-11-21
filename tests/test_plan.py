@@ -106,3 +106,25 @@ def test_a_task_naming_what_is_no_requirement_id_is_told_which(tmp_path, capsys,
     fake_provider.answers_when(TASKS, bad)
     assert run(tmp_path, "plan", "passkeys") == 3
     assert "tasks.bad-requirement-id" in capsys.readouterr().err
+
+
+def test_a_plan_that_serves_only_one_requirement_is_sent_back(tmp_path, capsys, fake_provider) -> None:
+    """The change adds REQ-AUTH-004 and modifies REQ-AUTH-002: a task list for the first alone is half a plan."""
+    seeded(tmp_path)
+    before = read_text(tmp_path / ".spec/changes/passkeys/tasks.md")
+    group = CANNED_TASKS["groups"][0]
+    fake_provider.answers_when(TASKS, {"groups": [{**group, "tasks": [group["tasks"][0]]}]})
+    assert run(tmp_path, "plan", "passkeys") == 3
+    err = capsys.readouterr().err
+    assert "check.requirement-no-task" in err and "REQ-AUTH-002" in err
+    assert read_text(tmp_path / ".spec/changes/passkeys/tasks.md") == before and openings(fake_provider) == [TASKS] * 3
+
+
+def test_a_plan_may_not_name_a_requirement_nothing_holds(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)
+    group = CANNED_TASKS["groups"][0]
+    stray = {**group["tasks"][1], "requirements": ["REQ-AUTH-004", "REQ-AUTH-002", "REQ-AUTH-042"]}
+    fake_provider.answers_when(TASKS, {"groups": [{**group, "tasks": [group["tasks"][0], stray]}]})
+    assert run(tmp_path, "plan", "passkeys") == 3
+    err = capsys.readouterr().err
+    assert "check.task-unknown-requirement" in err and "REQ-AUTH-042" in err

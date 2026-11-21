@@ -24,6 +24,7 @@ from google.adk.events import Event
 from google.adk.workflow import Workflow
 
 from ..domain.brief_md import markers, parse_brief, render_brief
+from ..domain.check import coverage
 from ..domain.convert import DESIGN_SECTIONS, render_design, to_brief, to_deltas, to_tasks
 from ..domain.delta_md import parse_delta, render_delta
 from ..domain.drafts import BriefDraft, DeltasDraft, DesignDraft, QuestionsDraft, TasksDraft, Triage
@@ -204,18 +205,23 @@ def _check_design(state: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def _check_tasks(state: Mapping[str, Any]) -> list[str]:
-    """The validator speaks before the round trip here too: it names the ID or the task that is wrong."""
-    groups = to_tasks(TasksDraft.model_validate(state[tasks_stage.KEY]))
-    if not any(group.tasks for group in groups):
-        return ["the plan holds no task. Write one task at least for each requirement the deltas add or change."]
-    if wrong := _errors(validate_tasks(groups)):
-        return wrong
-    try:
-        same = parse_tasks(render_tasks(groups)) == groups
-    except GrammarError as exc:
-        return [f"the tasks cannot be written as their file: {exc.message}."]
-    return [] if same else ["the tasks do not read back as written: keep each description, file and check on one line."]
+def _tasks_check(owed: frozenset[str], nameable: frozenset[str]) -> Callable[[Mapping[str, Any]], list[str]]:
+    """What the tasks' gate checks, for a change that owes a task to each of `owed` and may name any of `nameable`.
+    The validator and the coverage speak before the round trip: they name the ID or the task that is wrong."""
+
+    def check_tasks(state: Mapping[str, Any]) -> list[str]:
+        groups = to_tasks(TasksDraft.model_validate(state[tasks_stage.KEY]))
+        if not any(group.tasks for group in groups):
+            return ["the plan holds no task. Write one task at least for each requirement the deltas add or change."]
+        if wrong := _errors([*validate_tasks(groups), *coverage(groups, owed=owed, nameable=nameable)]):
+            return wrong
+        try:
+            same = parse_tasks(render_tasks(groups)) == groups
+        except GrammarError as exc:
+            return [f"the tasks cannot be written as their file: {exc.message}."]
+        return [] if same else ["the tasks do not read back as written: keep each description and check on one line."]
+
+    return check_tasks
 
 
 # The nodes between the stages. One that reads what the command knows is made for it; the rest read state alone.
@@ -319,9 +325,10 @@ def _opening(brief: Any, entry: Entry) -> list[Any]:
     ]
 
 
-def build_plan_app(*, design: bool, ledger: UsageLedger) -> App:
-    """The design, where the change owes one, and then the tasks, each behind its gate."""
-    tasks, tasks_gate = tasks_stage.build_tasks(), checked(tasks_stage.KEY, _check_tasks)
+def build_plan_app(*, design: bool, ledger: UsageLedger, owed: frozenset[str], nameable: frozenset[str]) -> App:
+    """The design, where the change owes one, and then the tasks, each behind its gate. The tasks are held to the
+    change's own requirements: each of `owed` served, and none named outside `nameable`."""
+    tasks, tasks_gate = tasks_stage.build_tasks(), checked(tasks_stage.KEY, _tasks_check(owed, nameable))
     edges: list[Any] = [(tasks, tasks_gate), (tasks_gate, {OK: _ended, AGAIN: tasks, GIVE_UP: _ended})]
     if design:
         drafting, design_gate = design_stage.build_design(), checked(design_stage.KEY, _check_design)

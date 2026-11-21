@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, NoReturn, get_args
 
 from ..domain.brief_md import render_brief
+from ..domain.check import nameable, owed
 from ..domain.convert import render_design, slug_of, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
@@ -497,7 +498,8 @@ def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
         LIVING: living_text(specs, sorted(change.deltas)),
     }
     ledger = UsageLedger(workspace.config().max_tokens or None)
-    run = _ran(build_plan_app(design=state.needs_design, ledger=ledger), seed, "plan")
+    serves = {"owed": owed(change.deltas), "nameable": nameable(change.deltas, specs)}
+    run = _ran(build_plan_app(design=state.needs_design, ledger=ledger, **serves), seed, "plan")
     tasks = read_tasks(run.state)
     failure = run.state.get(FAILURE) or run.failure or (tasks if isinstance(tasks, str) else None)
     if failure or isinstance(tasks, str):
