@@ -44,7 +44,7 @@ ADD = RequirementDraft(
 LIVING = {"auth": parse_spec(SPEC)}
 
 
-def one(capability: str = "auth", purpose: str | None = None, **ops: Any) -> DeltasDraft:
+def one(capability: str = "auth", purpose: str = "", **ops: Any) -> DeltasDraft:
     held = {"added": [], "modified": [], "removed": [], **ops}
     return DeltasDraft(deltas=[DeltaDraft(capability=capability, purpose=purpose, **held)])
 

@@ -7,7 +7,7 @@ model in silence. Past the limit the run is refused, and the sentence names what
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from ..domain.spec_md import render_spec
 from .files import read_text
@@ -34,7 +34,11 @@ def living_text(workspace: Workspace, capabilities: Iterable[str]) -> str:
     """The canonical text of each named capability's living spec, whole, under a line naming it. A capability with
     no spec yet is one the change creates, and adds nothing."""
     specs, _problems = workspace.specs()
-    parts = {slug: render_spec(specs[slug]) for slug in capabilities if slug in specs}
+    return joined({slug: render_spec(specs[slug]) for slug in capabilities if slug in specs})
+
+
+def joined(parts: Mapping[str, str]) -> str:
+    """Each capability's spec text under a line naming it, whole. `ContextTooLargeError` past the limit."""
     text = "\n".join(f"=== {slug}\n{held}" for slug, held in parts.items())
     if len(text) > CONTEXT_MAX_CHARS:
         sizes = ", ".join(f"{slug} ({len(held):,})" for slug, held in parts.items())

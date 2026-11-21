@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from conftest import seeded
+from conftest import approved, run, seeded, state_of
 from samples import BRIEF, DELTA, SPEC, TASKS
 
 from adk_spec.domain.spec_md import parse_spec
@@ -24,10 +24,6 @@ def test_a_usage_error_ends_by_naming_help(capsys) -> None:
     with pytest.raises(SystemExit) as stopped:
         main(["--no-such-flag"])
     assert stopped.value.code == 2 and "--help lists every" in capsys.readouterr().err
-
-
-def run(tmp_path, *argv: str) -> int:
-    return main(["--root", str(tmp_path), *argv])
 
 
 def test_init_then_status_says_there_is_nothing_yet(tmp_path, capsys) -> None:
@@ -89,16 +85,8 @@ def test_a_change_that_is_not_there_is_a_sentence_and_exit_2(tmp_path, capsys) -
     assert "no change `no-such`" in capsys.readouterr().err
 
 
-def state_of(tmp_path, change: str = "passkeys") -> dict:
-    return json.loads((tmp_path / f".spec/changes/{change}/change.json").read_text(encoding="utf-8"))
-
-
 def living_bytes(tmp_path, capability: str = "auth") -> bytes:
     return (tmp_path / f".spec/specs/{capability}/spec.md").read_bytes()
-
-
-def approved(tmp_path, change: str = "passkeys") -> None:
-    assert run(tmp_path, "rebase", change) == 0 and run(tmp_path, "approve", change, "--by", "reviewer") == 0
 
 
 def test_the_whole_lean_lifecycle_runs_without_a_model(tmp_path, capsys) -> None:

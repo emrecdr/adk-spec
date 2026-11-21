@@ -60,7 +60,18 @@ This is the `lean` tier, which needs one approval. A `standard` change also wait
 
 `adk-spec status` names the next step at any point.
 
-Three commands reach a model provider:
+One command drafts with a model:
+
+```
+uv run adk-spec propose "Let users sign in with a passkey."
+```
+
+- `propose` drafts a change from a request: its brief and one delta for each capability it touches. A model writes
+  each draft; a gate after each stage checks it and asks again at most twice; nothing is written until the whole
+  run has ended well. `--tier lean` or `--tier standard` sets the ceremony by hand, `--id` names the change, and
+  `--no-input` asks no question. `[limits] max_tokens` in `.spec/config.toml` caps what one run may spend.
+
+Three more reach a model provider without drafting:
 
 ```
 uv run adk-spec login

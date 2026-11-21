@@ -58,7 +58,7 @@ def to_deltas(draft: DeltasDraft, living: Mapping[str, Spec], taken: Iterable[st
     for one in draft.deltas:
         capability = one.capability.strip()
         slot = slots.setdefault(capability, {"purpose": None, "added": [], "modified": [], "removed": []})
-        if one.purpose and one.purpose.strip() and capability not in living:
+        if one.purpose.strip() and capability not in living:
             slot["purpose"] = slot["purpose"] or one.purpose.strip()
         names = {req.id: req.name for req in living[capability].requirements} if capability in living else {}
         for added in one.added:

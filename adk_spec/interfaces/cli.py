@@ -12,11 +12,16 @@ import getpass
 import json
 import os
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
-from typing import NoReturn, get_args
+from typing import Any, NoReturn, get_args
 
+from ..domain.brief_md import render_brief
+from ..domain.convert import slug_of
+from ..domain.delta_md import render_delta
+from ..domain.ids import slug_problem
 from ..domain.lifecycle import (
     approval_files,
     approval_stale,
@@ -27,7 +32,7 @@ from ..domain.lifecycle import (
     next_action,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import Finding, Spec, Tier
+from ..domain.model import ChangeState, Finding, Spec, Tier
 from ..domain.validate import failed, finding, validate_spec
 from ..workspace.config import ConfigError
 from ..workspace.context import CONSTITUTION_MAX_CHARS, capability_index, constitution_text
@@ -43,6 +48,7 @@ from ..workspace.layout import (
     WorkspaceError,
     findings_of,
 )
+from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
 
 EXIT_OK = 0
@@ -100,17 +106,24 @@ def _parser() -> argparse.ArgumentParser:
 
     rebase = commands.add_parser("rebase", help="record what a change's deltas are written against")
     rebase.add_argument("id", help="the change")
-    rebase.set_defaults(handler=_rebase)
+    rebase.set_defaults(handler=_locked(_rebase))
 
     approval = commands.add_parser("approve", help="record an approval of a change's files as they stand")
     approval.add_argument("id", help="the change")
     approval.add_argument("--by", help="who approves: a recorded claim, not an authentication (default: this account)")
     approval.add_argument("--strict", action="store_true", help="refuse on a warning too")
-    approval.set_defaults(handler=_approve)
+    approval.set_defaults(handler=_locked(_approve))
 
     archive = commands.add_parser("archive", help="fold an approved change's deltas into the living specs")
     archive.add_argument("id", help="the change")
-    archive.set_defaults(handler=_archive)
+    archive.set_defaults(handler=_locked(_archive))
+
+    propose = commands.add_parser("propose", help="draft a change from a request: its brief and its deltas")
+    propose.add_argument("request", help="what is wanted, in a sentence or a paragraph")
+    propose.add_argument("--id", help="the change's name (default: made from the brief's title)")
+    propose.add_argument("--tier", choices=("lean", "standard"), help="how much ceremony (default: the model's call)")
+    propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
+    propose.set_defaults(handler=_propose)
 
     smoke = commands.add_parser("smoke", help="run the triage stage alone, to prove an arm answers in a schema")
     smoke.add_argument("--model", help="the model for this run alone, in place of the arm's")
@@ -148,6 +161,16 @@ def main(argv: list[str]) -> int:
 
 
 # The commands that call no model.
+
+
+def _locked(handler: Callable[[argparse.Namespace], int]) -> Callable[[argparse.Namespace], int]:
+    """`handler` run while this run holds the workspace's lock: one writer at a time."""
+
+    def locked(args: argparse.Namespace) -> int:
+        with lock_held(_workspace(args)):
+            return handler(args)
+
+    return locked
 
 
 def _workspace(args: argparse.Namespace) -> Workspace:
@@ -331,16 +354,111 @@ def _archive(args: argparse.Namespace) -> int:
 # The commands that call a model, or log in to one.
 
 
+def _env_file() -> Path | None:
+    """The `.env` a run reads: the checkout's own, told by the `pyproject.toml` beside the package. An installed
+    copy has none beside it and reads the shell alone, never a file that happens to stand near its packages."""
+    return CHECKOUT / ".env" if (CHECKOUT / "pyproject.toml").is_file() else None
+
+
 def _load_env() -> None:
     """The checkout's `.env` read into the environment, the shell winning over the file."""
+    path = _env_file()
+    if path is None:
+        return
     from dotenv import load_dotenv
 
     try:
-        load_dotenv(CHECKOUT / ".env", override=False, encoding="utf-8")
+        load_dotenv(path, override=False, encoding="utf-8")
     except UnicodeDecodeError as exc:
-        raise UsageError(
-            f"{CHECKOUT / '.env'} is not UTF-8. Save it as UTF-8: Windows PowerShell 5.1's `>` writes UTF-16"
-        ) from exc
+        raise UsageError(f"{path} is not UTF-8. Save it as UTF-8: Windows PowerShell 5.1's `>` writes UTF-16") from exc
+
+
+def _ran(app: Any, seed: dict[str, Any], prompt: str) -> Any:
+    """One run of `app`, with the engine's own log quieted for its length: ADK logs a failed node with its whole
+    traceback, and the command says the failure in one line."""
+    import asyncio
+    import logging
+
+    from ..orchestration.run import run_seeded
+
+    engine_log = logging.getLogger("google_adk")
+    level = engine_log.level
+    engine_log.setLevel(logging.CRITICAL)
+    try:
+        return asyncio.run(run_seeded(app, state=seed, prompt=prompt))
+    finally:
+        engine_log.setLevel(level)
+
+
+def _spent(app: Any) -> str:
+    """What a run's stages spent, from the app's ledger: each stage, then the total."""
+    from ..orchestration.plugins import UsageLedger
+
+    ledger = next(plugin for plugin in app.plugins if isinstance(plugin, UsageLedger))
+    stages = ", ".join(f"{name} {row.total:,}" for name, row in ledger.spent.items())
+    return f"{stages}: {ledger.total.total:,} total" if stages else "nothing"
+
+
+def _propose(args: argparse.Namespace) -> int:
+    _load_env()
+    workspace = _workspace(args)
+    if args.id:  # refused before anything is spent
+        if why := slug_problem(args.id):
+            raise UsageError(f"a change cannot be named so: {why}")
+        if args.id in workspace.changes():
+            raise UsageError(f"the change `{args.id}` exists already")
+    from ..orchestration.models import require_ready
+
+    if why := require_ready(roles=("triage", "brief", "deltas")):
+        raise UsageError(why)
+    with lock_held(workspace):
+        return _proposed(args, workspace)
+
+
+def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
+    from ..orchestration.gate import FAILURE
+    from ..orchestration.graph import TIER, Known, build_propose_app, drafted
+    from ..orchestration.stages import CAPABILITIES, REQUEST
+    from ..orchestration.stages.brief import CONSTITUTION as RULES
+    from ..orchestration.stages.triage import read_triage
+
+    specs, of_specs = workspace.specs()
+    if of_specs:  # a spec that does not read would pass for a capability not yet there
+        _printed(of_specs)
+        print(f"{PROG}: nothing was drafted: a living spec does not read. Fix it first", file=sys.stderr)
+        return EXIT_FINDINGS
+    taken = {capability: frozenset(workspace.taken_ids(capability)) for capability in specs}
+    known = Known(living=specs, taken=taken, ceiling=workspace.config().max_tokens or None)
+    seed = {REQUEST: args.request, CAPABILITIES: capability_index(workspace), RULES: constitution_text(workspace)}
+    app = build_propose_app(known, tier=args.tier, ask=not args.no_input)
+    run = _ran(app, seed, "propose")
+    if failure := run.state.get(FAILURE) or run.failure:
+        print(f"{PROG}: no change was written: {failure}", file=sys.stderr)
+        print(f"tokens    {_spent(app)}")
+        return EXIT_ENGINE
+    tier = run.state.get(TIER)
+    if tier == "none":
+        sized = read_triage(run.state)
+        print(f"no spec is owed: {sized if isinstance(sized, str) else sized.reason}")
+        print(f"tokens    {_spent(app)}")
+        return EXIT_OK
+    made = drafted(run.state, known)
+    change_id = args.id or slug_of(made.brief.title, workspace.changes())
+    state = ChangeState(
+        id=change_id, tier=tier, bases=capture_bases(made.deltas, specs), needs_design=made.draft.design_needed
+    )
+    files = {"brief.md": render_brief(made.brief)}
+    files.update(
+        {f"{SPECS}/{capability}/{SPEC_FILE}": render_delta(delta) for capability, delta in made.deltas.items()}
+    )
+    folder = workspace.write_change(state, files)
+    print(f"wrote     {workspace.shown(folder)}, a {tier} draft")
+    for path in files:
+        print(f"          {workspace.shown(folder)}/{path}")
+    print(f"tokens    {_spent(app)}")
+    loaded, found, stale = _assessed(workspace, change_id, specs)
+    print(f"next      {next_action(loaded.change.state, found, stale)}")
+    return EXIT_OK
 
 
 def _login(args: argparse.Namespace) -> int:
@@ -400,9 +518,6 @@ def _checked(args: argparse.Namespace) -> int:
 
 
 def _smoked(args: argparse.Namespace) -> int:
-    import asyncio
-    import logging
-
     from ..orchestration.models import require_ready, serving
 
     if args.check:
@@ -410,21 +525,13 @@ def _smoked(args: argparse.Namespace) -> int:
     if why := require_ready(roles=("triage",)):
         raise UsageError(why)
     from ..orchestration.graph import build_smoke_app
-    from ..orchestration.run import run_seeded
     from ..orchestration.stages.triage import CAPABILITIES, KEY, REQUEST, read_triage
 
     try:  # the capabilities of the workspace this runs in, where it runs in one
         known = capability_index(_workspace(args))
     except WorkspaceError:
         known = ""
-    # ADK logs a failed node with its whole traceback; the failure is said below, in one line.
-    engine_log = logging.getLogger("google_adk")
-    level = engine_log.level
-    engine_log.setLevel(logging.CRITICAL)
-    try:
-        run = asyncio.run(run_seeded(build_smoke_app(), state={REQUEST: args.request, CAPABILITIES: known}, prompt=KEY))
-    finally:
-        engine_log.setLevel(level)
+    run = _ran(build_smoke_app(), {REQUEST: args.request, CAPABILITIES: known}, KEY)
     answer = read_triage(run.state)
     failure = None
     if isinstance(answer, str):

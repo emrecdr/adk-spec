@@ -3,6 +3,9 @@
 Written for the strictest arm. Each is a plain `BaseModel`: Gemini's `response_schema` refuses the
 `additionalProperties` that `extra="forbid"` adds. Every field is required and described, since the Copilot arm's
 strict mode lists every property as required and both arms read the descriptions.
+
+No field is nullable. ADK stores a stage's answer with every `None` dropped, so a required field that held `None`
+is missing when the answer is read back from state. An empty string or an empty list means "none".
 """
 
 from __future__ import annotations
@@ -55,8 +58,8 @@ class DeltaDraft(BaseModel):
     """What the change does to one capability's spec."""
 
     capability: str = Field(description="The capability's kebab-case slug.")
-    purpose: str | None = Field(
-        description="One sentence on what the capability is for, only where the change creates it. Else null."
+    purpose: str = Field(
+        description="One sentence on what the capability is for, only where the change creates it. Empty otherwise."
     )
     added: list[RequirementDraft] = Field(description="New requirements. Give no ID: one is assigned.")
     modified: list[ModifiedDraft] = Field(description="Living requirements restated whole. Empty where none changes.")

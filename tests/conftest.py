@@ -25,8 +25,45 @@ from pydantic import BaseModel, ValidationError
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "adk_spec"
 
+CANNED_TRIAGE = {"tier": "lean", "capabilities": ["auth"], "reason": "one small change"}
+#: A brief draft that converts to the sample `BRIEF`: no marker, and no design owed.
+CANNED_BRIEF = {
+    "title": "Sign in with a passkey",
+    "why": "Passwords are the top source of account takeovers.",
+    "what_changes": "Users can register a passkey and sign in with it.",
+    "non_goals": "No change to session length.",
+    "capabilities": ["auth"],
+    "impact": "The sign-in page and the session service.",
+    "assumptions": "Browsers in scope support WebAuthn.",
+    "design_needed": False,
+    "design_reason": "One capability, and no new dependency.",
+}
+_PASSKEY = {
+    "name": "Sign in with a passkey",
+    "statement": "The system SHALL let a user sign in with a passkey.",
+    "scenarios": [
+        {
+            "name": "Registered passkey",
+            "steps": ["WHEN the user presents a registered passkey", "THEN the system starts a session"],
+        }
+    ],
+}
+#: A deltas draft that adds one requirement to `auth`.
+CANNED_DELTAS = {"deltas": [{"capability": "auth", "purpose": "", "added": [_PASSKEY], "modified": [], "removed": []}]}
+#: A deltas draft that modifies a requirement the living spec does not hold.
+DELTAS_ON_A_MISSING_ID = {
+    "deltas": [
+        {
+            "capability": "auth",
+            "purpose": "",
+            "added": [],
+            "modified": [{"id": "REQ-AUTH-099", "requirement": _PASSKEY}],
+            "removed": [],
+        }
+    ]
+}
 #: The answers the fake gives by default, one a schema: the first one a request's schema accepts.
-CANNED: tuple[dict, ...] = ({"tier": "lean", "capabilities": ["auth"], "reason": "one small change"},)
+CANNED: tuple[dict, ...] = (CANNED_TRIAGE, CANNED_BRIEF, CANNED_DELTAS)
 
 
 def canned_for(schema: type[BaseModel]) -> dict:
@@ -221,3 +258,26 @@ def seeded(root: Path):
     write_text(folder / "tasks.md", TASKS)
     write_text(folder / "specs" / "auth" / "spec.md", DELTA)
     return workspace
+
+
+def on_the_fake(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Gemini arm on the fake model, with a key present: what a test of a model-calling command runs on."""
+    monkeypatch.setenv("SPEC_PROVIDER", "gemini")
+    monkeypatch.setenv("SPEC_MODEL", "fake")
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+
+
+def run(root: Path, *argv: str) -> int:
+    """The command, in process, in the workspace at `root`."""
+    from adk_spec.interfaces.cli import main
+
+    return main(["--root", str(root), *argv])
+
+
+def approved(root: Path, change: str = "passkeys") -> None:
+    """The change rebased and approved, as a person does before the work starts."""
+    assert run(root, "rebase", change) == 0 and run(root, "approve", change, "--by", "reviewer") == 0
+
+
+def state_of(root: Path, change: str = "passkeys") -> dict:
+    return json.loads((root / f".spec/changes/{change}/change.json").read_text(encoding="utf-8"))
