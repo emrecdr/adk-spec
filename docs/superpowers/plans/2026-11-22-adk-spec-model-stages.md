@@ -24,6 +24,16 @@ Two engine behaviours this design rests on were run offline on the pinned pair (
 - With a plugin that turns an answer off its schema into an error response, the workflow goes on to the next node with `node_input=None` and the stage's key unwritten. A gate node can then route back. Without the plugin the run raises and ends.
 - A `RequestInput` pause inside an `App` with plugins is answered in the same process by a function response named `adk_request_input`, and the answer arrives as the next node's `node_input`.
 
+## Validated before building
+
+Checked on 22 November 2026, before any task started, against the code on `main` and the pinned libraries, offline:
+
+- Every name this plan consumes from plan 1 exists as spelled. Three are new here: `Workspace.taken_ids`, `Workspace.write_change` and `fenced`.
+- A plugin's write to `callback_context.state` in a model hook lands, and the gate after the stage reads it. A gate that sets a stage's key to `None` clears a refused answer, so a later answer off its schema is not mistaken for the old one. A value of `None` renders as nothing in an optional placeholder (`q17_plan2_state_from_plugin_and_gate_probe.py`).
+- **A workflow node cannot be a lambda:** the engine requires a node's name to be an identifier. The gate's test builds its end nodes as named functions.
+- The helpers `run` and `approved` are in `tests/test_cli.py`, and `_on_the_fake` in `tests/test_smoke.py`. Task 6 moves all three to `tests/conftest.py`.
+- LiteLLM 1.106.2 has `get_copilot_default_headers(api_key)`, which sets `Authorization`, and `Authenticator.get_api_base()`, which reads the cached key file. It has no model-list call of its own.
+
 ## Scope
 
 In: `models`, two plugins, the draft schemas and their conversion, the context loader, the gate node, `propose` on both tiers, `plan`, a workspace lock, and a live run by the owner.
@@ -401,7 +411,13 @@ The node reads the stage's answer at `state[stage]` and its count at `state[f"tr
 def flow(check):
     agent = build_triage()
     gate = checked("triage", check)
-    done, lost = lambda: Event(output="done"), lambda: Event(output="lost")
+
+    def done():
+        return Event(output="done")
+
+    def lost():
+        return Event(output="lost")
+
     return App(
         name="t",
         root_agent=Workflow(name="t", edges=[("START", agent, gate), (gate, {OK: done, AGAIN: agent, GIVE_UP: lost})]),
