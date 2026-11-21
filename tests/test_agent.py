@@ -75,3 +75,30 @@ def test_adks_own_loader_finds_the_app_outside_a_workspace_too(tmp_path, monkeyp
     sys.modules.pop("adk_spec.agent", None)
     found = AgentLoader(str(ROOT)).load_agent("adk_spec")
     assert isinstance(found, App) and found.name == "adk_spec" and found.root_agent.name == "adk_spec"
+
+
+@pytest.mark.asyncio
+async def test_a_second_message_starts_from_nothing_of_the_first(tmp_path, monkeypatch, fake_provider) -> None:
+    """Found by the code review: one chat keeps one session, so a second message whose brief failed its gate was
+    answered with the first message's drafts, and its stages were asked fewer times."""
+    seeded(tmp_path)
+    app = loaded(tmp_path, monkeypatch)
+    runner = InMemoryRunner(app=app)
+    await runner.session_service.create_session(app_name=runner.app_name, user_id="u", session_id="s")
+
+    async def typed(message: str) -> str:
+        texts = []
+        async for event in runner.run_async(user_id="u", session_id="s", new_message=types.UserContent(message)):
+            parts = event.content.parts if event.content and event.content.parts else []
+            texts += [part.text for part in parts if part.text and event.author == app.name]
+        return texts[-1]
+
+    assert "# Sign in with a passkey" in await typed(REQUEST)
+    asked_before = len(fake_provider.requests)
+    fake_provider.answers_when("You write the brief of a change", "not json")
+    second = await typed("Add rate limiting to the export API.")
+    assert second.startswith("Nothing was drafted: brief:") and "passkey" not in second
+    briefs = [
+        r for r in fake_provider.requests[asked_before:] if "You write the brief" in str(r.config.system_instruction)
+    ]
+    assert len(briefs) == 3, "the second message has its own three tries"

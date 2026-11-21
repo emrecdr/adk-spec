@@ -41,6 +41,12 @@ def flat(text: str) -> str:
     return " ".join(text.split())
 
 
+def plain(text: str) -> str:
+    """A model's wording as it may be printed and written: on one line, every character that is no printable one,
+    an escape or a bell among them, read as a space."""
+    return flat("".join(char if char.isprintable() else " " for char in text))
+
+
 def quoted_at(quote: str, text: str) -> int | None:
     """The line of `text`, counted from 1, where `quote` starts, or nothing where `text` does not hold it. The two
     are compared with every run of whitespace read as one space, so a line break or an indent a model changed does

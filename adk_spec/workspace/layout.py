@@ -100,8 +100,9 @@ def findings_of(loaded: LoadedChange, living: Mapping[str, Spec], unreadable: Co
         if file and any(path == file or path.startswith(f"{file}/") for path in unread):
             continue
         found.append(held)
-    # With a living spec or one of the change's own deltas unread, what a task may name is unknown.
-    if not blind and not any(path.startswith(f"{SPECS}/") for path in unread):
+    # With any living spec or one of the change's own deltas unread, what a task may name is unknown: a task may
+    # serve a requirement of a capability the change does not touch.
+    if not unreadable and not any(path.startswith(f"{SPECS}/") for path in unread):
         found += coverage_of(loaded.change, living)
     return found
 

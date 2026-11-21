@@ -66,11 +66,21 @@ def approve(
     return state.model_copy(update={"status": "approved", "approval": approval, "base_commit": began})
 
 
+def check_stands(state: ChangeState, files: Mapping[str, str]) -> bool:
+    """Whether the change's last check was made by a model, of these same files. A check by code alone then adds
+    nothing and must not replace it: it would count the code's findings alone, and a blocking finding of the
+    model's would be gone with nothing fixed."""
+    return state.check is not None and state.check.model is not None and state.check.files == dict(files)
+
+
 def checked(
     state: ChangeState, findings: Sequence[Finding], *, files: Mapping[str, str], at: str, model: str | None = None
 ) -> ChangeState:
     """The state with a check recorded: the fingerprints of the files it read, how many of its findings block an
-    approval, and the model that judged, none where code alone did."""
+    approval, and the model that judged, none where code alone did. A check by code alone of files a model has
+    judged records nothing: the model's check stands, with whatever it found."""
+    if model is None and check_stands(state, files):
+        return state
     blocking = sum(found.severity == "ERROR" for found in findings)
     return state.model_copy(update={"check": Checked(at=at, files=dict(files), blocking=blocking, model=model)})
 
@@ -168,14 +178,17 @@ def verify_blockers(state: ChangeState, stale: Sequence[str]) -> list[str]:
     return _unready(state, stale)
 
 
-def archive_blockers(state: ChangeState, stale: Sequence[str]) -> list[str]:
+def archive_blockers(state: ChangeState, stale: Sequence[str], *, drifted: bool = False) -> list[str]:
     """Why a change cannot be archived yet, a sentence each; empty where it can. A lean change is archived once
-    approved; a standard or strict one once verified."""
+    approved; a standard or strict one once verified, and only while the work is what was verified: `drifted` says
+    it has changed since."""
     if unready := _unready(state, stale):
         return unready
+    cid = state.id
     if state.tier != "lean" and state.status != "verified":
-        cid = state.id
         return [f"`{cid}` is a {state.tier} change and is not verified: run `adk-spec verify {cid}` first"]
+    if state.tier != "lean" and drifted:
+        return [f"the work changed since `{cid}` was verified: run `adk-spec verify {cid}` again"]
     return []
 
 
@@ -209,9 +222,15 @@ _HOLDS: tuple[tuple[str, Actor, str], ...] = (
 
 
 def next_step(
-    state: ChangeState, findings: Sequence[Finding], stale: Sequence[str], *, check: Sequence[Finding] = ()
+    state: ChangeState,
+    findings: Sequence[Finding],
+    stale: Sequence[str],
+    *,
+    check: Sequence[Finding] = (),
+    drifted: bool = False,
 ) -> Step:
-    """What happens next with a change, and who makes it happen. `check` is what `check_blockers` gives for it."""
+    """What happens next with a change, and who makes it happen. `check` is what `check_blockers` gives for it, and
+    `drifted` whether the work changed since it was verified."""
     cid = state.id
     if state.status == "archived":
         return Step("done", "nothing: archived")
@@ -222,6 +241,8 @@ def next_step(
             return Step("you", f"{first}approve again: {', '.join(stale)} changed since the approval")
         if errors:  # a base that moved, a spec that no longer reads
             return Step("you", f"fix what `adk-spec validate {cid}` lists")
+        if state.status == "verified" and drifted and state.tier != "lean":
+            return Step("run", f"run `adk-spec verify {cid}` again: the work changed since it was verified")
         if state.status == "verified":
             return Step("run", f"run `adk-spec archive {cid}`")
         last = "archive" if state.tier == "lean" else "verify"

@@ -34,14 +34,14 @@ from ..domain.ids import slug_problem
 from ..domain.lifecycle import capture_bases
 from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.tasks_md import parse_tasks, render_tasks
-from ..domain.text import flat
+from ..domain.text import plain
 from ..domain.validate import validate_brief, validate_delta, validate_tasks
 from ..workspace.context import ContextTooLargeError, living_text
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import SPEC_FILE, SPECS
-from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked
-from .plugins import UsageLedger, roster
-from .stages import BRIEF_TEXT, LIVING, REQUEST, TIER
+from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked, tries_key
+from .plugins import STAGE_ERROR, UsageLedger, roster
+from .stages import BRIEF_TEXT, FINDINGS, LIVING, REQUEST, TIER
 from .stages import brief as brief_stage
 from .stages import check as check_stage
 from .stages import deltas as deltas_stage
@@ -101,7 +101,7 @@ def drafted(state: Mapping[str, Any], known: Known) -> Drafted:
     checked is what the command writes."""
     draft = BriefDraft.model_validate(state[brief_stage.KEY])
     deltas = to_deltas(DeltasDraft.model_validate(state[deltas_stage.KEY]), known.living, known.taken)
-    return Drafted(to_brief(draft), deltas, draft.design_needed, flat(draft.design_reason))
+    return Drafted(to_brief(draft), deltas, draft.design_needed, plain(draft.design_reason))
 
 
 def files_of(made: Drafted) -> dict[str, str]:
@@ -362,6 +362,20 @@ def build_propose_app(
     return _app(edges, ledger, recorder)
 
 
+#: Every key a propose run leaves in state, each set back to nothing. A command's run starts on a session of its
+#: own; a chat keeps one session for all its messages, so what one message drafted, and how often its stages were
+#: asked, would otherwise still be there for the next: a stage that failed would be answered with the old draft.
+_DRAFTING = (triage_stage.KEY, brief_stage.KEY, questions_stage.KEY, deltas_stage.KEY)
+_NOTHING_YET: dict[str, None] = dict.fromkeys(
+    (
+        *_DRAFTING,
+        *(tries_key(stage) for stage in _DRAFTING),
+        *(FAILURE, FINDINGS, STAGE_ERROR, TIER, ASKING, UNWORDED, ROUNDS, BRIEF_TEXT, LIVING),
+        *(brief_stage.ANSWERS, brief_stage.REPLACES),
+    )
+)
+
+
 def build_chat_app(known: Known, told: Mapping[str, Any], *, ledger: UsageLedger) -> App:
     """The shape ADK's own interface loads: one message typed is one request. It is drafted as `propose` drafts it
     with no question asked, and the run ends on one message that holds the drafts as their files, or the reason
@@ -373,7 +387,7 @@ def build_chat_app(known: Known, told: Mapping[str, Any], *, ledger: UsageLedger
         """The message typed becomes the request, beside what the workspace says."""
         parts = getattr(node_input, "parts", None) or ()
         typed = " ".join(part.text for part in parts if part.text) or str(node_input or "")
-        return Event(state={**told, REQUEST: typed})
+        return Event(state={**_NOTHING_YET, **told, REQUEST: typed})
 
     def shown(ctx: Context) -> Event:
         files = files_of(drafted(ctx.state.to_dict(), known))

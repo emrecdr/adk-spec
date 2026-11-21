@@ -287,3 +287,31 @@ def test_the_work_is_compared_with_the_first_approval_however_often_it_is_approv
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
     assert run(tmp_path, "verify", "passkeys") == 0, "the committed work is still in the diff that is judged"
     assert "+    return passkey(user)" in str(fake_provider.requests[0].config.system_instruction)
+
+
+def test_a_models_reason_and_its_quotes_are_kept_as_plain_text() -> None:
+    """Found by the code review: a verdict's reason was printed with its control characters, and a quote written
+    to the report with its line breaks."""
+    met = {**CANNED_VERDICTS["verdicts"][0], "reason": f"Done.{chr(27)}[2J{chr(7)}"}
+    met["evidence"] = [{"path": "src/auth.py", "quote": f"return{chr(10)}   passkey(user){chr(27)}"}]
+    (got,) = grounded(
+        VerdictsDraft.model_validate({"verdicts": [met]}), DIFF, added=frozenset({"REQ-AUTH-004"}), removed=frozenset()
+    )
+    assert (got.verdict, got.reason, got.evidence) == ("met", "Done. [2J", (("src/auth.py", "return passkey(user)"),))
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_work_that_changed_after_it_was_verified_is_verified_again_before_it_is_archived(tmp_path, capsys) -> None:
+    """Found by the code review: the diff's fingerprint was recorded and read by nothing, so a change stayed
+    verified after the code it was verified on was rewritten, and archive folded it in."""
+    ws, _commit = approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    write_text(tmp_path / "src/auth.py", BEFORE)  # the work is taken out again
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0 and "verify passkeys` again" in capsys.readouterr().out
+    assert run(tmp_path, "archive", "passkeys") == 1
+    assert "changed since" in capsys.readouterr().err
+    assert ws.load_change("passkeys").change.state.status == "verified", "nothing is rewritten by a refusal"
+    implemented(tmp_path)
+    assert run(tmp_path, "archive", "passkeys") == 0, "the same work as was verified is archived"

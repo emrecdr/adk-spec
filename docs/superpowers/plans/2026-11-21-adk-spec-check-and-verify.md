@@ -629,6 +629,31 @@ is the owner's and was not run.
   each start one git process fewer.
 - Every stage's instruction is byte for byte what it was.
 
+**What the code review after the phase found** (ten findings, eight reproduced; each fixed with a test that failed
+first).
+
+- **`verify` read files a person ignores in every repository.** With their git config left unread, so was their
+  global ignore file: an untracked `.env` was read as new work, sent to the model and kept in the recording. The
+  layer now asks git for that one setting and passes it on. The README says what a diff holds.
+- **`check --no-model` cleared a blocking finding of the model's** on unchanged files, with nothing fixed and no
+  reason recorded. A check by code alone no longer replaces a model's check of the same files.
+- **A change stayed `verified` after its code was rewritten.** The diff's fingerprint was recorded and read by
+  nothing. `archive` now refuses, and `status` says to verify again, where the diff against the same commit is no
+  longer the one that was judged.
+- **A model's wording reached the terminal and the reports with its control characters.** `plain` in
+  `domain/text.py` is applied where a finding or a verdict is made, so everything after it is plain text.
+- **A workspace in a subfolder of a repository another account owns** was told it is in no git repository. The
+  repository's top is what is trusted, and a refusal of git's that is no missing repository is said, never read as
+  a no.
+- **In `adk web`, a second message could be answered with the first one's drafts.** A chat keeps one session; each
+  message now starts from nothing of the one before.
+- **With any living spec unreadable, a task naming one of its requirements was called a stranger.** Coverage is
+  skipped then, and `plan` waits for every living spec to read, as `propose` does.
+- **The measurement ended with a traceback on a run that failed its gate**, losing the runs already paid for.
+- `plan` no longer replaces a started task list that does not parse, and a report leaves a finding's words alone.
+- Left: a file name git quotes (one holding a quote, a tab or a backslash) can never ground a verdict. It fails
+  safe, to `unclear`.
+
 **Validated by a probe before it was built:** what a recorder sees (`q19`), and what the shape `adk web` loads has
 to be (`q20`). `adk web` itself was never started.
 

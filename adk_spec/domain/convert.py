@@ -15,7 +15,7 @@ from .drafts import BriefDraft, DeltasDraft, DesignDraft, FindingDraft, Findings
 from .ids import SLUG_MAX, next_requirement_id, slug_problem
 from .model import Brief, Delta, Finding, GrammarError, Removal, Requirement, Scenario, Severity, Spec, Task, TaskGroup
 from .spec_md import fenced_lines, paragraphs
-from .text import flat, lines_of, normalise, quoted_at
+from .text import flat, lines_of, normalise, plain, quoted_at
 
 _STEP = re.compile(r"(?:-\s*)?(?:\*\*)?(GIVEN|WHEN|THEN|AND)(?:\*\*)?\s+(\S.*)", re.IGNORECASE | re.DOTALL)
 _WORD = re.compile(r"[a-z0-9]+")
@@ -169,7 +169,7 @@ def to_findings(draft: FindingsDraft, texts: Mapping[str, str]) -> tuple[list[Fi
         Finding(
             severity=_SEVERITY[one.severity],
             code=f"check.{one.kind}",
-            message=flat(one.message),
+            message=plain(one.message),
             path=at[0],
             line=at[1],
         )

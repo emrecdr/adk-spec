@@ -225,3 +225,63 @@ def test_a_report_is_no_part_of_an_approval(tmp_path, capsys, fake_provider) -> 
     capsys.readouterr()
     assert run(tmp_path, "status") == 0 and "approve again" not in capsys.readouterr().out
     assert state(ws).status == "approved" and len(fake_provider.requests) == 2
+
+
+def test_a_models_wording_reaches_the_terminal_and_the_report_as_plain_text(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: a finding's message was printed and written with its control characters."""
+    standard(tmp_path)
+    hostile = {**CANNED_FINDINGS["findings"][0], "message": f"{chr(27)}[2J{chr(27)}]0;owned{chr(7)} Not said."}
+    fake_provider.answers_when(CHECK, {"findings": [hostile]})
+    assert run(tmp_path, "check", "passkeys") == 0
+    out, report = capsys.readouterr().out, read_text(tmp_path / REPORT)
+    for text in (out, report):
+        assert chr(27) not in text and chr(7) not in text and "Not said." in text
+
+
+def test_a_check_by_code_alone_does_not_clear_what_a_model_found(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: `check --no-model` on the same files counted the code's findings alone, so a
+    blocking finding of the model's was gone with nothing fixed and no reason recorded."""
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    before = read_text(tmp_path / REPORT)
+    capsys.readouterr()
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 1
+    assert "stands" in capsys.readouterr().err and read_text(tmp_path / REPORT) == before
+    held = state(ws).check
+    assert (held.blocking, held.model) == (1, "fake on gemini")
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+
+
+def test_a_living_spec_that_does_not_read_makes_no_task_a_stranger(tmp_path, capsys) -> None:
+    """Found by the code review: with another capability's spec unreadable, a task that rightly named one of its
+    requirements was said to name a requirement no living spec holds."""
+    ws = seeded(tmp_path)
+    ws.write_specs({"billing": parse_spec(SPEC.replace("# auth", "# billing").replace("REQ-AUTH", "REQ-BILLING"))})
+    tasks = tmp_path / ".spec/changes/passkeys/tasks.md"
+    write_text(tasks, read_text(tasks).replace("T003 Update", "T003 [REQ-BILLING-001] Update"))
+    assert not [f for f in findings_of(ws.load_change("passkeys"), ws.specs()[0]) if f.code.startswith("check.")]
+    spec = tmp_path / ".spec/specs/billing/spec.md"
+    write_text(spec, read_text(spec).replace("## Requirements", "## Requirments"))
+    specs, _problems = ws.specs()
+    unreadable = set(ws.capabilities()) - set(specs)
+    assert unreadable == {"billing"}
+    found = findings_of(ws.load_change("passkeys"), specs, unreadable)
+    assert not [f for f in found if f.code.startswith("check.")]
+    capsys.readouterr()
+    assert run(tmp_path, "validate", "passkeys") == 1  # the spec's own fault, and nothing said of the task
+    assert "check.task-unknown-requirement" not in capsys.readouterr().out
+
+
+def test_a_report_leaves_a_findings_own_words_alone() -> None:
+    """Found by the code review: tidying the place of a finding also rewrote ` :` inside its message."""
+    from adk_spec.domain.model import Finding
+    from adk_spec.domain.report_md import render_check
+
+    worded = Finding(
+        severity="WARNING", code="check.ambiguity", message="the ratio a : b is wrong", path="brief.md", line=3
+    )
+    placeless = Finding(severity="ERROR", code="check.missing", message="nothing : here")
+    report = render_check("x", "t", [worded, placeless], model=None)
+    assert "- `check.ambiguity` brief.md:3: the ratio a : b is wrong" in report
+    assert "- `check.missing`: nothing : here" in report

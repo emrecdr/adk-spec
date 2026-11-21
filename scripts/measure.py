@@ -22,8 +22,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from adk_spec.domain.convert import pointed_at
-from adk_spec.domain.drafts import FindingsDraft
+from adk_spec.domain.drafts import FindingDraft, FindingsDraft
 from adk_spec.interfaces import cli
 from adk_spec.workspace.git import GitError, head
 from adk_spec.workspace.layout import Workspace, findings_of
@@ -91,12 +93,21 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], int, int,
     seen = [Seen(one.code, one.path or "", one.message, one.severity == "ERROR") for one in found]
     texts, dropped = workspace.approval_texts(change), 0
     answer = next((call.answer for call in reversed(calls) if call.answer and not call.error), None)
-    for one in FindingsDraft.model_validate_json(answer).findings if answer else ():
+    for one in _findings(answer):
         if (at := pointed_at(one, texts)) is None:  # the command left this one out, by the same test
             dropped += 1
         else:  # the quote is kept here beside the message: a planted fault is named by either
             seen.append(Seen(f"check.{one.kind}", at[0], f"{one.quote} {one.message}", one.severity == "critical"))
     return seen, dropped, tokens, seconds
+
+
+def _findings(answer: str | None) -> list[FindingDraft]:
+    """The findings of a check's last answer, or none: a run that failed its gate ended on an answer off its
+    schema, which is counted as a failed run and is nothing to read."""
+    try:
+        return FindingsDraft.model_validate_json(answer).findings if answer else []
+    except ValidationError:
+        return []
 
 
 def measured(case: Case, *, runs: int, folder: Path) -> Row:

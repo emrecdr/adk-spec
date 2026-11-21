@@ -12,6 +12,7 @@ import contextlib
 import getpass
 import json
 import os
+import re
 import sys
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
@@ -33,16 +34,17 @@ from ..domain.lifecycle import (
     archive_blockers,
     capture_bases,
     check_blockers,
+    check_stands,
     checked,
     next_step,
     verified,
     verify_blockers,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import ChangeState, Finding, Spec, Tier
+from ..domain.model import Brief, ChangeState, Finding, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_verify
 from ..domain.tasks_md import render_tasks
-from ..domain.text import sha256_of
+from ..domain.text import plain, sha256_of
 from ..domain.validate import failed, finding, validate_spec
 from ..domain.verify import Verdict, grounded
 from ..workspace.config import ConfigError
@@ -269,6 +271,8 @@ class Assessed:
     stale: list[str]
     #: What its check still owes an approval, as `check_blockers` gives it, pathed from the root too.
     unchecked: list[Finding]
+    #: Whether the work changed since the change was verified.
+    drifted: bool = False
 
     @property
     def state(self) -> ChangeState:
@@ -277,7 +281,7 @@ class Assessed:
     @property
     def step(self) -> Step:
         """What happens next with the change, and who makes it happen."""
-        return next_step(self.state, self.findings, self.stale, check=self.unchecked)
+        return next_step(self.state, self.findings, self.stale, check=self.unchecked, drifted=self.drifted)
 
 
 def _assessed(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> Assessed:
@@ -285,8 +289,21 @@ def _assessed(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> 
     unreadable = set(workspace.capabilities()) - set(living)  # a spec that is there and does not read
     found = _from_root(change_id, findings_of(loaded, living, unreadable))
     files = approval_files(workspace.approval_texts(change_id))
-    stale = approval_stale(loaded.change.state, files)
-    return Assessed(loaded, found, stale, _from_root(change_id, check_blockers(loaded.change.state, files)))
+    state = loaded.change.state
+    unchecked = _from_root(change_id, check_blockers(state, files))
+    return Assessed(loaded, found, approval_stale(state, files), unchecked, _drifted(workspace, state))
+
+
+def _drifted(workspace: Workspace, state: ChangeState) -> bool:
+    """Whether the work changed since a change was verified: its diff against the same commit is no longer the one
+    that was judged. True too where the two cannot be compared. Asked of git for a verified change alone."""
+    held = state.verification
+    if state.status != "verified" or held is None:
+        return False
+    try:
+        return sha256_of(diff(workspace.root, held.base)) != held.diff
+    except GitError:
+        return True
 
 
 def _say_next(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> None:
@@ -434,7 +451,7 @@ def _archive(args: argparse.Namespace) -> int:
     living, of_specs = workspace.specs()
     assessed = _assessed(workspace, args.id, living)
     loaded, state = assessed.loaded, assessed.state
-    if blockers := archive_blockers(state, assessed.stale):
+    if blockers := archive_blockers(state, assessed.stale, drifted=assessed.drifted):
         for sentence in blockers:
             print(f"{PROG}: {sentence}", file=sys.stderr)
         return EXIT_FINDINGS
@@ -491,12 +508,6 @@ def _line() -> str:
         return ""
 
 
-def _plain(text: str) -> str:
-    """A model's text as a terminal may be handed it: every character that is no printable one, an escape or a bell
-    among them, shown as a space."""
-    return "".join(char if char.isprintable() else " " for char in text)
-
-
 def _answered(questions: list[dict[str, Any]]) -> list[str]:
     """A round of questions put to the person on the terminal, one at a time: the answer to each, in their order.
     A line is the answer; `=` takes the suggestion; an empty line leaves the point open; the end of the input, or
@@ -507,8 +518,8 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     answers: list[str] = []
     ended = sys.stdin is None  # a process started with no terminal and no pipe
     for number, question in enumerate(questions, 1):
-        print(f"{number}. {_plain(question['question'])}")
-        print(f"   suggested: {_plain(question['recommended'])}", flush=True)
+        print(f"{number}. {plain(question['question'])}")
+        print(f"   suggested: {plain(question['recommended'])}", flush=True)
         line = "" if ended else _line()
         ended = ended or line == ""  # no line at all: the input is over
         typed = line.strip()
@@ -650,23 +661,40 @@ def _tree(workspace: Workspace) -> str:
         return ""
 
 
-def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
-    specs, _of_living = workspace.specs()
-    assessed = _assessed(workspace, args.id, specs)
+#: A ticked box of a task list, wherever its line stands: read in the text of a list that no longer parses.
+_TICKED = re.compile(r"(?m)^\s*-\s*\[[xX]\]")
+
+
+def _plannable(args: argparse.Namespace, workspace: Workspace, assessed: Assessed, of_specs: list[Finding]) -> Brief:
+    """The brief of a change that is to be planned now. `NotYetError` where it is not: it is no draft, work on its
+    task list has begun and replacing it was not asked for, or what the tasks are drafted from does not read."""
     change, state = assessed.loaded.change, assessed.state
     if state.status != "draft":  # new tasks would void what was approved
         raise NotYetError(f"`{args.id}` is {state.status}: a plan is drafted while a change is a draft")
-    started = [task.id for group in change.tasks or () for task in group.tasks if task.done]
+    started = sum(task.done for group in change.tasks or () for task in group.tasks)
+    if change.tasks is None:  # a list off its grammar reads as none: its boxes are counted in its text
+        started = len(_TICKED.findall(workspace.approval_texts(args.id).get(TASKS_FILE, "")))
     if started and not args.replace:  # work has begun on this list: it is not thrown away unasked
         raise NotYetError(
-            f"`{args.id}` has {len(started)} of its tasks ticked. A new plan would replace the list: run "
+            f"`{args.id}` has {started} of its tasks ticked. A new plan would replace the list: run "
             f"`{PROG} plan {args.id} --replace` if that is meant"
         )
+    if of_specs:  # a task may serve a requirement of any living spec: which exist is unknown while one is unread
+        _printed(of_specs)
+        raise NotYetError(f"`{args.id}` is not planned: a living spec does not read. Fix it first")
     # What must be right before tasks are worth drafting: everything but the tasks themselves.
     blocking = [held for held in assessed.findings if held.severity == "ERROR" and not _of_tasks(held)]
     if blocking or change.brief is None:
         _printed(blocking)
         raise NotYetError(f"`{args.id}` is not planned: its brief and deltas have errors. Fix them first")
+    return change.brief
+
+
+def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
+    specs, of_specs = workspace.specs()
+    assessed = _assessed(workspace, args.id, specs)
+    change, state = assessed.loaded.change, assessed.state
+    brief = _plannable(args, workspace, assessed, of_specs)
     from ..orchestration.models import require_ready
 
     roles = ("design", "tasks") if state.needs_design else ("tasks",)
@@ -680,7 +708,7 @@ def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
 
     seed = {
         RULES: constitution_text(workspace),
-        BRIEF_TEXT: render_brief(change.brief),
+        BRIEF_TEXT: render_brief(brief),
         DELTAS_TEXT: _deltas_text(change),
         LIVING: living_text(specs, sorted(change.deltas)),
         TREE: _tree(workspace),
@@ -717,6 +745,14 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
     if assessed.state.status == "archived":
         raise NotYetError(f"`{args.id}` is archived: there is nothing left to check")
     texts = workspace.approval_texts(args.id)
+    held = assessed.state.check
+    if args.no_model and held is not None and check_stands(assessed.state, approval_files(texts)):
+        print(
+            f"{PROG}: the check of `{args.id}` by {held.model} stands, with {held.blocking} blocking: its files have "
+            "not changed since, and a check by code alone does not replace it",
+            file=sys.stderr,
+        )
+        return EXIT_FINDINGS if held.blocking else EXIT_OK
     judged: list[Finding] = []
     dropped, ledger, model = 0, None, None
     if any(held.severity == "ERROR" for held in assessed.findings):
@@ -945,7 +981,7 @@ def _written(args: argparse.Namespace, workspace: Workspace, known: Any, state: 
     for path in files:
         print(f"          {workspace.shown(folder)}/{path}")
     if made.needs_design:
-        print(f"design    owed: {_plain(made.design_reason) or 'the brief gives no reason'}")
+        print(f"design    owed: {plain(made.design_reason) or 'the brief gives no reason'}")
     return change_id
 
 

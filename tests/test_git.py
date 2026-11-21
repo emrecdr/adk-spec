@@ -100,3 +100,57 @@ def test_a_failure_is_gits_own_first_line_and_never_an_empty_answer(tmp_path) ->
     repository(tmp_path)
     with pytest.raises(GitError, match="git cat-file failed"):
         git(tmp_path, "cat-file", "-p", "0" * 40)
+
+
+def test_what_a_person_ignores_everywhere_is_no_new_work(tmp_path, monkeypatch) -> None:
+    """Found by the code review: with a person's own git config left unread, the files they ignore in every
+    repository, a `.env` among them, were read as new work, sent to the model and kept in the recording."""
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".gitignore_global").write_text(".env\n.idea/\n", encoding="utf-8")
+    (home / ".gitconfig").write_text("[core]\n\texcludesfile = ~/.gitignore_global\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    base = repository(tmp_path / "repo")
+    (tmp_path / "repo/.env").write_text("API_KEY=supersecret-value\n", encoding="utf-8")
+    (tmp_path / "repo/.idea").mkdir()
+    (tmp_path / "repo/.idea/ws.xml").write_text("<x/>\n", encoding="utf-8")
+    changed(tmp_path / "repo")
+    text = diff(tmp_path / "repo", base)
+    assert "supersecret-value" not in text and ".idea" not in text and "+    return passkey()" in text
+    assert files(tmp_path / "repo") == ["src/app.py"]
+
+
+def test_a_subfolder_of_a_repository_another_account_owns_is_still_a_repository(tmp_path, monkeypatch) -> None:
+    """Found by the code review: the folder named was trusted where git asks about the repository's top, so a
+    workspace in a subfolder of a bind mount or a shared folder was told it is in no git repository."""
+    sha = repository(tmp_path / "repo", {"service/src/app.py": "a = 1\n"})
+    own = layer._environment
+    monkeypatch.setattr(layer, "_environment", lambda root: {**own(root), "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"})
+    assert is_repository(tmp_path / "repo/service") and head(tmp_path / "repo/service") == sha
+
+
+def test_a_refusal_of_gits_that_is_no_missing_repository_is_said_and_never_read_as_none(tmp_path, monkeypatch) -> None:
+    repository(tmp_path / "repo")
+    own = layer._environment
+
+    def distrusted(root):
+        env = {**own(root), "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+        return {name: value for name, value in env.items() if not name.startswith("GIT_CONFIG_")}
+
+    monkeypatch.setattr(layer, "_environment", distrusted)
+    with pytest.raises(GitError, match="dubious ownership"):
+        is_repository(tmp_path / "repo")
+    with pytest.raises(GitError, match="dubious ownership"):
+        head(tmp_path / "repo")
+
+
+def test_a_repositorys_own_diff_settings_change_no_path(tmp_path) -> None:
+    from conftest import _git
+
+    base = repository(tmp_path)
+    _git(tmp_path, "config", "diff.noprefix", "true")
+    _git(tmp_path, "config", "diff.mnemonicPrefix", "true")
+    changed(tmp_path)
+    assert "+++ b/src/app.py" in diff(tmp_path, base)

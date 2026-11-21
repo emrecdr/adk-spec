@@ -26,7 +26,8 @@ def left_out(dropped: int) -> str:
 
 
 def _listed(found: Finding) -> str:
-    return f"- `{found.code}` {place(found)}: {found.message}".replace(" :", ":")
+    where = place(found)
+    return f"- `{found.code}`{' ' + where if where else ''}: {found.message}"
 
 
 def render_check(change_id: str, at: str, findings: Sequence[Finding], *, model: str | None, dropped: int = 0) -> str:

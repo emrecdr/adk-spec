@@ -2,7 +2,9 @@
 
 A recording is what a stage is measured on afterwards, what a fake model replays in a test, and where a person
 reads why a gate sent an answer back. It holds the texts that were sent and received and nothing of how the
-provider was reached: no key and no token is ever part of an instruction. The folder ignores itself for git.
+provider was reached: no key and no token is ever part of an instruction. What was sent is what the command read:
+specs and a change's files, and for `verify` a diff of the working tree, which holds whatever changed in files git
+does not ignore. The folder ignores itself for git.
 """
 
 from __future__ import annotations

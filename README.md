@@ -135,8 +135,14 @@ asking, and the brief is kept as it stood. The `tokens` line counts each stage's
 
 Every command that calls a model keeps what it sent and what came back, one file a command, under `.spec/runs/`:
 each stage's instruction, its answer as it came, and what a gate found wrong where it asked again. The folder
-ignores itself for git. It holds your request and the texts of your specs, and no key or token. The newest 20 are
-kept; `[limits] keep_runs` in `.spec/config.toml` changes that, and `0` keeps none.
+ignores itself for git. The newest 20 are kept; `[limits] keep_runs` in `.spec/config.toml` changes that, and `0`
+keeps none.
+
+What a model is sent, and so what a recording holds, is what the command reads: your request, your specs and the
+change's files, for `plan` the paths of the repository's files, and for `verify` the diff of your working tree
+against the commit the work began at. No key or token of the provider is ever part of it. A diff holds whatever
+changed in files git tracks or would track, so keep secrets in files git ignores: what the repository's
+`.gitignore` or your own global ignore file leaves out is never read.
 
 Three more reach a model provider without drafting:
 

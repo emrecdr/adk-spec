@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .drafts import VerdictsDraft
-from .text import flat, lines_of, quoted_at
+from .text import lines_of, plain, quoted_at
 
 UNGROUNDED = "no quoted line is in the diff"
 NO_VERDICT = "no verdict was given"
@@ -81,12 +81,12 @@ def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed:
             continue
         side = 1 if req_id in removed else 0
         evidence = tuple(
-            (path, piece.quote.strip())
+            (path, quote)
             for piece in one.evidence
-            for path in [_named(piece.path, sides)]
-            if path is not None and _shown(piece.quote, sides[path][side])
+            for path, quote in [(_named(piece.path, sides), plain(piece.quote))]  # as plain text, then looked for
+            if path is not None and _shown(quote, sides[path][side])
         )
-        reason = flat(one.reason)
+        reason = plain(one.reason)
         if one.verdict == "met" and not evidence:
             verdicts.append(Verdict(req_id, "unclear", (), f"{UNGROUNDED}. The model's reason: {reason}"))
         else:

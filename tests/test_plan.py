@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import pytest
 from conftest import CANNED_TASKS, approved, between, on_the_fake, repository, run, seeded
-from samples import tasks_for
+from samples import SPEC, tasks_for
 
+from adk_spec.domain.spec_md import parse_spec
 from adk_spec.workspace.files import read_text, write_text
 
 DESIGN, TASKS = "You write the design of a change", "You break a change into tasks"
@@ -175,3 +176,23 @@ def test_plan_says_when_it_replaced_a_file(tmp_path, capsys, fake_provider) -> N
     tasks.unlink()
     assert run(tmp_path, "plan", "passkeys") == 0
     assert "wrote     .spec/changes/passkeys/tasks.md" in capsys.readouterr().out and len(fake_provider.requests) == 2
+
+
+def test_plan_does_not_replace_a_started_list_that_no_longer_parses(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: a task list off its grammar reads as no list, so its ticked boxes were not seen
+    and it was replaced unasked."""
+    seeded(tmp_path)
+    tasks = tmp_path / ".spec/changes/passkeys/tasks.md"
+    write_text(tasks, read_text(tasks).replace("## 1. Passkey sign-in", "### 1. Passkey sign-in"))
+    before = read_text(tasks)
+    assert run(tmp_path, "plan", "passkeys") == 1
+    assert "--replace" in capsys.readouterr().err and fake_provider.requests == [] and read_text(tasks) == before
+
+
+def test_plan_waits_for_every_living_spec_to_read(tmp_path, capsys, fake_provider) -> None:
+    ws = seeded(tmp_path)
+    ws.write_specs({"billing": parse_spec(SPEC.replace("# auth", "# billing").replace("REQ-AUTH", "REQ-BILLING"))})
+    spec = tmp_path / ".spec/specs/billing/spec.md"
+    write_text(spec, read_text(spec).replace("## Requirements", "## Requirments"))
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 1
+    assert "living spec does not read" in capsys.readouterr().err and fake_provider.requests == []

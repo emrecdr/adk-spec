@@ -41,6 +41,8 @@ _SETTLED = {
     "core.quotePath": "false",
     "core.precomposeUnicode": "false",
     "diff.suppressBlankEmpty": "false",
+    "diff.noprefix": "false",  # a diff's paths are read by their `a/` and `b/`
+    "diff.mnemonicPrefix": "false",
 }
 _PLAIN = ("--no-color", "--no-ext-diff", "--no-textconv", "-M")
 #: The folder's own files, without this package's tree: a pathspec git reads from the folder it runs in.
@@ -71,12 +73,41 @@ def _environment(root: Path) -> dict[str, str]:
     env |= {"GIT_NO_LAZY_FETCH": "1", "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0"}
     env |= {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_ATTR_NOSYSTEM": "1"}
     env |= {"GIT_TERMINAL_PROMPT": "0"}
-    # With a person's own config unread, so is their list of safe folders: the folder the person named is trusted.
-    settled = _SETTLED | {"safe.directory": Path(os.path.realpath(root)).as_posix()}
+    # With a person's own config unread, so is their list of safe folders: the repository the folder they named is
+    # in is trusted. Git asks about the repository's top, not about the folder a command runs in.
+    settled = _SETTLED | {"safe.directory": Path(os.path.realpath(_top(root))).as_posix()}
+    # And so is the file of what they ignore in every repository, which is read and passed on: without it a `.env`
+    # or an editor's folder they never see in `git status` would be read as new work.
+    if ignored := _excludes(
+        os.environ.get("HOME", ""), os.environ.get("USERPROFILE", ""), os.environ.get("XDG_CONFIG_HOME", "")
+    ):
+        settled |= {"core.excludesFile": ignored}
     env["GIT_CONFIG_COUNT"] = str(len(settled))
     for at, (key, value) in enumerate(settled.items()):
         env[f"GIT_CONFIG_KEY_{at}"], env[f"GIT_CONFIG_VALUE_{at}"] = key, value
     return env
+
+
+def _top(root: Path) -> Path:
+    """The top of the repository `root` is in, found without asking git: the nearest folder at or above it that
+    holds `.git`. `root` itself where none does."""
+    return next((folder for folder in (root, *root.parents) if (folder / ".git").exists()), root)
+
+
+@functools.cache
+def _excludes(*_homes: str) -> str | None:
+    """The file of patterns a person ignores in every repository, as their own git config names it, or nothing.
+    Asked of git once for each home the process has had: the one setting of a person's config this layer reads."""
+    program = on_path("git")
+    if program is None:
+        return None
+    env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+    argv = [program, "config", "--global", "--type=path", "--get", "core.excludesFile"]
+    try:
+        done = subprocess.run(argv, env=env | {"LC_ALL": "C"}, capture_output=True, timeout=GIT_TIMEOUT_S, check=False)
+    except OSError, subprocess.TimeoutExpired:
+        return None
+    return done.stdout.decode("utf-8", "replace").strip() or None
 
 
 def _run(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[bytes]:
@@ -96,29 +127,58 @@ def _run(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[by
     return subprocess.CompletedProcess(argv, process.returncode, out, err)
 
 
-def git(root: Path, *args: str, ok: tuple[int, ...] = (0,)) -> str:
-    """One git command in `root`: its output as text. `GitError` where git is not found, does not answer in time,
-    or ends with a code outside `ok`, with git's own first line as the reason."""
-    verb = next((arg for arg in args if not arg.startswith("-")), "")
+def _called(root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+    """One git command in `root`, run to its end whatever its code. `GitError` where git is not found, cannot
+    start, or does not answer in time."""
+    verb = _verb(args)
     program = on_path("git")
     if program is None:  # Git for Windows can be installed for Git Bash alone
         raise GitError("git is not on PATH. Install git, with its folder among PATH's absolute entries")
     try:
-        done = _run([program, "-C", str(root), *args], _environment(root))
+        return _run([program, "-C", str(root), *args], _environment(root))
     except subprocess.TimeoutExpired:
         raise GitError(f"git {verb} did not answer within {GIT_TIMEOUT_S:g} s") from None
     except OSError as exc:  # found, and still could not start
         raise GitError(f"git {verb} could not start: {exc.strerror or exc}") from None
+
+
+def _verb(args: tuple[str, ...]) -> str:
+    return next((arg for arg in args if not arg.startswith("-")), "")
+
+
+def _refusal(done: subprocess.CompletedProcess[bytes]) -> str:
+    """Why git refused, in its own first line. Its advice (`hint: ...`) comes first at times, and is never the
+    reason."""
+    said = done.stderr.decode("utf-8", "replace").split("\n")
+    lines = [line.strip() for line in said if line.strip() and not line.startswith("hint:")]
+    return lines[0] if lines else f"exit {done.returncode}"
+
+
+def git(root: Path, *args: str, ok: tuple[int, ...] = (0,)) -> str:
+    """One git command in `root`: its output as text. `GitError` where git is not found, does not answer in time,
+    or ends with a code outside `ok`, with git's own first line as the reason."""
+    done = _called(root, *args)
     if done.returncode not in ok:
-        said = done.stderr.decode("utf-8", "replace").split("\n")
-        lines = [line.strip() for line in said if line.strip() and not line.startswith("hint:")]
-        raise GitError(f"git {verb} failed: {lines[0] if lines else f'exit {done.returncode}'}")
+        raise GitError(f"git {_verb(args)} failed: {_refusal(done)}")
     return done.stdout.decode("utf-8", "replace")
+
+
+def _answered(root: Path, *args: str, no: tuple[int, ...] = ()) -> str | None:
+    """A question git answers with its output, or with no: an exit code of `no`, or its refusal where `root` is in
+    no repository at all. Any other refusal is raised, never read as a no: a repository git will not open, say for
+    whose it is, is there."""
+    done = _called(root, *args)
+    if done.returncode == 0:
+        return done.stdout.decode("utf-8", "replace").strip()
+    why = _refusal(done)
+    if done.returncode in no or "not a git repository" in why:
+        return None
+    raise GitError(f"git {_verb(args)} failed: {why}")
 
 
 def is_repository(root: Path) -> bool:
     """Whether `root` is inside a git work tree."""
-    return git(root, "rev-parse", "--is-inside-work-tree", ok=(0, 128)).strip() == "true"
+    return _answered(root, "rev-parse", "--is-inside-work-tree") == "true"
 
 
 def resolves(root: Path, ref: str) -> str | None:
@@ -126,7 +186,7 @@ def resolves(root: Path, ref: str) -> str | None:
     hyphen is an option to git and a revision to nobody."""
     if not ref or ref.startswith("-"):
         return None
-    return git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", ok=(0, 1, 128)).strip() or None
+    return _answered(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", no=(1,)) or None
 
 
 def head(root: Path) -> str | None:

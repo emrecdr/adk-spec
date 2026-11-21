@@ -97,3 +97,11 @@ def test_one_case_can_be_measured_alone(tmp_path, fake_provider) -> None:
     assert measure.main(["--runs", "1", "--case", "clean", "--out", str(tmp_path / "one.md")]) == 0
     assert len(fake_provider.requests) == 1
     assert measure.main(["--case", "no-such-case"]) == 2
+
+
+def test_a_run_that_fails_its_gate_is_counted_and_does_not_end_the_measurement(tmp_path, fake_provider) -> None:
+    """Found by the code review: a failed run's last answer is no JSON, and reading it ended the whole measurement
+    with a traceback, the runs already paid for lost."""
+    fake_provider.answers_when("You review the files of a change", "not json")
+    row = measure.measured(case("clean"), runs=1, folder=tmp_path)
+    assert (row.failed, row.false_blocking, row.dropped) == (1, 0, 0) and len(fake_provider.requests) == 3
