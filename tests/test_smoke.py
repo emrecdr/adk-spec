@@ -48,7 +48,7 @@ def test_the_triage_agent_reads_only_its_instruction_and_answers_in_its_schema(m
 
 def test_every_placeholder_names_a_key_the_command_seeds(monkeypatch) -> None:
     _on_the_fake(monkeypatch)
-    assert set(re.findall(r"\{(\w+)\??\}", build_triage().instruction)) == {"request", "capabilities"}
+    assert set(re.findall(r"\{(\w+)\??\}", build_triage().instruction)) == {"request", "capabilities", "findings"}
 
 
 def test_the_request_reaches_the_model_between_the_markers_and_is_not_expanded(monkeypatch, fake_provider) -> None:

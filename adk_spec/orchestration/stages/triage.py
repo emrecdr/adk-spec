@@ -45,6 +45,8 @@ Choose the smallest tier that fits. Where two fit, choose the larger only for am
 A capability is a kebab-case name for one area of behaviour, such as `auth` or `billing-export`. Reuse a known \
 capability where one fits. Name a new one only where none does. Known capabilities: {known}
 
+Findings on your last answer, to put right: {findings}
+
 ## The request
 <<< request {boundary}
 {request}
@@ -63,6 +65,7 @@ def build_triage() -> LlmAgent:
     instruction = INSTRUCTION.format(
         tiers=TIER_GUIDE,
         known=placeholder(CAPABILITIES, optional=True),
+        findings=placeholder("findings", optional=True),
         boundary=BOUNDARY,
         request=placeholder(REQUEST),
     )

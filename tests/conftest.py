@@ -44,7 +44,7 @@ class FakeProvider:
     """What the fake does for a request whose instruction contains a text, per test, and every request it was sent."""
 
     def __init__(self) -> None:
-        self.rules: list[tuple[str, Exception | dict | str]] = []
+        self.rules: list[tuple[str, object]] = []
         self.requests: list[LlmRequest] = []
 
     def clear(self) -> None:
@@ -58,13 +58,20 @@ class FakeProvider:
         """`payload` in place of the canned answer; as a str, the text itself."""
         self.rules.append((text, payload))
 
+    def answers_each_time(self, text: str, payloads) -> None:
+        """The next of `payloads`, an iterator, on each request whose instruction holds `text`; None among them, or
+        the iterator's end, means the canned answer."""
+        self.rules.append((text, payloads))
+
     def answer(self, llm_request: LlmRequest) -> dict | str | None:
         instruction = str(llm_request.config.system_instruction or "")
         for text, rule in self.rules:
             if text in instruction:
                 if isinstance(rule, Exception):
                     raise rule
-                return rule
+                if isinstance(rule, dict | str):
+                    return rule
+                return next(rule, None)  # an iterator: one answer a request
         return None
 
 
