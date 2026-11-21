@@ -829,9 +829,9 @@ def _verdicts(
 
 def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     from ..orchestration.gate import FAILURE
-    from ..orchestration.graph import TIER, UNWORDED, Known
+    from ..orchestration.graph import UNWORDED, Known
     from ..orchestration.plugins import UsageLedger
-    from ..orchestration.stages import CAPABILITIES, REQUEST
+    from ..orchestration.stages import CAPABILITIES, REQUEST, TIER
     from ..orchestration.stages import CONSTITUTION as RULES
     from ..orchestration.stages.brief import KEY as BRIEF_KEY
     from ..orchestration.stages.deltas import KEY as DELTAS_KEY

@@ -372,3 +372,16 @@ def test_a_section_of_nothing_but_a_space_no_keyboard_shows_is_empty(tmp_path, c
     fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "why": chr(0xA0)})
     assert proposed(tmp_path, "--tier", "lean", "--id", "blank") == 3
     assert "brief.section-empty" in capsys.readouterr().err and asked(fake_provider, BRIEF) == 3
+
+
+def test_the_brief_is_told_its_tier(tmp_path, fake_provider) -> None:
+    """The first live run: the lean tier, which asks no question, left a point open all the same."""
+    seeded(tmp_path)
+    assert proposed(tmp_path, "--tier", "lean", "--id", "by-hand") == 0
+    assert proposed(tmp_path, "--id", "by-triage") == 0  # the canned triage says lean
+    fake_provider.answers_when(TRIAGE, {**CANNED_TRIAGE, "tier": "strict"})
+    assert proposed(tmp_path, "--no-input", "--id", "strict-as-standard") == 0
+    briefs = [str(r.config.system_instruction) for r in fake_provider.requests]
+    told = [text.split("This change's tier is ")[1].split(".")[0] for text in briefs if text.startswith(BRIEF)]
+    assert told == ["lean", "lean", "standard"]
+    assert "On the lean tier no question is asked" in next(text for text in briefs if text.startswith(BRIEF))

@@ -232,3 +232,21 @@ def test_a_question_cannot_write_to_the_terminal_what_is_no_text(tmp_path, monke
     assert proposed(tmp_path, "--tier", "standard", "--id", "plain") == 0
     out = capsys.readouterr().out
     assert chr(27) not in out and bell not in out and "Which browsers?" in out and "suggested: All" in out
+
+
+def test_a_new_draft_is_given_the_brief_it_replaces(tmp_path, monkeypatch, fake_provider) -> None:
+    """The first live run: each new draft was written from the request and the answers alone, raised a new open
+    point each time, and once contradicted an answer. A new draft now reads the brief it replaces."""
+    from adk_spec.orchestration.stages import BOUNDARY
+
+    seeded(tmp_path)
+    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
+    monkeypatch.setattr("sys.stdin", io.StringIO("Chrome and Firefox\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "replaced") == 0
+    opened, closed = f"<<< replaces {BOUNDARY}\n", f"\n>>> replaces {BOUNDARY}"
+    first, second = (
+        text[text.index(opened) + len(opened) : text.index(closed)] for text in asked(fake_provider, BRIEF)
+    )
+    assert first == "", "a first draft replaces nothing"
+    assert second.startswith("# Sign in with a passkey\n") and "[NEEDS CLARIFICATION" in second
+    assert "## Assumptions" in second, "the brief as its file, whole"

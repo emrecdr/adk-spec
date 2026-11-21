@@ -37,7 +37,7 @@ from ..domain.validate import validate_brief, validate_delta, validate_tasks
 from ..workspace.context import ContextTooLargeError, living_text
 from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked
 from .plugins import UsageLedger, roster
-from .stages import BRIEF_TEXT, LIVING
+from .stages import BRIEF_TEXT, LIVING, TIER
 from .stages import brief as brief_stage
 from .stages import check as check_stage
 from .stages import deltas as deltas_stage
@@ -48,8 +48,6 @@ from .stages import triage as triage_stage
 from .stages import verify as verify_stage
 
 NAME = "adk_spec"
-#: The state key the tier a run settled on is left under: a tier, or `none` where no spec is owed.
-TIER = "tier"
 GO, NONE, STOP, SOME = "GO", "NONE", "STOP", "SOME"
 #: How many questions one round asks, and how many rounds a command asks in all.
 QUESTION_BUDGET = 5
@@ -112,8 +110,9 @@ def next_run(seed: Mapping[str, Any], state: Mapping[str, Any], answers: Sequenc
     `ASKING`, an empty one for a point left open.
 
     What was answered starts the next run at the brief, each answer beside the question the person was shown, after
-    those of the rounds before. A round nobody answered starts it at the deltas, with the brief that passed its
-    gate, its points left open."""
+    those of the rounds before, and with the brief the questions were asked about, for the new draft to keep and
+    settle. A round nobody answered starts it at the deltas, with the brief that passed its gate, its points left
+    open."""
     carried = {**seed, TIER: state[TIER]}
     if not any(answers):
         return "deltas", {**carried, brief_stage.KEY: state[brief_stage.KEY]}
@@ -123,7 +122,13 @@ def next_run(seed: Mapping[str, Any], state: Mapping[str, Any], answers: Sequenc
         for asked, answer in zip(state[ASKING], answers, strict=True)
         if answer
     ]
-    return "brief", {**carried, brief_stage.ANSWERS: "\n".join(told), ROUNDS: (seed.get(ROUNDS) or 0) + 1}
+    replaces = render_brief(_brief(state))  # the draft the questions were asked about: the next one starts from it
+    return "brief", {
+        **carried,
+        brief_stage.ANSWERS: "\n".join(told),
+        brief_stage.REPLACES: replaces,
+        ROUNDS: (seed.get(ROUNDS) or 0) + 1,
+    }
 
 
 def build_smoke_app() -> App:

@@ -31,6 +31,8 @@ LIVING = "living"
 DELTAS_TEXT = "deltas_text"
 #: The state key a change's own files are read from, each under a line naming its path.
 CHANGE_FILES = "change_files"
+#: The state key the tier a run settled on is left under: a tier, or `none` where no spec is owed.
+TIER = "tier"
 
 
 def placeholder(key: str, *, optional: bool = False) -> str:
