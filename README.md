@@ -46,7 +46,8 @@ uv run adk-spec archive <id>
 
 ### A change from start to finish
 
-This is the `lean` tier, which needs one approval. A `standard` change also waits for `verify`, which comes later.
+This is the `lean` tier, written by hand: it needs one approval and calls no model. The `standard` tier, with a
+model drafting and judging, follows the commands below.
 
 1. `adk-spec init`, once for a repository.
 2. `adk-spec new passkeys --tier lean`.
@@ -60,6 +61,20 @@ This is the `lean` tier, which needs one approval. A `standard` change also wait
    and writes nothing: read the current requirement, update the delta, then rebase and approve again.
 
 `adk-spec status` names the next step at any point.
+
+### A standard change, with a model
+
+1. `adk-spec propose "Let users sign in with a passkey."` drafts the brief and the deltas, asking you about what
+   the request leaves open.
+2. `adk-spec plan <id>` drafts the tasks, and a design first where the brief owes one.
+3. Read what was drafted, and edit it: the files are yours.
+4. `adk-spec check <id>` reads the files against each other. Fix what it marks as blocking.
+5. `adk-spec approve <id>`.
+6. Implement the tasks, with the coding agent you use, ticking each box.
+7. `adk-spec verify <id>` judges what changed in the repository against each requirement.
+8. `adk-spec archive <id>` folds the change into the living specs.
+
+`adk-spec` writes specs and plans and judges the result. It does not edit your code.
 
 Four commands call a model:
 
