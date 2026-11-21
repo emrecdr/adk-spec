@@ -209,3 +209,18 @@ def test_an_archived_change_is_archived_once(tmp_path, capsys) -> None:
     capsys.readouterr()
     assert run(tmp_path, "archive", "passkeys") == 1 and "already" in capsys.readouterr().err
     assert run(tmp_path, "approve", "passkeys") == 1 and living_bytes(tmp_path) == after
+
+
+def test_the_installed_package_is_found_from_any_folder(tmp_path) -> None:
+    """The suite runs with the checkout on the path, so it cannot see an install that maps no package: found by
+    running the installed command by hand, which failed with `No module named 'adk_spec'` outside the checkout."""
+    import os
+    import subprocess
+    import sys
+
+    env = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+    probe = "import adk_spec.interfaces.cli as cli; print(cli.PROG)"
+    done = subprocess.run(
+        [sys.executable, "-c", probe], cwd=tmp_path, env=env, capture_output=True, encoding="utf-8", check=False
+    )
+    assert done.returncode == 0 and done.stdout.strip() == "adk-spec", done.stderr
