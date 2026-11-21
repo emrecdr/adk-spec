@@ -572,8 +572,11 @@ Every step here calls a model with the owner's account, or needs a machine or a 
 
 ## What changed while this plan was executed
 
-Tasks 1 to 10 were built in the order 4, 1, 2, 3, 5, 6, 7, 8, 9, 10, each test first, with no model called. Task 11
-is the owner's and was not run.
+Tasks 1 to 10 were built in the order 4, 1, 2, 3, 5, 6, 7, 8, 9, 10, each test first, with no model called. Task 11's
+first three steps were then run on the owner's go-ahead: the measurement on Copilot
+(`docs/measurements/2026-11-copilot-gpt-4.1.md`) and the standard `propose` again
+(`docs/confirmation/2026-11-propose.md`). Its last two, the Gemini arm and Windows, are not run: they need a key
+and a machine.
 
 **Where the code differs from the tasks above** (each a ruling in the ledger).
 

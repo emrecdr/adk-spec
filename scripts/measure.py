@@ -18,7 +18,7 @@ import contextlib
 import io
 import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -68,6 +68,11 @@ class Row:
     seconds: float = 0.0
     #: Runs whose command did not end in a report: a refusal, or the engine's failure.
     failed: int = 0
+    #: Each blocking finding that matched nothing planted, in its own words, for a person to read: a false finding,
+    #: or a fault nobody planted.
+    strays: list[str] = field(default_factory=list)
+    #: Each planted fault a run did not catch, with what that run found.
+    missed: list[str] = field(default_factory=list)
 
 
 def scored(case: Case, seen: list[Seen]) -> Score:
@@ -123,8 +128,18 @@ def measured(case: Case, *, runs: int, folder: Path) -> Row:
         row.failed += code not in (cli.EXIT_OK, cli.EXIT_FINDINGS)
         seen, dropped, tokens, seconds = observed(case, root, change)
         for at, wanted in enumerate(case.expect):
-            row.caught[at] += any(wanted.met_by(one) for one in seen)
+            caught = any(wanted.met_by(one) for one in seen)
+            row.caught[at] += caught
+            if not caught:
+                codes = wanted.codes if isinstance(wanted.codes, str) else " or ".join(wanted.codes)
+                found = "; ".join(f"{one.code} on {one.path}" for one in seen) or "nothing"
+                row.missed.append(f"run {run + 1}: wanted {codes} on {' or '.join(wanted.paths)}; found {found}")
         row.false_blocking += scored(case, seen).false_blocking
+        row.strays += [
+            f"run {run + 1}: `{one.code}` {one.path}: {one.text[:300]}"
+            for one in seen
+            if one.blocking and not any(wanted.met_by(one) for wanted in case.expect)
+        ]
         row.dropped += dropped
         row.tokens += tokens
         row.seconds += seconds
@@ -156,6 +171,10 @@ def rendered(rows: list[Row], *, model: str, commit: str | None, at: str) -> str
         "the false ones, since a model may find a real fault nobody planted.",
         "",
     ]
+    for heading, held in (("Blocking on nothing planted", "strays"), ("Missed", "missed")):
+        listed = [f"- `{row.name}`, {said}" for row in rows for said in getattr(row, held)]
+        if listed:
+            lines += [f"## {heading}", "", *listed, ""]
     return "\n".join(lines)
 
 

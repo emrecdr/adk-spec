@@ -1,0 +1,14 @@
+{
+  "id": "new-device-alert",
+  "tier": "standard",
+  "status": "draft",
+  "skip_specs": false,
+  "bases": {
+    "REQ-AUTH-001": "sha256:9d6ffd3ceb60171020838d3b4092dcfa00e45a73d8dc72a520dbad11749d5228"
+  },
+  "approval": null,
+  "needs_design": false,
+  "check": null,
+  "verification": null,
+  "base_commit": null
+}

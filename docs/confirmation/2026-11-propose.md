@@ -86,3 +86,29 @@ For plan 3, in this order:
 - The Gemini arm: no key was set.
 - Anything on Windows.
 - A run with a constitution that says anything of the repository's own.
+
+## The second command again, after plan 3
+
+Run on the owner's go-ahead on 21 November 2026, at commit `5735877`: the same request, word for word, on the same
+two living specs, each question answered with `=`. What it wrote, and the recording of its four calls, are in
+`2026-11-propose-run-2/`.
+
+| | First run | This run |
+|---|---|---|
+| Rounds of questions | 3, and a fourth point left open | 1, and none left open |
+| Calls by stage | triage 1, brief 4, questions 3, deltas 2 | brief 2, questions 1, deltas 1 |
+| Tokens | 9,627 | 4,664 |
+| Sent back by a gate | the deltas, once | nothing |
+| The answer given | contradicted: device management answered yes, then listed as a non-goal | kept: answered no, listed as a non-goal, and named in the assumptions |
+| `validate` | 0 errors, 2 warnings | 0 errors, 1 warning (no task yet) |
+
+What changed between the two: a new draft of the brief is given the brief it replaces and told to settle what was
+answered and to raise every open point at once; a tier given by hand is not asked of triage; and a requirement
+copied unchanged under MODIFIED is left out.
+
+In this run the model modified `REQ-AUTH-001` and kept its scenario under its own name, where the first run had
+renamed one. It did not copy `REQ-AUTH-002`.
+
+This is one run against one run. It says the change did what it was made for this once, not how often it will.
+The first run's findings 6 and 7 (invented file paths, a design that took a suggestion for an existing mechanism)
+are about `plan`, which this run did not call.

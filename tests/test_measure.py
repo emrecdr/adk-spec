@@ -105,3 +105,22 @@ def test_a_run_that_fails_its_gate_is_counted_and_does_not_end_the_measurement(t
     fake_provider.answers_when("You review the files of a change", "not json")
     row = measure.measured(case("clean"), runs=1, folder=tmp_path)
     assert (row.failed, row.false_blocking, row.dropped) == (1, 0, 0) and len(fake_provider.requests) == 3
+
+
+def test_what_was_found_beyond_what_was_planted_is_kept_in_its_own_words(tmp_path, fake_provider) -> None:
+    """Found by the first live measurement: three blocking findings matched nothing planted, and the report held
+    their number alone, the runs being thrown away. A person is to read each one: it is a false finding, or a
+    fault nobody planted."""
+    stray = {"kind": "gap", "severity": "critical", "file": "brief.md", "message": "Which browsers is not said."}
+    stray["quote"] = "Browsers in scope support WebAuthn."
+    fake_provider.answers_when("You review the files of a change", {"findings": [stray]})
+    clean = measure.measured(case("clean"), runs=1, folder=tmp_path / "clean")
+    assert clean.false_blocking == 1
+    assert clean.strays == [
+        "run 1: `check.gap` brief.md: Browsers in scope support WebAuthn. Which browsers is not said."
+    ]
+    missed = measure.measured(case("ambiguity"), runs=1, folder=tmp_path / "ambiguity")
+    assert missed.caught == [0] and len(missed.missed) == 1 and "check.gap on brief.md" in missed.missed[0]
+    page = measure.rendered([clean, missed], model="a model", commit=None, at="t")
+    assert "## Blocking on nothing planted" in page and "- `clean`, run 1: `check.gap` brief.md" in page
+    assert "## Missed" in page and "- `ambiguity`, run 1: wanted check.ambiguity" in page
