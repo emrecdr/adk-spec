@@ -1,0 +1,4 @@
+# adk-spec's settings for this repository. Read whole: a key the code does not know is refused by name.
+[project]
+# The tier a new change gets where none is named: lean, standard or strict.
+default_tier = "standard"

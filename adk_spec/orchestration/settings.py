@@ -8,8 +8,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-#: Each arm's model where none is named. Provisional until a live run on both arms confirms them.
-DEFAULTS = {"copilot": "claude-sonnet-5.5", "gemini": "gemini-3.8-flash"}
+#: Each arm's model where none is named. Copilot's is the first that answered in a schema on the owner's seat
+#: (`docs/confirmation/2026-11-smoke.md`); a seat's policy decides which models it is served, so `adk-spec models`
+#: says what another seat may name. Gemini's is provisional: no live run has confirmed it.
+DEFAULTS = {"copilot": "gpt-4.1", "gemini": "gemini-3.8-flash"}
 
 
 def provider() -> str:

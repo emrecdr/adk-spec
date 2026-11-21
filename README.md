@@ -72,6 +72,13 @@ uv run adk-spec plan <id>
   run has ended well. `--tier lean` or `--tier standard` sets the ceremony by hand, `--id` names the change, and
   `--no-input` asks no question. `[limits] max_tokens` in `.spec/config.toml` caps what one command may spend:
   once that much is spent no further call is sent, so a command overshoots by its last call at most.
+  The first live runs spent about 2,800 tokens on a lean change and 9,600 on a standard one with three rounds of
+  questions (`docs/confirmation/2026-11-propose.md`), so this leaves room:
+
+  ```toml
+  [limits]
+  max_tokens = 30000
+  ```
 
 - `plan` drafts a draft change's tasks, and first its design where the brief says one is owed. It refuses a change
   whose brief or deltas have an error, and one that is approved already.

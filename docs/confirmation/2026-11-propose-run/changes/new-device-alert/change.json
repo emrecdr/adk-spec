@@ -1,0 +1,9 @@
+{
+  "id": "new-device-alert",
+  "tier": "standard",
+  "status": "draft",
+  "skip_specs": false,
+  "bases": {},
+  "approval": null,
+  "needs_design": true
+}

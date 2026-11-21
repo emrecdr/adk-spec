@@ -102,9 +102,9 @@ def test_smoke_runs_on_the_copilot_arm_with_only_the_client_replaced(monkeypatch
     cached_copilot_token(monkeypatch, tmp_path)
     assert main(["smoke", "--request", REQUEST, "--json"]) == 0
     said = json.loads(capsys.readouterr().out)
-    assert said["model"] == "claude-sonnet-5.5 on copilot" and said["schema"] == "valid"
+    assert said["model"] == "gpt-4.1 on copilot" and said["schema"] == "valid"
     assert said["tokens"]["total"] == 120
-    assert sent[0]["model"] == "github_copilot/claude-sonnet-5.5"
+    assert sent[0]["model"] == "github_copilot/gpt-4.1"
     assert sent[0]["response_format"]["type"] == "json_schema"
     assert sent[0]["messages"][0]["role"] == "system" and "temperature" not in sent[0]
 
@@ -126,7 +126,7 @@ async def test_below_litellm_copilot_is_sent_a_system_turn_and_the_strict_schema
             "id": "1",
             "object": "chat.completion",
             "created": 1,
-            "model": "claude-sonnet-5.5",
+            "model": "gpt-4.1",
             "choices": [choice],
         }
         return httpx.Response(200, json=reply, request=request)
@@ -141,7 +141,7 @@ async def test_below_litellm_copilot_is_sent_a_system_turn_and_the_strict_schema
     request = LlmRequest(model=model.model, contents=[types.UserContent("triage")], config=config)
     answered = [response async for response in model.generate_content_async(request)]
     ((url, body),) = sent
-    assert url == "https://copilot.invalid/chat/completions" and body["model"] == "claude-sonnet-5.5"
+    assert url == "https://copilot.invalid/chat/completions" and body["model"] == "gpt-4.1"
     assert [m["role"] for m in body["messages"]] == ["system", "user"], "never an assistant turn"
     assert body["response_format"]["json_schema"]["strict"] is True and "temperature" not in body
     assert json.loads(answered[-1].content.parts[0].text) == CANNED[0]
@@ -152,7 +152,7 @@ def test_each_arm_is_sent_the_triage_schema_as_it_is_written() -> None:
     from google.adk.models.lite_llm import _to_litellm_response_format
     from google.genai import Client, _transformers
 
-    copilot = _to_litellm_response_format(Triage, "github_copilot/claude-sonnet-5.5")["json_schema"]
+    copilot = _to_litellm_response_format(Triage, "github_copilot/gpt-4.1")["json_schema"]
     assert copilot["strict"] is True and sorted(copilot["schema"]["required"]) == ["capabilities", "reason", "tier"]
     assert copilot["schema"]["properties"]["tier"]["enum"] == ["none", "lean", "standard", "strict"]
     gemini = _transformers.t_schema(Client(api_key="offline")._api_client, Triage).model_dump(

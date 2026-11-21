@@ -783,8 +783,10 @@ uv run adk-spec validate
 
 ## What changed while this plan was executed
 
-Tasks 1 to 8 were built and reviewed once, whole, by a fresh reviewer. Task 1 step 5 and Task 9 are the owner's and
-were not run: no model was called.
+Tasks 1 to 8 were built and reviewed once, whole, by a fresh reviewer, with no model called. Task 1 step 5 and
+Task 9 were then run on the owner's go-ahead: `gpt-4.1` answers on the Copilot arm and is its default
+(`docs/confirmation/2026-11-smoke.md`), and the first live `propose` and `plan` ended well, with seven findings on
+what the model wrote (`docs/confirmation/2026-11-propose.md`). The Gemini arm and Windows are still not run.
 
 **The design the review overturned.** Task 7 asked its questions inside one run, with ADK's `RequestInput`. Run on
 the pinned engine (`q18_resume_reruns_an_errored_stage_probe.py`): when a paused run is resumed, ADK replays the

@@ -41,6 +41,13 @@ def test_the_copilot_arm_names_the_model_as_litellm_does(monkeypatch) -> None:
     assert model._additional_args == {"max_retries": 2, "_skip_mcp_handler": True}
 
 
+def test_the_copilot_arm_defaults_to_the_model_that_answered_live(monkeypatch) -> None:
+    """`docs/confirmation/2026-11-smoke.md`: the first model on the owner's seat to answer in the schema."""
+    monkeypatch.delenv("SPEC_MODEL", raising=False)
+    assert _fresh("settings").model_pick() == ("SPEC_MODEL", "gpt-4.1")
+    assert _fresh("models").build_model().model == "github_copilot/gpt-4.1"
+
+
 def test_a_roles_own_model_wins_over_everyones(monkeypatch) -> None:
     monkeypatch.setenv("SPEC_PROVIDER", "gemini")
     monkeypatch.setenv("SPEC_MODEL", "gemini-3.8-flash")

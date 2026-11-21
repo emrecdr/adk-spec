@@ -1,0 +1,12 @@
+{
+  "id": "allow-case-insensitive-email-for-sign-in",
+  "tier": "lean",
+  "status": "draft",
+  "skip_specs": false,
+  "bases": {
+    "REQ-AUTH-001": "sha256:9d6ffd3ceb60171020838d3b4092dcfa00e45a73d8dc72a520dbad11749d5228",
+    "REQ-AUTH-002": "sha256:c8f62ade1dba3894ba2bbe0acee31bd30cf3afd622241ddc494abec4da558cba"
+  },
+  "approval": null,
+  "needs_design": false
+}
