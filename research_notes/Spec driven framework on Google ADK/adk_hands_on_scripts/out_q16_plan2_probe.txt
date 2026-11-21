@@ -1,0 +1,28 @@
+
+=== A. no plugin, bad reply: what ADK does alone
+    event propose@1/brief@1: ERROR ValidationError: 1 validation error for Brief
+  Invalid JSON: expected ident  (author=propose)
+    model calls=1 failure=ValidationError: 1 validation error for Brief
+  Invalid JSON: expected ident at line 1 column 2 [type=json_ state={}
+
+=== B. plugin, bad then good: does the workflow go on to the gate and route back?
+    event propose@1/brief@1: ERROR SCHEMA_MISMATCH: Invalid JSON: expected ident at line 1 column 2 (author=brief)
+    gate ran: try 1, node_input=None, state.brief=None
+    gate ran: try 2, node_input={'title': 'Passkeys', 'why': 'safer'}, state.brief={'title': 'Passkeys', 'why': 'safer'}
+    wrote ran: answer=None
+    model calls=2 failure=None state={'tries': 2, 'findings': 'the last answer did not fit the schema', 'brief': {'title': 'Passkeys', 'why': 'safer'}, 'answer': None}
+
+=== C. plugin, three bad replies: bounded by the gate's own counter
+    event propose@1/brief@1: ERROR SCHEMA_MISMATCH: Invalid JSON: expected value at line 1 column 1 (author=brief)
+    gate ran: try 1, node_input=None, state.brief=None
+    event propose@1/brief@2: ERROR SCHEMA_MISMATCH: Invalid JSON: expected value at line 1 column 1 (author=brief)
+    gate ran: try 2, node_input=None, state.brief=None
+    event propose@1/brief@3: ERROR SCHEMA_MISMATCH: Invalid JSON: expected value at line 1 column 1 (author=brief)
+    gate ran: try 3, node_input=None, state.brief=None
+    model calls=3 failure=None state={'tries': 3, 'findings': 'the last answer did not fit the schema'}
+
+=== D. good reply, then a question answered in the same process
+    gate ran: try 1, node_input={'title': 'Passkeys', 'why': 'safer'}, state.brief={'title': 'Passkeys', 'why': 'safer'}
+    event propose@1/ask@1: PAUSE 'Which browsers are in scope?'
+    wrote ran: answer={'answer': 'evergreen only'}
+    model calls=1 failure=None state={'brief': {'title': 'Passkeys', 'why': 'safer'}, 'tries': 1, 'answer': {'answer': 'evergreen only'}}
