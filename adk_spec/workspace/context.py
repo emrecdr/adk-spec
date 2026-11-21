@@ -7,7 +7,8 @@ model in silence. Past the limit the run is refused, and the sentence names what
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 
 from ..domain.model import Spec
 from ..domain.spec_md import render_spec
@@ -20,6 +21,8 @@ from .layout import CONSTITUTION, Workspace, WorkspaceError
 CONTEXT_MAX_CHARS = 120_000
 #: Past this a constitution draws a warning: it is read by every stage of every run.
 CONSTITUTION_MAX_CHARS = 16_000
+#: How many of a repository's files a stage is shown by name. Past it, it is shown folders and counts.
+TREE_MAX_PATHS = 300
 
 
 class ContextTooLargeError(WorkspaceError):
@@ -58,3 +61,15 @@ def constitution_text(workspace: Workspace) -> str:
     """The constitution as it stands, or nothing where there is none."""
     path = workspace.home / CONSTITUTION
     return read_text(path) if path.is_file() else ""
+
+
+def tree_text(paths: Sequence[str]) -> str:
+    """A repository's files for a stage to name real paths by: every path, one a line, or past `TREE_MAX_PATHS`
+    each folder two levels deep with the number of files under it, under a first line that says so. A list cut
+    short in silence would hide the files a task needs."""
+    if len(paths) <= TREE_MAX_PATHS:
+        return "\n".join(paths)
+    folders = Counter("/".join(path.split("/")[:-1][:2]) or "." for path in paths)
+    lines = [f"{len(paths):,} files: too many to list. Each folder, two levels deep, with the files under it:"]
+    lines += [f"{folder}/ ({count:,} file{'' if count == 1 else 's'})" for folder, count in sorted(folders.items())]
+    return "\n".join(lines)

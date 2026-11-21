@@ -48,9 +48,11 @@ from ..workspace.context import (
     constitution_text,
     files_text,
     living_text,
+    tree_text,
 )
 from ..workspace.files import NotTextError
 from ..workspace.git import DIFF_MAX_CHARS, GitError, diff, head, is_repository, resolves
+from ..workspace.git import files as files_of
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGES,
@@ -153,6 +155,7 @@ def _parser() -> argparse.ArgumentParser:
 
     plan = commands.add_parser("plan", help="draft a change's tasks, and its design where one is owed")
     plan.add_argument("id", help="the change")
+    plan.add_argument("--replace", action="store_true", help="draft anew although a task of the list is ticked")
     plan.set_defaults(handler=_plan)
 
     check = commands.add_parser("check", help="check a change's files against each other, before it is approved")
@@ -554,12 +557,28 @@ def _of_tasks(found: Finding) -> bool:
     return found.code.startswith("tasks.") or (found.path or "").rsplit("/", 1)[-1] == TASKS_FILE
 
 
+def _tree(workspace: Workspace) -> str:
+    """The repository's files as a stage is shown them, or nothing: no repository here, or no git to ask."""
+    try:
+        return tree_text(files_of(workspace.root)) if is_repository(workspace.root) else ""
+    except GitError:
+        return ""
+
+
 def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     specs, _of_living = workspace.specs()
     loaded, found, _stale, _owed = _assessed(workspace, args.id, specs)
     change, state = loaded.change, loaded.change.state
     if state.status != "draft":  # new tasks would void what was approved
         print(f"{PROG}: `{args.id}` is {state.status}: a plan is drafted while a change is a draft", file=sys.stderr)
+        return EXIT_FINDINGS
+    started = [task.id for group in change.tasks or () for task in group.tasks if task.done]
+    if started and not args.replace:  # work has begun on this list: it is not thrown away unasked
+        print(
+            f"{PROG}: `{args.id}` has {len(started)} of its tasks ticked. A new plan would replace the list: run "
+            f"`{PROG} plan {args.id} --replace` if that is meant",
+            file=sys.stderr,
+        )
         return EXIT_FINDINGS
     # What must be right before tasks are worth drafting: everything but the tasks themselves.
     blocking = [held for held in found if held.severity == "ERROR" and not _of_tasks(held)]
@@ -575,17 +594,20 @@ def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import build_plan_app
     from ..orchestration.plugins import UsageLedger
-    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, LIVING
+    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, LIVING, TREE
     from ..orchestration.stages import CONSTITUTION as RULES
     from ..orchestration.stages.design import read_design
-    from ..orchestration.stages.tasks import read_tasks
+    from ..orchestration.stages.tasks import DESIGN_TEXT, read_tasks
 
     seed = {
         RULES: constitution_text(workspace),
         BRIEF_TEXT: render_brief(change.brief),
         DELTAS_TEXT: "\n".join(render_delta(delta) for _capability, delta in sorted(change.deltas.items())),
         LIVING: living_text(specs, sorted(change.deltas)),
+        TREE: _tree(workspace),
     }
+    if change.design and not state.needs_design:  # a design a person wrote, where the brief owed none
+        seed[DESIGN_TEXT] = change.design.strip()
     ledger = UsageLedger(workspace.config().max_tokens or None)
     serves = {"owed": owed(change.deltas), "nameable": nameable(change.deltas, specs)}
     with _recording(workspace, "plan", args.id) as kept:
@@ -602,8 +624,10 @@ def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     design = read_design(run.state) if state.needs_design else None
     if design is not None and not isinstance(design, str):
         files[DESIGN_FILE] = render_design(design)
-    for path in workspace.write_into(args.id, files):
-        print(f"wrote     {workspace.shown(path)}")
+    folder = workspace.home / CHANGES / args.id
+    there = {name for name in files if (folder / name).is_file()}
+    for name, path in zip(files, workspace.write_into(args.id, files), strict=True):
+        print(f"{'replaced' if name in there else 'wrote':<10}{workspace.shown(path)}")
     print(f"tokens    {_spent(ledger)}")
     loaded, found, stale, unchecked = _assessed(workspace, args.id, specs)
     print(f"next      {next_action(loaded.change.state, found, stale, check=unchecked)}")

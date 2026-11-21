@@ -101,7 +101,7 @@ def test_a_number_of_runs_that_is_none_is_refused_by_name(tmp_path, value) -> No
 
 def test_plan_is_recorded_under_its_change(tmp_path, fake_provider) -> None:
     seeded(tmp_path)
-    assert run(tmp_path, "plan", "passkeys") == 0
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
     (held,) = kept(tmp_path)
     assert (held.command, held.change, held.outcome) == ("plan", "passkeys", "written")
     assert [call.stage for call in held.calls] == ["tasks"] and len(fake_provider.requests) == 1

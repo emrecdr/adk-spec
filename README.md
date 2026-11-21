@@ -84,7 +84,10 @@ uv run adk-spec verify <id>
   ```
 
 - `plan` drafts a draft change's tasks, and first its design where the brief says one is owed. It refuses a change
-  whose brief or deltas have an error, and one that is approved already.
+  whose brief or deltas have an error, and one that is approved already. In a git repository its stages are shown
+  the repository's files, so a task names real paths; a `design.md` you wrote yourself is read by the tasks stage.
+  The tasks must serve every requirement the change adds or modifies. Where a task of the list is already ticked,
+  `plan` replaces nothing unless you add `--replace`.
 
 - `check` reads a change's files against each other and writes `reports/check.md` in the change's folder. Code
   checks what it can decide: structure, that every requirement the change adds or modifies has a task, and that no

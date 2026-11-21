@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from conftest import seeded
 
+from adk_spec.domain.text import lines_of
 from adk_spec.interfaces.cli import main
 from adk_spec.orchestration.stages import BOUNDARY
 from adk_spec.workspace import context
@@ -60,3 +61,15 @@ def test_the_index_breaks_a_purpose_at_a_newline_alone(tmp_path) -> None:
     odd = "Sign-in" + chr(0x2028) + "and sessions."
     write_text(tmp_path / ".spec/specs/auth/spec.md", SPEC.replace("Sign-in and session handling.", odd))
     assert capability_index(ws.specs()[0]) == f"auth: {odd}"
+
+
+def test_a_tree_within_the_limit_is_every_path_and_past_it_folders_with_counts() -> None:
+    from adk_spec.workspace.context import TREE_MAX_PATHS, tree_text
+
+    assert tree_text([]) == ""
+    assert tree_text(["src/app.py", "README.md"]) == "src/app.py\nREADME.md"
+    paths = [f"src/pkg{n % 4}/mod{n}.py" for n in range(TREE_MAX_PATHS + 1)] + ["README.md", "docs/guide/a/b.md"]
+    lines = lines_of(tree_text(paths))
+    assert lines[0].startswith("303 files: too many to list")
+    assert "src/pkg0/ (76 files)" in lines and "./ (1 file)" in lines and "docs/guide/ (1 file)" in lines
+    assert len(lines) == 7, "the first line, then one a folder"

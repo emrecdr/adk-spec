@@ -33,6 +33,8 @@ DELTAS_TEXT = "deltas_text"
 CHANGE_FILES = "change_files"
 #: The state key the tier a run settled on is left under: a tier, or `none` where no spec is owed.
 TIER = "tier"
+#: The state key the repository's files are read from, as paths.
+TREE = "tree"
 
 
 def placeholder(key: str, *, optional: bool = False) -> str:
@@ -65,6 +67,7 @@ RULES = section("## The rules of this repository", "constitution", CONSTITUTION,
 LIVING_SPECS = section("## The living specs the change touches", "living", LIVING, optional=True)
 THE_BRIEF = section("## The brief", "brief", BRIEF_TEXT)
 THE_DELTAS = section("## The requirement deltas", "deltas", DELTAS_TEXT, optional=True)
+FILES = section("## The files of this repository", "tree", TREE, optional=True)
 
 
 def instruction(opening: str, guide: str, *sections: str) -> str:

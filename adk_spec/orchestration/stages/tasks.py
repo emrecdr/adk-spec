@@ -8,7 +8,7 @@ from typing import Any
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import TasksDraft
-from . import LIVING_SPECS, RULES, THE_BRIEF, THE_DELTAS, instruction, read_back, section, stage
+from . import FILES, LIVING_SPECS, RULES, THE_BRIEF, THE_DELTAS, instruction, read_back, section, stage
 
 KEY = "tasks"
 #: The state key the change's design is read from, where it has one.
@@ -20,12 +20,13 @@ A task is one step with one result. Put the task that writes a test before the t
 Name the requirement IDs each task serves, exactly as the deltas spell them. A setup task names none.
 Give each task one way its result is checked: a command to run, or what to look at.
 Mark a task parallel only where it touches other files than its neighbours and waits on none of them.
-Write no task for anything the brief lists as a non-goal."""
+Write no task for anything the brief lists as a non-goal.
+Name files by the paths the repository uses. Where a file is new, put it beside its kind."""
 
 
 def build_tasks() -> LlmAgent:
     design = section("## The design", "design", DESIGN_TEXT, optional=True)
-    text = instruction(OPENING, GUIDE, RULES, LIVING_SPECS, THE_BRIEF, THE_DELTAS, design)
+    text = instruction(OPENING, GUIDE, RULES, LIVING_SPECS, FILES, THE_BRIEF, THE_DELTAS, design)
     return stage(KEY, "Breaks a change into tasks.", text, TasksDraft)
 
 
