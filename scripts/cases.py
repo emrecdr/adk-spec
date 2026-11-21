@@ -39,10 +39,9 @@ class Expected:
     words: tuple[str, ...] = ()
 
     def met_by(self, seen: Any) -> bool:
-        codes = (self.codes,) if isinstance(self.codes, str) else self.codes
         text = seen.text.lower()
         return (
-            seen.code.startswith(codes)
+            seen.code.startswith(self.codes)
             and seen.path in self.paths
             and (not self.words or any(word.lower() in text for word in self.words))
         )

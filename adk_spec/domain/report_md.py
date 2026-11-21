@@ -14,9 +14,19 @@ from .verify import Verdict
 _HEADINGS = (("ERROR", "Blocking"), ("WARNING", "Worth a look"), ("INFO", "Notes"))
 
 
+def place(found: Finding) -> str:
+    """Where a finding is: its file, and its line where it has one."""
+    return f"{found.path}:{found.line}" if found.line else (found.path or "")
+
+
+def left_out(dropped: int) -> str:
+    """The sentence for a model's findings that quoted nothing real."""
+    were = "finding of the model was" if dropped == 1 else "findings of the model were"
+    return f"{dropped} {were} left out: the text quoted is not in the file named"
+
+
 def _listed(found: Finding) -> str:
-    place = f"{found.path}:{found.line}" if found.line else (found.path or "")
-    return f"- `{found.code}` {place}: {found.message}".replace(" :", ":")
+    return f"- `{found.code}` {place(found)}: {found.message}".replace(" :", ":")
 
 
 def render_check(change_id: str, at: str, findings: Sequence[Finding], *, model: str | None, dropped: int = 0) -> str:
@@ -30,8 +40,7 @@ def render_check(change_id: str, at: str, findings: Sequence[Finding], *, model:
         if held:
             lines += [f"## {heading}", "", *(_listed(found) for found in held), ""]
     if dropped:
-        were = "finding of the model was" if dropped == 1 else "findings of the model were"
-        lines += [f"{dropped} {were} left out: the text quoted is not in the file named.", ""]
+        lines += [f"{left_out(dropped)}.", ""]
     return "\n".join(lines)
 
 

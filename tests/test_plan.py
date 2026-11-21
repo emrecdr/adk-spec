@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from conftest import CANNED_TASKS, approved, on_the_fake, repository, run, seeded
+from conftest import CANNED_TASKS, approved, between, on_the_fake, repository, run, seeded
 from samples import tasks_for
 
 from adk_spec.workspace.files import read_text, write_text
@@ -129,14 +129,6 @@ def test_a_plan_may_not_name_a_requirement_nothing_holds(tmp_path, capsys, fake_
     assert run(tmp_path, "plan", "passkeys", "--replace") == 3
     err = capsys.readouterr().err
     assert "check.task-unknown-requirement" in err and "REQ-AUTH-042" in err
-
-
-def between(text: str, label: str) -> str:
-    """What an instruction holds between the two markers of `label`."""
-    from adk_spec.orchestration.stages import BOUNDARY
-
-    opened, closed = f"<<< {label} {BOUNDARY}\n", f"\n>>> {label} {BOUNDARY}"
-    return text[text.index(opened) + len(opened) : text.index(closed)]
 
 
 def test_plans_stages_are_shown_the_repositorys_files(tmp_path, fake_provider) -> None:

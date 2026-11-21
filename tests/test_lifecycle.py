@@ -180,3 +180,63 @@ def test_a_check_that_is_owed_is_a_command_to_run_and_one_that_blocks_is_yours()
     assert next_step(never, [], ["approval"], check=check_blockers(never, FILES)).actor == "run"
     found = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=1)})
     assert next_step(found, [], ["approval"], check=check_blockers(found, FILES)).actor == "you"
+
+
+def test_whatever_blocks_an_approval_has_a_next_step_of_its_own_or_falls_to_validate() -> None:
+    """Found by the cleanup review: what blocks an approval and what the next step says were decided by two lists,
+    so a code added to one made `status` say to approve what `approve` then refused."""
+    from adk_spec.domain import lifecycle
+
+    assert {code for code, _actor, _phrase in lifecycle._HOLDS} >= lifecycle.BLOCKS_APPROVAL
+    unlisted = Finding(severity="WARNING", code="a.code-with-no-step", message="m")
+    assert next_action(DRAFT, [unlisted], ["approval"]) == "run `adk-spec approve passkeys`"
+    lifecycle_blocks = lifecycle.BLOCKS_APPROVAL
+    try:
+        lifecycle.BLOCKS_APPROVAL = frozenset({*lifecycle_blocks, "a.code-with-no-step"})
+        assert next_action(DRAFT, [unlisted], ["approval"]) == "fix what `adk-spec validate passkeys` lists"
+    finally:
+        lifecycle.BLOCKS_APPROVAL = lifecycle_blocks
+
+
+def test_the_lifecycle_decides_what_a_check_and_a_verification_record() -> None:
+    from adk_spec.domain.lifecycle import approve_blockers, check_blockers, checked, verified, verify_blockers
+
+    draft = ChangeState(id="passkeys", tier="standard")
+    held = checked(draft, [ERROR, MARKER], files=FILES, at="t", model="a model")
+    assert (held.check.blocking, held.check.model, held.check.files) == (1, "a model", FILES)
+    owed = check_blockers(held, FILES)
+    assert [f.code for f in approve_blockers(held, [], check=owed)] == ["check.blocking"]
+    assert approve_blockers(held, [], check=owed, override=True) == []
+    never = check_blockers(draft, FILES)
+    assert [f.code for f in approve_blockers(draft, [], check=never, override=True)] == ["check.missing"]
+
+    approved_state = approved("standard")
+    assert verify_blockers(approved_state, []) == [] and "void" in verify_blockers(approved_state, ["tasks.md"])[0]
+    assert "not approved" in verify_blockers(draft, ["approval"])[0]
+    met = verified(approved_state, {"REQ-A-001": "met"}, base="c0", diff="sha256:d", at="t", override="unused")
+    assert (met.status, met.verification.override) == ("verified", None), "a reason is kept only where it was needed"
+    short = verified(met, {"REQ-A-001": "unclear"}, base="c0", diff="sha256:d", at="t")
+    assert short.status == "approved", "the newest judgement stands"
+    by_hand = verified(approved_state, {"REQ-A-001": "unmet"}, base="c0", diff="sha256:d", at="t", override="covered")
+    assert (by_hand.status, by_hand.verification.override) == ("verified", "covered")
+
+
+def test_where_the_work_began_is_kept_however_often_a_change_is_approved() -> None:
+    from adk_spec.domain.lifecycle import approve
+
+    once = approve(DRAFT, files=FILES, by="a", at="t", commit="c0")
+    again = approve(once, files=FILES, by="a", at="t2", commit="c1")
+    assert (once.base_commit, again.base_commit) == ("c0", "c0")
+    assert approve(DRAFT, files=FILES, by="a", at="t").base_commit is None
+
+
+def test_a_standard_change_edited_after_approval_is_sent_to_its_check_before_its_approval() -> None:
+    """Seen in a hand-run: `status` said to approve again, and `approve` then refused, the check being stale too."""
+    from adk_spec.domain.lifecycle import check_blockers
+    from adk_spec.domain.model import Checked
+
+    state = approved("standard").model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
+    owed = check_blockers(state, {**FILES, "tasks.md": "sha256:edited"})
+    said = next_action(state, [], ["tasks.md"], check=owed)
+    assert said == "run `adk-spec check passkeys`, then approve again: tasks.md changed since the approval"
+    assert next_action(approved(), [], ["tasks.md"]) == "approve again: tasks.md changed since the approval"

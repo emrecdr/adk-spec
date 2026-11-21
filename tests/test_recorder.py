@@ -103,7 +103,7 @@ def test_plan_is_recorded_under_its_change(tmp_path, fake_provider) -> None:
     seeded(tmp_path)
     assert run(tmp_path, "plan", "passkeys", "--replace") == 0
     (held,) = kept(tmp_path)
-    assert (held.command, held.change, held.outcome) == ("plan", "passkeys", "written")
+    assert (held.command, held.change, held.outcome) == ("plan", "passkeys", "answered")
     assert [call.stage for call in held.calls] == ["tasks"] and len(fake_provider.requests) == 1
 
 

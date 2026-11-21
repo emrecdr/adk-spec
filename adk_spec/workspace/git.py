@@ -22,6 +22,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .layout import ROOT_NAME
+
 #: How long one git command may run, in seconds.
 GIT_TIMEOUT_S: float = 30
 #: What a stage may be given of a diff, in characters. A diff past it is refused, never cut: half a diff would be
@@ -42,7 +44,7 @@ _SETTLED = {
 }
 _PLAIN = ("--no-color", "--no-ext-diff", "--no-textconv", "-M")
 #: The folder's own files, without this package's tree: a pathspec git reads from the folder it runs in.
-_HERE = ("--", ".", ":(exclude).spec")
+_HERE = ("--", ".", f":(exclude){ROOT_NAME}")
 
 
 class GitError(Exception):

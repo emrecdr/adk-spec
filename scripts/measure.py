@@ -16,14 +16,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
-import json
 import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from adk_spec.domain.convert import quoted_at
+from adk_spec.domain.convert import pointed_at
+from adk_spec.domain.drafts import FindingsDraft
 from adk_spec.interfaces import cli
 from adk_spec.workspace.git import GitError, head
 from adk_spec.workspace.layout import Workspace, findings_of
@@ -91,12 +91,11 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], int, int,
     seen = [Seen(one.code, one.path or "", one.message, one.severity == "ERROR") for one in found]
     texts, dropped = workspace.approval_texts(change), 0
     answer = next((call.answer for call in reversed(calls) if call.answer and not call.error), None)
-    for one in json.loads(answer)["findings"] if answer else ():
-        if one["file"] in texts and quoted_at(one["quote"], texts[one["file"]]) is not None:
-            text = f"{one['quote']} {one['message']}"
-            seen.append(Seen(f"check.{one['kind']}", one["file"], text, one["severity"] == "critical"))
-        else:
+    for one in FindingsDraft.model_validate_json(answer).findings if answer else ():
+        if (at := pointed_at(one, texts)) is None:  # the command left this one out, by the same test
             dropped += 1
+        else:  # the quote is kept here beside the message: a planted fault is named by either
+            seen.append(Seen(f"check.{one.kind}", at[0], f"{one.quote} {one.message}", one.severity == "critical"))
     return seen, dropped, tokens, seconds
 
 

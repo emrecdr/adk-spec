@@ -11,10 +11,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from .ids import REQ_ID
+from .lifecycle import TASKS_FILE
 from .model import Change, Delta, Finding, Spec, TaskGroup
 from .validate import finding
-
-TASKS_FILE = "tasks.md"
 
 
 def owed(deltas: Mapping[str, Delta]) -> frozenset[str]:
@@ -22,12 +21,16 @@ def owed(deltas: Mapping[str, Delta]) -> frozenset[str]:
     return frozenset(req.id for delta in deltas.values() for req in (*delta.added, *delta.modified))
 
 
+def removed(deltas: Mapping[str, Delta]) -> frozenset[str]:
+    """Every requirement a change removes."""
+    return frozenset(gone.id for delta in deltas.values() for gone in delta.removed)
+
+
 def nameable(deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> frozenset[str]:
     """Every requirement a task of the change may name: what it adds, modifies or removes, and what any living
     spec holds. A task may serve a requirement the change leaves alone and must keep true."""
-    removed = {gone.id for delta in deltas.values() for gone in delta.removed}
     held = {req.id for spec in living.values() for req in spec.requirements}
-    return owed(deltas) | removed | held
+    return owed(deltas) | removed(deltas) | held
 
 
 def coverage(groups: Sequence[TaskGroup], *, owed: frozenset[str], nameable: frozenset[str]) -> list[Finding]:

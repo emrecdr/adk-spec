@@ -44,7 +44,8 @@ class Recording(BaseModel):
     change: str | None
     at: str
     model: str
-    #: `written`, `nothing owed`, `interrupted`, or `failed: ` and the sentence the person was given.
+    #: For `propose`: `written` or `nothing owed`. For a command of one model pass: `answered`, where the pass
+    #: gave an answer to use. For any: `interrupted`, or `failed: ` and the sentence the person was given.
     outcome: str
     calls: tuple[Call, ...]
 

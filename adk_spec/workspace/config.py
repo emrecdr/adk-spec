@@ -59,10 +59,14 @@ def load_config(path: Path) -> Config:
     if tier not in TIERS:
         raise ConfigError(f"{path} sets default_tier to `{tier}`, which is none of {', '.join(TIERS)}")
     limits = held.get("limits", {})
-    ceiling = limits.get("max_tokens", 0) if isinstance(limits, dict) else 0
-    if type(ceiling) is not int or ceiling < 0:
-        raise ConfigError(f"{path} sets max_tokens to `{ceiling}`: a whole number of tokens, 0 for no ceiling")
-    keep = limits.get("keep_runs", Config.keep_runs) if isinstance(limits, dict) else Config.keep_runs
-    if type(keep) is not int or keep < 0:
-        raise ConfigError(f"{path} sets keep_runs to `{keep}`: a whole number of recordings, 0 to keep none")
+    ceiling = _whole(path, limits, "max_tokens", Config.max_tokens, "a whole number of tokens, 0 for no ceiling")
+    keep = _whole(path, limits, "keep_runs", Config.keep_runs, "a whole number of recordings, 0 to keep none")
     return Config(default_tier=tier, max_tokens=ceiling, keep_runs=keep)
+
+
+def _whole(path: Path, limits: object, key: str, default: int, what: str) -> int:
+    """A whole number of zero or more under `[limits]`, or its default where the key is not set."""
+    value = limits.get(key, default) if isinstance(limits, dict) else default
+    if type(value) is not int or value < 0:
+        raise ConfigError(f"{path} sets {key} to `{value}`: {what}")
+    return value

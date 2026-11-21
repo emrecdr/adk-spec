@@ -40,14 +40,18 @@ def living_text(specs: Mapping[str, Spec], capabilities: Iterable[str]) -> str:
     return joined({slug: render_spec(specs[slug]) for slug in capabilities if slug in specs})
 
 
-def joined(parts: Mapping[str, str], *, what: str = "the living specs of", remedy: str = "") -> str:
+def joined(
+    parts: Mapping[str, str],
+    *,
+    what: str = "the living specs of",
+    remedy: str = "Split a capability, or name fewer in the change",
+) -> str:
     """Each text under a line naming it, whole. `ContextTooLargeError` past the limit, naming `what` they are."""
     text = "\n".join(f"=== {name}\n{held}" for name, held in parts.items())
     if len(text) > CONTEXT_MAX_CHARS:
         sizes = ", ".join(f"{name} ({len(held):,})" for name, held in parts.items())
         raise ContextTooLargeError(
-            f"{what} {sizes} hold {len(text):,} characters, past the {CONTEXT_MAX_CHARS:,} a stage is given. "
-            + (remedy or "Split a capability, or name fewer in the change")
+            f"{what} {sizes} hold {len(text):,} characters, past the {CONTEXT_MAX_CHARS:,} a stage is given. {remedy}"
         )
     return text
 

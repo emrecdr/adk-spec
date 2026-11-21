@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .convert import QUOTE_MIN_CHARS, flat
 from .drafts import VerdictsDraft
-from .text import lines_of
+from .text import flat, lines_of, quoted_at
 
 UNGROUNDED = "no quoted line is in the diff"
 NO_VERDICT = "no verdict was given"
@@ -61,10 +60,8 @@ def _path(named: str) -> str | None:
 
 
 def _shown(quote: str, lines: list[str]) -> bool:
-    """Whether `quote` is in `lines`, runs of whitespace read as one space. A quote may run over lines; one too
-    short to point at anything is in no diff."""
-    wanted = flat(quote)
-    return len(wanted) >= QUOTE_MIN_CHARS and wanted in flat(" ".join(lines))
+    """Whether `quote` is in `lines`, by the one test of a quote the package has."""
+    return quoted_at(quote, "\n".join(lines)) is not None
 
 
 def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed: frozenset[str]) -> list[Verdict]:
@@ -89,7 +86,7 @@ def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed:
             for path in [_named(piece.path, sides)]
             if path is not None and _shown(piece.quote, sides[path][side])
         )
-        reason = " ".join(one.reason.split())
+        reason = flat(one.reason)
         if one.verdict == "met" and not evidence:
             verdicts.append(Verdict(req_id, "unclear", (), f"{UNGROUNDED}. The model's reason: {reason}"))
         else:

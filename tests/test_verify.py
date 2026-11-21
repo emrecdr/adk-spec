@@ -115,7 +115,7 @@ def test_an_unmet_verdict_is_kept_as_it_is_given() -> None:
 
 def test_verify_sets_verified_when_every_requirement_is_met(tmp_path, capsys, fake_provider) -> None:
     ws, commit = approved_in_a_repository(tmp_path)
-    assert state_of(tmp_path)["approval"]["commit"] == commit
+    assert state_of(tmp_path)["base_commit"] == commit
     implemented(tmp_path)
     capsys.readouterr()
     assert run(tmp_path, "verify", "passkeys") == 0
@@ -218,8 +218,7 @@ def test_what_cannot_be_verified_is_a_sentence_and_writes_nothing(
         ws, _commit = approved_in_a_repository(tmp_path)
         implemented(tmp_path)
     if case == "no base":
-        state = ws.load_change("passkeys").change.state
-        ws.save_state(state.model_copy(update={"approval": state.approval.model_copy(update={"commit": None})}))
+        ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"base_commit": None}))
         said = "--base"
     elif case == "unknown base":
         argv, said = [*argv, "--base", "no-such-branch"], "no-such-branch"
@@ -263,4 +262,28 @@ def test_a_lean_change_may_be_verified_and_a_change_with_no_delta_has_nothing_to
 def test_approve_records_no_commit_outside_a_repository(tmp_path) -> None:
     seeded(tmp_path)
     assert run(tmp_path, "rebase", "passkeys") == 0 and run(tmp_path, "approve", "passkeys", "--by", "r") == 0
-    assert state_of(tmp_path)["approval"]["commit"] is None and head(tmp_path) is None
+    assert state_of(tmp_path)["base_commit"] is None and head(tmp_path) is None
+
+
+def test_the_work_is_compared_with_the_first_approval_however_often_it_is_approved_again(
+    tmp_path, fake_provider
+) -> None:
+    """Found by the cleanup review: the commit was kept in the approval, so a person who committed half the work,
+    reworded a task and approved again, as `status` told them to, moved the base past the work already done."""
+    from conftest import repository_commit
+
+    _ws, first = approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    repository_commit(tmp_path, "half the work")
+    assert head(tmp_path) != first
+    tasks = tmp_path / ".spec/changes/passkeys/tasks.md"
+    write_text(tasks, read_text(tasks).replace("Write the failing passkey sign-in test", "Write the passkey test"))
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert state_of(tmp_path)["base_commit"] == first, "the work still starts where it started"
+    assert run(tmp_path, "rebase", "passkeys") == 0, "a rebase voids the approval, and keeps where the work began"
+    assert state_of(tmp_path)["base_commit"] == first
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert run(tmp_path, "verify", "passkeys") == 0, "the committed work is still in the diff that is judged"
+    assert "+    return passkey(user)" in str(fake_provider.requests[0].config.system_instruction)

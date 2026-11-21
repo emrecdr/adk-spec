@@ -34,8 +34,11 @@ from ..domain.ids import slug_problem
 from ..domain.lifecycle import capture_bases
 from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.tasks_md import parse_tasks, render_tasks
+from ..domain.text import flat
 from ..domain.validate import validate_brief, validate_delta, validate_tasks
 from ..workspace.context import ContextTooLargeError, living_text
+from ..workspace.layout import BRIEF as BRIEF_FILE
+from ..workspace.layout import SPEC_FILE, SPECS
 from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked
 from .plugins import UsageLedger, roster
 from .stages import BRIEF_TEXT, LIVING, REQUEST, TIER
@@ -98,7 +101,15 @@ def drafted(state: Mapping[str, Any], known: Known) -> Drafted:
     checked is what the command writes."""
     draft = BriefDraft.model_validate(state[brief_stage.KEY])
     deltas = to_deltas(DeltasDraft.model_validate(state[deltas_stage.KEY]), known.living, known.taken)
-    return Drafted(to_brief(draft), deltas, draft.design_needed, " ".join(draft.design_reason.split()))
+    return Drafted(to_brief(draft), deltas, draft.design_needed, flat(draft.design_reason))
+
+
+def files_of(made: Drafted) -> dict[str, str]:
+    """A run's drafts as the files a change holds, by their paths in its folder: the brief, and one delta a
+    capability. What the command writes, and what the chat shows."""
+    files = {BRIEF_FILE: render_brief(made.brief)}
+    files |= {f"{SPECS}/{capability}/{SPEC_FILE}": render_delta(delta) for capability, delta in made.deltas.items()}
+    return files
 
 
 def first_run(tier: Tier | None, seed: Mapping[str, Any]) -> tuple[Entry, dict[str, Any]]:
@@ -132,6 +143,11 @@ def next_run(seed: Mapping[str, Any], state: Mapping[str, Any], answers: Sequenc
         brief_stage.REPLACES: replaces,
         ROUNDS: (seed.get(ROUNDS) or 0) + 1,
     }
+
+
+def _app(edges: list[Any], ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:
+    """An app of this package: one workflow named for it, with the roster's plugins."""
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
 
 
 def build_smoke_app() -> App:
@@ -343,7 +359,7 @@ def build_propose_app(
     With `ask`, a standard change whose brief leaves a point open ends its run on the questions, under `ASKING`.
     `first_run` and `next_run` say which entry a run takes and what it is seeded with."""
     edges = _propose_edges(known, ask=ask, entry=entry)
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
+    return _app(edges, ledger, recorder)
 
 
 def build_chat_app(known: Known, told: Mapping[str, Any], *, ledger: UsageLedger) -> App:
@@ -360,9 +376,7 @@ def build_chat_app(known: Known, told: Mapping[str, Any], *, ledger: UsageLedger
         return Event(state={**told, REQUEST: typed})
 
     def shown(ctx: Context) -> Event:
-        made = drafted(ctx.state.to_dict(), known)
-        files = {"brief.md": render_brief(made.brief)}
-        files |= {f"specs/{capability}/spec.md": render_delta(delta) for capability, delta in made.deltas.items()}
+        files = files_of(drafted(ctx.state.to_dict(), known))
         pages = "\n\n".join(f"--- {path}\n{text}" for path, text in files.items())
         return Event(
             content=types.ModelContent(f"Drafted, and not written. `adk-spec propose` writes a change.\n\n{pages}")
@@ -378,7 +392,7 @@ def build_chat_app(known: Known, told: Mapping[str, Any], *, ledger: UsageLedger
         ("START", opened),
         *_propose_edges(known, ask=False, entry="triage", start=opened, done=shown, ended=closed),
     ]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger))
+    return _app(edges, ledger)
 
 
 def build_plan_app(
@@ -403,7 +417,7 @@ def build_plan_app(
         ]
     else:
         edges = [("START", tasks), *edges]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
+    return _app(edges, ledger, recorder)
 
 
 def build_check_app(*, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:
@@ -411,7 +425,7 @@ def build_check_app(*, ledger: UsageLedger, recorder: BasePlugin | None = None) 
     points at nothing is left out by code afterwards, not sent back."""
     check, check_gate = check_stage.build_check(), checked(check_stage.KEY, lambda _state: [])
     edges: list[Any] = [("START", check, check_gate), (check_gate, {OK: _ended, AGAIN: check, GIVE_UP: _ended})]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
+    return _app(edges, ledger, recorder)
 
 
 def build_verify_app(*, ledger: UsageLedger, required: frozenset[str], recorder: BasePlugin | None = None) -> App:
@@ -427,4 +441,4 @@ def build_verify_app(*, ledger: UsageLedger, required: frozenset[str], recorder:
 
     verify, verify_gate = verify_stage.build_verify(), checked(verify_stage.KEY, check_verdicts)
     edges: list[Any] = [("START", verify, verify_gate), (verify_gate, {OK: _ended, AGAIN: verify, GIVE_UP: _ended})]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
+    return _app(edges, ledger, recorder)

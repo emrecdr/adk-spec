@@ -8,11 +8,11 @@ task list is fingerprinted with every box empty.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from .model import Approval, ChangeState, Delta, Finding, GrammarError, Spec
+from .model import Approval, ChangeState, Checked, Delta, Finding, GrammarError, Spec, Verification
 from .spec_md import fingerprint
 from .tasks_md import parse_tasks, render_tasks
 from .text import sha256_of
@@ -58,10 +58,41 @@ def approve(
     override: str | None = None,
     commit: str | None = None,
 ) -> ChangeState:
-    """The state with the approval recorded: who, when, each file's fingerprint and the bases as they stand, the
-    reason where the approver set a blocking finding of the check aside, and the commit the work starts from."""
-    approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override, commit=commit)
-    return state.model_copy(update={"status": "approved", "approval": approval})
+    """The state with the approval recorded: who, when, each file's fingerprint and the bases as they stand, and
+    the reason where the approver set a blocking finding of the check aside. `commit` is what is checked out now:
+    it is kept as where the work began only where none is kept yet, so approving again does not move it."""
+    approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override)
+    began = state.base_commit or commit
+    return state.model_copy(update={"status": "approved", "approval": approval, "base_commit": began})
+
+
+def checked(
+    state: ChangeState, findings: Sequence[Finding], *, files: Mapping[str, str], at: str, model: str | None = None
+) -> ChangeState:
+    """The state with a check recorded: the fingerprints of the files it read, how many of its findings block an
+    approval, and the model that judged, none where code alone did."""
+    blocking = sum(found.severity == "ERROR" for found in findings)
+    return state.model_copy(update={"check": Checked(at=at, files=dict(files), blocking=blocking, model=model)})
+
+
+def verified(
+    state: ChangeState,
+    verdicts: Mapping[str, str],
+    *,
+    base: str,
+    diff: str,
+    at: str,
+    model: str | None = None,
+    override: str | None = None,
+) -> ChangeState:
+    """The state with a verification recorded. The change is `verified` where every requirement's verdict is `met`,
+    or a person says so with a reason, which is kept only where it was needed. Otherwise it is `approved`, also
+    where it was verified before: the newest judgement is the one that stands."""
+    met = all(verdict == "met" for verdict in verdicts.values())
+    reason = None if met else (override or None)
+    held = Verification(at=at, base=base, diff=diff, verdicts=dict(verdicts), override=reason, model=model)
+    status = "verified" if met or reason else "approved"
+    return state.model_copy(update={"verification": held, "status": status})
 
 
 def check_blockers(state: ChangeState, files: Mapping[str, str]) -> list[Finding]:
@@ -95,21 +126,31 @@ def approval_stale(state: ChangeState, files: Mapping[str, str]) -> list[str]:
     return moved + (["bases"] if state.bases != state.approval.bases else [])
 
 
-def approve_blockers(state: ChangeState, findings: Sequence[Finding], *, strict: bool = False) -> list[Finding]:
-    """The findings that block an approval: every ERROR, every finding of `BLOCKS_APPROVAL`, and under `strict`
-    every WARNING. An archived change is approved no more."""
+def approve_blockers(
+    state: ChangeState,
+    findings: Sequence[Finding],
+    *,
+    strict: bool = False,
+    check: Sequence[Finding] = (),
+    override: bool = False,
+) -> list[Finding]:
+    """What blocks an approval: every ERROR, every finding of `BLOCKS_APPROVAL`, under `strict` every WARNING, and
+    what the change's check still owes, which is `check`, as `check_blockers` gives it. With `override`, a blocking
+    finding of a current check is set aside, and nothing else: a check never run, or run on other files, is still
+    owed. An archived change is approved no more."""
     if state.status == "archived":
         return [Finding(severity="ERROR", code="change.archived", message=f"`{state.id}` is archived already.")]
-    return [
+    held = [
         found
         for found in findings
         if found.severity == "ERROR" or found.code in BLOCKS_APPROVAL or (strict and found.severity == "WARNING")
     ]
+    return held + [owed for owed in check if not (override and owed.code == "check.blocking")]
 
 
-def archive_blockers(state: ChangeState, stale: Sequence[str]) -> list[str]:
-    """Why a change cannot be archived yet, a sentence each; empty where it can. A lean change is archived once
-    approved; a standard or strict one once verified."""
+def _unready(state: ChangeState, stale: Sequence[str]) -> list[str]:
+    """Why work on a change's approved files cannot go on, a sentence; empty where it can: it is archived, it is
+    not approved, or its approval no longer covers its files."""
     cid = state.id
     if state.status == "archived":
         return [f"`{cid}` is archived already"]
@@ -119,7 +160,21 @@ def archive_blockers(state: ChangeState, stale: Sequence[str]) -> list[str]:
         return [
             f"the approval of `{cid}` is void: {', '.join(stale)} changed since. Run `adk-spec approve {cid}` again"
         ]
+    return []
+
+
+def verify_blockers(state: ChangeState, stale: Sequence[str]) -> list[str]:
+    """Why a change's work cannot be verified yet, a sentence; empty where it can."""
+    return _unready(state, stale)
+
+
+def archive_blockers(state: ChangeState, stale: Sequence[str]) -> list[str]:
+    """Why a change cannot be archived yet, a sentence each; empty where it can. A lean change is archived once
+    approved; a standard or strict one once verified."""
+    if unready := _unready(state, stale):
+        return unready
     if state.tier != "lean" and state.status != "verified":
+        cid = state.id
         return [f"`{cid}` is a {state.tier} change and is not verified: run `adk-spec verify {cid}` first"]
     return []
 
@@ -136,21 +191,20 @@ class Step:
     phrase: str
 
 
-#: What holds a draft, the first that applies first: whether it does, who acts on it, and the phrase, in which
-#: `{cid}` is the change. An ERROR comes before everything, since the files it is in will change; an open point
-#: before the plan, since its answer shapes the tasks; the plan before the base, and the base before the check,
-#: which reads what the two leave.
-_HOLDS: tuple[tuple[Callable[[set[str], set[str], bool], bool], Actor, str], ...] = (
-    (lambda _codes, _check, errors: errors, "you", "fix what `adk-spec validate {cid}` lists"),
-    (lambda codes, _check, _errors: "brief.marker-unresolved" in codes, "you", "settle the open point in brief.md"),
-    (lambda codes, _check, _errors: "change.missing-tasks" in codes, "run", "run `adk-spec plan {cid}`"),
-    (lambda codes, _check, _errors: "delta.base-missing" in codes, "run", "run `adk-spec rebase {cid}`"),
-    (
-        lambda _codes, check, _errors: "check.blocking" in check,
-        "you",
-        "fix what reports/check.md lists, then run `adk-spec check {cid}`",
-    ),
-    (lambda _codes, check, _errors: bool(check), "run", "run `adk-spec check {cid}`"),
+#: What stands for "a finding of the change is an ERROR" among the codes below.
+_ERROR = "an ERROR"
+#: What holds a draft, the first that applies first: the code of what holds it, who acts on it, and the phrase, in
+#: which `{cid}` is the change. An ERROR comes before everything, since the files it is in will change; an open
+#: point before the plan, since its answer shapes the tasks; the plan before the base, and the base before the
+#: check, which reads what the two leave.
+_HOLDS: tuple[tuple[str, Actor, str], ...] = (
+    (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
+    ("brief.marker-unresolved", "you", "settle the open point in brief.md"),
+    ("change.missing-tasks", "run", "run `adk-spec plan {cid}`"),
+    ("delta.base-missing", "run", "run `adk-spec rebase {cid}`"),
+    ("check.blocking", "you", "fix what reports/check.md lists, then run `adk-spec check {cid}`"),
+    ("check.missing", "run", "run `adk-spec check {cid}`"),
+    ("check.stale", "run", "run `adk-spec check {cid}`"),
 )
 
 
@@ -163,19 +217,21 @@ def next_step(
         return Step("done", "nothing: archived")
     errors = any(found.severity == "ERROR" for found in findings)
     if state.status in ("approved", "verified"):
-        if stale:
-            return Step("you", f"approve again: {', '.join(stale)} changed since the approval")
+        if stale:  # the edit that voided the approval made a check of the old files stale as well
+            first = f"run `adk-spec check {cid}`, then " if check else ""
+            return Step("you", f"{first}approve again: {', '.join(stale)} changed since the approval")
         if errors:  # a base that moved, a spec that no longer reads
             return Step("you", f"fix what `adk-spec validate {cid}` lists")
         if state.status == "verified":
             return Step("run", f"run `adk-spec archive {cid}`")
         last = "archive" if state.tier == "lean" else "verify"
         return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
-    codes = {found.code for found in findings}
-    owed = {found.code for found in check}
-    for holds, actor, phrase in _HOLDS:
-        if holds(codes, owed, errors):
+    held = {found.code for found in (*findings, *check)} | ({_ERROR} if errors else set())
+    for code, actor, phrase in _HOLDS:
+        if code in held:
             return Step(actor, phrase.format(cid=cid))
+    if approve_blockers(state, findings, check=check):  # what blocks an approval and has no step of its own
+        return Step("you", f"fix what `adk-spec validate {cid}` lists")
     return Step("you", f"run `adk-spec approve {cid}`")
 
 

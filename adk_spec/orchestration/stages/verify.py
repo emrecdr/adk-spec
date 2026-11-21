@@ -32,6 +32,15 @@ A test that exercises the behaviour is good evidence. A comment or a name alone 
 Judge what the diff shows, not which boxes of the tasks are ticked."""
 
 
+def required_text(added: frozenset[str], removed: frozenset[str]) -> str:
+    """What the stage is told to judge: each requirement, under the side of the diff that can show it."""
+    sides = (
+        ("added or modified, shown by lines the diff adds", added),
+        ("removed, shown by lines the diff removes", removed),
+    )
+    return "\n".join(f"{what}: {', '.join(sorted(ids))}" for what, ids in sides if ids)
+
+
 def build_verify() -> LlmAgent:
     text = instruction(
         OPENING,

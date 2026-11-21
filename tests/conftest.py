@@ -384,10 +384,9 @@ def state_of(root: Path, change: str = "passkeys") -> dict:
     return json.loads((root / f".spec/changes/{change}/change.json").read_text(encoding="utf-8"))
 
 
-def repository(root: Path, files: dict[str, str] | None = None) -> str:
-    """A git repository at `root` with one commit of `files` (one source file where none is given) and of whatever
-    stands there already: the commit's ID. Git is started as a test starts it, by `subprocess` and an argv list,
-    under settings of its own, so a person's config and signing key change nothing."""
+def _git(root: Path, *args: str) -> str:
+    """One git command a test makes of its own, by `subprocess` and an argv list, under settings of its own: a
+    person's config and signing key change nothing."""
     import shutil
     import subprocess
 
@@ -396,16 +395,31 @@ def repository(root: Path, files: dict[str, str] | None = None) -> str:
     env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
     env |= {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
     who = ["-c", "user.name=A Test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"]
+    done = subprocess.run([git, "-C", str(root), *who, *args], env=env, capture_output=True, check=True)
+    return done.stdout.decode("utf-8").strip()
 
-    def do(*args: str) -> str:
-        done = subprocess.run([git, "-C", str(root), *who, *args], env=env, capture_output=True, check=True)
-        return done.stdout.decode("utf-8").strip()
 
+def repository_commit(root: Path, message: str) -> str:
+    """Everything under `root` committed, `.spec/` too: the new commit's ID."""
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", message)
+    return _git(root, "rev-parse", "HEAD")
+
+
+def repository(root: Path, files: dict[str, str] | None = None) -> str:
+    """A git repository at `root` with one commit of `files` (one source file where none is given) and of whatever
+    stands there already: the commit's ID."""
     root.mkdir(parents=True, exist_ok=True)
     for path, text in (files or {"src/app.py": "def login():\n    return password()\n"}).items():
         (root / path).parent.mkdir(parents=True, exist_ok=True)
         (root / path).write_text(text, encoding="utf-8", newline="\n")
-    do("init", "-q", "-b", "main")
-    do("add", "-A")
-    do("commit", "-q", "-m", "first")
-    return do("rev-parse", "HEAD")
+    _git(root, "init", "-q", "-b", "main")
+    return repository_commit(root, "first")
+
+
+def between(text: str, label: str) -> str:
+    """What an instruction holds between the two markers of `label`."""
+    from adk_spec.orchestration.stages import BOUNDARY
+
+    opened, closed = f"<<< {label} {BOUNDARY}\n", f"\n>>> {label} {BOUNDARY}"
+    return text[text.index(opened) + len(opened) : text.index(closed)]

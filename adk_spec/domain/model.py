@@ -119,9 +119,6 @@ class Approval(_Held):
     bases: dict[str, str]
     #: Why the approver set a blocking finding of the check aside, in their words. None where nothing was.
     override: str | None = None
-    #: The commit checked out when the approval was made, where the repository is git's: what `verify` compares
-    #: the work with.
-    commit: str | None = None
 
 
 class Checked(_Held):
@@ -162,6 +159,10 @@ class ChangeState(_Held):
     check: Checked | None = None
     #: The last verification of the work against the change's requirements.
     verification: Verification | None = None
+    #: The commit checked out when the change was first approved, where the repository is git's: where the work
+    #: began, and what `verify` compares it with. It is the change's, not one approval's: approving again after an
+    #: edit, or after a rebase, does not move it past work already done.
+    base_commit: str | None = None
 
 
 class Change(_Held):
