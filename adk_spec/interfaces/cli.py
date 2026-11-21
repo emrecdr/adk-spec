@@ -373,7 +373,29 @@ def _load_env() -> None:
         raise UsageError(f"{path} is not UTF-8. Save it as UTF-8: Windows PowerShell 5.1's `>` writes UTF-16") from exc
 
 
-def _ran(app: Any, seed: dict[str, Any], prompt: str) -> Any:
+def _answered(payload: dict[str, Any]) -> dict[str, Any]:
+    """A round of questions put to the person on the terminal, one at a time. A line is the answer; `=` takes the
+    suggestion; an empty line leaves the point open; the end of the input answers every question still to come with
+    nothing. The answers go back as data, never as text a run could take for a new request."""
+    questions = payload.get("questions") or []
+    print(
+        f"The brief leaves {len(questions)} open. A line answers. `=` takes the suggestion. An empty line leaves it open."
+    )
+    answers: list[str] = []
+    ended = False
+    for number, question in enumerate(questions, 1):
+        print(f"{number}. {question.get('question', '')}")
+        print(f"   suggested: {question.get('recommended', '')}", flush=True)
+        line = "" if ended else sys.stdin.readline()
+        ended = ended or line == ""  # no line at all: the input is over
+        typed = line.strip()
+        answers.append(str(question.get("recommended", "")) if typed == "=" else typed)
+    return {"answers": answers}
+
+
+def _ran(
+    app: Any, seed: dict[str, Any], prompt: str, answer: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+) -> Any:
     """One run of `app`, with the engine's own log quieted for its length: ADK logs a failed node with its whole
     traceback, and the command says the failure in one line."""
     import asyncio
@@ -385,7 +407,7 @@ def _ran(app: Any, seed: dict[str, Any], prompt: str) -> Any:
     level = engine_log.level
     engine_log.setLevel(logging.CRITICAL)
     try:
-        return asyncio.run(run_seeded(app, state=seed, prompt=prompt))
+        return asyncio.run(run_seeded(app, state=seed, prompt=prompt, answer=answer))
     finally:
         engine_log.setLevel(level)
 
@@ -409,7 +431,7 @@ def _propose(args: argparse.Namespace) -> int:
             raise UsageError(f"the change `{args.id}` exists already")
     from ..orchestration.models import require_ready
 
-    if why := require_ready(roles=("triage", "brief", "deltas")):
+    if why := require_ready(roles=("triage", "brief", "questions", "deltas")):
         raise UsageError(why)
     with lock_held(workspace):
         return _proposed(args, workspace)
@@ -431,7 +453,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     known = Known(living=specs, taken=taken, ceiling=workspace.config().max_tokens or None)
     seed = {REQUEST: args.request, CAPABILITIES: capability_index(workspace), RULES: constitution_text(workspace)}
     app = build_propose_app(known, tier=args.tier, ask=not args.no_input)
-    run = _ran(app, seed, "propose")
+    run = _ran(app, seed, "propose", None if args.no_input else _answered)
     if failure := run.state.get(FAILURE) or run.failure:
         print(f"{PROG}: no change was written: {failure}", file=sys.stderr)
         print(f"tokens    {_spent(app)}")

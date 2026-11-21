@@ -63,7 +63,21 @@ DELTAS_ON_A_MISSING_ID = {
     ]
 }
 #: The answers the fake gives by default, one a schema: the first one a request's schema accepts.
-CANNED: tuple[dict, ...] = (CANNED_TRIAGE, CANNED_BRIEF, CANNED_DELTAS)
+#: A brief draft that leaves one point open, and the question a model words for it.
+BRIEF_WITH_A_MARKER = {
+    **CANNED_BRIEF,
+    "assumptions": "Browsers support WebAuthn. [NEEDS CLARIFICATION: which browsers?]",
+}
+CANNED_QUESTIONS = {
+    "questions": [
+        {
+            "marker": "[NEEDS CLARIFICATION: which browsers?]",
+            "question": "Which browsers are in scope?",
+            "recommended": "Evergreen browsers only",
+        }
+    ]
+}
+CANNED: tuple[dict, ...] = (CANNED_TRIAGE, CANNED_BRIEF, CANNED_DELTAS, CANNED_QUESTIONS)
 
 
 def canned_for(schema: type[BaseModel]) -> dict:
