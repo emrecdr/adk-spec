@@ -129,7 +129,8 @@ class Workspace:
         workspace = cls(repo)
         if workspace.home.exists():
             raise WorkspaceError(f"{workspace.home} is already there. Nothing was changed")
-        write_all({workspace.home / CONFIG: DEFAULT, workspace.home / CONSTITUTION: CONSTITUTION_TEXT})
+        made = {CONFIG: DEFAULT, CONSTITUTION: CONSTITUTION_TEXT, ".gitignore": ".lock\n"}  # the lock is a run's own
+        write_all({workspace.home / name: text for name, text in made.items()})
         for folder in (SPECS, CHANGES):
             (workspace.home / folder).mkdir()
         return workspace

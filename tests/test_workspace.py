@@ -19,6 +19,7 @@ from adk_spec.workspace.layout import Workspace, WorkspaceError, findings_of
 def test_init_makes_the_tree_and_refuses_a_second_time(tmp_path) -> None:
     ws = Workspace.init(tmp_path)
     assert sorted(p.name for p in (tmp_path / ".spec").iterdir()) == [
+        ".gitignore",
         "changes",
         "config.toml",
         "constitution.md",

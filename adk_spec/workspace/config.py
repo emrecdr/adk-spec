@@ -28,12 +28,14 @@ class ConfigError(ValueError):
 @dataclass(frozen=True)
 class Config:
     default_tier: Tier
-    #: The tokens one run may spend, every stage of it. 0 means no ceiling.
+    #: The tokens one command may spend, every stage of it. 0 means no ceiling.
     max_tokens: int = 0
+    #: How many commands' model calls are kept under `.spec/runs/`, the newest ones. 0 keeps none.
+    keep_runs: int = 20
 
 
 #: Each table the code reads, and the keys it reads there.
-KNOWN = {"project": ("default_tier",), "limits": ("max_tokens",)}
+KNOWN = {"project": ("default_tier",), "limits": ("max_tokens", "keep_runs")}
 
 
 def load_config(path: Path) -> Config:
@@ -60,4 +62,7 @@ def load_config(path: Path) -> Config:
     ceiling = limits.get("max_tokens", 0) if isinstance(limits, dict) else 0
     if type(ceiling) is not int or ceiling < 0:
         raise ConfigError(f"{path} sets max_tokens to `{ceiling}`: a whole number of tokens, 0 for no ceiling")
-    return Config(default_tier=tier, max_tokens=ceiling)
+    keep = limits.get("keep_runs", Config.keep_runs) if isinstance(limits, dict) else Config.keep_runs
+    if type(keep) is not int or keep < 0:
+        raise ConfigError(f"{path} sets keep_runs to `{keep}`: a whole number of recordings, 0 to keep none")
+    return Config(default_tier=tier, max_tokens=ceiling, keep_runs=keep)

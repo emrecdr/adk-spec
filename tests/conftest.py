@@ -143,6 +143,16 @@ class FakeProvider:
         the iterator's end, means the canned answer."""
         self.rules.append((text, payloads))
 
+    def answers_from(self, recording) -> None:
+        """Each stage's answers as a recording holds them, in their order: a stage is known by the first line of
+        its instruction, and a call that got no answer gave none to replay."""
+        by_opening: dict[str, list[str]] = {}
+        for call in recording.calls:
+            if call.answer is not None:
+                by_opening.setdefault(call.instruction.split("\n", 1)[0], []).append(call.answer)
+        for opening, answers in by_opening.items():
+            self.answers_each_time(opening, iter(answers))
+
     def answer(self, llm_request: LlmRequest) -> dict | str | None:
         instruction = str(llm_request.config.system_instruction or "")
         for text, rule in self.rules:

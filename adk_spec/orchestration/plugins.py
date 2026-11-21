@@ -108,7 +108,8 @@ class UsageLedger(BasePlugin):
         return None
 
 
-def roster(ledger: UsageLedger) -> list[BasePlugin]:
-    """The plugins of every app, the ledger first: it must read an answer before a mismatch replaces it. The ledger
-    is the command's own, one for all its runs, so the count and the ceiling are the command's."""
-    return [ledger, SchemaMismatch()]
+def roster(ledger: UsageLedger, recorder: BasePlugin | None = None) -> list[BasePlugin]:
+    """The plugins of every app: the recorder where the command keeps one, then the ledger, then the mismatch. Each
+    must read an answer before the mismatch replaces it, and the recorder a request before the ledger refuses it.
+    The ledger and the recorder are the command's own, one for all its runs."""
+    return [*([recorder] if recorder is not None else []), ledger, SchemaMismatch()]

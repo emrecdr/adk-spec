@@ -89,6 +89,11 @@ three rounds, each with a suggested answer. A line answers, `=` takes the sugges
 point open, in which case approval waits until you settle it in the brief. A round you answer nothing in ends the
 asking, and the brief is kept as it stood. The `tokens` line counts each stage's calls, the asked-again ones too.
 
+Every command that calls a model keeps what it sent and what came back, one file a command, under `.spec/runs/`:
+each stage's instruction, its answer as it came, and what a gate found wrong where it asked again. The folder
+ignores itself for git. It holds your request and the texts of your specs, and no key or token. The newest 20 are
+kept; `[limits] keep_runs` in `.spec/config.toml` changes that, and `0` keeps none.
+
 Three more reach a model provider without drafting:
 
 ```

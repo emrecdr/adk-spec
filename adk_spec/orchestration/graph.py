@@ -21,6 +21,7 @@ from typing import Any, Literal
 from google.adk.agents.context import Context
 from google.adk.apps.app import App
 from google.adk.events import Event
+from google.adk.plugins.base_plugin import BasePlugin
 from google.adk.workflow import Workflow
 
 from ..domain.brief_md import markers, parse_brief, render_brief
@@ -281,7 +282,9 @@ def _designed(ctx: Context) -> Event:
     return Event(state={tasks_stage.DESIGN_TEXT: render_design(draft)})
 
 
-def build_propose_app(known: Known, *, ask: bool, entry: Entry, ledger: UsageLedger) -> App:
+def build_propose_app(
+    known: Known, *, ask: bool, entry: Entry, ledger: UsageLedger, recorder: BasePlugin | None = None
+) -> App:
     """Triage, the brief and the deltas, each behind its gate, from `entry` on. A request the model sizes as `none`
     ends the run with nothing drafted.
 
@@ -310,7 +313,7 @@ def build_propose_app(known: Known, *, ask: bool, entry: Entry, ledger: UsageLed
             (_unasked, gathered),
             *edges,
         ]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger))
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
 
 
 def _opening(brief: Any, entry: Entry) -> list[Any]:
@@ -325,7 +328,14 @@ def _opening(brief: Any, entry: Entry) -> list[Any]:
     ]
 
 
-def build_plan_app(*, design: bool, ledger: UsageLedger, owed: frozenset[str], nameable: frozenset[str]) -> App:
+def build_plan_app(
+    *,
+    design: bool,
+    ledger: UsageLedger,
+    owed: frozenset[str],
+    nameable: frozenset[str],
+    recorder: BasePlugin | None = None,
+) -> App:
     """The design, where the change owes one, and then the tasks, each behind its gate. The tasks are held to the
     change's own requirements: each of `owed` served, and none named outside `nameable`."""
     tasks, tasks_gate = tasks_stage.build_tasks(), checked(tasks_stage.KEY, _tasks_check(owed, nameable))
@@ -340,4 +350,4 @@ def build_plan_app(*, design: bool, ledger: UsageLedger, owed: frozenset[str], n
         ]
     else:
         edges = [("START", tasks), *edges]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger))
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))

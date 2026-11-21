@@ -8,11 +8,13 @@ usage error and every command that calls no model start without it.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import json
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
@@ -54,6 +56,8 @@ from ..workspace.layout import DESIGN as DESIGN_FILE
 from ..workspace.layout import TASKS as TASKS_FILE
 from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
+from ..workspace.runs import Recording
+from ..workspace.runs import write as write_run
 
 EXIT_OK = 0
 #: A gate refused, or findings at the bar.
@@ -431,6 +435,40 @@ def _ran(app: Any, seed: dict[str, Any], prompt: str) -> Any:
         engine_log.setLevel(level)
 
 
+@dataclass
+class _Kept:
+    """What a command says for its recording: the plugin that hears its calls, the change it is about, and how it
+    ended."""
+
+    recorder: Any
+    change: str | None
+    outcome: str = ""
+
+
+@contextlib.contextmanager
+def _recording(workspace: Workspace, command: str, change: str | None) -> Generator[_Kept]:
+    """A command's model calls, kept when it ends, however it ends: well, with a failure, or interrupted. A
+    recording that cannot be written costs the command nothing."""
+    from ..orchestration.models import serving
+    from ..orchestration.recorder import Recorder
+
+    keep = workspace.config().keep_runs
+    kept = _Kept(Recorder(), change)
+    try:
+        yield kept
+    except KeyboardInterrupt:
+        kept.outcome = "interrupted"
+        raise
+    finally:
+        calls = kept.recorder.calls
+        if calls:
+            at = datetime.now(UTC).isoformat(timespec="seconds")
+            outcome = kept.outcome or "failed"
+            held = Recording(command=command, change=kept.change, at=at, model=serving(), outcome=outcome, calls=calls)
+            with contextlib.suppress(OSError):
+                write_run(workspace, held, keep=keep)
+
+
 def _spent(ledger: Any) -> str:
     """What a command's stages spent, from its ledger: each stage with its calls, then the total."""
     stages = ", ".join(
@@ -499,9 +537,12 @@ def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     }
     ledger = UsageLedger(workspace.config().max_tokens or None)
     serves = {"owed": owed(change.deltas), "nameable": nameable(change.deltas, specs)}
-    run = _ran(build_plan_app(design=state.needs_design, ledger=ledger, **serves), seed, "plan")
-    tasks = read_tasks(run.state)
-    failure = run.state.get(FAILURE) or run.failure or (tasks if isinstance(tasks, str) else None)
+    with _recording(workspace, "plan", args.id) as kept:
+        app = build_plan_app(design=state.needs_design, ledger=ledger, recorder=kept.recorder, **serves)
+        run = _ran(app, seed, "plan")
+        tasks = read_tasks(run.state)
+        failure = run.state.get(FAILURE) or run.failure or (tasks if isinstance(tasks, str) else None)
+        kept.outcome = f"failed: {failure}" if failure else "written"
     if failure or isinstance(tasks, str):
         print(f"{PROG}: no plan was written: {failure}", file=sys.stderr)
         print(f"tokens    {_spent(ledger)}")
@@ -537,34 +578,39 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     # One ledger for every run of this command: the count and the ceiling are the command's.
     ledger = UsageLedger(workspace.config().max_tokens or None)
     seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES: constitution_text(workspace)}
-    state = _rounds(args, known, ledger, seed)
-    tier = state.get(TIER)
-    whole = tier == "none" or (state.get(BRIEF_KEY) and state.get(DELTAS_KEY))
-    if tier is None or not whole or state.get(FAILURE):
-        failure = state.get(FAILURE) or "the run ended before its drafts were whole"
-        print(f"{PROG}: no change was written: {failure}", file=sys.stderr)
-        print(f"tokens    {_spent(ledger)}")
-        return EXIT_ENGINE
-    if tier == "none":
-        sized = read_triage(state)
-        print(f"no spec is owed: {sized if isinstance(sized, str) else sized.reason}")
-        print(f"tokens    {_spent(ledger)}")
-        return EXIT_OK
-    if why := state.get(UNWORDED):
-        print(f"note      the brief's open points were not put to you ({why}). They stay in the brief")
-    try:
-        change_id = _written(args, workspace, known, state, tier)
-    except WorkspaceError as exc:  # the calls are paid for by now: say so beside the refusal
-        print(f"{PROG}: no change was written: {exc}", file=sys.stderr)
-        print(f"tokens    {_spent(ledger)}")
-        return EXIT_USAGE
+    with _recording(workspace, "propose", args.id) as kept:
+        state = _rounds(args, known, ledger, kept.recorder, seed)
+        tier = state.get(TIER)
+        whole = tier == "none" or (state.get(BRIEF_KEY) and state.get(DELTAS_KEY))
+        if tier is None or not whole or state.get(FAILURE):
+            failure = state.get(FAILURE) or "the run ended before its drafts were whole"
+            kept.outcome = f"failed: {failure}"
+            print(f"{PROG}: no change was written: {failure}", file=sys.stderr)
+            print(f"tokens    {_spent(ledger)}")
+            return EXIT_ENGINE
+        if tier == "none":
+            sized = read_triage(state)
+            kept.outcome = "nothing owed"
+            print(f"no spec is owed: {sized if isinstance(sized, str) else sized.reason}")
+            print(f"tokens    {_spent(ledger)}")
+            return EXIT_OK
+        if why := state.get(UNWORDED):
+            print(f"note      the brief's open points were not put to you ({why}). They stay in the brief")
+        try:
+            kept.change = _written(args, workspace, known, state, tier)
+        except WorkspaceError as exc:  # the calls are paid for by now: say so beside the refusal
+            kept.outcome = f"failed: {exc}"
+            print(f"{PROG}: no change was written: {exc}", file=sys.stderr)
+            print(f"tokens    {_spent(ledger)}")
+            return EXIT_USAGE
+        kept.outcome = "written"
     print(f"tokens    {_spent(ledger)}")
-    loaded, found, stale = _assessed(workspace, change_id, specs)
+    loaded, found, stale = _assessed(workspace, kept.change, specs)
     print(f"next      {next_action(loaded.change.state, found, stale)}")
     return EXIT_OK
 
 
-def _rounds(args: argparse.Namespace, known: Any, ledger: Any, seed: dict[str, Any]) -> dict[str, Any]:
+def _rounds(args: argparse.Namespace, known: Any, ledger: Any, recorder: Any, seed: dict[str, Any]) -> dict[str, Any]:
     """The runs of one `propose`, and the state the last of them left, a failure of the engine's own under the
     gate's key: the first run, then one more for each round of questions. A run ends on its questions and the
     person answers here, between two runs. Run on the pinned engine: a run paused and resumed runs again, unseen,
@@ -574,7 +620,7 @@ def _rounds(args: argparse.Namespace, known: Any, ledger: Any, seed: dict[str, A
 
     entry, seed = first_run(args.tier, seed)
     while True:
-        app = build_propose_app(known, ask=not args.no_input, entry=entry, ledger=ledger)
+        app = build_propose_app(known, ask=not args.no_input, entry=entry, ledger=ledger, recorder=recorder)
         run = _ran(app, seed, "propose")
         state = {**run.state, FAILURE: run.state.get(FAILURE) or run.failure}
         if state[FAILURE] or state.get(ASKING) is None:
