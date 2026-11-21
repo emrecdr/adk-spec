@@ -91,9 +91,11 @@ def test_what_an_archive_waits_for() -> None:
         (DRAFT, [NO_BASE], ["approval"], "run `adk-spec rebase passkeys`"),
         (DRAFT, [NO_TASKS], ["approval"], "run `adk-spec plan passkeys`"),
         (DRAFT, [NO_TASKS, NO_BASE], ["approval"], "run `adk-spec plan passkeys`"),
-        (DRAFT, [NO_TASKS, MARKER], ["approval"], "fix what `adk-spec validate passkeys` lists"),
+        (DRAFT, [NO_TASKS, MARKER], ["approval"], "settle the open point in brief.md"),
+        (DRAFT, [MARKER, NO_TASKS, NO_BASE], ["approval"], "settle the open point in brief.md"),
+        (DRAFT, [ERROR, MARKER, NO_TASKS], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_TASKS, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
-        (DRAFT, [MARKER], ["approval"], "fix what `adk-spec validate passkeys` lists"),
+        (DRAFT, [MARKER], ["approval"], "settle the open point in brief.md"),
         (DRAFT, [OTHER], ["approval"], "run `adk-spec approve passkeys`"),
         (DRAFT, [], ["approval"], "run `adk-spec approve passkeys`"),
         (approved(), [], ["tasks.md"], "approve again: tasks.md changed since the approval"),
@@ -147,3 +149,34 @@ def test_a_draft_with_nothing_else_owed_is_sent_to_its_check_first() -> None:
     assert step == "fix what reports/check.md lists, then run `adk-spec check passkeys`"
     clean = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
     assert next_action(clean, [], ["approval"], check=check_blockers(clean, FILES)) == "run `adk-spec approve passkeys`"
+
+
+@pytest.mark.parametrize(
+    ("state", "findings", "actor"),
+    [
+        (DRAFT, [ERROR], "you"),
+        (DRAFT, [MARKER], "you"),
+        (DRAFT, [NO_TASKS], "run"),
+        (DRAFT, [NO_BASE], "run"),
+        (DRAFT, [], "you"),  # an approval is a person's decision
+        (approved(), [], "you"),  # the work itself
+        (approved("standard").model_copy(update={"status": "verified"}), [], "run"),
+        (approved().model_copy(update={"status": "archived"}), [], "done"),
+    ],
+)
+def test_each_next_step_says_who_takes_it(state, findings, actor) -> None:
+    from adk_spec.domain.lifecycle import next_step
+
+    stale = [] if state.approval else ["approval"]
+    step = next_step(state, findings, stale)
+    assert step.actor == actor and step.phrase == next_action(state, findings, stale)
+
+
+def test_a_check_that_is_owed_is_a_command_to_run_and_one_that_blocks_is_yours() -> None:
+    from adk_spec.domain.lifecycle import check_blockers, next_step
+    from adk_spec.domain.model import Checked
+
+    never = ChangeState(id="passkeys", tier="standard")
+    assert next_step(never, [], ["approval"], check=check_blockers(never, FILES)).actor == "run"
+    found = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=1)})
+    assert next_step(found, [], ["approval"], check=check_blockers(found, FILES)).actor == "you"

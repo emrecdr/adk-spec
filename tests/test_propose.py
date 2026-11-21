@@ -385,3 +385,14 @@ def test_the_brief_is_told_its_tier(tmp_path, fake_provider) -> None:
     told = [text.split("This change's tier is ")[1].split(".")[0] for text in briefs if text.startswith(BRIEF)]
     assert told == ["lean", "lean", "standard"]
     assert "On the lean tier no question is asked" in next(text for text in briefs if text.startswith(BRIEF))
+
+
+def test_propose_says_why_a_design_is_owed(tmp_path, capsys, fake_provider) -> None:
+    """Left by the first review: the reason was drafted, and shown to nobody."""
+    from conftest import CANNED_BRIEF
+
+    seeded(tmp_path)
+    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "design_needed": True, "design_reason": "It adds a dependency."})
+    assert proposed(tmp_path, "--tier", "lean", "--id", "designed") == 0
+    assert "design    owed: It adds a dependency." in capsys.readouterr().out
+    assert proposed(tmp_path, "--tier", "lean", "--id", "plain", request="Fix a typo in the sign-in page.") == 0

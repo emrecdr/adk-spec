@@ -8,7 +8,9 @@ task list is fingerprinted with every box empty.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Literal
 
 from .model import Approval, ChangeState, Delta, Finding, GrammarError, Spec
 from .spec_md import fingerprint
@@ -122,38 +124,63 @@ def archive_blockers(state: ChangeState, stale: Sequence[str]) -> list[str]:
     return []
 
 
+Actor = Literal["you", "run", "done"]
+
+
+@dataclass(frozen=True)
+class Step:
+    """What happens next with a change, and who makes it happen: `you` where it takes a person's work or decision,
+    `run` where it is one command, `done` where nothing is left."""
+
+    actor: Actor
+    phrase: str
+
+
+#: What holds a draft, the first that applies first: whether it does, who acts on it, and the phrase, in which
+#: `{cid}` is the change. An ERROR comes before everything, since the files it is in will change; an open point
+#: before the plan, since its answer shapes the tasks; the plan before the base, and the base before the check,
+#: which reads what the two leave.
+_HOLDS: tuple[tuple[Callable[[set[str], set[str], bool], bool], Actor, str], ...] = (
+    (lambda _codes, _check, errors: errors, "you", "fix what `adk-spec validate {cid}` lists"),
+    (lambda codes, _check, _errors: "brief.marker-unresolved" in codes, "you", "settle the open point in brief.md"),
+    (lambda codes, _check, _errors: "change.missing-tasks" in codes, "run", "run `adk-spec plan {cid}`"),
+    (lambda codes, _check, _errors: "delta.base-missing" in codes, "run", "run `adk-spec rebase {cid}`"),
+    (
+        lambda _codes, check, _errors: "check.blocking" in check,
+        "you",
+        "fix what reports/check.md lists, then run `adk-spec check {cid}`",
+    ),
+    (lambda _codes, check, _errors: bool(check), "run", "run `adk-spec check {cid}`"),
+)
+
+
+def next_step(
+    state: ChangeState, findings: Sequence[Finding], stale: Sequence[str], *, check: Sequence[Finding] = ()
+) -> Step:
+    """What happens next with a change, and who makes it happen. `check` is what `check_blockers` gives for it."""
+    cid = state.id
+    if state.status == "archived":
+        return Step("done", "nothing: archived")
+    errors = any(found.severity == "ERROR" for found in findings)
+    if state.status in ("approved", "verified"):
+        if stale:
+            return Step("you", f"approve again: {', '.join(stale)} changed since the approval")
+        if errors:  # a base that moved, a spec that no longer reads
+            return Step("you", f"fix what `adk-spec validate {cid}` lists")
+        if state.status == "verified":
+            return Step("run", f"run `adk-spec archive {cid}`")
+        last = "archive" if state.tier == "lean" else "verify"
+        return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
+    codes = {found.code for found in findings}
+    owed = {found.code for found in check}
+    for holds, actor, phrase in _HOLDS:
+        if holds(codes, owed, errors):
+            return Step(actor, phrase.format(cid=cid))
+    return Step("you", f"run `adk-spec approve {cid}`")
+
+
 def next_action(
     state: ChangeState, findings: Sequence[Finding], stale: Sequence[str], *, check: Sequence[Finding] = ()
 ) -> str:
-    """What a person does next with a change, in one phrase. `check` is what `check_blockers` gives for it."""
-    cid = state.id
-    if state.status == "archived":
-        return "nothing: archived"
-    if state.status in ("approved", "verified"):
-        if stale:
-            return f"approve again: {', '.join(stale)} changed since the approval"
-        if any(found.severity == "ERROR" for found in findings):  # a base that moved, a spec that no longer reads
-            return f"fix what `adk-spec validate {cid}` lists"
-        if state.status == "verified" or state.tier == "lean":
-            step = "run" if state.status == "verified" else "implement tasks.md, then run"
-            return f"{step} `adk-spec archive {cid}`"
-        return f"implement tasks.md, then run `adk-spec verify {cid}`"
-    return _next_of_a_draft(state, findings, check)
-
-
-def _next_of_a_draft(state: ChangeState, findings: Sequence[Finding], check: Sequence[Finding]) -> str:
-    cid = state.id
-    blockers = approve_blockers(state, findings)
-    errors = any(found.severity == "ERROR" for found in findings)
-    codes = {found.code for found in blockers}
-    if not errors and "change.missing-tasks" in codes and codes <= {"change.missing-tasks", "delta.base-missing"}:
-        return f"run `adk-spec plan {cid}`"
-    if not errors and any(found.code == "delta.base-missing" for found in blockers):
-        return f"run `adk-spec rebase {cid}`"
-    if blockers:
-        return f"fix what `adk-spec validate {cid}` lists"
-    if any(owed.code == "check.blocking" for owed in check):
-        return f"fix what reports/check.md lists, then run `adk-spec check {cid}`"
-    if check:
-        return f"run `adk-spec check {cid}`"
-    return f"run `adk-spec approve {cid}`"
+    """What a person does next with a change, in one phrase."""
+    return next_step(state, findings, stale, check=check).phrase

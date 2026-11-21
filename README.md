@@ -37,7 +37,8 @@ uv run adk-spec archive <id>
 - `init` makes `.spec/` with a config, a constitution to fill in, and the folders for specs and changes.
 - `new` starts a change: its folder and its state file. The tier is `lean`, `standard` or `strict`.
 - `validate` checks the structure of the living specs and of every open change. `--strict` fails on a warning too.
-- `status` lists each open change and what to do next with it.
+- `status` lists each open change and what to do next with it, in groups: `Waiting on you` (your work or your
+  decision), `Ready to run` (one command), and with `--all` `Done`.
 - `rebase` records the fingerprint each modified or removed requirement has in the living spec now.
 - `approve` records who approved, when, and the fingerprint of each file. A later edit voids it; ticking a task does
   not. The name is a recorded claim, not an authentication.

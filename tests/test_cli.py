@@ -67,7 +67,13 @@ def test_validate_json_is_the_findings_as_data(tmp_path, capsys) -> None:
 def test_status_names_the_next_step_of_each_change(tmp_path, capsys) -> None:
     seeded(tmp_path)
     assert run(tmp_path, "status", "--json") == 0
-    row = {"id": "passkeys", "tier": "lean", "status": "draft", "next": "run `adk-spec rebase passkeys`"}
+    row = {
+        "id": "passkeys",
+        "tier": "lean",
+        "status": "draft",
+        "actor": "run",
+        "next": "run `adk-spec rebase passkeys`",
+    }
     assert json.loads(capsys.readouterr().out) == {"changes": [row]}
     assert run(tmp_path, "status") == 0
     assert "passkeys" in (line := capsys.readouterr().out.strip()) and "run `adk-spec rebase passkeys`" in line
@@ -325,3 +331,24 @@ def test_the_installed_command_reads_what_a_person_types_as_utf8(monkeypatch) ->
     monkeypatch.setattr("sys.argv", ["adk-spec"])
     cli.run()
     assert sys.stdin.readline() == "twee\u00ebn\n"
+
+
+def test_status_groups_changes_by_who_acts_next(tmp_path, capsys) -> None:
+    """Borrowed from an overview that groups work as waiting on you, ready, and done: a list of every change in one
+    column makes a person read each line to find the ones that wait on them."""
+    ws = seeded(tmp_path)  # `passkeys`: a base is not recorded yet, so a command is ready to run
+    folder = ws.new_change("needs-you", "lean")
+    write_text(
+        folder / "brief.md", BRIEF.replace("Browsers in scope support WebAuthn.", "[NEEDS CLARIFICATION: which?]")
+    )
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0
+    out = capsys.readouterr().out
+    assert out.index("Waiting on you") < out.index("needs-you") < out.index("Ready to run") < out.index("passkeys  ")
+    assert "Done" not in out, "a group with no change is not printed"
+    approved(tmp_path)
+    assert run(tmp_path, "archive", "passkeys") == 0
+    capsys.readouterr()
+    assert run(tmp_path, "status", "--all") == 0
+    out = capsys.readouterr().out
+    assert out.index("Waiting on you") < out.index("Done") < out.index("passkeys  ") and "Ready to run" not in out

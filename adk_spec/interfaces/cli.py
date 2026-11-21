@@ -33,6 +33,7 @@ from ..domain.lifecycle import (
     capture_bases,
     check_blockers,
     next_action,
+    next_step,
 )
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import ChangeState, Checked, Finding, Spec, Tier, Verification
@@ -297,6 +298,10 @@ def _validate(args: argparse.Namespace) -> int:
     return EXIT_FINDINGS if stops else EXIT_OK
 
 
+#: How `status` groups changes: by who makes the next step happen.
+GROUPS = (("you", "Waiting on you"), ("run", "Ready to run"), ("done", "Done"))
+
+
 def _status(args: argparse.Namespace) -> int:
     workspace = _workspace(args)
     living, _found = workspace.specs()
@@ -306,16 +311,20 @@ def _status(args: argparse.Namespace) -> int:
         state = loaded.change.state
         if state.status == "archived" and not args.all:
             continue
-        step = next_action(state, found, stale, check=owed)
-        rows.append({"id": change_id, "tier": state.tier, "status": state.status, "next": step})
+        step = next_step(state, found, stale, check=owed)
+        row = {"id": change_id, "tier": state.tier, "status": state.status, "actor": step.actor, "next": step.phrase}
+        rows.append(row)
     if args.json:
         print(json.dumps({"changes": rows}, indent=2))
     elif not rows:
         print(f"no open changes: run {PROG} new <id>")
     else:
         width = max(len(row["id"]) for row in rows)
-        for row in rows:
-            print(f"{row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
+        groups = [(heading, [row for row in rows if row["actor"] == actor]) for actor, heading in GROUPS]
+        for at, (heading, held) in enumerate(group for group in groups if group[1]):
+            print(("\n" if at else "") + heading)
+            for row in held:
+                print(f"  {row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
     return EXIT_OK
 
 
@@ -937,6 +946,8 @@ def _written(args: argparse.Namespace, workspace: Workspace, known: Any, state: 
     print(f"wrote     {workspace.shown(folder)}, a {tier} draft")
     for path in files:
         print(f"          {workspace.shown(folder)}/{path}")
+    if made.needs_design:
+        print(f"design    owed: {_plain(made.design_reason) or 'the brief gives no reason'}")
     return change_id
 
 

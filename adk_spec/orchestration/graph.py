@@ -79,6 +79,8 @@ class Drafted:
     brief: Brief
     deltas: dict[str, Delta]
     needs_design: bool
+    #: Why the brief says a design is owed, in a sentence. Shown to the person; nothing is decided by it.
+    design_reason: str
 
 
 def _errors(findings: list[Finding]) -> list[str]:
@@ -95,7 +97,7 @@ def drafted(state: Mapping[str, Any], known: Known) -> Drafted:
     checked is what the command writes."""
     draft = BriefDraft.model_validate(state[brief_stage.KEY])
     deltas = to_deltas(DeltasDraft.model_validate(state[deltas_stage.KEY]), known.living, known.taken)
-    return Drafted(to_brief(draft), deltas, draft.design_needed)
+    return Drafted(to_brief(draft), deltas, draft.design_needed, " ".join(draft.design_reason.split()))
 
 
 def first_run(tier: Tier | None, seed: Mapping[str, Any]) -> tuple[Entry, dict[str, Any]]:
