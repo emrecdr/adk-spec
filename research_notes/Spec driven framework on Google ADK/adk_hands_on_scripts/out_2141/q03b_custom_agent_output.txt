@@ -1,0 +1,10 @@
+--- TextOnly
+  [01] author='wf' | node_path='wf@1/upstream@1' | output={'spec': 'spec'}
+  [02] author='gate' | node_path='wf@1/gate@1' | text='verdict as text'
+    downstream got node_input=None
+  [03] author='wf' | node_path='wf@1/downstream@1' | output='done'
+--- WithOutput
+  [01] author='wf' | node_path='wf@1/upstream@1' | output={'spec': 'spec'}
+  [02] author='gate' | node_path='wf@1/gate@1' | output={'ok': True, 'missing': []}
+    downstream got node_input={'ok': True, 'missing': []}
+  [03] author='wf' | node_path='wf@1/downstream@1' | output='done'

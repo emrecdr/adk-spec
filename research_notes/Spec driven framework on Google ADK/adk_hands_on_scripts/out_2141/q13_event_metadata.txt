@@ -1,0 +1,20 @@
+--- event 1 (wf@1/writer@1) top-level keys: ['actions', 'author', 'content', 'id', 'invocation_id', 'model_version', 'node_info', 'timestamp', 'usage_metadata']
+    usage_metadata: {'candidates_token_count': 7, 'prompt_token_count': 11, 'total_token_count': 18}
+    model_version: fake-model-001
+    timestamp: 1795231656.493057
+    invocation_id: e-8e13ee9f-13dc-4914-bc81-5b052b20a8bc
+    id: 1ba7b8c8-52c1-43d9-a578-91f6db5799a5
+    node_info: {'path': 'wf@1/writer@1', 'output_for': ['wf@1/writer@1'], 'message_as_output': True}
+--- event 2 (wf@1/after@1) top-level keys: ['actions', 'author', 'id', 'invocation_id', 'node_info', 'output', 'timestamp']
+    timestamp: 1795231656.5028281
+    invocation_id: e-8e13ee9f-13dc-4914-bc81-5b052b20a8bc
+    id: ec24200b-b862-4acb-a27a-f94b10dfeadc
+    node_info: {'path': 'wf@1/after@1', 'output_for': ['wf@1/after@1', 'wf@1']}
+
+per-event wall-clock timestamps (epoch seconds): [1795231656.4246, 1795231656.4931, 1795231656.5028]
+deltas between consecutive events (ms): [68.49, 9.77]
+duration fields on Event: none
+
+--- same run, model returns NO usage metadata
+Skipping missing token usage metadata for agent writer and model fake-model
+    usage_metadata on the agent event: None

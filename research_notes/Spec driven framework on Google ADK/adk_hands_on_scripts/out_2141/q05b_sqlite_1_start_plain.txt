@@ -1,0 +1,7 @@
+--- process 4220 START (resumable=False)
+  [01] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | state_delta={'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}
+  [02] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login page\n## Requirements\n- R1\n'
+  [03] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='c193ac74-6560-46ff-9cd6-b04062c56dc0', args={'interruptId': 'c193ac74-6560-46ff-9cd6-b04062c56dc0', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n...) | long_running_tool_ids=['c193ac74-6560-46ff-9cd6-b04062c56dc0']
+  node bodies executed in this process: ['write_spec', 'approve_spec']
+  paused; handoff file written: q05_handoff_plain.json -> {"session_id": "f4635541-bc31-4fe5-97e3-d2e2ca389777", "interrupt_id": "c193ac74-6560-46ff-9cd6-b04062c56dc0", "pid": 4220, "invocation_id": "e-a3be92ab-da6e-470f-9325-154bfe3db741"}
+  sqlite file: q05_sessions_plain.db (36864 bytes)

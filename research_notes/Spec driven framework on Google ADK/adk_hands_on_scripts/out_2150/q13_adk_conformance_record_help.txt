@@ -1,0 +1,27 @@
+Usage: adk conformance record [OPTIONS] [PATHS]... {none|sse|bidi}
+
+  Generate ADK conformance test recordings from spec.yaml files.
+
+  NOTE: this is work in progress.
+
+  This command reads TestSpec specifications from spec.yaml files, executes
+  the specified test cases against agents, and writes the recorded agent
+  interactions next to each spec.yaml.
+
+  Expected directory structure: category/name/spec.yaml (TestSpec) ->
+  category/name/generated-recordings.yaml and category/name/generated-
+  session.yaml ('-sse' suffix in sse mode)
+
+  PATHS: One or more directories containing test case specifications. If no
+  paths are provided, defaults to 'tests/' directory.
+
+  STREAMING_MODE: The streaming mode to record in: none or sse.
+
+  Examples:
+
+  Use default directory: adk conformance record none
+
+  Custom directories: adk conformance record tests/core tests/tool sse
+
+Options:
+  --help  Show this message and exit.

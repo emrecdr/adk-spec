@@ -1,0 +1,49 @@
+### without the mcp package (google-adk 2.14.1, litellm 1.106.2)
+--- claude-sonnet-5.5, disable_copilot_system_to_assistant=True: answered text='{"tier":"lean","capabilities":["auth"],"reason":"small"}' total_tokens=120
+  url: https://copilot.invalid/chat/completions
+  message roles: ['system', 'user'] | instructions: None
+  body keys: {'messages': 'list', 'model': 'claude-sonnet-5.5'}
+  schema carrier: response_format | {"type": "json_schema", "json_schema": {"name": "Triage", "strict": true, "schema": {"description": "How much ceremony a change request needs.", "properties": {"tier": {"
+--- claude-sonnet-5.5, disable_copilot_system_to_assistant=False: answered text='{"tier":"lean","capabilities":["auth"],"reason":"small"}' total_tokens=120
+  url: https://copilot.invalid/chat/completions
+  message roles: ['assistant', 'user'] | instructions: None
+  body keys: {'messages': 'list', 'model': 'claude-sonnet-5.5'}
+  schema carrier: response_format | {"type": "json_schema", "json_schema": {"name": "Triage", "strict": true, "schema": {"description": "How much ceremony a change request needs.", "properties": {"tier": {"
+--- gpt-5.3-codex, disable_copilot_system_to_assistant=True: RAISED APIConnectionError: "litellm.APIConnectionError: APIConnectionError: Github_copilotException - No module named 'mcp'"
+--- gpt-6-luna, disable_copilot_system_to_assistant=True: RAISED APIConnectionError: "litellm.APIConnectionError: APIConnectionError: Github_copilotException - No module named 'mcp'"
+=== LiteLLM logger
+propagate: True | handlers: ['LevelRoutingStreamHandler'] | level: 0
+python: 3.14.10
+
+### with mcp 2.3.0 installed beside them
+--- claude-sonnet-5.5, disable_copilot_system_to_assistant=True: answered text='{"tier":"lean","capabilities":["auth"],"reason":"small"}' total_tokens=120
+  url: https://copilot.invalid/chat/completions
+  message roles: ['system', 'user'] | instructions: None
+  body keys: {'messages': 'list', 'model': 'claude-sonnet-5.5'}
+  schema carrier: response_format | {"type": "json_schema", "json_schema": {"name": "Triage", "strict": true, "schema": {"description": "How much ceremony a change request needs.", "properties": {"tier": {"
+--- claude-sonnet-5.5, disable_copilot_system_to_assistant=False: answered text='{"tier":"lean","capabilities":["auth"],"reason":"small"}' total_tokens=120
+  url: https://copilot.invalid/chat/completions
+  message roles: ['assistant', 'user'] | instructions: None
+  body keys: {'messages': 'list', 'model': 'claude-sonnet-5.5'}
+  schema carrier: response_format | {"type": "json_schema", "json_schema": {"name": "Triage", "strict": true, "schema": {"description": "How much ceremony a change request needs.", "properties": {"tier": {"
+--- gpt-5.3-codex, disable_copilot_system_to_assistant=True: answered text='{"tier":"lean","capabilities":["auth"],"reason":"small"}' total_tokens=120
+  url: https://copilot.invalid/responses
+  message roles: None | instructions: 'You size a change request.'
+  body keys: {'model': 'gpt-5.3-codex', 'input': 'list', 'instructions': 'You size a change request.'}
+  schema carrier: text | {"format": {"type": "json_schema", "name": "Triage", "schema": {"description": "How much ceremony a change request needs.", "properties": {"tier": {"description": "The sm
+--- gpt-6-luna, disable_copilot_system_to_assistant=True: answered text='{"tier":"lean","capabilities":["auth"],"reason":"small"}' total_tokens=120
+  url: https://copilot.invalid/responses
+  message roles: None | instructions: 'You size a change request.'
+  body keys: {'model': 'gpt-6-luna', 'input': 'list', 'instructions': 'You size a change request.'}
+  schema carrier: text | {"format": {"type": "json_schema", "name": "Triage", "schema": {"description": "How much ceremony a change request needs.", "properties": {"tier": {"description": "The sm
+=== LiteLLM logger
+propagate: True | handlers: ['LevelRoutingStreamHandler'] | level: 0
+python: 3.14.10
+
+### cause, litellm 1.106.2 responses/main.py lines 1066-1070: the handler is imported before skip_mcp_handler is read
+    """Return a response when MCP gateway handles the call; otherwise None."""
+    from litellm.responses.mcp.litellm_proxy_mcp_handler import (
+        LiteLLM_Proxy_MCP_Handler,
+    )
+
+    if skip_mcp_handler or not LiteLLM_Proxy_MCP_Handler.should_use_litellm_mcp_gateway(tools=tools):

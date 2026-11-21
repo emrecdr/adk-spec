@@ -1,0 +1,61 @@
+python      : 3.14.10 (main, Oct 25 2026, 17:12:00) [Clang 21.0.0 (clang-2100.3.34.2)]
+platform    : macOS-26.5.1-arm64-arm-64bit-Mach-O arm64
+import ok   : google.adk
+import ok   : google.adk.agents
+import ok   : google.adk.agents.llm_agent
+import ok   : google.adk.agents.base_agent
+import ok   : google.adk.agents.sequential_agent
+import ok   : google.adk.agents.loop_agent
+import ok   : google.adk.agents.parallel_agent
+import ok   : google.adk.workflow
+import ok   : google.adk.workflow._workflow
+import ok   : google.adk.workflow._function_node
+import ok   : google.adk.runners
+import ok   : google.adk.apps
+import ok   : google.adk.events
+import ok   : google.adk.plugins
+import ok   : google.adk.tools
+import ok   : google.adk.tools.function_tool
+import ok   : google.adk.sessions
+import ok   : google.adk.sessions.sqlite_session_service
+import ok   : google.adk.artifacts
+import ok   : google.adk.models
+import ok   : google.adk.models.base_llm
+import ok   : google.adk.evaluation
+import ok   : google.adk.cli.cli_tools_click
+
+warnings raised during imports: 0
+
+google.adk.__version__ : 2.14.1
+  google-adk              2.14.1
+  google-genai            2.34.0
+  pydantic                2.14.4
+  pydantic-core           2.50.5
+  fastapi                 0.165.0
+  starlette               1.10.0
+  uvicorn                 0.54.0
+  aiosqlite               0.22.1
+  opentelemetry-api       1.45.2
+  opentelemetry-sdk       1.45.2
+  google-auth             2.62.2
+  authlib                 1.9.10
+  click                   8.5.1
+  httpx                   0.28.1
+  tenacity                9.1.4
+  typing-extensions       4.16.0
+  jsonschema              4.26.0
+  graphviz                0.21
+  pyyaml                  6.0.3
+  websockets              15.0.1
+  watchdog                6.0.0
+  pytest                  9.2.0
+  pytest-asyncio          1.5.0
+  sqlalchemy              NOT INSTALLED (not a core dependency)
+  litellm                 NOT INSTALLED (not a core dependency)
+  mcp                     NOT INSTALLED (not a core dependency)
+  anthropic               NOT INSTALLED (not a core dependency)
+  google-cloud-aiplatform NOT INSTALLED (not a core dependency)
+
+requires-python: >=3.11
+classifiers py : ['Only', '3.11', '3.12', '3.13', '3.14', '3.15']
+extras         : ['a2a', 'agent-identity', 'all', 'antigravity', 'benchmark', 'bigquery-analytics', 'community', 'daytona', 'db', 'dev', 'docs', 'e2b', 'elevenlabs', 'eval', 'extensions', 'fsspec', 'gcp', 'livekit', 'mcp', 'mongodb', 'oci', 'openai', 'opensandbox', 'otel', 'otel-gcp', 'redis', 'slack', 'teams', 'test', 'toolbox', 'tools']

@@ -1,0 +1,416 @@
+Node execution failed with exception
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
+    await self._execute_node(ctx, node_input)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
+    await self._run_node_loop(ctx, node_input)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 437, in _run_node_loop
+    async for event in agen:
+    ...<8 lines>...
+        break
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_base_node.py", line 213, in run
+    item = await anext(agen, _sentinel)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 690, in _run_impl
+    async for event in agen:
+    ...<4 lines>...
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_llm_agent_wrapper.py", line 491, in run_llm_agent_as_node
+    async for event in run_iter:
+      process_llm_agent_output(effective_agent, ctx, event)
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 374, in run_async
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 476, in _run_with_lifecycle
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/telemetry/_instrumentation.py", line 169, in stream_in_scope
+    item = await _drive(owned.__anext__())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/telemetry/_instrumentation.py", line 157, in _drive
+    return await step
+           ^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 439, in _run
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 640, in _run_async_impl
+    self.__maybe_save_output_to_state(event)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 1144, in __maybe_save_output_to_state
+    result = validate_schema(self.output_schema, result)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/utils/_schema_utils.py", line 260, in validate_schema
+    return model.model_validate_json(json_text).model_dump(exclude_none=True)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/pydantic/main.py", line 847, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        json_data, strict=strict, extra=extra, context=context, by_alias=by_alias, by_name=by_name
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Triage
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Sure! It is lean.', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.14/v/json_invalid
+Root node adk_spec failed.
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 267, in _drive_root_node
+    await root_ctx._run_node_internal(  # pylint: disable=protected-access
+    ...<3 lines>...
+    )
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 521, in _run_node_internal
+    return await _dynamic_node_scheduler.run_node_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+    )
+    ^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_dynamic_node_scheduler.py", line 846, in run_node_internal
+    raise DynamicNodeFailError(
+    ...<3 lines>...
+    )
+google.adk.workflow._errors.DynamicNodeFailError: Dynamic node adk_spec failed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/runners.py", line 873, in _cleanup_root_task
+    await task
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 276, in _drive_root_node
+    raise e.error
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
+    await self._execute_node(ctx, node_input)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
+    await self._run_node_loop(ctx, node_input)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 437, in _run_node_loop
+    async for event in agen:
+    ...<8 lines>...
+        break
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_base_node.py", line 213, in run
+    item = await anext(agen, _sentinel)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 690, in _run_impl
+    async for event in agen:
+    ...<4 lines>...
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_llm_agent_wrapper.py", line 491, in run_llm_agent_as_node
+    async for event in run_iter:
+      process_llm_agent_output(effective_agent, ctx, event)
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 374, in run_async
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 476, in _run_with_lifecycle
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/telemetry/_instrumentation.py", line 169, in stream_in_scope
+    item = await _drive(owned.__anext__())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/telemetry/_instrumentation.py", line 157, in _drive
+    return await step
+           ^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 439, in _run
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 640, in _run_async_impl
+    self.__maybe_save_output_to_state(event)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 1144, in __maybe_save_output_to_state
+    result = validate_schema(self.output_schema, result)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/utils/_schema_utils.py", line 260, in validate_schema
+    return model.model_validate_json(json_text).model_dump(exclude_none=True)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/pydantic/main.py", line 847, in model_validate_json
+    return cls.__pydantic_validator__.validate_json(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        json_data, strict=strict, extra=extra, context=context, by_alias=by_alias, by_name=by_name
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Triage
+  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Sure! It is lean.', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.14/v/json_invalid
+Node execution failed with exception
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
+    await self._execute_node(ctx, node_input)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
+    await self._run_node_loop(ctx, node_input)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 437, in _run_node_loop
+    async for event in agen:
+    ...<8 lines>...
+        break
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_base_node.py", line 213, in run
+    item = await anext(agen, _sentinel)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 690, in _run_impl
+    async for event in agen:
+    ...<4 lines>...
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_llm_agent_wrapper.py", line 491, in run_llm_agent_as_node
+    async for event in run_iter:
+      process_llm_agent_output(effective_agent, ctx, event)
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 374, in run_async
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 476, in _run_with_lifecycle
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/telemetry/_instrumentation.py", line 169, in stream_in_scope
+    item = await _drive(owned.__anext__())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/telemetry/_instrumentation.py", line 157, in _drive
+    return await step
+           ^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 439, in _run
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 639, in _run_async_impl
+    async for event in agen:
+    ...<8 lines>...
+        should_pause = True
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 298, in run_async
+    async for event in agen:
+    ...<3 lines>...
+        break
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 345, in _run_one_step_async
+    async for event in agen:
+    ...<2 lines>...
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 452, in _preprocess_async
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions.py", line 166, in run_async
+    await _build_instructions(invocation_context, llm_request)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions.py", line 144, in _build_instructions
+    si = await _process_agent_instruction(agent, invocation_context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions.py", line 90, in _process_agent_instruction
+    si = await instructions_utils.inject_session_state(
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        raw_si, ReadonlyContext(invocation_context)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions_utils.py", line 118, in inject_session_state
+    return await _render_with_regex(template, readonly_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions_utils.py", line 199, in _render_with_regex
+    return await _async_sub(_TEMPLATE_VAR_PATTERN, _replace_match, template)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions_utils.py", line 144, in _async_sub
+    replacement = await repl_async_fn(match)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions_utils.py", line 194, in _replace_match
+    raise KeyError(
+    ...<2 lines>...
+    )
+KeyError: "Context variable not found: `request` in agent 'triage'."
+Root node adk_spec failed.
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 267, in _drive_root_node
+    await root_ctx._run_node_internal(  # pylint: disable=protected-access
+    ...<3 lines>...
+    )
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 521, in _run_node_internal
+    return await _dynamic_node_scheduler.run_node_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<12 lines>...
+    )
+    ^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_dynamic_node_scheduler.py", line 846, in run_node_internal
+    raise DynamicNodeFailError(
+    ...<3 lines>...
+    )
+google.adk.workflow._errors.DynamicNodeFailError: Dynamic node adk_spec failed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/runners.py", line 873, in _cleanup_root_task
+    await task
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 276, in _drive_root_node
+    raise e.error
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
+    await self._execute_node(ctx, node_input)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
+    await self._run_node_loop(ctx, node_input)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 437, in _run_node_loop
+    async for event in agen:
+    ...<8 lines>...
+        break
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_base_node.py", line 213, in run
+    item = await anext(agen, _sentinel)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 690, in _run_impl
+    async for event in agen:
+    ...<4 lines>...
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/workflow/_llm_agent_wrapper.py", line 491, in run_llm_agent_as_node
+    async for event in run_iter:
+      process_llm_agent_output(effective_agent, ctx, event)
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 374, in run_async
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 476, in _run_with_lifecycle
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/telemetry/_instrumentation.py", line 169, in stream_in_scope
+    item = await _drive(owned.__anext__())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/telemetry/_instrumentation.py", line 157, in _drive
+    return await step
+           ^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/base_agent.py", line 439, in _run
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/agents/llm_agent.py", line 639, in _run_async_impl
+    async for event in agen:
+    ...<8 lines>...
+        should_pause = True
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 298, in run_async
+    async for event in agen:
+    ...<3 lines>...
+        break
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 345, in _run_one_step_async
+    async for event in agen:
+    ...<2 lines>...
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 452, in _preprocess_async
+    async for event in agen:
+      yield event
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions.py", line 166, in run_async
+    await _build_instructions(invocation_context, llm_request)
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions.py", line 144, in _build_instructions
+    si = await _process_agent_instruction(agent, invocation_context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions.py", line 90, in _process_agent_instruction
+    si = await instructions_utils.inject_session_state(
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        raw_si, ReadonlyContext(invocation_context)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions_utils.py", line 118, in inject_session_state
+    return await _render_with_regex(template, readonly_context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions_utils.py", line 199, in _render_with_regex
+    return await _async_sub(_TEMPLATE_VAR_PATTERN, _replace_match, template)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions_utils.py", line 144, in _async_sub
+    replacement = await repl_async_fn(match)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/plan-probe/.venv/lib/python3.14/site-packages/google/adk/flows/llm_flows/prompt/_instructions_utils.py", line 194, in _replace_match
+    raise KeyError(
+    ...<2 lines>...
+    )
+KeyError: "Context variable not found: `request` in agent 'triage'."
+
+=== 1. LiteLlm keeps extra keywords
+model.model: github_copilot/gpt-5.3-codex
+_additional_args: {'max_retries': 2, '_skip_mcp_handler': True}
+
+=== 2. LiteLLM 1.106.2 bundled map: Copilot candidates
+  gpt-5.3-codex: {'mode': 'responses', 'supports_response_schema': True, 'supports_reasoning': True, 'max_input_tokens': 128000, 'supported_endpoints': ['/v1/responses']}
+  claude-sonnet-5.5: {'mode': 'chat', 'supports_response_schema': True, 'supports_reasoning': True, 'max_input_tokens': 200000, 'supported_endpoints': ['/v1/chat/completions', '/v1/messages']}
+  gpt-6-luna: {'mode': 'responses', 'supports_response_schema': True, 'supports_reasoning': True, 'max_input_tokens': 272000, 'supported_endpoints': ['/v1/responses']}
+  claude-haiku-5.5: {'mode': 'chat', 'supports_response_schema': True, 'supports_reasoning': True, 'max_input_tokens': 128000, 'supported_endpoints': ['/v1/chat/completions', '/v1/messages']}
+  gpt-6.1-terra: NOT IN MAP
+  gpt-4.1: {'mode': 'chat', 'supports_response_schema': True, 'supports_reasoning': None, 'max_input_tokens': 128000, 'supported_endpoints': None}
+  gpt-99-none: NOT IN MAP
+  copilot entries: 49
+  disable_copilot_system_to_assistant default: False
+
+=== 3. FallbackModel
+DEFAULT_STATUS_CODES: [429, 500, 502, 503, 504]
+retriable_status_codes attr: [408, 429, 500, 502, 503, 504]
+
+=== 4. Strict schema as ADK writes it for the Copilot arm
+{
+ "type": "json_schema",
+ "json_schema": {
+  "name": "Triage",
+  "strict": true,
+  "schema": {
+   "description": "How much ceremony a change request needs.",
+   "properties": {
+    "tier": {
+     "description": "The smallest tier that fits.",
+     "enum": [
+      "none",
+      "lean",
+      "standard",
+      "strict"
+     ],
+     "title": "Tier",
+     "type": "string"
+    },
+    "capabilities": {
+     "description": "Kebab-case capability slugs the request touches.",
+     "items": {
+      "type": "string"
+     },
+     "title": "Capabilities",
+     "type": "array"
+    },
+    "reason": {
+     "description": "One sentence: why this tier.",
+     "title": "Reason",
+     "type": "string"
+    }
+   },
+   "required": [
+    "capabilities",
+    "reason",
+    "tier"
+   ],
+   "title": "Triage",
+   "type": "object",
+   "additionalProperties": false
+  }
+ }
+}
+
+=== 5. What ADK passes LiteLLM when the request carries no temperature
+kwargs (less messages/response_format): {'model': 'github_copilot/gpt-5.3-codex', 'tools': None, 'max_retries': 2, '_skip_mcp_handler': True, 'timeout': 180.0}
+has temperature key: False | response_format type: json_schema
+usage on response: cache_tokens_details=None cached_content_token_count=0 candidates_token_count=20 candidates_tokens_details=None prompt_token_count=100 prompt_tokens_details=None thoughts_token_count=None tool_use_prompt_token_count=None tool_use_prompt_tokens_details=None total_token_count=120 traffic_type=None
+
+=== 6. One schema-bound LlmAgent in a Workflow, fake model through the registry, seeded state
+valid reply, request with braces in it:
+  state.triage: {'tier': 'lean', 'capabilities': ['auth'], 'reason': 'one small change'} | errors: {} | usage: [('triage', 120)] | failure: None
+  system_instruction: 'Size the request.\n<<< request abc\nAdd login {with braces} and a `{placeholder}`\n>>> request abc\nKnown capabilities: auth, billing'
+  contents: [('user', ['triage'])]
+  response_schema: <class '__main__.Triage'> | mime: application/json | temperature: None
+valid reply, optional key missing:
+  state.triage: {'tier': 'lean', 'capabilities': ['auth'], 'reason': 'one small change'} | errors: {} | usage: [('triage', 120)] | failure: None
+  system_instruction: 'Size the request.\n<<< request abc\nAdd login\n>>> request abc\nKnown capabilities: '
+  contents: [('user', ['triage'])]
+  response_schema: <class '__main__.Triage'> | mime: application/json | temperature: None
+reply that is not JSON:
+  state.triage: None | errors: {'adk_spec': 'ValidationError: 1 validation error for Triage\n  Invalid JSON: expected value at line 1 column 1 [type=json'} | usage: [] | failure: ValidationError: '1 validation error for Triage\n  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_valu'
+  system_instruction: 'Size the request.\n<<< request abc\nAdd login\n>>> request abc\nKnown capabilities: '
+  contents: [('user', ['triage'])]
+  response_schema: <class '__main__.Triage'> | mime: application/json | temperature: None
+required key missing from state:
+  state.triage: None | errors: {'adk_spec': 'KeyError: "Context variable not found: `request` in agent \'triage\'."'} | usage: [] | failure: KeyError: '"Context variable not found: `request` in agent \'triage\'."'
+
+=== 7. Reserved names, asked on this platform through ntpath
+  'con': True
+  'CON': True
+  'nul.md': True
+  'aux': True
+  'com1': True
+  'auth': False
+  'auth.': True
+  'auth ': True
+  'a:b': False
+  'CONIN$': True
+
+=== 8. LLMRegistry.resolve on names the Gemini arm must refuse
+  gemini-3.8-flash: Gemini
+  gemini-4-hydrogen: Gemini
+  gpt-5.3-codex: OpenAILlm
+  fake: FakeModel
+  claude-sonnet-5.5: ValueError: Model claude-sonnet-5.5 not found.

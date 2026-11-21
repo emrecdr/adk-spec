@@ -1,0 +1,25 @@
+=== (i) from google.adk.sessions import DatabaseSessionService (sqlalchemy not installed)
+  RAISED ImportError: The 'sqlalchemy' package is required to use this feature. Please install it by running: pip install google-adk[db]
+
+=== (ii) resume a paused Workflow with invocation_id only, no new_message (resumable=False)
+  paused with interrupt 686c9c02..., invocation e-188e7b6f-7493-4be9-aa52-11257855e4ed
+--- run_async(user_id, session_id, invocation_id=<paused id>)
+  -> 0 events; still waiting on the same interrupt: False
+
+=== (ii) resume a paused Workflow with invocation_id only, no new_message (resumable=True)
+  paused with interrupt 249b828a..., invocation e-d89af8b5-69b2-46aa-b065-80513656e2e3
+--- run_async(user_id, session_id, invocation_id=<paused id>)
+  [01] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login\n## Requirements\n- R1\n'
+  [02] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 4, 'interrup...
+  -> 2 events; still waiting on the same interrupt: False
+
+=== (iii) approval gate inside a dynamic workflow (no App, no resumability config)
+--- run 1
+  [01] author='dyn_gate' | node_path='dyn_gate@1/orchestrator@1/write@1' | output='# Spec: Login'
+  [02] author='dyn_gate' | node_path='dyn_gate@1/orchestrator@1/approve@1' | function_call=adk_request_input(id='c168dcbc-2b2a-4b94-bbc7-03a5678d543d', args={'interruptId': 'c168dcbc-2b2a-4b94-bbc7-03a5678d543d', 'payload': '# Spec: Login', 'message': 'Approve this spec? (y...) | long_running_tool_ids=['c168dcbc-2b2a-4b94-bbc7-03a5678d543d']
+  bodies executed in run 1: ['orchestrator', 'write', 'approve']
+--- run 2 (resume, answer 'yes')
+    orchestrator: approve returned 'yes'
+  [01] author='dyn_gate' | node_path='dyn_gate@1/orchestrator@1/make_plan@1' | output='PLAN for # Spec: Login'
+  [02] author='dyn_gate' | node_path='dyn_gate@1/orchestrator@1' | output='PLAN for # Spec: Login'
+  bodies executed in run 2: ['orchestrator', 'make_plan']

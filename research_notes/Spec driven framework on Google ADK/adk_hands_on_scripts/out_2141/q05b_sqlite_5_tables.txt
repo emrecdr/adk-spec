@@ -1,0 +1,2 @@
+tables: ['app_states', 'events', 'sessions', 'user_states']
+events rows: 7

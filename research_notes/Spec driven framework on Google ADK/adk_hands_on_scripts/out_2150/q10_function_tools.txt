@@ -1,0 +1,165 @@
+python 3.14.10
+raw __annotations__ of save_spec (plain module)  : {'filename': 'str', 'markdown': 'str', 'tags': 'list', 'reviewer': 'Union'} ...
+raw __annotations__ of save_spec (future module) : {'filename': 'str', 'markdown': 'str', 'tags': 'list[str]', 'reviewer': 'str | None'} ...
+
+=== declaration for save_spec (module WITHOUT the future import)
+{
+ "description": "Saves a spec as markdown.\n\nArgs:\n  filename: Name of the spec file, for example \"spec.md\".\n  markdown: The markdown body.\n  tags: Free-form labels.\n  reviewer: Reviewer login, or null when unassigned.\n  task: The task this spec belongs to.\n  section: Optional section heading.\n  priority: Priority of the spec.\n  mode: Whether this is a draft or the final version.\n  max_versions: How many versions to keep.\n\nReturns:\n  dict with \"status\" and \"received\" (what the function actually got).",
+ "name": "save_spec",
+ "parameters_json_schema": {
+  "$defs": {
+   "Priority": {
+    "enum": [
+     "low",
+     "high"
+    ],
+    "title": "Priority",
+    "type": "string"
+   },
+   "TaskSpec": {
+    "description": "A task to add to the plan.",
+    "properties": {
+     "title": {
+      "description": "Short task title",
+      "title": "Title",
+      "type": "string"
+     },
+     "estimate_hours": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "title": "Estimate Hours"
+     },
+     "labels": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Labels",
+      "type": "array"
+     }
+    },
+    "required": [
+     "title"
+    ],
+    "title": "TaskSpec",
+    "type": "object"
+   }
+  },
+  "properties": {
+   "filename": {
+    "title": "Filename",
+    "type": "string"
+   },
+   "markdown": {
+    "title": "Markdown",
+    "type": "string"
+   },
+   "tags": {
+    "items": {
+     "type": "string"
+    },
+    "title": "Tags",
+    "type": "array"
+   },
+   "reviewer": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "title": "Reviewer"
+   },
+   "task": {
+    "$ref": "#/$defs/TaskSpec"
+   },
+   "section": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ],
+    "default": null,
+    "title": "Section"
+   },
+   "priority": {
+    "$ref": "#/$defs/Priority",
+    "default": "low"
+   },
+   "mode": {
+    "default": "draft",
+    "enum": [
+     "draft",
+     "final"
+    ],
+    "title": "Mode",
+    "type": "string"
+   },
+   "max_versions": {
+    "default": 5,
+    "title": "Max Versions",
+    "type": "integer"
+   }
+  },
+  "required": [
+   "filename",
+   "markdown",
+   "tags",
+   "reviewer",
+   "task"
+  ],
+  "title": "save_specParams",
+  "type": "object"
+ }
+}
+
+=== declaration for list_tasks (module WITHOUT the future import)
+{
+ "description": "Lists tasks for the given specs.",
+ "name": "list_tasks",
+ "parameters_json_schema": {
+  "properties": {
+   "spec_ids": {
+    "items": {
+     "type": "string"
+    },
+    "title": "Spec Ids",
+    "type": "array"
+   },
+   "include_done": {
+    "default": false,
+    "title": "Include Done",
+    "type": "boolean"
+   }
+  },
+  "required": [
+   "spec_ids"
+  ],
+  "title": "list_tasksParams",
+  "type": "object"
+ }
+}
+
+=== save_spec: declaration with `from __future__ import annotations` identical to plain: True
+
+=== list_tasks: declaration with `from __future__ import annotations` identical to plain: True
+
+=== invoke save_spec through an agent (plain module); model-supplied args={'filename': 'spec.md', 'markdown': '# S', 'tags': ['a', 'b'], 'reviewer': None, 'task': {'title': 'Login', 'estimate_hours': 2}, 'priority': 'high', 'mode': 'final'}
+  tool returned: {"status": "success", "received": {"task_type": "TaskSpec", "task": {"title": "Login", "estimate_hours": 2.0, "labels": []}, "tags_type": "list", "reviewer": null, "priority_type": "Priority", "priority": "Priority.HIGH", "has_tool_context": true, "mode": "final", "section": null}}
+  declarations sent to the model: ['save_spec']
+
+=== invoke save_spec through an agent (future module); model-supplied args={'filename': 'spec.md', 'markdown': '# S', 'tags': ['a', 'b'], 'reviewer': None, 'task': {'title': 'Login', 'estimate_hours': 2}, 'priority': 'high', 'mode': 'final'}
+  tool returned: {"status": "success", "received": {"task_type": "TaskSpec", "task": {"title": "Login", "estimate_hours": 2.0, "labels": []}, "tags_type": "list", "reviewer": null, "priority_type": "Priority", "priority": "Priority.HIGH", "has_tool_context": true, "mode": "final", "section": null}}
+  declarations sent to the model: ['save_spec']

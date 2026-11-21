@@ -1,0 +1,1 @@
+ok: imports succeed with every warning turned into an error

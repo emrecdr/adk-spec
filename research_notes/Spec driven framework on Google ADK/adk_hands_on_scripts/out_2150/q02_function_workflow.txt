@@ -1,0 +1,43 @@
+
+=== A. route OK after one RETRY: runner.app_name='spec_flow' resumability_config=None
+    intake           got node_input='Login page' type=str
+  [01] author='spec_flow' | node_path='spec_flow@1/intake@1' | output={'title': 'Login page', 'words': 2}
+    draft            got node_input={'title': 'Login page', 'words': 2} attempts-in-state=None
+  [02] author='spec_flow' | node_path='spec_flow@1/draft@1' | state_delta={'attempts': 1, 'draft_text': 'spec for Login page (attempt 1)'}
+  [03] author='spec_flow' | node_path='spec_flow@1/draft@1' | output={'title': 'Login page', 'text': 'spec for Login page (attempt 1)', 'attempt': 1}
+    check            got node_input.attempt=1 state.attempts=1 state.draft_text='spec for Login page (attempt 1)'
+  [04] author='spec_flow' | node_path='spec_flow@1/check@1' | output={'title': 'Login page'} | route='RETRY'
+    draft            got node_input={'title': 'Login page'} attempts-in-state=1
+  [05] author='spec_flow' | node_path='spec_flow@1/draft@2' | state_delta={'attempts': 2, 'draft_text': 'spec for Login page (attempt 2)'}
+  [06] author='spec_flow' | node_path='spec_flow@1/draft@2' | output={'title': 'Login page', 'text': 'spec for Login page (attempt 2)', 'attempt': 2}
+    check            got node_input.attempt=2 state.attempts=2 state.draft_text='spec for Login page (attempt 2)'
+  [07] author='spec_flow' | node_path='spec_flow@1/check@2' | output={'title': 'Login page', 'text': 'spec for Login page (attempt 2)', 'attempt': 2} | route='OK'
+    publish          got node_input={'title': 'Login page', 'text': 'spec for Login page (attempt 2)', 'attempt': 2}
+  [08] author='spec_flow' | node_path='spec_flow@1/publish@1' | text='done (user-facing message)' | output='PUBLISHED: spec for Login page (attempt 2)' | state_delta={'published': True}
+  final session.state : {'attempts': 2, 'draft_text': 'spec for Login page (attempt 2)', 'published': True}
+  events persisted    : 9 (incl. the user message event)
+
+  full dump of one function-node event (exclude_none):
+   {"invocation_id":"e-1a6c50c2-2e9d-4d3b-bc83-200eaa82b4eb","author":"spec_flow","actions":{"state_delta":{},"artifact_delta":{},"requested_auth_configs":{},"requested_tool_confirmations":{}},"output":{"title":"Login page","words":2},"node_info":{"path":"spec_flow@1/intake@1","output_for":["spec_flow@1/intake@1"]},"id":"d0c44dfa-d4ba-46fa-a891-38b4842afcb9","timestamp":1795231594.5079439}
+
+=== B. loop bounded at MAX_ATTEMPTS=3: runner.app_name='spec_flow' resumability_config=None
+    intake           got node_input='Payments' type=str
+  [01] author='spec_flow' | node_path='spec_flow@1/intake@1' | output={'title': 'Payments', 'words': 1}
+    draft            got node_input={'title': 'Payments', 'words': 1} attempts-in-state=None
+  [02] author='spec_flow' | node_path='spec_flow@1/draft@1' | state_delta={'attempts': 1, 'draft_text': 'spec for Payments (attempt 1)'}
+  [03] author='spec_flow' | node_path='spec_flow@1/draft@1' | output={'title': 'Payments', 'text': 'spec for Payments (attempt 1)', 'attempt': 1}
+    always_retry     state.attempts=1
+  [04] author='spec_flow' | node_path='spec_flow@1/always_retry@1' | output={'title': 'Payments'} | route='RETRY'
+    draft            got node_input={'title': 'Payments'} attempts-in-state=1
+  [05] author='spec_flow' | node_path='spec_flow@1/draft@2' | state_delta={'attempts': 2, 'draft_text': 'spec for Payments (attempt 2)'}
+  [06] author='spec_flow' | node_path='spec_flow@1/draft@2' | output={'title': 'Payments', 'text': 'spec for Payments (attempt 2)', 'attempt': 2}
+    always_retry     state.attempts=2
+  [07] author='spec_flow' | node_path='spec_flow@1/always_retry@2' | output={'title': 'Payments'} | route='RETRY'
+    draft            got node_input={'title': 'Payments'} attempts-in-state=2
+  [08] author='spec_flow' | node_path='spec_flow@1/draft@3' | state_delta={'attempts': 3, 'draft_text': 'spec for Payments (attempt 3)'}
+  [09] author='spec_flow' | node_path='spec_flow@1/draft@3' | output={'title': 'Payments', 'text': 'spec for Payments (attempt 3)', 'attempt': 3}
+    always_retry     state.attempts=3
+  [10] author='spec_flow' | node_path='spec_flow@1/always_retry@3' | output={'title': 'Payments', 'text': 'spec for Payments (attempt 3)', 'attempt': 3} | route='GIVE_UP'
+  [11] author='spec_flow' | node_path='spec_flow@1/give_up@1' | output='GAVE UP after 3 attempts'
+  final session.state : {'attempts': 3, 'draft_text': 'spec for Payments (attempt 3)'}
+  events persisted    : 12 (incl. the user message event)

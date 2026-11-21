@@ -1,0 +1,67 @@
+Usage: adk conformance test [OPTIONS] [PATHS]...
+
+  Run conformance tests to verify agent behavior consistency.
+
+  Validates that agents produce consistent outputs by comparing against
+  recorded interactions or evaluating live execution results.
+
+  PATHS can be any number of folder paths. Each folder can either: - Contain a
+  spec.yaml file directly (single test case) - Contain subdirectories with
+  spec.yaml files (multiple test cases)
+
+  If no paths are provided, defaults to searching for the 'tests' folder.
+
+  TEST MODES:
+
+  replay  : Verifies agent interactions match previously recorded behaviors
+            exactly. Compares LLM requests/responses and tool calls/results.
+  live    : Runs evaluation-based verification (not yet implemented)
+
+  DIRECTORY STRUCTURE:
+
+  Test cases must follow this structure:
+
+  category/
+    test_name/
+      spec.yaml                     # Test specification
+      generated-recordings.yaml     # Recorded interactions (replay mode)
+      generated-session.yaml        # Session data (replay mode)
+      generated-recordings-sse.yaml # Recorded SSE interactions (replay mode)
+      generated-session-sse.yaml    # SSE Session data (replay mode)
+
+  REPORT GENERATION:
+
+  Use --generate_report to create a Markdown report of test results. Use
+  --report_dir to specify where the report should be saved.
+
+  EXAMPLES:
+
+  # Run all tests in current directory's 'tests' folder
+  adk conformance test
+
+  # Run tests from specific folders
+  adk conformance test tests/core tests/tool
+
+  # Run a single test case
+  adk conformance test tests/core/sys_instruction_001
+
+  # Run in live mode (when available)
+  adk conformance test --mode=live tests/core
+
+  # Generate a test report
+  adk conformance test --generate_report
+
+  # Generate a test report in a specific directory
+  adk conformance test --generate_report --report_dir=reports
+
+Options:
+  --mode [replay|live]            Test mode: 'replay' verifies against
+                                  recorded interactions, 'live' runs
+                                  evaluation-based verification.  [default:
+                                  replay]
+  --generate_report               Optional. Whether to generate a Markdown
+                                  report of the test results.
+  --report_dir DIRECTORY          Optional. Directory to store the generated
+                                  report. Defaults to current directory.
+  --streaming-mode [none|sse|bidi]
+  --help                          Show this message and exit.

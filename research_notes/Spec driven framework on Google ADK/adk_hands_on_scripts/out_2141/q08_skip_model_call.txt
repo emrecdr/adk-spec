@@ -1,0 +1,46 @@
+
+=== baseline, no callback [root agent]
+  [01] author='spec_writer' | node_path='spec_writer@1' | text='FROM THE MODEL' | state_delta={'spec_md': 'FROM THE MODEL'}
+Skipping missing token usage metadata for agent spec_writer and model fake-model
+  model calls: 1   state['spec_md'] = 'FROM THE MODEL'
+
+=== before_agent_callback returns Content [root agent]
+  [01] author='spec_writer' | node_path='spec_writer@1' | text='FROM before_agent_callback' | state_delta={'spec_md': 'FROM before_agent_callback'}
+  model calls: 0   state['spec_md'] = 'FROM before_agent_callback'
+
+=== before_agent_callback writes the key itself and returns Content [root agent]
+  [01] author='spec_writer' | node_path='spec_writer@1' | text='FROM before_agent_callback' | state_delta={'spec_md': 'FROM before_agent_callback'}
+  model calls: 0   state['spec_md'] = 'FROM before_agent_callback'
+
+=== before_model_callback returns LlmResponse [root agent]
+  [01] author='spec_writer' | node_path='spec_writer@1' | text='FROM before_model_callback' | state_delta={'spec_md': 'FROM before_model_callback'}
+  model calls: 0   state['spec_md'] = 'FROM before_model_callback'
+
+=== baseline, no callback [workflow node]
+  [01] author='spec_writer' | node_path='wf@1/spec_writer@1' | text='FROM THE MODEL' | state_delta={'spec_md': 'FROM THE MODEL'}
+Skipping missing token usage metadata for agent spec_writer and model fake-model
+  [02] author='wf' | node_path='wf@1/downstream@1' | output='downstream ran'
+  model calls: 1   state['spec_md'] = 'FROM THE MODEL'   downstream node_input = 'FROM THE MODEL'
+
+=== before_agent_callback returns Content [workflow node]
+  [01] author='spec_writer' | node_path='wf@1/spec_writer@1' | text='FROM before_agent_callback' | state_delta={'spec_md': 'FROM before_agent_callback'}
+  [02] author='wf' | node_path='wf@1/downstream@1' | output='downstream ran'
+  model calls: 0   state['spec_md'] = 'FROM before_agent_callback'   downstream node_input = 'FROM before_agent_callback'
+
+=== before_agent_callback writes the key itself and returns Content [workflow node]
+  [01] author='spec_writer' | node_path='wf@1/spec_writer@1' | text='FROM before_agent_callback' | state_delta={'spec_md': 'FROM before_agent_callback'}
+  [02] author='wf' | node_path='wf@1/downstream@1' | output='downstream ran'
+  model calls: 0   state['spec_md'] = 'FROM before_agent_callback'   downstream node_input = 'FROM before_agent_callback'
+
+=== before_model_callback returns LlmResponse [workflow node]
+  [01] author='spec_writer' | node_path='wf@1/spec_writer@1' | text='FROM before_model_callback' | state_delta={'spec_md': 'FROM before_model_callback'}
+  [02] author='wf' | node_path='wf@1/downstream@1' | output='downstream ran'
+  model calls: 0   state['spec_md'] = 'FROM before_model_callback'   downstream node_input = 'FROM before_model_callback'
+
+=== before_agent_callback returns Content [sub-agent of a (deprecated) SequentialAgent]
+  [01] author='spec_writer' | text='FROM before_agent_callback' | state_delta={'spec_md': 'FROM before_agent_callback'}
+  model calls: 0   state['spec_md'] = 'FROM before_agent_callback'
+
+=== before_model_callback returns LlmResponse [sub-agent of a (deprecated) SequentialAgent]
+  [01] author='spec_writer' | text='FROM before_model_callback' | state_delta={'spec_md': 'FROM before_model_callback'}
+  model calls: 0   state['spec_md'] = 'FROM before_model_callback'

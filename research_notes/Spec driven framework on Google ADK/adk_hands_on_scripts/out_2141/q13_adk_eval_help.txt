@@ -1,0 +1,84 @@
+Usage: adk eval [OPTIONS] AGENT_MODULE_FILE_PATH [EVAL_SET_FILE_PATH_OR_ID]...
+
+  Evaluates an agent given the eval sets.
+
+  AGENT_MODULE_FILE_PATH: The path to the agent folder, whose __init__.py
+  imports a module by the name "agent". "agent" module contains a root_agent.
+
+  EVAL_SET_FILE_PATH_OR_ID: You can specify one or more eval set file paths or
+  eval set id.
+
+  Mixing of eval set file paths with eval set ids is not allowed.
+
+  *Eval Set File Path* For each file, all evals will be run by default.
+
+  If you want to run only specific evals from an eval set, first create a
+  comma separated list of eval names and then add that as a suffix to the eval
+  set file name, demarcated by a `:`.
+
+  For example, we have `sample_eval_set_file.json` file that has following the
+  eval cases: sample_eval_set_file.json:   |....... eval_1   |....... eval_2
+  |....... eval_3   |....... eval_4   |....... eval_5
+
+  sample_eval_set_file.json:eval_1,eval_2,eval_3
+
+  This will only run eval_1, eval_2 and eval_3 from sample_eval_set_file.json.
+
+  *Eval Set ID* For each eval set, all evals will be run by default.
+
+  If you want to run only specific evals from an eval set, first create a
+  comma separated list of eval names and then add that as a suffix to the eval
+  set file name, demarcated by a `:`.
+
+  For example, we have `sample_eval_set_id` that has following the eval cases:
+  sample_eval_set_id:   |....... eval_1   |....... eval_2   |....... eval_3
+  |....... eval_4   |....... eval_5
+
+  If we did:     sample_eval_set_id:eval_1,eval_2,eval_3
+
+  This will only run eval_1, eval_2 and eval_3 from sample_eval_set_id.
+
+  CONFIG_FILE_PATH: The path to config file.
+
+  NUM_RUNS: Number of times to run each eval case. Overrides
+  multi_run_config.num_runs in the eval config; if neither is set, each eval
+  case runs once.
+
+  PARALLELISM: Maximum number of eval cases to run in parallel during
+  inference and metric evaluation. Overrides parallelism in the eval config;
+  if neither is set, defaults to 4.
+
+  PRINT_DETAILED_RESULTS: Prints detailed results on the console.
+
+Options:
+  --enable_features TEXT          Optional. Comma-separated list of feature
+                                  names to enable. This provides an
+                                  alternative to environment variables for
+                                  enabling experimental features. Example: --e
+                                  nable_features=JSON_SCHEMA_FOR_FUNC_DECL,PRO
+                                  GRESSIVE_SSE_STREAMING
+  --disable_features TEXT         Optional. Comma-separated list of feature
+                                  names to disable. This provides an
+                                  alternative to environment variables for
+                                  disabling features. Example: --disable_featu
+                                  res=JSON_SCHEMA_FOR_FUNC_DECL,PROGRESSIVE_SS
+                                  E_STREAMING
+  --config_file_path TEXT         Optional. The path to config file.
+  --num_runs INTEGER RANGE        Optional. Number of times to run each eval
+                                  case. Overrides multi_run_config.num_runs in
+                                  the eval config; if neither is set, each
+                                  eval case runs once.  [x>=1]
+  --parallelism INTEGER RANGE     Optional. Maximum number of eval cases to
+                                  run in parallel during inference and metric
+                                  evaluation. Overrides parallelism in the
+                                  eval config; if neither is set, defaults to
+                                  4.  [x>=1]
+  --print_detailed_results        Optional. Whether to print detailed results
+                                  on console or not.
+  --eval_storage_uri TEXT         Optional. The evals storage URI to store
+                                  agent evals, supported URIs: gs://<bucket
+                                  name> or file://<path>. When omitted,
+                                  ADK_EVAL_STORAGE_URI is used if set.
+  --log_level [debug|info|warning|error|critical]
+                                  Optional. Set the logging level
+  --help                          Show this message and exit.

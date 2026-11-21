@@ -1,0 +1,115 @@
+
+########## 00_install.txt: DIFFERS (out_2150 -> out_2141)
+--- out_2150
++++ out_2141
+@@ -3,9 +3,5 @@
+ Activate with: source <VENV>/bin/activate
+-Resolved 53 packages in 391ms
+-Downloading pydantic-core (2.0MiB)
+-Downloading google-adk (5.1MiB)
+- Downloaded pydantic-core
+- Downloaded google-adk
+-Prepared 7 packages in 310ms
+-Installed 53 packages in 85ms
++Using Python 3.14.10 environment at: <VENV>
++Resolved 53 packages in 108ms
++Installed 53 packages in 154ms
+  + aiosqlite==0.22.1
+@@ -23,3 +19,3 @@
+  + fastapi==0.165.0
+- + google-adk==2.15.0
++ + google-adk==2.14.1
+  + google-auth==2.62.2
+@@ -61,4 +57,3 @@
+  + uvicorn==0.54.0
+- + watchdog==7.1.0
++ + watchdog==6.0.0
+  + websockets==15.0.1
+-uv pip install google-adk==2.15.0 pytest pytest-asyncio 2>&1  0.17s user 0.37s system 62% cpu 0.860 total
+
+########## q01_adk_version.txt: DIFFERS (out_2150 -> out_2141)
+--- out_2150
++++ out_2141
+@@ -1 +1 @@
+-adk, version 2.15.0
++adk, version 2.14.1
+
+########## q01_install.txt: DIFFERS (out_2150 -> out_2141)
+--- out_2150
++++ out_2141
+@@ -28,4 +28,4 @@
+ 
+-google.adk.__version__ : 2.15.0
+-  google-adk              2.15.0
++google.adk.__version__ : 2.14.1
++  google-adk              2.14.1
+   google-genai            2.34.0
+@@ -49,3 +49,3 @@
+   websockets              15.0.1
+-  watchdog                7.1.0
++  watchdog                6.0.0
+   pytest                  9.2.0
+
+########## q05a_hitl_inmemory.txt: DIFFERS (out_2150 -> out_2141)
+--- out_2150
++++ out_2141
+@@ -25,5 +25,6 @@
+   [03] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login page\n## Requirements\n- R1\n'
+-  [04] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 2, 'interrup...
+-  [05] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='<UUID>', args={'interruptId': '<UUID>', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n...) | long_running_tool_ids=['<UUID>']
+-  [06] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 4, 'interrup...
++  [04] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}}}
++  [05] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 2, 'interrup...
++  [06] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='<UUID>', args={'interruptId': '<UUID>', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n...) | long_running_tool_ids=['<UUID>']
++  [07] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 4, 'interrup...
+   paused: interrupt_id='<UUID>' call.name='adk_request_input'
+@@ -39,5 +40,6 @@
+   [05] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
+-  [06] author='sdd_gate' | node_path='sdd_gate@1/rejected@1' | output='Spec rejected; planning skipped.'
+-  [07] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
+-  [08] author='sdd_gate' | end_of_agent=True
++  [06] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
++  [07] author='sdd_gate' | node_path='sdd_gate@1/rejected@1' | output='Spec rejected; planning skipped.'
++  [08] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
++  [09] author='sdd_gate' | end_of_agent=True
+   invocation_id of run 2 = e-<UUID> (same as run 1: True)
+
+########## q05b_sqlite_3_start_resumable.txt: DIFFERS (out_2150 -> out_2141)
+--- out_2150
++++ out_2141
+@@ -4,5 +4,6 @@
+   [03] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login page\n## Requirements\n- R1\n'
+-  [04] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 2, 'interrup...
+-  [05] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='<UUID>', args={'interruptId': '<UUID>', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n...) | long_running_tool_ids=['<UUID>']
+-  [06] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 4, 'interrup...
++  [04] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}}}
++  [05] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 2, 'interrup...
++  [06] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='<UUID>', args={'interruptId': '<UUID>', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n...) | long_running_tool_ids=['<UUID>']
++  [07] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 4, 'interrup...
+   node bodies executed in this process: ['write_spec', 'approve_spec']
+
+########## q05b_sqlite_4_resume_resumable.txt: DIFFERS (out_2150 -> out_2141)
+--- out_2150
++++ out_2141
+@@ -1,3 +1,3 @@
+ --- process <PID> RESUME (started by pid <PID>; resumable=True)
+-  session loaded from SQLite: 7 events, state keys=['spec_md']
++  session loaded from SQLite: 8 events, state keys=['spec_md']
+   [01] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login page\n## Requirements\n- R1\n'
+@@ -8,5 +8,6 @@
+   [05] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
+-  [06] author='sdd_gate' | node_path='sdd_gate@1/plan@1' | output='PLAN for -> # Spec: Login page'
+-  [07] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
+-  [08] author='sdd_gate' | end_of_agent=True
++  [06] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
++  [07] author='sdd_gate' | node_path='sdd_gate@1/plan@1' | output='PLAN for -> # Spec: Login page'
++  [08] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
++  [09] author='sdd_gate' | end_of_agent=True
+   node bodies executed in this process: ['route_on_answer', 'plan']
+@@ -14,2 +15,2 @@
+   final state: {'spec_approved': True, 'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}
+-  events now in SQLite: 16
++  events now in SQLite: 18
+
+IDENTICAL after masking (27): ['q01_adk_help.txt', 'q01_import_w_error.txt', 'q02_function_workflow.txt', 'q02b_dynamic_and_edge_cases.txt', 'q03_custom_agent.txt', 'q03b_custom_agent_output.txt', 'q04_deprecated_agents.txt', 'q04b_default_filter.txt', 'q04b_w_error.txt', 'q05b_sqlite_1_start_plain.txt', 'q05b_sqlite_2_resume_plain.txt', 'q05b_sqlite_5_tables.txt', 'q05c_hitl_extras.txt', 'q06_swap_llm_for_python.txt', 'q06b_typed_contract.txt', 'q07_structured_output.txt', 'q08_skip_model_call.txt', 'q09_plugins.txt', 'q10_function_tools.txt', 'q11_artifacts.txt', 'q12_pytest.txt', 'q12_pytest_w_error.txt', 'q13_adk_conformance_help.txt', 'q13_adk_conformance_record_help.txt', 'q13_adk_conformance_test_help.txt', 'q13_adk_eval_help.txt', 'q13_event_metadata.txt']
+DIFFERENT (6): ['00_install.txt', 'q01_adk_version.txt', 'q01_install.txt', 'q05a_hitl_inmemory.txt', 'q05b_sqlite_3_start_resumable.txt', 'q05b_sqlite_4_resume_resumable.txt']

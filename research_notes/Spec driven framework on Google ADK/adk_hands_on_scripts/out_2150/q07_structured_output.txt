@@ -1,0 +1,117 @@
+
+=== valid JSON [root agent]
+  [01] author='task_breaker' | node_path='task_breaker@1' | text='{"tasks": [{"id": "T-1", "title": "Login form"}]}' | state_delta={'tasks': {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]}}
+  outcome            : completed without exception
+  model calls        : 1 (of 1 scripted)
+  state['tasks']     : {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]} (type dict)
+  persisted events   : ['user', 'text']; first model reply text stored in an event: True
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== valid JSON in a ```json fence [root agent]
+  [01] author='task_breaker' | node_path='task_breaker@1' | text='```json\n{"tasks": [{"id": "T-1", "title": "Login form"}]}\n```' | state_delta={'tasks': {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]}}
+  outcome            : completed without exception
+  model calls        : 1 (of 1 scripted)
+  state['tasks']     : {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]} (type dict)
+  persisted events   : ['user', 'text']; first model reply text stored in an event: True
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== NOT JSON [root agent]
+  [01] author='task_breaker' | node_path='task_breaker@1' | error='ValidationError':"1 validation error for TaskList\n  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Sure! Here are the tasks: T-1 Login form...
+  outcome            : RAISED pydantic_core._pydantic_core.ValidationError: 1 validation error for TaskList ...
+  model calls        : 1 (of 2 scripted)
+  state['tasks']     : '<absent>' (type str)
+  persisted events   : ['user', 'error']; first model reply text stored in an event: False
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== JSON failing validation (tasks: []) [root agent]
+  [01] author='task_breaker' | node_path='task_breaker@1' | error='ValidationError':'1 validation error for TaskList\ntasks\n  List should have at least 1 item after validation, not 0 [type=too_short, input_value=[], input_type=list]\n    Fo...
+  outcome            : RAISED pydantic_core._pydantic_core.ValidationError: 1 validation error for TaskList ...
+  model calls        : 1 (of 2 scripted)
+  state['tasks']     : '<absent>' (type str)
+  persisted events   : ['user', 'error']; first model reply text stored in an event: False
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== JSON failing validation (missing title) [root agent]
+  [01] author='task_breaker' | node_path='task_breaker@1' | error='ValidationError':"1 validation error for TaskList\ntasks.0.title\n  Field required [type=missing, input_value={'id': 'T-1'}, input_type=dict]\n    For further information vis...
+  outcome            : RAISED pydantic_core._pydantic_core.ValidationError: 1 validation error for TaskList ...
+  model calls        : 1 (of 2 scripted)
+  state['tasks']     : '<absent>' (type str)
+  persisted events   : ['user', 'error']; first model reply text stored in an event: False
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== valid JSON [workflow node]
+  [01] author='task_breaker' | node_path='wf@1/task_breaker@1' | text='{"tasks": [{"id": "T-1", "title": "Login form"}]}' | output={'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]} | state_delta={'tasks': {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]}}
+  [02] author='wf' | node_path='wf@1/downstream@1' | output='downstream ran'
+  outcome            : completed without exception
+  model calls        : 1 (of 1 scripted)
+  state['tasks']     : {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]} (type dict)
+  persisted events   : ['user', 'text', 'other']; first model reply text stored in an event: True
+  downstream got     : {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]}
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== valid JSON in a ```json fence [workflow node]
+  [01] author='task_breaker' | node_path='wf@1/task_breaker@1' | text='```json\n{"tasks": [{"id": "T-1", "title": "Login form"}]}\n```' | output={'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]} | state_delta={'tasks': {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]}}
+  [02] author='wf' | node_path='wf@1/downstream@1' | output='downstream ran'
+  outcome            : completed without exception
+  model calls        : 1 (of 1 scripted)
+  state['tasks']     : {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]} (type dict)
+  persisted events   : ['user', 'text', 'other']; first model reply text stored in an event: True
+  downstream got     : {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]}
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== NOT JSON [workflow node]
+  [01] author='wf' | node_path='wf@1/task_breaker@1' | error='ValidationError':"1 validation error for TaskList\n  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Sure! Here are the tasks: T-1 Login form...
+  outcome            : RAISED pydantic_core._pydantic_core.ValidationError: 1 validation error for TaskList ...
+  model calls        : 1 (of 2 scripted)
+  state['tasks']     : '<absent>' (type str)
+  persisted events   : ['user', 'error']; first model reply text stored in an event: False
+  downstream got     : '<downstream did not run>'
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== JSON failing validation (tasks: []) [workflow node]
+  [01] author='wf' | node_path='wf@1/task_breaker@1' | error='ValidationError':'1 validation error for TaskList\ntasks\n  List should have at least 1 item after validation, not 0 [type=too_short, input_value=[], input_type=list]\n    Fo...
+  outcome            : RAISED pydantic_core._pydantic_core.ValidationError: 1 validation error for TaskList ...
+  model calls        : 1 (of 2 scripted)
+  state['tasks']     : '<absent>' (type str)
+  persisted events   : ['user', 'error']; first model reply text stored in an event: False
+  downstream got     : '<downstream did not run>'
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== JSON failing validation (missing title) [workflow node]
+  [01] author='wf' | node_path='wf@1/task_breaker@1' | error='ValidationError':"1 validation error for TaskList\ntasks.0.title\n  Field required [type=missing, input_value={'id': 'T-1'}, input_type=dict]\n    For further information vis...
+  outcome            : RAISED pydantic_core._pydantic_core.ValidationError: 1 validation error for TaskList ...
+  model calls        : 1 (of 2 scripted)
+  state['tasks']     : '<absent>' (type str)
+  persisted events   : ['user', 'error']; first model reply text stored in an event: False
+  downstream got     : '<downstream did not run>'
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== JSON failing validation, then a valid reply [workflow node, retry_config=2 attempts]
+  [01] author='wf' | node_path='wf@1/task_breaker@1' | error='ValidationError':'1 validation error for TaskList\ntasks\n  List should have at least 1 item after validation, not 0 [type=too_short, input_value=[], input_type=list]\n    Fo...
+  [02] author='task_breaker' | node_path='wf@1/task_breaker@1' | text='{"tasks": [{"id": "T-1", "title": "Login form"}]}' | output={'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]} | state_delta={'tasks': {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]}}
+  [03] author='wf' | node_path='wf@1/downstream@1' | output='downstream ran'
+  outcome            : completed without exception
+  model calls        : 2 (of 2 scripted)
+  state['tasks']     : {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]} (type dict)
+  persisted events   : ['user', 'error', 'text', 'other']; first model reply text stored in an event: False
+  downstream got     : {'tasks': [{'id': 'T-1', 'title': 'Login form', 'depends_on': []}]}
+  request 1 contents : [('user', ['plan'])]
+  request 2 contents : [('user', ['plan'])]
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== NOT JSON [root agent, NO output_key]
+  [01] author='task_breaker' | node_path='task_breaker@1' | text='Sure! Here are the tasks: T-1 Login form'
+  outcome            : completed without exception
+  model calls        : 1 (of 2 scripted)
+  state['tasks']     : '<absent>' (type str)
+  persisted events   : ['user', 'text']; first model reply text stored in an event: True
+  request config     : response_schema=set response_mime_type='application/json' tools=[]
+
+=== NOT JSON [workflow node, NO output_key]
+  [01] author='wf' | node_path='wf@1/task_breaker@1' | error='ValidationError':"1 validation error for TaskList\n  Invalid JSON: expected value at line 1 column 1 [type=json_invalid, input_value='Sure! Here are the tasks: T-1 Login form...
+  outcome            : RAISED pydantic_core._pydantic_core.ValidationError: 1 validation error for TaskList ...
+  model calls        : 1 (of 2 scripted)
+  state['tasks']     : '<absent>' (type str)
+  persisted events   : ['user', 'error']; first model reply text stored in an event: False
+  downstream got     : '<downstream did not run>'
+  request config     : response_schema=set response_mime_type='application/json' tools=[]

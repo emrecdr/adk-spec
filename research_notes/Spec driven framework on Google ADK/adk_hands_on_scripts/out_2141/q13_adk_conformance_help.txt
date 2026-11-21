@@ -1,0 +1,10 @@
+Usage: adk conformance [OPTIONS] COMMAND [ARGS]...
+
+  Conformance testing tools for ADK.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  record  Generate ADK conformance test recordings from spec.yaml files.
+  test    Run conformance tests to verify agent behavior consistency.

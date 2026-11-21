@@ -1,0 +1,86 @@
+
+=== FileArtifactService(root_dir='data_2150/q11_artifacts')
+  [01] author='arts' | node_path='arts@1/save_v0@1' | output={'saved_version': 0} | artifact_delta={'spec.md': 0}
+  [02] author='arts' | node_path='arts@1/save_v1@1' | output={'spec.md': 1, 'specs/001-login/plan.md': 0, 'user:glossary.md': 0} | artifact_delta={'spec.md': 1, 'specs/001-login/plan.md': 0, 'user:glossary.md': 0}
+  [03] read_back output:
+        list_artifacts: ['spec.md', 'specs/001-login/plan.md', 'user:glossary.md']
+        latest: '# Spec\n\nv1 body (revised)\n'
+        latest_mime: 'text/markdown'
+        v0: '# Spec: Login\n\nv0 body\n'
+        v7: None
+        nested_part: {'text': '# Plan\n', 'inline': False}
+        version_info: {'version': 1, 'canonical_uri': 'file:///private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/data_2150/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md', 'custom_metadata': {'stage': 'review'}, 'create_time': 1795231608.320551, 'mime_type': 'text/markdown'}
+  -- direct service API (outside any agent run) --
+  list_artifact_keys : ['spec.md', 'specs/001-login/plan.md', 'user:glossary.md']
+  list_versions      : [0, 1]
+  load_artifact(v=0) : # Spec: Login
+
+v0 body
+
+  artifact version   : {'version': 0, 'canonical_uri': 'file:///private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/data_2150/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/0/spec.md', 'custom_metadata': {}, 'create_time': 1795231608.3179688, 'mime_type': 'text/markdown'}
+  artifact version   : {'version': 1, 'canonical_uri': 'file:///private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/data_2150/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md', 'custom_metadata': {'stage': 'review'}, 'create_time': 1795231608.320551, 'mime_type': 'text/markdown'}
+  keys visible from ANOTHER session of the same user: ['user:glossary.md']
+
+  -- on-disk layout --
+  apps/
+    arts/
+      users/
+        u1/
+          artifacts/
+            glossary.md/
+              versions/
+                0/
+                  glossary.md   (11 bytes)
+                  metadata.json   (358 bytes)
+          sessions/
+            sess-1/
+              artifacts/
+                spec.md/
+                  versions/
+                    0/
+                      metadata.json   (357 bytes)
+                      spec.md   (23 bytes)
+                    1/
+                      metadata.json   (372 bytes)
+                      spec.md   (26 bytes)
+                specs/
+                  001-login/
+                    plan.md/
+                      versions/
+                        0/
+                          metadata.json   (361 bytes)
+                          plan.md   (7 bytes)
+
+  -- apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/metadata.json --
+  {"version":1,"canonicalUri":"file:///private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/data_2150/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md","customMetadata":{"stage":"review"},"createTime":1795231608.320551,"mimeType":"text/markdown","fileName":"spec.md"}
+  -- apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md (plain file on disk) --
+  '# Spec\n\nv1 body (revised)\n'
+
+=== extra: does `{artifact.spec.md}` in an instruction inline the artifact text?
+Skipping missing token usage metadata for agent reviewer and model fake-model
+  system_instruction sent to the model: 'Review this spec:\n# Spec\n\nv1 body (revised)\n\nEND\n\nYou are an agent. Your internal name is "reviewer".'
+
+=== InMemoryArtifactService()
+  [01] author='arts' | node_path='arts@1/save_v0@1' | output={'saved_version': 0} | artifact_delta={'spec.md': 0}
+  [02] author='arts' | node_path='arts@1/save_v1@1' | output={'spec.md': 1, 'specs/001-login/plan.md': 0, 'user:glossary.md': 0} | artifact_delta={'spec.md': 1, 'specs/001-login/plan.md': 0, 'user:glossary.md': 0}
+  [03] read_back output:
+        list_artifacts: ['spec.md', 'specs/001-login/plan.md', 'user:glossary.md']
+        latest: '# Spec\n\nv1 body (revised)\n'
+        latest_mime: 'text/markdown'
+        v0: '# Spec: Login\n\nv0 body\n'
+        v7: None
+        nested_part: {'text': '# Plan\n', 'inline': False}
+        version_info: {'version': 1, 'canonical_uri': 'memory://apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1', 'custom_metadata': {'stage': 'review'}, 'create_time': 1795231608.360034, 'mime_type': 'text/markdown'}
+  -- direct service API (outside any agent run) --
+  list_artifact_keys : ['spec.md', 'specs/001-login/plan.md', 'user:glossary.md']
+  list_versions      : [0, 1]
+  load_artifact(v=0) : # Spec: Login
+
+v0 body
+
+  artifact version   : {'version': 0, 'canonical_uri': 'memory://apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/0', 'custom_metadata': {}, 'create_time': 1795231608.3591108, 'mime_type': 'text/markdown'}
+  artifact version   : {'version': 1, 'canonical_uri': 'memory://apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1', 'custom_metadata': {'stage': 'review'}, 'create_time': 1795231608.360034, 'mime_type': 'text/markdown'}
+  keys visible from ANOTHER session of the same user: ['user:glossary.md']
+
+=== extra: ctx.save_artifact with NO artifact service configured on the Runner
+  RAISED ValueError: Artifact service is not initialized.

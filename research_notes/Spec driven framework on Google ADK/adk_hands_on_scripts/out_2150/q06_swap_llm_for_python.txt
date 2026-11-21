@@ -1,0 +1,24 @@
+
+=== variant: LLM agent step
+  [01] author='pipeline' | node_path='pipeline@1/intake@1' | output='Feature request: Login page'
+  [02] author='spec_writer' | node_path='pipeline@1/spec_writer@1' | text='# Spec: Login page\n## Requirements\n- R1\n' | state_delta={'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}
+Skipping missing token usage metadata for agent spec_writer and model fake-model
+  [03] author='pipeline' | node_path='pipeline@1/downstream@1' | output='PLAN based on: # Spec: Login page'
+  fake model calls: 1
+  what the model was sent: system_instruction='Write a markdown spec for the feature request.'
+     content role=user parts=['Feature request: Login page']
+
+=== variant: Python function step
+  [01] author='pipeline' | node_path='pipeline@1/intake@1' | output='Feature request: Login page'
+  [02] author='pipeline' | node_path='pipeline@1/spec_writer@1' | output='# Spec: Login page\n## Requirements\n- R1\n' | state_delta={'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}
+  [03] author='pipeline' | node_path='pipeline@1/downstream@1' | output='PLAN based on: # Spec: Login page'
+
+=== what the unchanged downstream node observed
+  LLM agent step        : {'node_input': '# Spec: Login page\n## Requirements\n- R1\n', 'node_input_type': 'str', 'state': {'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}}
+  Python function step  : {'node_input': '# Spec: Login page\n## Requirements\n- R1\n', 'node_input_type': 'str', 'state': {'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}}
+  node_input identical: True
+  state identical     : True
+
+=== differences in the event stream of the swapped step
+  LLM   : author='spec_writer' path='pipeline@1/spec_writer@1' has_content=True output=None state_delta=['spec_md'] output_for=['pipeline@1/spec_writer@1'] message_as_output=True
+  Python: author='pipeline' path='pipeline@1/spec_writer@1' has_content=False output=set state_delta=['spec_md'] output_for=['pipeline@1/spec_writer@1'] message_as_output=None

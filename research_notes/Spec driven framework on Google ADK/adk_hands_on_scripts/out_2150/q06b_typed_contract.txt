@@ -1,0 +1,29 @@
+Skipping missing token usage metadata for agent task_breaker and model fake-model
+
+=== step = LLM Agent(output_schema=TaskList, output_key='tasks')
+  type of Event.output in the stream : ['dict']
+  untyped  downstream saw            : dict: {'tasks': [{'id': 'T-1', 'title': 'Login form'}]}
+  typed    downstream saw            : TaskList: TaskList(tasks=[Task(id='T-1', title='Login form')])
+  state    downstream saw            : dict: {'tasks': [{'id': 'T-1', 'title': 'Login form'}]}
+
+=== step = Python node: yield Event(output=<TaskList instance>, state={'tasks': dict})
+  type of Event.output in the stream : ['TaskList']
+  untyped  downstream saw            : TaskList: TaskList(tasks=[Task(id='T-1', title='Login form')])
+  typed    downstream saw            : TaskList: TaskList(tasks=[Task(id='T-1', title='Login form')])
+  state    downstream saw            : dict: {'tasks': [{'id': 'T-1', 'title': 'Login form'}]}
+
+=== step = Python node: yield Event(output=<dict>, state={'tasks': dict})
+  type of Event.output in the stream : ['dict']
+  untyped  downstream saw            : dict: {'tasks': [{'id': 'T-1', 'title': 'Login form'}]}
+  typed    downstream saw            : TaskList: TaskList(tasks=[Task(id='T-1', title='Login form')])
+  state    downstream saw            : dict: {'tasks': [{'id': 'T-1', 'title': 'Login form'}]}
+
+=== step = Python node: plain `return <TaskList instance>` (no state write)
+  type of Event.output in the stream : ['dict']
+  untyped  downstream saw            : dict: {'tasks': [{'id': 'T-1', 'title': 'Login form'}]}
+  typed    downstream saw            : TaskList: TaskList(tasks=[Task(id='T-1', title='Login form')])
+  state    downstream saw            : NoneType: None
+
+=== what the FIRST node after START receives
+  node_input without annotation : Content
+  node_input annotated `str`    : str: 'hello'

@@ -1,0 +1,32 @@
+
+=== (a) custom BaseAgent as ROOT agent: Runner(agent=..., app_name=...)
+    before_agent_callback fired for gate_root
+    >>> SpecGate._run_async_impl EXECUTED (name=gate_root, ctx=InvocationContext, user_content='check my spec')
+  [01] author='gate_root' | text='gate verdict from gate_root' | state_delta={'gate_root_ran': True}
+    after_agent_callback fired for gate_root
+  _run_async_impl executions in this run: 1; state={'gate_root_ran': True}
+
+=== (b) custom BaseAgent as a NODE inside a Workflow
+  [01] author='q3b' | node_path='q3b@1/upstream@1' | output={'spec': 'check my spec'}
+    before_agent_callback fired for gate_node
+    >>> SpecGate._run_async_impl EXECUTED (name=gate_node, ctx=InvocationContext, user_content='check my spec')
+  [02] author='gate_node' | node_path='q3b@1/gate_node@1' | text='gate verdict from gate_node' | state_delta={'gate_node_ran': True}
+    after_agent_callback fired for gate_node
+    downstream node got node_input=None state={'gate_node_ran': True}
+  [03] author='q3b' | node_path='q3b@1/downstream@1' | output='downstream done'
+  _run_async_impl executions in this run: 1; state={'gate_node_ran': True}
+App "q3c" can transfer between agents but has no context_cache_config. Every transfer swaps the system instruction and the tool set, so the request prefix changes and the whole prompt is re-sent uncached after each transfer. Set context_cache_config on the app to give each agent its own cache.
+
+=== (c) custom BaseAgent as SUB-AGENT of an LLM agent (fake model emits transfer_to_agent)
+  [01] author='coordinator' | node_path='coordinator@1' | function_call=transfer_to_agent(id='adk-bae48ec2-b8e2-4e24-8cfd-747e9b94d4de', args={'agent_name': 'gate_sub'})
+  [02] author='coordinator' | node_path='coordinator@1' | function_response=transfer_to_agent(id='adk-bae48ec2-b8e2-4e24-8cfd-747e9b94d4de', response={'result': None}) | transfer_to_agent='gate_sub'
+Skipping missing token usage metadata for agent coordinator and model fake-model
+    before_agent_callback fired for gate_sub
+    >>> SpecGate._run_async_impl EXECUTED (name=gate_sub, ctx=InvocationContext, user_content='check my spec')
+  [03] author='gate_sub' | node_path='coordinator@1/gate_sub@1' | text='gate verdict from gate_sub' | state_delta={'gate_sub_ran': True}
+    after_agent_callback fired for gate_sub
+  _run_async_impl executions in this run: 1; state={'gate_sub_ran': True}
+  fake model calls: 1; tools offered to the model on call 1: ['transfer_to_agent']
+
+warnings during Q3: []
+total _run_async_impl executions: ['gate_root', 'gate_node', 'gate_sub']

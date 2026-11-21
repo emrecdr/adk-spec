@@ -1,0 +1,51 @@
+
+=== 1. Workflow with ONE plain function node
+    on_user_message_callback
+    before_run_callback
+    on_event_callback(wf@1/plain_step@1:output)
+    after_run_callback
+  distinct hooks fired: ['after_run_callback', 'before_run_callback', 'on_event_callback', 'on_user_message_callback']
+
+=== 2. Workflow with ONE LLM agent node (fake model, no tools)
+    on_user_message_callback
+    before_run_callback
+    before_agent_callback(writer)
+    before_model_callback(writer)
+    after_model_callback(writer)
+    on_event_callback(wf@1/writer@1:text)
+    after_agent_callback(writer)
+    after_run_callback
+  distinct hooks fired: ['after_agent_callback', 'after_model_callback', 'after_run_callback', 'before_agent_callback', 'before_model_callback', 'before_run_callback', 'on_event_callback', 'on_user_message_callback']
+
+=== 3. Workflow with an LLM agent node that calls a function tool
+    on_user_message_callback
+    before_run_callback
+    before_agent_callback(counter)
+    before_model_callback(counter)
+    after_model_callback(counter)
+    on_event_callback(wf@1/counter@1:function_call)
+    before_tool_callback(count_words args={'text': 'a b c'})
+    after_tool_callback(count_words result={'status': 'success', 'words': 3})
+    on_event_callback(wf@1/counter@1:function_response)
+    before_model_callback(counter)
+    after_model_callback(counter)
+    on_event_callback(wf@1/counter@1:text)
+    after_agent_callback(counter)
+    after_run_callback
+  distinct hooks fired: ['after_agent_callback', 'after_model_callback', 'after_run_callback', 'after_tool_callback', 'before_agent_callback', 'before_model_callback', 'before_run_callback', 'before_tool_callback', 'on_event_callback', 'on_user_message_callback']
+
+=== 4. Workflow with a function node that raises
+  run raised RuntimeError: boom
+    on_user_message_callback
+    before_run_callback
+    on_event_callback(wf@1/failing_step@1:error)
+    on_run_error_callback(RuntimeError)
+  distinct hooks fired: ['before_run_callback', 'on_event_callback', 'on_run_error_callback', 'on_user_message_callback']
+
+=== 5. Same as 1, but plugin passed as Runner(plugins=[...]) instead of App(plugins=[...])
+  WARNING at Runner construction: DeprecationWarning: The `plugins` argument is deprecated. Please use the `app` argument to provide plugins instead.
+    on_user_message_callback
+    before_run_callback
+    on_event_callback(wf@1/plain_step@1:output)
+    after_run_callback
+  distinct hooks fired: ['after_run_callback', 'before_run_callback', 'on_event_callback', 'on_user_message_callback']

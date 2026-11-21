@@ -1,0 +1,9 @@
+--- process 4258 RESUME (started by pid 4220; resumable=False)
+  session loaded from SQLite: 4 events, state keys=['spec_md']
+    route_on_answer  got node_input={'answer': 'yes'} (type dict)
+  [01] author='sdd_gate' | node_path='sdd_gate@1/route_on_answer@1' | state_delta={'spec_approved': True} | route='APPROVED'
+  [02] author='sdd_gate' | node_path='sdd_gate@1/plan@1' | output='PLAN for -> # Spec: Login page'
+  node bodies executed in this process: ['route_on_answer', 'plan']
+  resumed invocation_id == paused invocation_id: True
+  final state: {'spec_approved': True, 'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}
+  events now in SQLite: 7

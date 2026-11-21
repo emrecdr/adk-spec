@@ -1,0 +1,81 @@
+
+=== 1. NO App / no resumability config; reply {'answer': 'yes'}
+  runner.resumability_config = None
+--- run 1 (expected to pause at the gate)
+  [01] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | state_delta={'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}
+  [02] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login page\n## Requirements\n- R1\n'
+  [03] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='0133ad8f-82e6-40a9-8041-6bb4540c61c1', args={'interruptId': '0133ad8f-82e6-40a9-8041-6bb4540c61c1', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n...) | long_running_tool_ids=['0133ad8f-82e6-40a9-8041-6bb4540c61c1']
+  paused: interrupt_id='0133ad8f-82e6-40a9-8041-6bb4540c61c1' call.name='adk_request_input'
+  call.args={'interruptId': '0133ad8f-82e6-40a9-8041-6bb4540c61c1', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}, 'message': 'Approve the spec before planning? (yes/no)', 'response_schema': None}
+  invocation_id of run 1 = e-cec2c56a-5ff3-4546-a963-ce3010a3c1dd
+  node bodies executed so far: ['write_spec', 'approve_spec']
+--- run 2: resume with FunctionResponse(id=interrupt_id, name='adk_request_input', response={'answer': 'yes'})
+    route_on_answer  got node_input={'answer': 'yes'} (type dict)
+  [01] author='sdd_gate' | node_path='sdd_gate@1/route_on_answer@1' | state_delta={'spec_approved': True} | route='APPROVED'
+  [02] author='sdd_gate' | node_path='sdd_gate@1/plan@1' | output='PLAN for -> # Spec: Login page'
+  invocation_id of run 2 = e-cec2c56a-5ff3-4546-a963-ce3010a3c1dd (same as run 1: True)
+  node bodies executed in total: ['write_spec', 'approve_spec', 'route_on_answer', 'plan']
+  final state: {'spec_md': '# Spec: Login page\n## Requirements\n- R1\n', 'spec_approved': True}
+
+=== 2. App(resumability_config=ResumabilityConfig(is_resumable=True)); reply {'answer': 'no'}
+  runner.resumability_config = is_resumable=True
+--- run 1 (expected to pause at the gate)
+  [01] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 2, 'interrupts': []}}}
+  [02] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | state_delta={'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}
+  [03] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login page\n## Requirements\n- R1\n'
+  [04] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 2, 'interrup...
+  [05] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='30e06751-88c4-47ea-a83c-6ca54ae0b51c', args={'interruptId': '30e06751-88c4-47ea-a83c-6ca54ae0b51c', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n...) | long_running_tool_ids=['30e06751-88c4-47ea-a83c-6ca54ae0b51c']
+  [06] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 4, 'interrup...
+  paused: interrupt_id='30e06751-88c4-47ea-a83c-6ca54ae0b51c' call.name='adk_request_input'
+  call.args={'interruptId': '30e06751-88c4-47ea-a83c-6ca54ae0b51c', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}, 'message': 'Approve the spec before planning? (yes/no)', 'response_schema': None}
+  invocation_id of run 1 = e-9ae377e0-9016-4333-bab0-4ba6e4c9f877
+  node bodies executed so far: ['write_spec', 'approve_spec']
+--- run 2: resume with FunctionResponse(id=interrupt_id, name='adk_request_input', response={'answer': 'no'})
+  [01] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login page\n## Requirements\n- R1\n'
+  [02] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | output={'answer': 'no'}
+    route_on_answer  got node_input={'answer': 'no'} (type dict)
+  [03] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
+  [04] author='sdd_gate' | node_path='sdd_gate@1/route_on_answer@1' | state_delta={'spec_approved': False} | route='REJECTED'
+  [05] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
+  [06] author='sdd_gate' | node_path='sdd_gate@1/rejected@1' | output='Spec rejected; planning skipped.'
+  [07] author='sdd_gate' | agent_state={'nodes': {'write_spec': {'status': 3, 'interrupts': []}, 'approve_spec': {'status': 3, 'interrup...
+  [08] author='sdd_gate' | end_of_agent=True
+  invocation_id of run 2 = e-9ae377e0-9016-4333-bab0-4ba6e4c9f877 (same as run 1: True)
+  node bodies executed in total: ['write_spec', 'approve_spec', 'route_on_answer', 'rejected']
+  final state: {'spec_md': '# Spec: Login page\n## Requirements\n- R1\n', 'spec_approved': False}
+
+=== 3. App with is_resumable=False; reply {'result': 'yes'}
+  runner.resumability_config = is_resumable=False
+--- run 1 (expected to pause at the gate)
+  [01] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | state_delta={'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}
+  [02] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login page\n## Requirements\n- R1\n'
+  [03] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='afa070c3-3952-4034-b8e9-701299aeaf11', args={'interruptId': 'afa070c3-3952-4034-b8e9-701299aeaf11', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n...) | long_running_tool_ids=['afa070c3-3952-4034-b8e9-701299aeaf11']
+  paused: interrupt_id='afa070c3-3952-4034-b8e9-701299aeaf11' call.name='adk_request_input'
+  call.args={'interruptId': 'afa070c3-3952-4034-b8e9-701299aeaf11', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}, 'message': 'Approve the spec before planning? (yes/no)', 'response_schema': None}
+  invocation_id of run 1 = e-014eb1d9-f524-4186-aea7-c90a3c3d2668
+  node bodies executed so far: ['write_spec', 'approve_spec']
+--- run 2: resume with FunctionResponse(id=interrupt_id, name='adk_request_input', response={'result': 'yes'})
+    route_on_answer  got node_input='yes' (type str)
+  [01] author='sdd_gate' | node_path='sdd_gate@1/route_on_answer@1' | state_delta={'spec_approved': True} | route='APPROVED'
+  [02] author='sdd_gate' | node_path='sdd_gate@1/plan@1' | output='PLAN for -> # Spec: Login page'
+  invocation_id of run 2 = e-014eb1d9-f524-4186-aea7-c90a3c3d2668 (same as run 1: True)
+  node bodies executed in total: ['write_spec', 'approve_spec', 'route_on_answer', 'plan']
+  final state: {'spec_md': '# Spec: Login page\n## Requirements\n- R1\n', 'spec_approved': True}
+
+=== 4. NO App; reply is PLAIN TEXT 'yes' instead of a function response
+  runner.resumability_config = None
+--- run 1 (expected to pause at the gate)
+  [01] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | state_delta={'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}
+  [02] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: Login page\n## Requirements\n- R1\n'
+  [03] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='a6c6e103-6dda-4ed5-9305-3d6095cec3a5', args={'interruptId': 'a6c6e103-6dda-4ed5-9305-3d6095cec3a5', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n...) | long_running_tool_ids=['a6c6e103-6dda-4ed5-9305-3d6095cec3a5']
+  paused: interrupt_id='a6c6e103-6dda-4ed5-9305-3d6095cec3a5' call.name='adk_request_input'
+  call.args={'interruptId': 'a6c6e103-6dda-4ed5-9305-3d6095cec3a5', 'payload': {'spec_md': '# Spec: Login page\n## Requirements\n- R1\n'}, 'message': 'Approve the spec before planning? (yes/no)', 'response_schema': None}
+  invocation_id of run 1 = e-bf907001-10f3-4af1-92f6-9e98eb2c5178
+  node bodies executed so far: ['write_spec', 'approve_spec']
+--- run 2: resume with plain text 'yes'
+  [01] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | state_delta={'spec_md': '# Spec: yes\n## Requirements\n- R1\n'}
+  [02] author='sdd_gate' | node_path='sdd_gate@1/write_spec@1' | output='# Spec: yes\n## Requirements\n- R1\n'
+  [03] author='sdd_gate' | node_path='sdd_gate@1/approve_spec@1' | function_call=adk_request_input(id='709295a0-ca9c-4116-93dc-a2e3414a427a', args={'interruptId': '709295a0-ca9c-4116-93dc-a2e3414a427a', 'payload': {'spec_md': '# Spec: yes\n## Requirements\n- R1\n'...) | long_running_tool_ids=['709295a0-ca9c-4116-93dc-a2e3414a427a']
+  invocation_id of run 2 = e-54ae0a08-247b-48c2-bc8c-ae4862ee458b (same as run 1: False)
+  node bodies executed in total: ['write_spec', 'approve_spec', 'write_spec', 'approve_spec']
+  final state: {'spec_md': '# Spec: yes\n## Requirements\n- R1\n'}
