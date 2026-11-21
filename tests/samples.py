@@ -65,3 +65,46 @@ The system MUST lock an account after three failed attempts.
 
 Reason: Passwords are retired in favour of passkeys.
 """
+
+BRIEF = """\
+# Sign in with a passkey
+
+## Why
+
+Passwords are the top source of account takeovers.
+
+## What changes
+
+Users can register a passkey and sign in with it.
+
+## Non-goals
+
+No change to session length.
+
+## Capabilities
+
+- auth
+
+## Impact
+
+The sign-in page and the session service.
+
+## Assumptions
+
+Browsers in scope support WebAuthn.
+"""
+
+TASKS = """\
+# Tasks
+
+## 1. Passkey sign-in
+
+- [ ] T001 [REQ-AUTH-004] Write the failing passkey sign-in test
+  - files: tests/test_passkey.py
+  - verify: uv run pytest tests/test_passkey.py
+- [x] T002 [P] [REQ-AUTH-004, REQ-AUTH-002] Implement the passkey handler
+  - files: src/auth/passkey.py, src/auth/lockout.py
+  - verify: uv run pytest tests/test_passkey.py tests/test_lockout.py
+- [ ] T003 Update the sign-in page copy
+  - verify: read the page
+"""
