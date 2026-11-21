@@ -570,6 +570,46 @@ Every step here calls a model with the owner's account, or needs a machine or a 
 
 ---
 
+## What changed while this plan was executed
+
+Tasks 1 to 10 were built in the order 4, 1, 2, 3, 5, 6, 7, 8, 9, 10, each test first, with no model called. Task 11
+is the owner's and was not run.
+
+**Where the code differs from the tasks above** (each a ruling in the ledger).
+
+- **Coverage is `domain/check.py`'s `coverage_of(change, living)`, added by `findings_of`,** not by
+  `validate_change`: the validator reads each file by itself, and `check.py` reads the validator's `finding`, so
+  the call the other way would be a cycle. Every command that reads a change goes through `findings_of`. A task may
+  name any requirement a living spec holds, and coverage is skipped while one of the change's own deltas does not
+  read.
+- **What a check still owes an approval is `lifecycle.check_blockers(state, files)`,** kept apart from the
+  validator's findings. `approve_blockers` is unchanged, and `next_step` and `next_action` take the check's blockers
+  as `check=`. Mixed into the findings, a change never checked would fail `validate` and be refused by `plan`.
+  `_assessed` in the command returns four values: the change, its findings, what its approval no longer covers, and
+  what its check owes.
+- **`check` writes no report and records nothing where the model's pass fails,** and does not run that pass while a
+  file has an error of structure. `--override` sets aside a blocking finding of a current check only: a check never
+  run, or stale, is still owed, and `check --no-model` costs nothing.
+- **`diff` reads a file git does not track yet as added,** and refuses past 500 such files. The listing is
+  `files(root)`.
+- **The verify gate sends the stage back where a requirement has no verdict.** A verification that does not pass
+  sets a `verified` change back to `approved`.
+- **The measurement runs as `uv run python -m scripts.measure`.** A planted contradiction counts as caught by a
+  finding of kind `contradiction` or `gap`.
+- **A recording names the change asked for with `--id` even where nothing was written,** and one model a command.
+- `Checked` and `Verification` also record the model that judged. An approval records the commit it was made at.
+
+**What the tasks did not foresee.**
+
+- Four older fixtures gave a change a task list written for another delta, which the new coverage rule rightly
+  refused. `samples.tasks_for(*ids)` makes a list that serves what a test's change adds.
+- The sample task list has a ticked box, so twelve older tests of `plan` now pass `--replace`.
+- Three older cases of the next step changed with the table: a draft with an open point is told to settle it in
+  `brief.md`, before a plan or a rebase.
+
+**Validated by a probe before it was built:** what a recorder sees (`q19`), and what the shape `adk web` loads has
+to be (`q20`). `adk web` itself was never started.
+
 ## What this plan leaves
 
 Running a project's tests as evidence for `verify`; a route for `check`'s contradiction pass to move to code; triage by rules; a capability-to-path map; a lessons file a workspace keeps between runs; the `strict` tier. Each waits on a measurement this plan makes possible.
