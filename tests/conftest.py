@@ -154,3 +154,11 @@ def cached_copilot_token(monkeypatch: pytest.MonkeyPatch, folder: Path, text: st
     if text is not None:
         (folder / "access-token").write_text(text, encoding="utf-8")
     monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(folder))
+
+
+@pytest.fixture(autouse=True)
+def _no_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reads the developer's `.env`: the command's one loader is replaced."""
+    from adk_spec.interfaces import cli
+
+    monkeypatch.setattr(cli, "_load_env", lambda: None)

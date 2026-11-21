@@ -84,7 +84,7 @@ adk_spec/
   domain/                  pure: no I/O, no ADK
     text.py                normalise, lines_of, sha256_of
     ids.py                 slug, requirement and task id grammar
-    model.py               the domain types, SyntaxProblem
+    model.py               the domain types, GrammarError
     drafts.py              model-facing schemas (Triage)
     spec_md.py             living spec: render, parse, fingerprint
     delta_md.py            delta spec: render, parse
@@ -1131,7 +1131,7 @@ class ChangeState: id: str; tier: Tier; status: Status = "draft"; skip_specs: bo
 class Change:      state: ChangeState; brief: Brief | None = None; brief_raw: str | None = None
                    deltas: dict[str, Delta] = {}; tasks: tuple[TaskGroup, ...] | None = None; design: str | None = None
 
-class SyntaxProblem(Exception):   # .line: int (1-based), .message: str
+class GrammarError(Exception):   # .line: int (1-based), .message: str
 ```
 
 - Produces, in `spec_md.py`: `render_requirement(req: Requirement) -> str`; `render_spec(spec: Spec) -> str`; `parse_spec(text: str) -> Spec`; `parse_blocks(lines: list[str], first: int, last: int) -> tuple[Requirement, ...]` (the requirement blocks in `lines[first:last]`, for the delta parser too); `fingerprint(req: Requirement) -> str` (`sha256_of(render_requirement(req))`).
@@ -1249,7 +1249,7 @@ def test_a_statement_keeps_its_paragraphs() -> None:
     ],
 )
 def test_a_spec_off_the_grammar_is_refused_with_its_line(broken: str, line: int, said: str) -> None:
-    with pytest.raises(SyntaxProblem) as caught:
+    with pytest.raises(GrammarError) as caught:
         parse_spec(broken)
     assert caught.value.line == line and said in caught.value.message
 
@@ -1290,7 +1290,7 @@ git commit -m "feat(domain): the domain types and the living spec's grammar, ren
 - Test: `tests/test_delta_md.py`
 
 **Interfaces:**
-- Consumes: `Delta`, `Removal`, `Requirement`, `SyntaxProblem` (Task 7); `parse_blocks`, `render_requirement` (Task 7).
+- Consumes: `Delta`, `Removal`, `Requirement`, `GrammarError` (Task 7); `parse_blocks`, `render_requirement` (Task 7).
 - Produces: `render_delta(delta: Delta) -> str`; `parse_delta(text: str) -> Delta`; `DELTA: str` in `tests/samples.py`.
 
 The grammar: line 1 is `# Delta: <capability>`. Then, each optional and in this order, `## Purpose` (for a capability the change creates), `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`. ADDED and MODIFIED hold whole requirement blocks. A REMOVED block is its header and one line `Reason: <text>`.
@@ -1361,14 +1361,14 @@ def test_a_removal_with_no_reason_parses_for_the_validator_to_judge() -> None:
 
 
 def test_a_renamed_section_is_refused_and_told_what_to_write() -> None:
-    with pytest.raises(SyntaxProblem) as caught:
+    with pytest.raises(GrammarError) as caught:
         parse_delta(DELTA.replace("## REMOVED Requirements", "## RENAMED Requirements"))
     assert caught.value.line == 25 and "MODIFIED block with the new name" in caught.value.message
 
 
 def test_sections_out_of_order_are_refused() -> None:
     swapped = "# Delta: auth\n\n## REMOVED Requirements\n\n### REQ-AUTH-001: Sign in with email\n\nReason: x\n\n## ADDED Requirements\n"
-    with pytest.raises(SyntaxProblem) as caught:
+    with pytest.raises(GrammarError) as caught:
         parse_delta(swapped)
     assert caught.value.line == 9
 ```
@@ -1396,12 +1396,12 @@ git commit -m "feat(domain): the delta grammar, three operations keyed by requir
 - Test: `tests/test_brief_tasks_md.py`
 
 **Interfaces:**
-- Consumes: `Brief`, `Task`, `TaskGroup`, `SyntaxProblem` (Task 7).
+- Consumes: `Brief`, `Task`, `TaskGroup`, `GrammarError` (Task 7).
 - Produces, in `brief_md.py`: `SECTIONS = ("Why", "What changes", "Non-goals", "Capabilities", "Impact", "Assumptions")`; `MARKER: re.Pattern[str]` (`[NEEDS CLARIFICATION]` or `[NEEDS CLARIFICATION: …]`); `MARKER_BUDGET = 3`; `render_brief(brief: Brief) -> str`; `parse_brief(text: str) -> Brief`; `markers(text: str) -> list[str]`.
 - Produces, in `tasks_md.py`: `render_tasks(groups: Sequence[TaskGroup], *, unchecked: bool = False) -> str`; `parse_tasks(text: str) -> tuple[TaskGroup, ...]`.
 - Produces: `BRIEF: str`, `TASKS: str` in `tests/samples.py`.
 
-The brief: line 1 is `# <title>`; then the six sections of `SECTIONS`, in order, each `## <name>`. A missing section parses as `""`; an unknown one is a `SyntaxProblem`. `Capabilities` is a list of `- <slug>` lines.
+The brief: line 1 is `# <title>`; then the six sections of `SECTIONS`, in order, each `## <name>`. A missing section parses as `""`; an unknown one is a `GrammarError`. `Capabilities` is a list of `- <slug>` lines.
 
 The tasks file: line 1 is `# Tasks`; each group is `## <title>`; a task is `- [ ] T001 [P] [REQ-A-001, REQ-A-002] description`, where `[P]` (may run in parallel) and the requirement list are each optional; under a task, optional `  - files: a, b` and `  - verify: <command or check>`.
 
@@ -1467,7 +1467,7 @@ def test_parse_reads_the_briefs_sections() -> None:
 
 def test_a_brief_missing_a_section_parses_and_one_it_does_not_know_is_refused() -> None:
     assert parse_brief(BRIEF.replace("## Impact\n\nThe sign-in page and the session service.\n\n", "")).impact == ""
-    with pytest.raises(SyntaxProblem) as caught:
+    with pytest.raises(GrammarError) as caught:
         parse_brief(BRIEF.replace("## Impact", "## Rollout"))
     assert caught.value.line == 19 and "Rollout" in caught.value.message
 
@@ -1495,7 +1495,7 @@ def test_unchecked_renders_every_box_empty_and_changes_nothing_else() -> None:
 
 
 def test_a_task_line_off_the_grammar_is_refused_with_its_line() -> None:
-    with pytest.raises(SyntaxProblem) as caught:
+    with pytest.raises(GrammarError) as caught:
         parse_tasks(TASKS.replace("- [ ] T003 Update", "- [ ] 3. Update"))
     assert caught.value.line == 11
 ```
@@ -1644,7 +1644,7 @@ git commit -m "feat(domain): the structural validator and its rule table"
 
 **Interfaces:**
 - Consumes: `validate_delta`, `validate_spec` (Task 10); the types of Task 7.
-- Produces: `class MergeRefused(Exception)` with `findings: tuple[Finding, ...]`; `apply_delta(living: Spec | None, delta: Delta, *, bases: Mapping[str, str], change: str) -> Spec`.
+- Produces: `class MergeError(Exception)` with `findings: tuple[Finding, ...]`; `apply_delta(living: Spec | None, delta: Delta, *, bases: Mapping[str, str], change: str) -> Spec`.
 
 `apply_delta` refuses, with every reason at once, when `validate_delta` returns an ERROR or a `delta.base-missing`, or when the merged spec fails `validate_spec` with an ERROR. Otherwise it applies REMOVED (the requirement leaves, and `Retired(id, name, change)` is appended), then MODIFIED (the whole block is replaced where it stood), then ADDED (appended in the delta's order). With `living` as `None` it builds the spec from the delta's purpose and its ADDED blocks.
 
@@ -1671,13 +1671,13 @@ def test_a_delta_folds_in_removed_then_modified_then_added() -> None:
 
 def test_a_requirement_changed_since_the_delta_was_based_refuses_the_merge() -> None:
     other = parse_spec(SPEC.replace("after five failed attempts", "after ten failed attempts"))
-    with pytest.raises(MergeRefused) as refused:
+    with pytest.raises(MergeError) as refused:
         apply_delta(other, parse_delta(DELTA), bases=BASES, change="passkeys")
     assert [f.code for f in refused.value.findings] == ["delta.base-stale"]
 
 
 def test_a_merge_without_a_recorded_base_is_refused() -> None:
-    with pytest.raises(MergeRefused) as refused:
+    with pytest.raises(MergeError) as refused:
         apply_delta(living(), parse_delta(DELTA), bases={}, change="passkeys")
     assert {f.code for f in refused.value.findings} == {"delta.base-missing"}
 
@@ -1685,7 +1685,7 @@ def test_a_merge_without_a_recorded_base_is_refused() -> None:
 def test_every_reason_is_reported_at_once() -> None:
     clash = DELTA.replace("REQ-AUTH-004", "REQ-AUTH-003")  # a retired id
     other = parse_spec(SPEC.replace("after five failed attempts", "after ten failed attempts"))
-    with pytest.raises(MergeRefused) as refused:
+    with pytest.raises(MergeError) as refused:
         apply_delta(other, parse_delta(clash), bases=BASES, change="passkeys")
     assert sorted(f.code for f in refused.value.findings) == ["delta.added-exists", "delta.base-stale"]
 
@@ -1703,7 +1703,7 @@ def test_a_merge_that_would_break_the_spec_is_refused() -> None:
         "#### Scenario: Registered passkey\n\n- WHEN the user presents a registered passkey\n- THEN the system starts a session\n\n",
         "",
     )
-    with pytest.raises(MergeRefused) as refused:
+    with pytest.raises(MergeError) as refused:
         apply_delta(living(), parse_delta(bare), bases=BASES, change="passkeys")
     assert "spec.no-scenario" in {f.code for f in refused.value.findings}
 ```
@@ -1857,8 +1857,8 @@ git commit -m "feat(domain): recorded approval, base capture, gate blockers and 
 
 **Interfaces:**
 - Consumes: `normalise` (Task 6).
-- Produces, in `paths.py`: `class PathRefused(ValueError)`; `inside(root: Path, *parts: str) -> Path`.
-- Produces, in `files.py`: `class NotText(ValueError)`; `read_text(path: Path) -> str`; `write_text(path: Path, text: str) -> None`; `write_all(files: Mapping[Path, str]) -> None`.
+- Produces, in `paths.py`: `class PathError(ValueError)`; `inside(root: Path, *parts: str) -> Path`.
+- Produces, in `files.py`: `class NotTextError(ValueError)`; `read_text(path: Path) -> str`; `write_text(path: Path, text: str) -> None`; `write_all(files: Mapping[Path, str]) -> None`.
 
 `inside` returns `root` joined with `parts`, and refuses, naming the part and the reason:
 - a part that is empty, `.` or `..`, holds `/`, `\` or a NUL, or any of `< > : " | ? *`;
@@ -1866,7 +1866,7 @@ git commit -m "feat(domain): recorded approval, base capture, gate blockers and 
 - a component that exists and is a symbolic link or a junction, tested on each component before anything is resolved;
 - a part whose parent folder already holds a name equal to it when both are case-folded but not equal as written.
 
-`read_text` decodes `utf-8-sig` and turns CRLF and lone CR into LF; a file that is not UTF-8 raises `NotText` naming the path and saying to save it as UTF-8. `write_text` makes the parent folders, writes `normalise(text)` as UTF-8 with `newline="\n"` to a temporary file in the same folder, closes it, then `os.replace`s it; on any failure the temporary file is removed and the error raised. `write_all` writes every temporary file first, and replaces none until all are written.
+`read_text` decodes `utf-8-sig` and turns CRLF and lone CR into LF; a file that is not UTF-8 raises `NotTextError` naming the path and saying to save it as UTF-8. `write_text` makes the parent folders, writes `normalise(text)` as UTF-8 with `newline="\n"` to a temporary file in the same folder, closes it, then `os.replace`s it; on any failure the temporary file is removed and the error raised. `write_all` writes every temporary file first, and replaces none until all are written.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1894,13 +1894,13 @@ git commit -m "feat(domain): recorded approval, base capture, gate blockers and 
     ],
 )
 def test_a_part_no_system_holds_safely_is_refused_on_every_system(tmp_path, part: str) -> None:
-    with pytest.raises(PathRefused):
+    with pytest.raises(PathError):
         inside(tmp_path, "specs", part)
 
 
 def test_a_name_that_differs_from_a_neighbour_only_by_case_is_refused(tmp_path) -> None:
     (tmp_path / "specs" / "auth").mkdir(parents=True)
-    with pytest.raises(PathRefused, match="auth"):
+    with pytest.raises(PathError, match="auth"):
         inside(tmp_path, "specs", "Auth")
     assert inside(tmp_path, "specs", "auth") == tmp_path / "specs" / "auth"
     assert inside(tmp_path, "specs", "billing", "spec.md") == tmp_path / "specs" / "billing" / "spec.md"
@@ -1914,7 +1914,7 @@ def test_a_link_on_the_way_is_refused_before_it_is_followed(tmp_path) -> None:
         (root / "specs").symlink_to(outside, target_is_directory=True)
     except OSError:
         pytest.skip("this account may not make a symbolic link, which Windows holds to a privilege")
-    with pytest.raises(PathRefused, match="link"):
+    with pytest.raises(PathError, match="link"):
         inside(root, "specs", "auth")
 
 
@@ -1930,7 +1930,7 @@ def test_a_bom_and_crlf_are_read_as_their_lf_twin(tmp_path) -> None:
 
 def test_a_file_that_is_not_utf8_is_named_and_never_decoded_wrong(tmp_path) -> None:
     (tmp_path / "s.md").write_bytes("# auth\n".encode("utf-16"))
-    with pytest.raises(NotText, match="UTF-8"):
+    with pytest.raises(NotTextError, match="UTF-8"):
         read_text(tmp_path / "s.md")
 
 
@@ -1994,7 +1994,7 @@ git commit -m "feat(workspace): the path policy and atomic LF text files"
 - Test: `tests/test_workspace.py`
 
 **Interfaces:**
-- Consumes: `inside`, `PathRefused` (Task 13); `read_text`, `write_text`, `write_all`, `NotText` (Task 13); the parsers and renderers of Tasks 7 to 9; `slug_problem` (Task 6); the types of Task 7; `SEVERITY` (Task 10).
+- Consumes: `inside`, `PathError` (Task 13); `read_text`, `write_text`, `write_all`, `NotTextError` (Task 13); the parsers and renderers of Tasks 7 to 9; `slug_problem` (Task 6); the types of Task 7; `SEVERITY` (Task 10).
 - Produces, in `config.py`: `class ConfigError(ValueError)`; `@dataclass(frozen=True) class Config: default_tier: Tier`; `load_config(path: Path) -> Config`.
 - Produces, in `layout.py`:
 
@@ -2184,7 +2184,7 @@ git commit -m "feat(workspace): the .spec tree, its strict config and the change
 Behaviour:
 - `validate` with no id checks every living spec and every change that is not archived; with an id, that change and the living specs. Each finding prints as `SEVERITY code path[:line]  message`, with paths from the repository's root. It ends with one line, `N errors, M warnings`. Exit 1 where `failed(findings, strict=…)`, else 0. `--json` prints `{"findings": [...], "failed": true|false}`.
 - `status` prints one line a change that is not archived (`--all` shows those too): the id, tier and status, then its next action. With none to show it prints `no open changes: run adk-spec new <id>`. `--json` prints `{"changes": [{"id", "tier", "status", "next"}]}`.
-- `WorkspaceError`, `ConfigError`, `PathRefused` and `NotText` each end as one sentence on stderr and `EXIT_USAGE`.
+- `WorkspaceError`, `ConfigError`, `PathError` and `NotTextError` each end as one sentence on stderr and `EXIT_USAGE`.
 
 - [ ] **Step 1: Write the failing tests** (added to `tests/test_cli.py`)
 
@@ -2268,7 +2268,7 @@ git commit -m "feat: init, new, validate and status, which start without the eng
 - Test: `tests/test_cli.py`
 
 **Interfaces:**
-- Consumes: `capture_bases`, `approve`, `approval_files`, `approval_stale`, `approve_blockers`, `archive_blockers` (Task 12); `apply_delta`, `MergeRefused` (Task 11); `Workspace` (Task 14).
+- Consumes: `capture_bases`, `approve`, `approval_files`, `approval_stale`, `approve_blockers`, `archive_blockers` (Task 12); `apply_delta`, `MergeError` (Task 11); `Workspace` (Task 14).
 - Produces: `adk-spec rebase <id>`; `adk-spec approve <id> [--by NAME] [--strict]`; `adk-spec archive <id>`.
 
 Behaviour:
