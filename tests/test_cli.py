@@ -146,7 +146,9 @@ def test_a_standard_change_waits_for_verify(tmp_path, capsys) -> None:
     source, target = tmp_path / ".spec/changes/passkeys", tmp_path / ".spec/changes/audited"
     for name in ("brief.md", "tasks.md", "specs/auth/spec.md"):
         write_text(target / name, read_text(source / name))
-    approved(tmp_path, "audited")
+    assert run(tmp_path, "rebase", "audited") == 0
+    assert run(tmp_path, "check", "audited", "--no-model") == 0, "a standard change is checked before it is approved"
+    assert run(tmp_path, "approve", "audited", "--by", "reviewer") == 0
     capsys.readouterr()
     assert run(tmp_path, "archive", "audited") == 1 and "verify" in capsys.readouterr().err
 

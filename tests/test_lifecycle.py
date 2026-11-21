@@ -113,3 +113,37 @@ def test_a_line_slipped_in_above_an_approved_one_voids_the_approval() -> None:
     first = "  - verify: uv run pytest tests/test_passkey.py\n"
     shadowed = {**TEXTS, "tasks.md": TASKS.replace(first, "  - verify: skip the tests\n" + first)}
     assert approval_stale(approved(), approval_files(shadowed)) == ["tasks.md"]
+
+
+# The check a standard change owes before its approval.
+
+FILES = {"brief.md": "sha256:a", "tasks.md": "sha256:b"}
+
+
+def test_a_lean_change_owes_no_check_and_a_standard_one_owes_a_current_clean_one() -> None:
+    from adk_spec.domain.lifecycle import check_blockers
+    from adk_spec.domain.model import Checked
+
+    never = ChangeState(id="passkeys", tier="standard")
+    assert check_blockers(ChangeState(id="passkeys", tier="lean"), FILES) == []
+    assert [f.code for f in check_blockers(never, FILES)] == ["check.missing"]
+    clean = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
+    assert check_blockers(clean, FILES) == []
+    assert [f.code for f in check_blockers(clean, {**FILES, "brief.md": "sha256:z"})] == ["check.stale"]
+    assert [f.code for f in check_blockers(clean, {"brief.md": "sha256:a"})] == ["check.stale"], "a file was removed"
+    found = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=2)})
+    (blocking,) = check_blockers(found, FILES)
+    assert (blocking.code, blocking.severity) == ("check.blocking", "ERROR") and "2 blocking" in blocking.message
+
+
+def test_a_draft_with_nothing_else_owed_is_sent_to_its_check_first() -> None:
+    from adk_spec.domain.lifecycle import check_blockers
+    from adk_spec.domain.model import Checked
+
+    never = ChangeState(id="passkeys", tier="standard")
+    assert next_action(never, [], ["approval"], check=check_blockers(never, FILES)) == "run `adk-spec check passkeys`"
+    found = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=1)})
+    step = next_action(found, [], ["approval"], check=check_blockers(found, FILES))
+    assert step == "fix what reports/check.md lists, then run `adk-spec check passkeys`"
+    clean = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
+    assert next_action(clean, [], ["approval"], check=check_blockers(clean, FILES)) == "run `adk-spec approve passkeys`"

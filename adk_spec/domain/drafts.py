@@ -141,3 +141,27 @@ class DesignDraft(BaseModel):
     goals: str = Field(description="What the design must achieve, and what it need not.")
     decisions: str = Field(description="Each decision with the alternatives weighed and why this one.")
     risks: str = Field(description="What could go wrong, and what limits it.")
+
+
+class FindingDraft(BaseModel):
+    """One thing a review of a change's files found, with the text it points to."""
+
+    kind: Literal["contradiction", "ambiguity", "gap", "duplication", "constitution"] = Field(
+        description=(
+            "contradiction: two files say opposite things. ambiguity: wording that allows two readings. gap: "
+            "something promised that no requirement delivers. duplication: one requirement stated twice. "
+            "constitution: a rule of the repository the change breaks."
+        )
+    )
+    severity: Literal["critical", "warning", "note"] = Field(
+        description="critical: the change would be built wrong as it stands. warning: worth a look. note: a remark."
+    )
+    file: str = Field(description="The path of the file the quote is from, exactly as given above that file.")
+    quote: str = Field(description="The exact text the finding points to, copied from that file: a line or a phrase.")
+    message: str = Field(description="One sentence: what is wrong, and what to change.")
+
+
+class FindingsDraft(BaseModel):
+    """What a review of a change's files found. An empty list where it found nothing."""
+
+    findings: list[FindingDraft] = Field(description="Each finding. Empty where the files agree.")

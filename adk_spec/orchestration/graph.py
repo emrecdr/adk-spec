@@ -39,6 +39,7 @@ from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked
 from .plugins import UsageLedger, roster
 from .stages import BRIEF_TEXT, LIVING
 from .stages import brief as brief_stage
+from .stages import check as check_stage
 from .stages import deltas as deltas_stage
 from .stages import design as design_stage
 from .stages import questions as questions_stage
@@ -350,4 +351,12 @@ def build_plan_app(
         ]
     else:
         edges = [("START", tasks), *edges]
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
+
+
+def build_check_app(*, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:
+    """The check stage behind its gate. The gate holds the answer to its schema and nothing more: a finding that
+    points at nothing is left out by code afterwards, not sent back."""
+    check, check_gate = check_stage.build_check(), checked(check_stage.KEY, lambda _state: [])
+    edges: list[Any] = [("START", check, check_gate), (check_gate, {OK: _ended, AGAIN: check, GIVE_UP: _ended})]
     return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))

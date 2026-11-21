@@ -117,6 +117,18 @@ class Approval(_Held):
     at: str
     files: dict[str, str]
     bases: dict[str, str]
+    #: Why the approver set a blocking finding of the check aside, in their words. None where nothing was.
+    override: str | None = None
+
+
+class Checked(_Held):
+    """What a check of a change read and found: each file's fingerprint as it stood, how many findings block an
+    approval, and the model that judged, none where code alone did."""
+
+    at: str
+    files: dict[str, str]
+    blocking: int
+    model: str | None = None
 
 
 class ChangeState(_Held):
@@ -131,6 +143,8 @@ class ChangeState(_Held):
     approval: Approval | None = None
     #: Whether the change owes a design before its tasks: the brief's own call, or the strict tier's.
     needs_design: bool = False
+    #: The last check of the change's files against each other. Void once one of them changes.
+    check: Checked | None = None
 
 
 class Change(_Held):

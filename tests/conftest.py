@@ -106,7 +106,27 @@ CANNED_DESIGN = {
     "decisions": "WebAuthn through the platform API, not a library: one less dependency.",
     "risks": "Older browsers lack WebAuthn: the password path stays.",
 }
-CANNED: tuple[dict, ...] = (CANNED_TRIAGE, CANNED_BRIEF, CANNED_DELTAS, CANNED_QUESTIONS, CANNED_TASKS, CANNED_DESIGN)
+#: One finding of the check's, a warning that quotes the sample brief's last line.
+CANNED_FINDINGS = {
+    "findings": [
+        {
+            "kind": "ambiguity",
+            "severity": "warning",
+            "file": "brief.md",
+            "quote": "Browsers in scope support WebAuthn.",
+            "message": "Which browsers are in scope is not said.",
+        }
+    ]
+}
+CANNED: tuple[dict, ...] = (
+    CANNED_TRIAGE,
+    CANNED_BRIEF,
+    CANNED_DELTAS,
+    CANNED_QUESTIONS,
+    CANNED_TASKS,
+    CANNED_DESIGN,
+    CANNED_FINDINGS,
+)
 
 
 def canned_for(schema: type[BaseModel]) -> dict:

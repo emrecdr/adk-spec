@@ -60,11 +60,12 @@ This is the `lean` tier, which needs one approval. A `standard` change also wait
 
 `adk-spec status` names the next step at any point.
 
-Two commands draft with a model:
+Three commands call a model:
 
 ```
 uv run adk-spec propose "Let users sign in with a passkey."
 uv run adk-spec plan <id>
+uv run adk-spec check <id>
 ```
 
 - `propose` drafts a change from a request: its brief and one delta for each capability it touches. A model writes
@@ -83,6 +84,17 @@ uv run adk-spec plan <id>
 
 - `plan` drafts a draft change's tasks, and first its design where the brief says one is owed. It refuses a change
   whose brief or deltas have an error, and one that is approved already.
+
+- `check` reads a change's files against each other and writes `reports/check.md` in the change's folder. Code
+  checks what it can decide: structure, that every requirement the change adds or modifies has a task, and that no
+  task names a requirement nothing holds. A model then looks for what takes a reading: two files that contradict
+  each other, wording that allows two readings, a promise no requirement keeps, a broken rule of the repository.
+  Each of its findings must quote the text it is about, and one whose quote is not in the file it names is left
+  out. `check --no-model` runs the code's checks alone.
+
+  A standard change must be checked before it is approved, and a finding marked blocking holds the approval. Fix
+  it and check again, or approve with `--override "<your reason>"`, which is recorded in the approval. An edit
+  after the check makes it stale. A lean change owes no check.
 
 On the standard tier `propose` puts each point the brief leaves open to you as a question, at most five a round and
 three rounds, each with a suggested answer. A line answers, `=` takes the suggestion, and an empty line leaves the

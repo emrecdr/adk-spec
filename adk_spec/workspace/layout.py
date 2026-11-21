@@ -36,6 +36,8 @@ from .paths import PathError, inside
 ROOT_NAME = ".spec"
 CONFIG, CONSTITUTION, SPECS, CHANGES = "config.toml", "constitution.md", "specs", "changes"
 STATE, BRIEF, DESIGN, TASKS, SPEC_FILE = "change.json", "brief.md", "design.md", "tasks.md", "spec.md"
+#: The folder of a change's generated reports, which no approval fingerprints.
+REPORTS = "reports"
 #: What `adk-spec init` writes: the sections teams have found a constitution useful for.
 CONSTITUTION_TEXT = """\
 # Constitution
@@ -255,6 +257,10 @@ class Workspace:
         texts = self._placed(self._folder(change_id), files)
         write_all(texts)
         return list(texts)
+
+    def write_report(self, change_id: str, name: str, text: str) -> Path:
+        """A generated report of a change, under its `reports/` folder: written whole, replacing the one before."""
+        return self.write_into(change_id, {f"{REPORTS}/{name}": text})[0]
 
     def save_state(self, state: ChangeState) -> None:
         write_text(inside(self.home, CHANGES, state.id, STATE), state.model_dump_json(indent=2))

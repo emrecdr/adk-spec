@@ -3,16 +3,21 @@ which task names a requirement nothing holds."""
 
 from __future__ import annotations
 
-from conftest import seeded
-from samples import DELTA, SPEC, TASKS
+import pytest
+from conftest import CANNED_FINDINGS, approved, on_the_fake, run, seeded
+from samples import BRIEF, DELTA, SPEC, TASKS
 
 from adk_spec.domain.check import coverage, coverage_of, nameable, owed
+from adk_spec.domain.convert import to_findings
 from adk_spec.domain.delta_md import parse_delta
+from adk_spec.domain.drafts import FindingsDraft
+from adk_spec.domain.lifecycle import approval_files
 from adk_spec.domain.spec_md import parse_spec
 from adk_spec.domain.tasks_md import parse_tasks
 from adk_spec.domain.validate import validate_delta
 from adk_spec.workspace.files import read_text, write_text
-from adk_spec.workspace.layout import findings_of
+from adk_spec.workspace.layout import Workspace, findings_of
+from adk_spec.workspace.runs import listed, read
 
 DELTAS = {"auth": parse_delta(DELTA)}  # adds 004, modifies 002, removes 001
 LIVING = {"auth": parse_spec(SPEC)}  # holds 001 and 002, has retired 003
@@ -69,3 +74,154 @@ def test_a_modified_requirement_that_did_not_change_is_a_warning() -> None:
     found = validate_delta(same, living, {})
     assert ("delta.modified-unchanged", "WARNING") in [(f.code, f.severity) for f in found]
     assert not any(f.code == "delta.modified-unchanged" for f in validate_delta(DELTAS["auth"], living, {}))
+
+
+# The model's pass, and the command.
+
+CHECK = "You review the files of a change"
+REAL = {
+    "kind": "contradiction",
+    "severity": "critical",
+    "file": "brief.md",
+    "quote": "the top source of account takeovers",
+    "message": "The delta keeps password sign-in.",
+}
+REPORT = ".spec/changes/passkeys/reports/check.md"
+
+
+@pytest.fixture(autouse=True)
+def _fake_arm(monkeypatch) -> None:
+    on_the_fake(monkeypatch)
+
+
+def standard(root) -> Workspace:
+    """The seeded change as a standard one with its bases recorded: what owes a check before approval."""
+    ws = seeded(root)
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"tier": "standard"}))
+    assert run(root, "rebase", "passkeys") == 0
+    return ws
+
+
+def state(ws: Workspace):
+    return ws.load_change("passkeys").change.state
+
+
+def test_a_finding_is_kept_only_where_its_quote_is_in_the_file() -> None:
+    texts = {"brief.md": BRIEF, "specs/auth/spec.md": DELTA}
+    invented = {**REAL, "quote": "Passwords are never used here"}
+    elsewhere = {**REAL, "file": "tasks.md"}
+    short = {**REAL, "quote": "the top"}
+    draft = FindingsDraft.model_validate({"findings": [REAL, invented, elsewhere, short]})
+    kept, dropped = to_findings(draft, texts)
+    assert [(f.code, f.severity, f.path, f.line) for f in kept] == [("check.contradiction", "ERROR", "brief.md", 5)]
+    assert dropped == 3 and kept[0].message == "The delta keeps password sign-in."
+
+
+def test_a_quote_is_found_across_a_line_break_and_stray_spaces() -> None:
+    quote = "WHEN the user presents a registered passkey\n   - THEN the system   starts a session"
+    wrapped = {**REAL, "kind": "ambiguity", "severity": "note", "file": "specs/auth/spec.md", "quote": quote}
+    kept, dropped = to_findings(FindingsDraft.model_validate({"findings": [wrapped]}), {"specs/auth/spec.md": DELTA})
+    assert dropped == 0 and [(f.code, f.severity, f.line) for f in kept] == [("check.ambiguity", "INFO", 11)]
+
+
+def test_check_writes_a_report_and_records_what_it_read(tmp_path, capsys, fake_provider) -> None:
+    ws = standard(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "check", "passkeys") == 0
+    held = state(ws).check
+    assert (held.blocking, held.model) == (0, "fake on gemini")
+    assert held.files == approval_files(ws.approval_texts("passkeys"))
+    report = read_text(tmp_path / REPORT)
+    assert "check.ambiguity" in report and "brief.md:25" in report and "Which browsers are in scope" in report
+    out = capsys.readouterr().out
+    assert REPORT in out and "check 120 in 1 call: 120 total" in out and "approve passkeys" in out
+    sent = str(fake_provider.requests[0].config.system_instruction)
+    assert "=== brief.md\n# Sign in with a passkey" in sent and "=== specs/auth/spec.md\n# Delta: auth" in sent
+    assert read(listed(ws)[0]).command == "check"
+
+
+def test_a_critical_finding_blocks_approval_until_it_is_fixed_or_overridden(tmp_path, capsys, fake_provider) -> None:
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1 and state(ws).check.blocking == 1
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0 and "reports/check.md" in capsys.readouterr().out
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    assert "check.blocking" in capsys.readouterr().out
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer", "--override", "the delta is right") == 0
+    approval = state(ws).approval
+    assert approval.override == "the delta is right" and state(ws).status == "approved"
+
+
+def test_an_edit_after_the_check_makes_it_stale(tmp_path, capsys, fake_provider) -> None:
+    standard(tmp_path)
+    assert run(tmp_path, "check", "passkeys") == 0
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief).replace("No change to session length.", "No change to sessions."))
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    assert "check.stale" in capsys.readouterr().out
+    assert run(tmp_path, "status") == 0 and "run `adk-spec check passkeys`" in capsys.readouterr().out
+    assert len(fake_provider.requests) == 1
+
+
+def test_a_standard_change_never_checked_cannot_be_approved_and_a_lean_one_can(tmp_path, capsys) -> None:
+    standard(tmp_path / "standard")
+    capsys.readouterr()
+    assert run(tmp_path / "standard", "approve", "passkeys", "--by", "reviewer") == 1
+    assert "check.missing" in capsys.readouterr().out
+    seeded(tmp_path / "lean")
+    approved(tmp_path / "lean")
+
+
+def test_an_override_does_not_stand_in_for_a_check_never_run(tmp_path, capsys) -> None:
+    standard(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer", "--override", "no time") == 1
+    assert "check.missing" in capsys.readouterr().out
+
+
+def test_no_model_runs_the_codes_passes_alone(tmp_path, fake_provider) -> None:
+    ws = standard(tmp_path)
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    assert fake_provider.requests == [] and state(ws).check.model is None
+    assert "by code alone" in read_text(tmp_path / REPORT)
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+
+
+def test_a_failed_pass_records_no_check_and_writes_no_report(tmp_path, capsys, fake_provider) -> None:
+    ws = standard(tmp_path)
+    fake_provider.raises_when(CHECK, RuntimeError("the provider fell over"))
+    assert run(tmp_path, "check", "passkeys") == 3
+    assert "the provider fell over" in capsys.readouterr().err
+    assert state(ws).check is None and not (tmp_path / REPORT).exists()
+
+
+def test_an_error_of_structure_is_reported_and_the_model_is_not_asked(tmp_path, capsys, fake_provider) -> None:
+    ws = standard(tmp_path)
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, read_text(delta).replace("### REQ-AUTH-002", "### REQ-AUTH-099"))
+    assert run(tmp_path, "check", "passkeys") == 1
+    assert fake_provider.requests == [] and state(ws).check.blocking >= 1
+    assert "delta.target-missing" in read_text(tmp_path / REPORT)
+    assert "fix what the check lists first" in capsys.readouterr().err
+
+
+def test_a_finding_whose_quote_is_nowhere_is_left_out_and_counted(tmp_path, capsys, fake_provider) -> None:
+    ws = standard(tmp_path)
+    invented = {**REAL, "quote": "Passwords are never used here"}
+    fake_provider.answers_when(CHECK, {"findings": [invented, CANNED_FINDINGS["findings"][0]]})
+    assert run(tmp_path, "check", "passkeys") == 0 and state(ws).check.blocking == 0
+    assert "1 finding of the model was left out" in capsys.readouterr().out
+    report = read_text(tmp_path / REPORT)
+    assert "check.contradiction" not in report and "left out" in report
+
+
+def test_a_report_is_no_part_of_an_approval(tmp_path, capsys, fake_provider) -> None:
+    ws = standard(tmp_path)
+    assert run(tmp_path, "check", "passkeys") == 0
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert run(tmp_path, "check", "passkeys") == 0, "a change may be checked again once approved"
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0 and "approve again" not in capsys.readouterr().out
+    assert state(ws).status == "approved" and len(fake_provider.requests) == 2

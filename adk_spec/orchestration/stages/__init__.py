@@ -29,6 +29,8 @@ CONSTITUTION = "constitution"
 BRIEF_TEXT = "brief_text"
 LIVING = "living"
 DELTAS_TEXT = "deltas_text"
+#: The state key a change's own files are read from, each under a line naming its path.
+CHANGE_FILES = "change_files"
 
 
 def placeholder(key: str, *, optional: bool = False) -> str:

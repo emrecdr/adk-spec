@@ -22,7 +22,7 @@ from typing import Any, NoReturn, get_args
 
 from ..domain.brief_md import render_brief
 from ..domain.check import nameable, owed
-from ..domain.convert import render_design, slug_of, to_tasks
+from ..domain.convert import render_design, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
     approval_files,
@@ -31,14 +31,22 @@ from ..domain.lifecycle import (
     approve_blockers,
     archive_blockers,
     capture_bases,
+    check_blockers,
     next_action,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import ChangeState, Finding, Spec, Tier
+from ..domain.model import ChangeState, Checked, Finding, Spec, Tier
+from ..domain.report_md import render_check
 from ..domain.tasks_md import render_tasks
 from ..domain.validate import failed, finding, validate_spec
 from ..workspace.config import ConfigError
-from ..workspace.context import CONSTITUTION_MAX_CHARS, capability_index, constitution_text, living_text
+from ..workspace.context import (
+    CONSTITUTION_MAX_CHARS,
+    capability_index,
+    constitution_text,
+    files_text,
+    living_text,
+)
 from ..workspace.files import NotTextError
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
@@ -120,6 +128,9 @@ def _parser() -> argparse.ArgumentParser:
     approval.add_argument("id", help="the change")
     approval.add_argument("--by", help="who approves: a recorded claim, not an authentication (default: this account)")
     approval.add_argument("--strict", action="store_true", help="refuse on a warning too")
+    approval.add_argument(
+        "--override", metavar="REASON", help="approve although the check found something blocking, and record why"
+    )
     approval.set_defaults(handler=_locked(_approve))
 
     archive = commands.add_parser("archive", help="fold an approved change's deltas into the living specs")
@@ -136,6 +147,11 @@ def _parser() -> argparse.ArgumentParser:
     plan = commands.add_parser("plan", help="draft a change's tasks, and its design where one is owed")
     plan.add_argument("id", help="the change")
     plan.set_defaults(handler=_plan)
+
+    check = commands.add_parser("check", help="check a change's files against each other, before it is approved")
+    check.add_argument("id", help="the change")
+    check.add_argument("--no-model", action="store_true", help="run the checks code makes, and call no model")
+    check.set_defaults(handler=_check)
 
     smoke = commands.add_parser("smoke", help="run the triage stage alone, to prove an arm answers in a schema")
     smoke.add_argument("--model", help="the model for this run alone, in place of the arm's")
@@ -203,18 +219,23 @@ def _new(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _from_root(change_id: str, found: list[Finding]) -> list[Finding]:
+    """Findings about a change's files, each with its path from the repository's root."""
+    prefix = f"{ROOT_NAME}/{CHANGES}/{change_id}/"
+    return [held.model_copy(update={"path": prefix + (held.path or "")}) for held in found]
+
+
 def _assessed(
     workspace: Workspace, change_id: str, living: dict[str, Spec]
-) -> tuple[LoadedChange, list[Finding], list[str]]:
-    """A change as every command reads it: loaded, its findings with their paths from the root, and what its
-    approval no longer covers."""
+) -> tuple[LoadedChange, list[Finding], list[str], list[Finding]]:
+    """A change as every command reads it: loaded, its findings with their paths from the root, what its approval
+    no longer covers, and what its check still owes an approval."""
     loaded = workspace.load_change(change_id)
-    prefix = f"{ROOT_NAME}/{CHANGES}/{change_id}/"
     unreadable = set(workspace.capabilities()) - set(living)  # a spec that is there and does not read
-    of_change = findings_of(loaded, living, unreadable)
-    found = [held.model_copy(update={"path": prefix + (held.path or "")}) for held in of_change]
-    stale = approval_stale(loaded.change.state, approval_files(workspace.approval_texts(change_id)))
-    return loaded, found, stale
+    found = _from_root(change_id, findings_of(loaded, living, unreadable))
+    files = approval_files(workspace.approval_texts(change_id))
+    stale = approval_stale(loaded.change.state, files)
+    return loaded, found, stale, _from_root(change_id, check_blockers(loaded.change.state, files))
 
 
 def _of_specs(workspace: Workspace) -> tuple[dict[str, Spec], list[Finding]]:
@@ -245,7 +266,7 @@ def _validate(args: argparse.Namespace) -> int:
             )
         )
     for change_id in [args.id] if args.id else workspace.changes():
-        loaded, of_change, _stale = _assessed(workspace, change_id, living)
+        loaded, of_change, _stale, _owed = _assessed(workspace, change_id, living)
         if loaded.change.state.status != "archived":  # an archived change is folded in: its delta has no base now
             found += of_change
     stops = failed(found, strict=args.strict)
@@ -263,11 +284,11 @@ def _status(args: argparse.Namespace) -> int:
     living, _found = workspace.specs()
     rows = []
     for change_id in workspace.changes():
-        loaded, found, stale = _assessed(workspace, change_id, living)
+        loaded, found, stale, owed = _assessed(workspace, change_id, living)
         state = loaded.change.state
         if state.status == "archived" and not args.all:
             continue
-        step = next_action(state, found, stale)
+        step = next_action(state, found, stale, check=owed)
         rows.append({"id": change_id, "tier": state.tier, "status": state.status, "next": step})
     if args.json:
         print(json.dumps({"changes": rows}, indent=2))
@@ -313,8 +334,13 @@ def _rebase(args: argparse.Namespace) -> int:
 def _approve(args: argparse.Namespace) -> int:
     workspace = _workspace(args)
     living, _found = workspace.specs()
-    loaded, found, _stale = _assessed(workspace, args.id, living)
-    if blockers := approve_blockers(loaded.change.state, found, strict=args.strict):
+    loaded, found, _stale, owed = _assessed(workspace, args.id, living)
+    # A reason given sets a blocking finding of the check aside, and nothing else: a check never run, or run on
+    # other files, is still owed.
+    overridden = bool(args.override) and any(held.code == "check.blocking" for held in owed)
+    blockers = approve_blockers(loaded.change.state, found, strict=args.strict)
+    blockers += [held for held in owed if not (overridden and held.code == "check.blocking")]
+    if blockers:
         _printed(blockers)
         print(f"{PROG}: `{args.id}` is not approved: {len(blockers)} findings block it", file=sys.stderr)
         return EXIT_FINDINGS
@@ -324,7 +350,8 @@ def _approve(args: argparse.Namespace) -> int:
     except OSError as exc:  # an account with no name, as in a container run under a bare user id
         raise UsageError("this account has no name: name the approver with --by") from exc
     at = datetime.now(UTC).isoformat(timespec="seconds")
-    workspace.save_state(approve(loaded.change.state, files=files, by=by, at=at))
+    override = args.override if overridden else None
+    workspace.save_state(approve(loaded.change.state, files=files, by=by, at=at, override=override))
     print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
     return EXIT_OK
 
@@ -334,7 +361,7 @@ def _archive(args: argparse.Namespace) -> int:
     are then written as one set: all of them, or none as far as the file system allows."""
     workspace = _workspace(args)
     living, of_specs = workspace.specs()
-    loaded, _found, stale = _assessed(workspace, args.id, living)
+    loaded, _found, stale, _owed = _assessed(workspace, args.id, living)
     state = loaded.change.state
     if blockers := archive_blockers(state, stale):
         for sentence in blockers:
@@ -505,7 +532,7 @@ def _of_tasks(found: Finding) -> bool:
 
 def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     specs, _of_living = workspace.specs()
-    loaded, found, _stale = _assessed(workspace, args.id, specs)
+    loaded, found, _stale, _owed = _assessed(workspace, args.id, specs)
     change, state = loaded.change, loaded.change.state
     if state.status != "draft":  # new tasks would void what was approved
         print(f"{PROG}: `{args.id}` is {state.status}: a plan is drafted while a change is a draft", file=sys.stderr)
@@ -554,9 +581,94 @@ def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     for path in workspace.write_into(args.id, files):
         print(f"wrote     {workspace.shown(path)}")
     print(f"tokens    {_spent(ledger)}")
-    loaded, found, stale = _assessed(workspace, args.id, specs)
-    print(f"next      {next_action(loaded.change.state, found, stale)}")
+    loaded, found, stale, unchecked = _assessed(workspace, args.id, specs)
+    print(f"next      {next_action(loaded.change.state, found, stale, check=unchecked)}")
     return EXIT_OK
+
+
+def _check(args: argparse.Namespace) -> int:
+    _load_env()
+    workspace = _workspace(args)
+    with lock_held(workspace):
+        return _reviewed(args, workspace)
+
+
+def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
+    """A change's files checked against each other: by code always, and by a model where the files read and the
+    person did not say otherwise. The report is written and the check recorded with the fingerprints of what was
+    read; where the model's pass does not end well, neither is."""
+    specs, _of_living = workspace.specs()
+    loaded, found, _stale, _owed = _assessed(workspace, args.id, specs)
+    state = loaded.change.state
+    if state.status == "archived":
+        print(f"{PROG}: `{args.id}` is archived: there is nothing left to check", file=sys.stderr)
+        return EXIT_FINDINGS
+    texts = workspace.approval_texts(args.id)
+    judged: list[Finding] = []
+    dropped, ledger, model = 0, None, None
+    if any(held.severity == "ERROR" for held in found):
+        print(f"{PROG}: fix what the check lists first: the model's pass waits for files that read", file=sys.stderr)
+    elif not args.no_model:
+        from ..orchestration.models import serving
+
+        judged, dropped, ledger, failure = _judged(workspace, loaded.change, specs, texts)
+        if failure:
+            print(f"{PROG}: the check did not finish, and nothing was recorded: {failure}", file=sys.stderr)
+            print(f"tokens    {_spent(ledger)}")
+            return EXIT_ENGINE
+        model = serving("check")
+    at = datetime.now(UTC).isoformat(timespec="seconds")
+    every = [*found, *_from_root(args.id, judged)]
+    blocking = sum(held.severity == "ERROR" for held in every)
+    inside_change = [held.model_copy(update={"path": (held.path or "").split(f"/{args.id}/", 1)[-1]}) for held in every]
+    report = workspace.write_report(
+        args.id, "check.md", render_check(args.id, at, inside_change, model=model, dropped=dropped)
+    )
+    held = Checked(at=at, files=approval_files(texts), blocking=blocking, model=model)
+    workspace.save_state(state.model_copy(update={"check": held}))
+    _printed(every)
+    print(f"wrote     {workspace.shown(report)}")
+    if dropped:
+        were = "finding of the model was" if dropped == 1 else "findings of the model were"
+        print(f"note      {dropped} {were} left out: the text quoted is not in the file named")
+    if ledger is not None:
+        print(f"tokens    {_spent(ledger)}")
+    loaded, found, stale, owed = _assessed(workspace, args.id, specs)
+    print(f"next      {next_action(loaded.change.state, found, stale, check=owed)}")
+    return EXIT_FINDINGS if blocking else EXIT_OK
+
+
+def _judged(
+    workspace: Workspace, change: Any, specs: dict[str, Spec], texts: dict[str, str]
+) -> tuple[list[Finding], int, Any, str | None]:
+    """The model's pass of a check: its findings that point at something, each with its path in the change's
+    folder; how many pointed at nothing; the ledger; and the failure, where the pass did not end well."""
+    from ..orchestration.models import require_ready
+
+    if why := require_ready(roles=("check",)):
+        raise UsageError(why)
+    from ..orchestration.gate import FAILURE
+    from ..orchestration.graph import build_check_app
+    from ..orchestration.plugins import UsageLedger
+    from ..orchestration.stages import CHANGE_FILES, LIVING
+    from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages.check import read_check
+
+    seed = {
+        RULES: constitution_text(workspace),
+        LIVING: living_text(specs, sorted(change.deltas)),
+        CHANGE_FILES: files_text(texts),
+    }
+    ledger = UsageLedger(workspace.config().max_tokens or None)
+    with _recording(workspace, "check", change.state.id) as kept:
+        run = _ran(build_check_app(ledger=ledger, recorder=kept.recorder), seed, "check")
+        answer = read_check(run.state)
+        failure = run.state.get(FAILURE) or run.failure or (answer if isinstance(answer, str) else None)
+        kept.outcome = f"failed: {failure}" if failure else "written"
+    if failure or isinstance(answer, str):
+        return [], 0, ledger, str(failure)
+    judged, dropped = to_findings(answer, texts)
+    return judged, dropped, ledger, None
 
 
 def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
@@ -605,8 +717,8 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
             return EXIT_USAGE
         kept.outcome = "written"
     print(f"tokens    {_spent(ledger)}")
-    loaded, found, stale = _assessed(workspace, kept.change, specs)
-    print(f"next      {next_action(loaded.change.state, found, stale)}")
+    loaded, found, stale, owed = _assessed(workspace, kept.change, specs)
+    print(f"next      {next_action(loaded.change.state, found, stale, check=owed)}")
     return EXIT_OK
 
 

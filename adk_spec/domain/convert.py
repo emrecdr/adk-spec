@@ -10,9 +10,9 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 
-from .drafts import BriefDraft, DeltasDraft, DesignDraft, RequirementDraft, TasksDraft
+from .drafts import BriefDraft, DeltasDraft, DesignDraft, FindingsDraft, RequirementDraft, TasksDraft
 from .ids import SLUG_MAX, next_requirement_id, slug_problem
-from .model import Brief, Delta, GrammarError, Removal, Requirement, Scenario, Spec, Task, TaskGroup
+from .model import Brief, Delta, Finding, GrammarError, Removal, Requirement, Scenario, Severity, Spec, Task, TaskGroup
 from .spec_md import fenced_lines, paragraphs
 from .text import lines_of, normalise
 
@@ -153,3 +153,56 @@ def slug_of(title: str, held: Iterable[str]) -> str:
         tail = f"-{number}"
         slug = base[: SLUG_MAX - len(tail)].rstrip("-") + tail
     return slug
+
+
+#: A quote shorter than this, once its spaces are settled, points at nothing: `the` is in every file.
+QUOTE_MIN_CHARS = 8
+_SEVERITY: dict[str, Severity] = {"critical": "ERROR", "warning": "WARNING", "note": "INFO"}
+
+
+def flat(text: str) -> str:
+    """`text` with every run of whitespace read as one space: how a quote is compared with the text it is from, so a
+    line break or an indent a model changed does not lose it."""
+    return " ".join(text.split())
+
+
+def quoted_at(quote: str, text: str) -> int | None:
+    """The line of `text`, counted from 1, where `quote` starts, or nothing where `text` does not hold it. A quote
+    may run over lines; one too short to point at anything is in no text."""
+    wanted = flat(quote)
+    if len(wanted) < QUOTE_MIN_CHARS:
+        return None
+    starts: list[tuple[int, int]] = []  # where each line that holds a word starts in the flat text, and its number
+    pieces: list[str] = []
+    offset = 0
+    for number, line in enumerate(lines_of(normalise(text)), 1):
+        if piece := flat(line):
+            starts.append((offset, number))
+            pieces.append(piece)
+            offset += len(piece) + 1
+    at = " ".join(pieces).find(wanted)
+    if at < 0:
+        return None
+    return max(number for start, number in starts if start <= at)
+
+
+def to_findings(draft: FindingsDraft, texts: Mapping[str, str]) -> tuple[list[Finding], int]:
+    """The findings a model gave that point at something: each kept only where the file it names is one of `texts`
+    and holds the text it quotes. With them, how many were left out. A model's finding that quotes nothing real is
+    no finding, whatever it says."""
+    kept: list[Finding] = []
+    for one in draft.findings:
+        path = one.file.strip()
+        line = quoted_at(one.quote, texts[path]) if path in texts else None
+        if line is None:
+            continue
+        kept.append(
+            Finding(
+                severity=_SEVERITY[one.severity],
+                code=f"check.{one.kind}",
+                message=_line(one.message),
+                path=path,
+                line=line,
+            )
+        )
+    return kept, len(draft.findings) - len(kept)

@@ -37,16 +37,21 @@ def living_text(specs: Mapping[str, Spec], capabilities: Iterable[str]) -> str:
     return joined({slug: render_spec(specs[slug]) for slug in capabilities if slug in specs})
 
 
-def joined(parts: Mapping[str, str]) -> str:
-    """Each capability's spec text under a line naming it, whole. `ContextTooLargeError` past the limit."""
-    text = "\n".join(f"=== {slug}\n{held}" for slug, held in parts.items())
+def joined(parts: Mapping[str, str], *, what: str = "the living specs of", remedy: str = "") -> str:
+    """Each text under a line naming it, whole. `ContextTooLargeError` past the limit, naming `what` they are."""
+    text = "\n".join(f"=== {name}\n{held}" for name, held in parts.items())
     if len(text) > CONTEXT_MAX_CHARS:
-        sizes = ", ".join(f"{slug} ({len(held):,})" for slug, held in parts.items())
+        sizes = ", ".join(f"{name} ({len(held):,})" for name, held in parts.items())
         raise ContextTooLargeError(
-            f"the living specs of {sizes} hold {len(text):,} characters, past the {CONTEXT_MAX_CHARS:,} a stage is "
-            "given. Split a capability, or name fewer in the change"
+            f"{what} {sizes} hold {len(text):,} characters, past the {CONTEXT_MAX_CHARS:,} a stage is given. "
+            + (remedy or "Split a capability, or name fewer in the change")
         )
     return text
+
+
+def files_text(texts: Mapping[str, str]) -> str:
+    """A change's own files, each under a line naming its path in the change's folder, whole."""
+    return joined(texts, what="the change's files", remedy="Split the change")
 
 
 def constitution_text(workspace: Workspace) -> str:

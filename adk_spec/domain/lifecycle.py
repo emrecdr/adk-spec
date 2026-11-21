@@ -47,10 +47,34 @@ def approval_files(texts: Mapping[str, str]) -> dict[str, str]:
     return {path: sha256_of(_as_approved(path, text)) for path, text in texts.items()}
 
 
-def approve(state: ChangeState, *, files: Mapping[str, str], by: str, at: str) -> ChangeState:
-    """The state with the approval recorded: who, when, each file's fingerprint and the bases as they stand."""
-    approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases))
+def approve(
+    state: ChangeState, *, files: Mapping[str, str], by: str, at: str, override: str | None = None
+) -> ChangeState:
+    """The state with the approval recorded: who, when, each file's fingerprint and the bases as they stand, and
+    the reason where the approver set a blocking finding of the check aside."""
+    approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override)
     return state.model_copy(update={"status": "approved", "approval": approval})
+
+
+def check_blockers(state: ChangeState, files: Mapping[str, str]) -> list[Finding]:
+    """What a change's check still owes its approval, as one finding or none. A lean change owes no check. Any
+    other owes one of its files as they stand now (`files`, their fingerprints), with nothing blocking in it."""
+    cid = state.id
+    if state.tier == "lean":
+        return []
+    if state.check is None:
+        why = ("check.missing", f"`{cid}` has not been checked. Run `adk-spec check {cid}`.")
+    elif state.check.files != dict(files):
+        why = ("check.stale", f"A file of `{cid}` changed since its check. Run `adk-spec check {cid}` again.")
+    elif state.check.blocking:
+        why = (
+            "check.blocking",
+            f"The check of `{cid}` found {state.check.blocking} blocking: reports/check.md lists them. Fix them and "
+            "check again, or approve with --override and your reason.",
+        )
+    else:
+        return []
+    return [Finding(severity="ERROR", code=why[0], message=why[1], path="reports/check.md")]
 
 
 def approval_stale(state: ChangeState, files: Mapping[str, str]) -> list[str]:
@@ -92,8 +116,10 @@ def archive_blockers(state: ChangeState, stale: Sequence[str]) -> list[str]:
     return []
 
 
-def next_action(state: ChangeState, findings: Sequence[Finding], stale: Sequence[str]) -> str:
-    """What a person does next with a change, in one phrase."""
+def next_action(
+    state: ChangeState, findings: Sequence[Finding], stale: Sequence[str], *, check: Sequence[Finding] = ()
+) -> str:
+    """What a person does next with a change, in one phrase. `check` is what `check_blockers` gives for it."""
     cid = state.id
     if state.status == "archived":
         return "nothing: archived"
@@ -106,6 +132,11 @@ def next_action(state: ChangeState, findings: Sequence[Finding], stale: Sequence
             step = "run" if state.status == "verified" else "implement tasks.md, then run"
             return f"{step} `adk-spec archive {cid}`"
         return f"implement tasks.md, then run `adk-spec verify {cid}`"
+    return _next_of_a_draft(state, findings, check)
+
+
+def _next_of_a_draft(state: ChangeState, findings: Sequence[Finding], check: Sequence[Finding]) -> str:
+    cid = state.id
     blockers = approve_blockers(state, findings)
     errors = any(found.severity == "ERROR" for found in findings)
     codes = {found.code for found in blockers}
@@ -115,4 +146,8 @@ def next_action(state: ChangeState, findings: Sequence[Finding], stale: Sequence
         return f"run `adk-spec rebase {cid}`"
     if blockers:
         return f"fix what `adk-spec validate {cid}` lists"
+    if any(owed.code == "check.blocking" for owed in check):
+        return f"fix what reports/check.md lists, then run `adk-spec check {cid}`"
+    if check:
+        return f"run `adk-spec check {cid}`"
     return f"run `adk-spec approve {cid}`"
