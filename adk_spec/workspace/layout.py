@@ -136,6 +136,9 @@ class Workspace:
         problems: list[Finding] = []
         for capability in self.capabilities():
             path = self.home / SPECS / capability / SPEC_FILE
+            if why := slug_problem(capability):
+                problems.append(_misnamed(why, self.shown(path)))
+                continue
             spec = _read(path, parse_spec, self.shown(path), problems)
             if spec is None:
                 continue
@@ -145,11 +148,15 @@ class Workspace:
                 specs[capability] = spec
         return specs, problems
 
-    def write_specs(self, specs: Mapping[str, Spec]) -> None:
-        """Each spec written in its canonical form, all of them or none."""
-        write_all(
-            {inside(self.home, SPECS, capability, SPEC_FILE): render_spec(spec) for capability, spec in specs.items()}
-        )
+    def write_specs(self, specs: Mapping[str, Spec], *, state: ChangeState | None = None) -> None:
+        """Each spec written in its canonical form and, where given, a change's state beside them: every file, or
+        none, as far as the file system allows."""
+        files = {
+            inside(self.home, SPECS, capability, SPEC_FILE): render_spec(spec) for capability, spec in specs.items()
+        }
+        if state is not None:
+            files[inside(self.home, CHANGES, state.id, STATE)] = state.model_dump_json(indent=2)
+        write_all(files)
 
     def _folder(self, change_id: str) -> Path:
         """The folder of an existing change."""
@@ -187,6 +194,11 @@ class Workspace:
             first = exc.errors()[0]
             where = ".".join(str(part) for part in first["loc"]) or "the file"
             raise WorkspaceError(f"{self.shown(folder / STATE)} does not read: `{where}`: {first['msg']}") from exc
+        if state.id != change_id:  # a renamed or copied folder: each save would go to the other change's file
+            raise WorkspaceError(
+                f"{self.shown(folder / STATE)} names the change `{state.id}`, and its folder is `{change_id}`. "
+                "Make the two the same"
+            )
         problems: list[Finding] = []
         raw = _read(folder / BRIEF, str, BRIEF, problems) if (folder / BRIEF).is_file() else None
         brief = _parsed(raw, parse_brief, BRIEF, problems) if raw is not None else None
@@ -194,6 +206,9 @@ class Workspace:
         deltas = {}
         for capability in self._holding(folder / SPECS, SPEC_FILE):
             shown = f"{SPECS}/{capability}/{SPEC_FILE}"
+            if why := slug_problem(capability):
+                problems.append(_misnamed(why, shown))
+                continue
             delta = _read(folder / SPECS / capability / SPEC_FILE, parse_delta, shown, problems)
             if delta is None:
                 continue
@@ -211,6 +226,10 @@ class Workspace:
         paths = [BRIEF, DESIGN, TASKS]
         paths += [f"{SPECS}/{capability}/{SPEC_FILE}" for capability in self._holding(folder / SPECS, SPEC_FILE)]
         return {path: read_text(folder / path) for path in paths if (folder / path).is_file()}
+
+
+def _misnamed(why: str, shown: str) -> Finding:
+    return finding("spec.folder-bad-name", f"The folder cannot name a capability: {why}. Rename it.", path=shown)
 
 
 def _misplaced(titled: str, folder: str, shown: str) -> Finding:

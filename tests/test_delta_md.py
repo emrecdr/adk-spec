@@ -54,3 +54,10 @@ def test_text_under_a_removal_that_is_no_reason_is_refused() -> None:
     with pytest.raises(GrammarError) as caught:
         parse_delta(DELTA.replace("Reason: Passwords", "Because passwords"))
     assert caught.value.line == 29 and "Reason:" in caught.value.message
+
+
+def test_an_unclosed_fence_in_a_delta_is_refused_too() -> None:
+    fence = "`" * 3
+    with pytest.raises(GrammarError) as caught:
+        parse_delta(DELTA.replace("Reason: Passwords", f"Reason: Passwords\n{fence}\nexample\n"))
+    assert caught.value.line == 30 and "never closed" in caught.value.message

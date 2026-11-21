@@ -100,3 +100,9 @@ def test_what_an_archive_waits_for() -> None:
 )
 def test_the_next_step_is_named_for_every_state(state, findings, stale, said) -> None:
     assert next_action(state, findings, stale) == said
+
+
+def test_a_line_slipped_in_above_an_approved_one_voids_the_approval() -> None:
+    first = "  - verify: uv run pytest tests/test_passkey.py\n"
+    shadowed = {**TEXTS, "tasks.md": TASKS.replace(first, "  - verify: skip the tests\n" + first)}
+    assert approval_stale(approved(), approval_files(shadowed)) == ["tasks.md"]

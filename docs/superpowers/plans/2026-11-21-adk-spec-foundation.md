@@ -2406,6 +2406,22 @@ git commit -m "feat: rebase, approve and archive; the lean lifecycle end to end 
 | The `strict` tier's second approver, the three-way merge, the UI workbench, worktrees, MCP, memory, evaluation sets, mutation testing | After version 1, each on a measured need (see the report's deferral section) |
 | `google-adk` 2.15.0 | Its own change after 23 November 2026: bump, lock, gate, Task 5's smoke on both arms, compare |
 
+## What changed while this plan was executed
+
+Recorded so plan 2 builds on what is there, not on this plan's first wording. Each is a ruling in the execution ledger.
+
+- Exception classes end in `Error`, as the project's lint rule requires: `GrammarError`, `MergeError`, `PathError`, `NotTextError`, and the command's `UsageError`. This file was edited to those names.
+- `workspace/layout.py` has `findings_of(loaded, living)`: a change's file faults joined to the validator's findings. The commands call it, not `validate_change`.
+- `Workspace.write_specs(specs, *, state=None)` writes the merged specs and a change's state as one set, and `write_all` puts back what it replaced when a later replace fails.
+- Two rule codes were added after the review: `delta.empty` (a delta with no operation) and `spec.folder-bad-name` (a capability folder that is no slug, raised by the loader). A task list with no task counts as `change.missing-tasks`.
+- A code fence that is never closed, and a second `files` or `verify` line under one task, are grammar errors.
+- `load_change` refuses a state file whose `id` is not its folder's name.
+- `rebase` leaves an approval alone where no base moved. Decision F now reads: new bases void an approval.
+- `smoke --model` sets `SPEC_TRIAGE_MODEL` for the run and restores it. `serving(role="")` takes an optional role.
+- An `OSError` ends a command with one sentence and exit 3, never a traceback.
+- Task 1's order was wrong: it synced the environment before the package folder existed, so the editable install mapped no package. After the skeleton exists, run `uv sync --locked --reinstall-package adk-spec` once. A fresh clone is not affected.
+- Task 15's probe answers `[0, 0, 1, 0]`, not `0 0 0 0`: `validate` exits 1 on the empty draft `new` made.
+
 ## Design inputs recorded for plan 2 (from Claude Projects)
 
 Read on 2026-11-21 at the owner's request, to borrow ideas. None changes a task in this plan: each concerns a stage that plan 2 or 3 builds.

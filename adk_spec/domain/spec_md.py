@@ -25,13 +25,17 @@ _RETIRED = re.compile(r"- (REQ-\S+): (\S.*) \(removed by ([^()]+)\)")
 
 
 def fenced_lines(lines: list[str]) -> list[bool]:
-    """For each line, whether it stands inside a code fence or is one of its two marker lines."""
-    inside, held = False, []
-    for line in lines:
+    """For each line, whether it stands inside a code fence or is one of its two marker lines. A fence that is
+    never closed is refused at its opening line: it would take every later heading for text, in silence."""
+    inside, held, opened = False, [], 0
+    for at, line in enumerate(lines):
         marker = line.startswith(FENCE)
         held.append(inside or marker)
         if marker:
             inside = not inside
+            opened = at
+    if inside:
+        raise GrammarError(opened + 1, f"this code fence is never closed: end it with a line of `{FENCE}`")
     return held
 
 

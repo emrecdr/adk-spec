@@ -67,3 +67,14 @@ def test_a_task_file_off_the_grammar_is_refused_with_its_line(broken: str, line:
     with pytest.raises(GrammarError) as caught:
         parse_tasks(broken)
     assert caught.value.line == line
+
+
+def test_a_second_files_or_verify_line_under_one_task_is_refused() -> None:
+    """Found by review: a later line replaced an earlier one in silence, so a line slipped in above an approved one
+    changed nothing an approval saw."""
+    first = "  - verify: uv run pytest tests/test_passkey.py\n"
+    with pytest.raises(GrammarError) as caught:
+        parse_tasks(TASKS.replace(first, "  - verify: skip the tests\n" + first))
+    assert caught.value.line == 8 and "verify" in caught.value.message
+    with pytest.raises(GrammarError):
+        parse_tasks(TASKS.replace("  - files: tests/test_passkey.py\n", "  - files: a.py\n  - files: b.py\n"))

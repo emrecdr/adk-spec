@@ -20,6 +20,7 @@ from .spec_md import fingerprint
 SEVERITY: dict[str, Severity] = {
     "syntax": "ERROR",
     "spec.folder-mismatch": "ERROR",
+    "spec.folder-bad-name": "ERROR",
     "spec.id-capability": "ERROR",
     "spec.id-duplicate": "ERROR",
     "spec.id-retired-reused": "ERROR",
@@ -28,6 +29,7 @@ SEVERITY: dict[str, Severity] = {
     "spec.scenario-no-when-then": "WARNING",
     "spec.statement-long": "WARNING",
     "spec.purpose-empty": "WARNING",
+    "delta.empty": "ERROR",
     "delta.added-exists": "ERROR",
     "delta.target-missing": "ERROR",
     "delta.duplicate-op": "ERROR",
@@ -125,6 +127,14 @@ def validate_delta(delta: Delta, living: Spec | None, bases: Mapping[str, str]) 
     against the fingerprints recorded when it was based."""
     found = []
     targets = [*delta.modified, *delta.removed]
+    if not delta.added and not targets:
+        found.append(
+            finding(
+                "delta.empty",
+                f"The delta of `{delta.capability}` holds no operation. Add a requirement under ADDED, MODIFIED or "
+                "REMOVED, or delete the file.",
+            )
+        )
     for req_id, times in Counter(held.id for held in (*delta.added, *targets)).items():
         if times > 1:
             found.append(
@@ -284,9 +294,10 @@ def validate_change(change: Change, living: Mapping[str, Spec]) -> list[Finding]
         about("specs", [finding("change.no-deltas", no_delta)])
     for capability, delta in sorted(change.deltas.items()):
         about(f"specs/{capability}/spec.md", validate_delta(delta, living.get(capability), change.state.bases))
-    if change.tasks is None:
-        no_tasks = "The change has no tasks.md. Plan its tasks before approval."
+    groups = change.tasks or ()
+    if not any(group.tasks for group in groups):
+        no_tasks = "The change has no task. Plan its tasks in tasks.md before approval."
         about("tasks.md", [finding("change.missing-tasks", no_tasks)])
     else:
-        about("tasks.md", validate_tasks(change.tasks))
+        about("tasks.md", validate_tasks(groups))
     return found

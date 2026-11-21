@@ -224,3 +224,42 @@ def test_the_installed_package_is_found_from_any_folder(tmp_path) -> None:
         [sys.executable, "-c", probe], cwd=tmp_path, env=env, capture_output=True, encoding="utf-8", check=False
     )
     assert done.returncode == 0 and done.stdout.strip() == "adk-spec", done.stderr
+
+
+def test_an_archive_that_cannot_write_one_file_changes_none_and_says_so(tmp_path, monkeypatch, capsys) -> None:
+    """Found by review: a file held open left one spec merged, the other not, and the state behind both; and the
+    failure reached the person as a traceback under the exit code that means findings."""
+    import os
+
+    ws = seeded(tmp_path)
+    ws.write_specs({"billing": parse_spec(SPEC.replace("# auth", "# billing").replace("REQ-AUTH", "REQ-BILLING"))})
+    billing = DELTA.replace("# Delta: auth", "# Delta: billing").replace("REQ-AUTH", "REQ-BILLING")
+    write_text(tmp_path / ".spec/changes/passkeys/specs/billing/spec.md", billing)
+    approved(tmp_path)
+    before = (living_bytes(tmp_path), living_bytes(tmp_path, "billing"), state_of(tmp_path))
+    real, asked = os.replace, []
+
+    def second_fails(source, target):
+        asked.append(target)
+        if len(asked) == 2:
+            raise PermissionError("another process holds the file")
+        return real(source, target)
+
+    monkeypatch.setattr(os, "replace", second_fails)
+    capsys.readouterr()
+    assert run(tmp_path, "archive", "passkeys") == 3
+    said = capsys.readouterr()
+    assert "another process holds the file" in said.err and "Traceback" not in said.err
+    assert (living_bytes(tmp_path), living_bytes(tmp_path, "billing"), state_of(tmp_path)) == before
+
+
+def test_an_account_with_no_name_is_asked_to_name_the_approver(tmp_path, monkeypatch, capsys) -> None:
+    def no_name():
+        raise OSError("No username set in the environment")
+
+    seeded(tmp_path)
+    run(tmp_path, "rebase", "passkeys")
+    monkeypatch.setattr("getpass.getuser", no_name)
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys") == 2 and "--by" in capsys.readouterr().err
+    assert state_of(tmp_path)["approval"] is None

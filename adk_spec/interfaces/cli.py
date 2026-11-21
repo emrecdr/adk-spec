@@ -134,6 +134,10 @@ def main(argv: list[str]) -> int:
     except (UsageError, *REFUSALS) as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)
         return EXIT_USAGE
+    except OSError as exc:  # a file held open, a folder that cannot be written: said, and never the code for findings
+        where = f" {exc.filename}" if exc.filename else ""
+        print(f"{PROG}: could not read or write{where}: {exc.strerror or exc}", file=sys.stderr)
+        return EXIT_ENGINE
 
 
 # The commands that call no model.
@@ -254,7 +258,10 @@ def _approve(args: argparse.Namespace) -> int:
         print(f"{PROG}: `{args.id}` is not approved: {len(blockers)} findings block it", file=sys.stderr)
         return EXIT_FINDINGS
     files = approval_files(workspace.approval_texts(args.id))
-    by = args.by or getpass.getuser()
+    try:
+        by = args.by or getpass.getuser()
+    except OSError as exc:  # an account with no name, as in a container run under a bare user id
+        raise UsageError("this account has no name: name the approver with --by") from exc
     at = datetime.now(UTC).isoformat(timespec="seconds")
     workspace.save_state(approve(loaded.change.state, files=files, by=by, at=at))
     print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
@@ -262,8 +269,8 @@ def _approve(args: argparse.Namespace) -> int:
 
 
 def _archive(args: argparse.Namespace) -> int:
-    """Every capability's merge is computed before any file is written, so a change is folded in whole or not at
-    all; the state is written last."""
+    """Every capability's merge is computed before any file is written, and the merged specs and the change's state
+    are then written as one set: all of them, or none as far as the file system allows."""
     workspace = _workspace(args)
     living, of_specs = workspace.specs()
     loaded, _found, stale = _assessed(workspace, args.id, living)
@@ -290,8 +297,7 @@ def _archive(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
         return EXIT_FINDINGS
-    workspace.write_specs(merged)
-    workspace.save_state(state.model_copy(update={"status": "archived"}))
+    workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}))
     print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
     return EXIT_OK
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import os
+import stat
 
 import pytest
 from conftest import PACKAGE
@@ -100,3 +101,39 @@ def test_every_text_file_call_in_the_package_names_its_encoding() -> None:
             if name in ("read_text", "write_text", "open") and not (own or binary or named):
                 offenders.append(f"{path.relative_to(PACKAGE)}:{node.lineno}")
     assert offenders == [], offenders
+
+
+def test_write_all_puts_back_what_it_replaced_when_a_later_replace_fails(tmp_path, monkeypatch) -> None:
+    """Found by review: the second of three replaces failed, as on a file Windows holds open, and the first stayed."""
+    write_text(tmp_path / "a.md", "old a")
+    write_text(tmp_path / "b.md", "old b")
+    real, asked = os.replace, []
+
+    def second_fails(source, target):
+        asked.append(target)
+        if len(asked) == 2:
+            raise PermissionError("another process holds the file")
+        return real(source, target)
+
+    monkeypatch.setattr(os, "replace", second_fails)
+    with pytest.raises(PermissionError):
+        write_all({tmp_path / "a.md": "new a", tmp_path / "b.md": "new b", tmp_path / "c.md": "new c"})
+    assert (tmp_path / "a.md").read_text(encoding="utf-8") == "old a\n"
+    assert (tmp_path / "b.md").read_text(encoding="utf-8") == "old b\n"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.md", "b.md"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a Windows file has no owner, group and other modes")
+def test_a_written_file_is_as_readable_as_any_file_this_account_makes(tmp_path) -> None:
+    """Found by review: every file came out owner-only, the temporary file's mode, and a rewrite narrowed a file."""
+    kept = tmp_path / "kept.md"
+    kept.write_text("x", encoding="utf-8")
+    kept.chmod(0o664)
+    mask = os.umask(0o022)
+    try:
+        write_text(tmp_path / "new.md", "x")
+        write_text(kept, "y")
+    finally:
+        os.umask(mask)
+    assert stat.S_IMODE((tmp_path / "new.md").stat().st_mode) == 0o644
+    assert stat.S_IMODE(kept.stat().st_mode) == 0o664

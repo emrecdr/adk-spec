@@ -79,3 +79,11 @@ def test_a_fingerprint_is_of_the_canonical_block_alone() -> None:
     assert fingerprint(parse_spec(SPEC.replace("\n", "\r\n")).requirements[0]) == fingerprint(one)
     other_purpose = SPEC.replace("Sign-in and session handling.", "Another purpose.")
     assert fingerprint(parse_spec(other_purpose).requirements[0]) == fingerprint(one)
+
+
+def test_a_code_fence_that_is_never_closed_is_refused_at_its_opening_line() -> None:
+    """Found by review: an unclosed fence swallowed every later requirement and the retired list, with no finding."""
+    unclosed = SPEC.replace("email and password.", f"email and password.\n\n{FENCE}\nexample")
+    with pytest.raises(GrammarError) as caught:
+        parse_spec(unclosed)
+    assert caught.value.line == 13 and "never closed" in caught.value.message

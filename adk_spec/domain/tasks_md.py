@@ -57,6 +57,8 @@ def _detail(groups: list[tuple[str, list[dict]]], detail: re.Match[str], at: int
     if not groups or not groups[-1][1]:
         raise GrammarError(at + 1, "a `files` or `verify` line stands under a task")
     task = groups[-1][1][-1]
+    if detail[1] in task:  # a later line would replace an earlier one in silence, past what an approval saw
+        raise GrammarError(at + 1, f"a task holds one `{detail[1]}` line, and this is its second")
     if detail[1] == "files":
         task["files"] = tuple(part.strip() for part in detail[2].split(",") if part.strip())
     elif detail[1] == "verify":

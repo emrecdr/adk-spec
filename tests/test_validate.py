@@ -77,6 +77,7 @@ CASES: dict[str, Callable[[], list[Finding]]] = {
     "spec.scenario-no-when-then": lambda: _spec(SPEC.replace("- THEN the system starts a session\n", "")),
     "spec.statement-long": lambda: _spec(SPEC.replace("email and password.", "email and password. " + "x" * 500)),
     "spec.purpose-empty": lambda: _spec(SPEC.replace("Sign-in and session handling.\n\n", "")),
+    "delta.empty": lambda: _change(delta="# Delta: auth\n"),
     "delta.added-exists": lambda: _change(delta=DELTA.replace("REQ-AUTH-004", "REQ-AUTH-003")),
     "delta.target-missing": lambda: _change(delta=DELTA.replace("### REQ-AUTH-002", "### REQ-AUTH-009")),
     "delta.duplicate-op": lambda: _change(delta=DELTA.replace("REQ-AUTH-004", "REQ-AUTH-002")),
@@ -113,7 +114,7 @@ def test_each_rule_fires_on_its_fault_with_its_severity(code: str) -> None:
 
 
 def test_every_code_has_a_case_and_a_severity() -> None:
-    assert set(CASES) == set(SEVERITY) - {"syntax", "spec.folder-mismatch"}
+    assert set(CASES) == set(SEVERITY) - {"syntax", "spec.folder-mismatch", "spec.folder-bad-name"}
 
 
 @pytest.mark.parametrize(
@@ -139,3 +140,9 @@ def test_warnings_fail_only_under_strict() -> None:
     assert failed([warning]) is False and failed([warning], strict=True) is True
     assert failed([Finding(severity="ERROR", code="spec.no-scenario", message="m")]) is True
     assert failed([]) is False
+
+
+def test_a_task_list_that_holds_no_task_is_no_plan() -> None:
+    """Found by review: a tasks.md holding its title alone met the gate that asks for a plan."""
+    assert "change.missing-tasks" in {f.code for f in _change(tasks="# Tasks\n")}
+    assert "change.missing-tasks" in {f.code for f in _change(tasks="# Tasks\n\n## 1. Nothing yet\n")}

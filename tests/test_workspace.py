@@ -132,3 +132,24 @@ def test_approval_texts_are_the_files_an_approval_covers(tmp_path) -> None:
 def test_a_path_is_shown_from_the_root_with_forward_slashes(tmp_path) -> None:
     ws = Workspace.init(tmp_path)
     assert ws.shown(tmp_path / ".spec" / "specs" / "auth" / "spec.md") == ".spec/specs/auth/spec.md"
+
+
+def test_a_state_file_that_names_another_change_is_refused(tmp_path) -> None:
+    """Found by review: a renamed or copied folder kept its old id, and each save went to the other change's file."""
+    ws = seeded(tmp_path)
+    (tmp_path / ".spec/changes/passkeys").rename(tmp_path / ".spec/changes/passkey-sign-in")
+    with pytest.raises(WorkspaceError, match=r"`passkeys`.*`passkey-sign-in`"):
+        ws.load_change("passkey-sign-in")
+
+
+def test_a_folder_no_capability_may_be_named_is_a_finding_when_it_is_read(tmp_path) -> None:
+    """Found by review: a name was held to the slug grammar when written, never when read from a hand-made folder."""
+    ws = seeded(tmp_path)
+    write_text(tmp_path / ".spec/specs/Billing_v2/spec.md", SPEC.replace("# auth", "# Billing_v2"))
+    write_text(tmp_path / ".spec/changes/passkeys/specs/Billing_v2/spec.md", DELTA.replace("auth", "Billing_v2"))
+    specs, problems = ws.specs()
+    assert sorted(specs) == ["auth"]
+    assert [(p.code, p.path) for p in problems] == [("spec.folder-bad-name", ".spec/specs/Billing_v2/spec.md")]
+    loaded = ws.load_change("passkeys")
+    assert [(p.code, p.path) for p in loaded.problems] == [("spec.folder-bad-name", "specs/Billing_v2/spec.md")]
+    assert sorted(loaded.change.deltas) == ["auth"]

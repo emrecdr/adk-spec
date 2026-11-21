@@ -7,6 +7,7 @@ reader never sees half a file.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from collections.abc import Mapping
@@ -30,6 +31,16 @@ def read_text(path: Path) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
+def _mode_for(path: Path) -> int:
+    """The mode a file written to `path` should have: the one it has, or the one this account gives a new file.
+    A temporary file is made owner-only, and moved into place it would narrow what it replaced."""
+    if path.exists():
+        return path.stat().st_mode & 0o777
+    mask = os.umask(0)
+    os.umask(mask)
+    return 0o666 & ~mask
+
+
 def _staged(path: Path, text: str) -> Path:
     """`text`, normalised, in a closed temporary file beside `path`, whose folders are made."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -38,6 +49,8 @@ def _staged(path: Path, text: str) -> Path:
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as out:
             out.write(normalise(text))
+        if os.name != "nt":  # a Windows file has no owner, group and other modes
+            staged.chmod(_mode_for(path))
     except BaseException:
         staged.unlink(missing_ok=True)
         raise
@@ -51,15 +64,25 @@ def write_text(path: Path, text: str) -> None:
 
 
 def write_all(files: Mapping[Path, str]) -> None:
-    """Every text written to its path, none moved into place until all are on disk: a text that cannot be written
-    leaves every target as it was."""
+    """Every text written to its path, none moved into place until all are on disk. Where a move fails part way, as
+    on a file another process holds open, each file already replaced is put back and each new one removed, so the
+    set is written whole or not at all as far as the file system allows."""
     staged: list[tuple[Path, Path]] = []
+    replaced: list[tuple[Path, bytes | None]] = []
     try:
         for path, text in files.items():
             staged.append((_staged(path, text), path))
         for temporary, path in staged:
+            before = path.read_bytes() if path.is_file() else None
             os.replace(temporary, path)
+            replaced.append((path, before))
     except BaseException:
         for temporary, _path in staged:
             temporary.unlink(missing_ok=True)
+        for path, before in reversed(replaced):
+            with contextlib.suppress(OSError):
+                if before is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    path.write_bytes(before)
         raise
