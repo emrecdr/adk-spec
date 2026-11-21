@@ -108,6 +108,7 @@ class UsageLedger(BasePlugin):
         return None
 
 
-def roster(ceiling: int | None) -> list[BasePlugin]:
-    """The plugins of every app, the ledger first: it must read an answer before a mismatch replaces it."""
-    return [UsageLedger(ceiling=ceiling), SchemaMismatch()]
+def roster(ceiling: int | None, ledger: UsageLedger | None = None) -> list[BasePlugin]:
+    """The plugins of every app, the ledger first: it must read an answer before a mismatch replaces it. A command
+    of several runs hands each the one `ledger`, so the count and the ceiling are the command's."""
+    return [ledger or UsageLedger(ceiling=ceiling), SchemaMismatch()]

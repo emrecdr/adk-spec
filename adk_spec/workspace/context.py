@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 
 from ..domain.spec_md import render_spec
+from ..domain.text import lines_of
 from .files import read_text
 from .layout import CONSTITUTION, Workspace, WorkspaceError
 
@@ -27,7 +28,7 @@ class ContextTooLargeError(WorkspaceError):
 def capability_index(workspace: Workspace) -> str:
     """One line a capability: its slug, and the first line of its purpose."""
     specs, _problems = workspace.specs()
-    return "\n".join(f"{slug}: {(spec.purpose.splitlines() or [''])[0]}" for slug, spec in sorted(specs.items()))
+    return "\n".join(f"{slug}: {(lines_of(spec.purpose) or [''])[0]}" for slug, spec in sorted(specs.items()))
 
 
 def living_text(workspace: Workspace, capabilities: Iterable[str]) -> str:

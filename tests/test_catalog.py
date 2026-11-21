@@ -81,3 +81,18 @@ def test_the_gemini_list_names_each_model(monkeypatch) -> None:
     monkeypatch.setattr("google.genai.Client", Client)
     monkeypatch.setenv("SPEC_PROVIDER", "gemini")
     assert list_models() == [{"id": "gemini-x", "display_name": "X"}] and shown(list_models()) == ["gemini-x"]
+
+
+def test_a_key_the_provider_will_not_issue_is_a_sentence(monkeypatch, tmp_path, capsys) -> None:
+    """Found by review: LiteLLM's own error for a refused key refresh escaped as a traceback."""
+    from litellm.llms.github_copilot.authenticator import Authenticator
+    from litellm.llms.github_copilot.common_utils import GetAPIKeyError
+
+    def refused(_self):
+        raise GetAPIKeyError(status_code=403, message="no seat")
+
+    cached_copilot_token(monkeypatch, tmp_path)
+    monkeypatch.setattr(Authenticator, "get_api_key", refused)
+    assert main(["models"]) == 3
+    err = capsys.readouterr().err
+    assert "no seat" in err and "Traceback" not in err

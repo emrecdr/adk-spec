@@ -305,3 +305,17 @@ def test_ctrl_c_is_one_sentence_and_130(monkeypatch, capsys) -> None:
     monkeypatch.setattr(cli, "main", interrupted)
     assert cli.run() == 130
     assert "interrupted" in capsys.readouterr().err
+
+
+def test_the_installed_command_reads_what_a_person_types_as_utf8(monkeypatch) -> None:
+    """Found by review: stdout and stderr were set to UTF-8 and stdin was not, so an answer piped in on Windows was
+    read in the ANSI code page."""
+    import io
+    import sys
+
+    from adk_spec.interfaces import cli
+
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO("twee\u00ebn\n".encode()), encoding="cp1252"))
+    monkeypatch.setattr("sys.argv", ["adk-spec"])
+    cli.run()
+    assert sys.stdin.readline() == "twee\u00ebn\n"

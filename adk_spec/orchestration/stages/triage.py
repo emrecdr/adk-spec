@@ -40,8 +40,9 @@ def build_triage() -> LlmAgent:
             "",
             "## Capabilities",
             "A capability is a kebab-case name for one area of behaviour, such as `auth` or `billing-export`. Reuse a "
-            "known capability where one fits. Name a new one only where none does. "
-            f"Known capabilities: {placeholder(CAPABILITIES, optional=True)}",
+            "known capability where one fits. Name a new one only where none does. Known capabilities, each with "
+            "its purpose:",
+            fenced("capabilities", placeholder(CAPABILITIES, optional=True)),
             "",
             RETRY,
             "",

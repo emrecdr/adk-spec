@@ -131,7 +131,7 @@ class FakeProvider:
         self.rules.clear()
         self.requests.clear()
 
-    def raises_when(self, text: str, exc: Exception) -> None:
+    def raises_when(self, text: str, exc: BaseException) -> None:
         self.rules.append((text, exc))
 
     def answers_when(self, text: str, payload: dict | str) -> None:
@@ -147,7 +147,7 @@ class FakeProvider:
         instruction = str(llm_request.config.system_instruction or "")
         for text, rule in self.rules:
             if text in instruction:
-                if isinstance(rule, Exception):
+                if isinstance(rule, BaseException):
                     raise rule
                 if isinstance(rule, dict | str):
                     return rule

@@ -178,3 +178,17 @@ def test_every_field_of_a_draft_is_required_and_described(name: str) -> None:
     ]:
         for field, held in model.model_fields.items():
             assert held.is_required() and held.description, f"{model.__name__}.{field}"
+
+
+def test_requirement_ids_given_in_one_string_are_split() -> None:
+    """Found by review: `["REQ-A-001, REQ-A-002"]` failed its round trip three times."""
+    task = TaskDraft(
+        description="Do it",
+        requirements=["REQ-AUTH-001, REQ-AUTH-002"],
+        files=["a.py, b.py"],
+        verify="run",
+        parallel=False,
+    )
+    (group,) = to_tasks(TasksDraft(groups=[TaskGroupDraft(title="1. A", tasks=[task])]))
+    assert group.tasks[0].requirements == ("REQ-AUTH-001", "REQ-AUTH-002") and group.tasks[0].files == ("a.py", "b.py")
+    assert parse_tasks(render_tasks((group,))) == (group,)

@@ -12,7 +12,8 @@ from collections.abc import Iterable, Mapping
 
 from .drafts import BriefDraft, DeltasDraft, DesignDraft, RequirementDraft, TasksDraft
 from .ids import SLUG_MAX, next_requirement_id, slug_problem
-from .model import Brief, Delta, Removal, Requirement, Scenario, Spec, Task, TaskGroup
+from .model import Brief, Delta, GrammarError, Removal, Requirement, Scenario, Spec, Task, TaskGroup
+from .spec_md import fenced_lines, paragraphs
 
 _STEP = re.compile(r"(?:-\s*)?(?:\*\*)?(GIVEN|WHEN|THEN|AND)(?:\*\*)?\s+(\S.*)", re.IGNORECASE | re.DOTALL)
 _WORD = re.compile(r"[a-z0-9]+")
@@ -22,6 +23,21 @@ FALLBACK = "change"
 def _line(text: str) -> str:
     """`text` on one line."""
     return " ".join(text.split())
+
+
+def _text(text: str) -> str:
+    """Prose as its file holds it, so a draft reads back as written: no trailing blanks, one blank line between
+    paragraphs, none at the ends. Text with a fence left open is passed on as it is, for a gate to name."""
+    lines = [line.rstrip() for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    try:
+        return paragraphs(lines, fenced_lines(lines), 0, len(lines))
+    except GrammarError:
+        return "\n".join(lines).strip()
+
+
+def _listed(items: list[str]) -> tuple[str, ...]:
+    """Each item of a list, where a model may have given several in one string with commas between."""
+    return tuple(part.strip() for item in items for part in item.split(",") if part.strip())
 
 
 def _step(text: str) -> str:
@@ -35,18 +51,18 @@ def _requirement(req_id: str, draft: RequirementDraft) -> Requirement:
         Scenario(name=_line(scenario.name), steps=tuple(_step(step) for step in scenario.steps if step.strip()))
         for scenario in draft.scenarios
     )
-    return Requirement(id=req_id, name=_line(draft.name), statement=draft.statement.strip(), scenarios=scenarios)
+    return Requirement(id=req_id, name=_line(draft.name), statement=_text(draft.statement), scenarios=scenarios)
 
 
 def to_brief(draft: BriefDraft) -> Brief:
     return Brief(
         title=_line(draft.title),
-        why=draft.why.strip(),
-        what_changes=draft.what_changes.strip(),
-        non_goals=draft.non_goals.strip(),
-        capabilities=tuple(capability.strip() for capability in draft.capabilities if capability.strip()),
-        impact=draft.impact.strip(),
-        assumptions=draft.assumptions.strip(),
+        why=_text(draft.why),
+        what_changes=_text(draft.what_changes),
+        non_goals=_text(draft.non_goals),
+        capabilities=_listed(draft.capabilities),
+        impact=_text(draft.impact),
+        assumptions=_text(draft.assumptions),
     )
 
 
@@ -95,9 +111,9 @@ def to_tasks(draft: TasksDraft) -> tuple[TaskGroup, ...]:
                     id=f"T{number:03d}",
                     done=False,
                     parallel=task.parallel,
-                    requirements=tuple(named.strip() for named in task.requirements if named.strip()),
+                    requirements=_listed(task.requirements),
                     description=_line(task.description),
-                    files=tuple(path.strip() for path in task.files if path.strip()),
+                    files=_listed(task.files),
                     verify=_line(task.verify) or None,
                 )
             )

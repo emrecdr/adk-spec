@@ -70,14 +70,16 @@ uv run adk-spec plan <id>
 - `propose` drafts a change from a request: its brief and one delta for each capability it touches. A model writes
   each draft; a gate after each stage checks it and asks again at most twice; nothing is written until the whole
   run has ended well. `--tier lean` or `--tier standard` sets the ceremony by hand, `--id` names the change, and
-  `--no-input` asks no question. `[limits] max_tokens` in `.spec/config.toml` caps what one run may spend.
+  `--no-input` asks no question. `[limits] max_tokens` in `.spec/config.toml` caps what one command may spend:
+  once that much is spent no further call is sent, so a command overshoots by its last call at most.
 
 - `plan` drafts a draft change's tasks, and first its design where the brief says one is owed. It refuses a change
   whose brief or deltas have an error, and one that is approved already.
 
 On the standard tier `propose` puts each point the brief leaves open to you as a question, at most five a round and
 three rounds, each with a suggested answer. A line answers, `=` takes the suggestion, and an empty line leaves the
-point open, in which case approval waits until you settle it in the brief.
+point open, in which case approval waits until you settle it in the brief. A round you answer nothing in ends the
+asking, and the brief is kept as it stood. The `tokens` line counts each stage's calls, the asked-again ones too.
 
 Three more reach a model provider without drafting:
 
@@ -88,7 +90,7 @@ uv run adk-spec smoke
 ```
 
 - `login` logs in to GitHub Copilot once, with GitHub's device flow.
-- `models` lists the models the chosen arm serves. It sends one read-only request and calls no model.
+- `models` lists the models the chosen arm serves. It only reads the provider's list and calls no model.
 - `smoke` runs the triage stage alone, to prove the chosen arm answers in a schema.
   `smoke --check` says whether the arm is ready and sends nothing. `smoke --model <name>` tries one model.
 

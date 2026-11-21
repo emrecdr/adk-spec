@@ -86,3 +86,12 @@ def test_plan_holds_the_lock_and_lets_it_go(tmp_path, capsys) -> None:
     assert run(tmp_path, "plan", "passkeys") == 2 and ".spec/.lock" in capsys.readouterr().err
     (tmp_path / ".spec/.lock").unlink()
     assert run(tmp_path, "plan", "passkeys") == 0 and not (tmp_path / ".spec/.lock").exists()
+
+
+def test_plan_replaces_a_task_list_that_does_not_parse(tmp_path, fake_provider) -> None:
+    """Found by review: `plan` refused a change over the very file it was about to replace."""
+    ws = seeded(tmp_path)
+    write_text(tmp_path / ".spec/changes/passkeys/tasks.md", "# Tasks\n\n- [ ] no group, no number\n")
+    assert ws.load_change("passkeys").problems != [], "the premise: the file does not parse"
+    assert run(tmp_path, "plan", "passkeys") == 0
+    assert ws.load_change("passkeys").problems == [] and len(fake_provider.requests) == 1

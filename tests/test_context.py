@@ -6,6 +6,7 @@ import pytest
 from conftest import seeded
 
 from adk_spec.interfaces.cli import main
+from adk_spec.orchestration.stages import BOUNDARY
 from adk_spec.workspace import context
 from adk_spec.workspace.context import ContextTooLargeError, capability_index, constitution_text, living_text
 from adk_spec.workspace.files import write_text
@@ -47,4 +48,14 @@ def test_smoke_tells_triage_the_capabilities_the_workspace_holds(tmp_path, monke
     seeded(tmp_path)
     assert main(["--root", str(tmp_path), "smoke"]) == 0
     sent = str(fake_provider.requests[0].config.system_instruction)
-    assert "Known capabilities: auth: Sign-in and session handling." in sent
+    assert f"<<< capabilities {BOUNDARY}\nauth: Sign-in and session handling.\n>>> capabilities {BOUNDARY}" in sent
+
+
+def test_the_index_breaks_a_purpose_at_a_newline_alone(tmp_path) -> None:
+    """Found by review: `str.splitlines` was used, which also breaks at a form feed and at U+2028."""
+    from samples import SPEC
+
+    ws = seeded(tmp_path)
+    odd = "Sign-in" + chr(0x2028) + "and sessions."
+    write_text(tmp_path / ".spec/specs/auth/spec.md", SPEC.replace("Sign-in and session handling.", odd))
+    assert capability_index(ws) == f"auth: {odd}"

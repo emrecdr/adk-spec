@@ -1,0 +1,14 @@
+google-adk 2.14.1
+
+A. the stage answers well at once
+  model calls before the pause : 1  ['{"word": "first"}']
+  the person was shown         : {'shown': {'word': 'first'}}
+  model calls after the answer : 0  []
+  the stage's answer at the end: {'word': 'first'}
+  the resume failed with       : None
+B. the stage answers off its schema, then well
+  model calls before the pause : 2  ['not json', '{"word": "second"}']
+  the person was shown         : {'shown': {'word': 'second'}}
+  model calls after the answer : 1  ['{"word": "unseen"}']
+  the stage's answer at the end: {'word': 'unseen'}
+  the resume failed with       : None

@@ -5,10 +5,10 @@ event is drained, and the state is read back whatever happened. Whatever escapes
 returned as the run's failure, so what finished is still in the state and what failed is named, never a traceback.
 The session is thrown away: the files under `.spec/` are the record.
 
-A run may pause to ask the person something. Run on the pinned engine: the pause is a function call named
-`adk_request_input`, and the run goes on only when a function response with that call's id is sent. Plain text sent
-instead starts the whole graph again, in silence. So an answer never travels as text here: `answer` is given the
-question's payload and its result goes back as that function response.
+No run of this package pauses to ask a person anything. Found by review, and run on the pinned engine: when a paused
+run is resumed, ADK replays the graph from its start and runs again, unseen, any node that had ended in an error
+event, which a stage's answer off its schema is. So a command that needs an answer ends its run, asks, and starts a
+new run seeded with the answer. A pause met here all the same ends the run and is said.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,65 +53,41 @@ class Run:
     seconds: float
 
 
-def _pause_of(event: Any) -> tuple[str, dict[str, Any]] | None:
-    """The pause an event is, as its id and its payload, or None."""
-    for part in event.content.parts if event.content and event.content.parts else ():
-        call = part.function_call
-        if call is not None and call.name == REQUEST_INPUT and call.id:
-            return call.id, dict((call.args or {}).get("payload") or {})
-    return None
+def _paused(event: Any) -> bool:
+    """Whether an event is a pause for a person's input."""
+    parts = event.content.parts if event.content and event.content.parts else ()
+    return any(part.function_call is not None and part.function_call.name == REQUEST_INPUT for part in parts)
 
 
-class _Drain:
-    """One session's run, a stretch at a time: what each author ended with and what the calls spent, kept across
-    stretches."""
-
-    def __init__(self, runner: InMemoryRunner, session_id: str) -> None:
-        self.runner, self.session_id = runner, session_id
-        self.errors: dict[str, str] = {}
-        self.spent = [0, 0, 0, 0]  # calls, prompt, output, total
-
-    async def stretch(self, message: types.Content) -> tuple[str, dict[str, Any]] | None:
-        """The run from `message` to its end or its next pause: the pause, or None. The deadline is the stretch's
-        own, so the time a person takes to answer counts against none."""
-        pause = None
-        async with asyncio.timeout(RUN_DEADLINE_S):
-            async for event in self.runner.run_async(user_id=USER, session_id=self.session_id, new_message=message):
-                if event.error_code:
-                    self.errors[event.author] = f"{event.error_code}: {event.error_message}"
-                if used := event.usage_metadata:
-                    asked, said_back = used.prompt_token_count or 0, used.candidates_token_count or 0
-                    counted = (1, asked, said_back, used.total_token_count or asked + said_back)
-                    self.spent = [held + more for held, more in zip(self.spent, counted, strict=True)]
-                pause = _pause_of(event) or pause
-        return pause
-
-
-async def run_seeded(
-    app: App, *, state: dict[str, Any], prompt: str, answer: Callable[[dict[str, Any]], dict[str, Any]] | None = None
-) -> Run:
-    """One run of `app` over a new session seeded with `state`, started by `prompt`. Where the run pauses to ask,
-    `answer` is called with the question's payload and its result is sent back; with no `answer` the run ends there."""
+async def run_seeded(app: App, *, state: dict[str, Any], prompt: str) -> Run:
+    """One run of `app` over a new session seeded with `state`, started by `prompt`."""
     runner = InMemoryRunner(app=app)
     ids = {"app_name": runner.app_name, "user_id": USER, "session_id": uuid.uuid4().hex}
     await runner.session_service.create_session(**ids, state=state)
-    drain = _Drain(runner, ids["session_id"])
+    errors: dict[str, str] = {}
     failure: str | None = None
+    spent = [0, 0, 0, 0]  # calls, prompt, output, total
     started = time.perf_counter()
     try:
-        pause = await drain.stretch(types.UserContent(prompt))
-        while pause is not None and answer is not None:
-            reply = types.FunctionResponse(id=pause[0], name=REQUEST_INPUT, response=answer(pause[1]))
-            pause = await drain.stretch(types.Content(role="user", parts=[types.Part(function_response=reply)]))
-        failure = UNANSWERED if pause is not None else None
+        async with asyncio.timeout(RUN_DEADLINE_S):
+            async for event in runner.run_async(
+                user_id=USER, session_id=ids["session_id"], new_message=types.UserContent(prompt)
+            ):
+                if event.error_code:
+                    errors[event.author] = f"{event.error_code}: {event.error_message}"
+                if used := event.usage_metadata:
+                    asked, answered = used.prompt_token_count or 0, used.candidates_token_count or 0
+                    counted = (1, asked, answered, used.total_token_count or asked + answered)
+                    spent = [held + more for held, more in zip(spent, counted, strict=True)]
+                if _paused(event):
+                    failure = UNANSWERED
     except TimeoutError:
         failure = f"the run did not finish within {RUN_DEADLINE_S:g} s"
     except Exception as exc:  # noqa: BLE001 -- the engine itself: a reply off its schema, or a provider that raised
         failure = f"{type(exc).__name__}: {said(exc)}"
     seconds = time.perf_counter() - started
     session = await runner.session_service.get_session(**ids)
-    usage = Usage(*drain.spent)
+    usage = Usage(*spent)
     if session is None:
-        gone = "the run's session was gone when its answers were read"
-        return Run({}, drain.errors, failure or gone, usage, seconds)
-    return Run(dict(session.state), drain.errors, failure, usage, seconds)
+        return Run({}, errors, failure or "the run's session was gone when its answers were read", usage, seconds)
+    return Run(dict(session.state), errors, failure, usage, seconds)

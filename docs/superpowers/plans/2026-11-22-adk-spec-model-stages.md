@@ -781,6 +781,69 @@ uv run adk-spec validate
 
 ---
 
+## What changed while this plan was executed
+
+Tasks 1 to 8 were built and reviewed once, whole, by a fresh reviewer. Task 1 step 5 and Task 9 are the owner's and
+were not run: no model was called.
+
+**The design the review overturned.** Task 7 asked its questions inside one run, with ADK's `RequestInput`. Run on
+the pinned engine (`q18_resume_reruns_an_errored_stage_probe.py`): when a paused run is resumed, ADK replays the
+graph from its start and runs again, unseen, any node that had ended in an error event. An answer off its schema is
+such an event once the mismatch plugin has turned it into the stage's own error. So after one such answer anywhere
+earlier in the run, the questions stage was called again behind the person's back, their answers were attached to
+that second set of questions, and a second answered round ended the run with a replay error. The two features each
+work alone; they do not work together.
+
+- **No run of this package pauses.** A run ends on its questions, left in state under `ASKING` by code. The command
+  asks, and starts a new run: at the brief, seeded with every answer so far, each beside the question that was
+  shown; or at the deltas, seeded with the brief that passed its gate, where nobody answered. `build_propose_app`
+  takes `entry: "triage" | "brief" | "deltas"` and one `ledger` for all the runs of a command, so the token count
+  and the ceiling are the command's. `run_seeded` takes no `answer`; a pause met all the same ends the run.
+- A Ctrl-C at a question is now Python's own, outside the engine's event loop, and stops at once.
+- **This binds plan 3's `adk web` chat shape**: a graph that pauses cannot carry the mismatch plugin. It asks
+  between runs as the command does, or it lets an answer off its schema end the run.
+
+**What else the review found, each fixed with a test that failed first.**
+
+- The brief's gate now writes the brief as its file and reads it back, as the deltas' and the tasks' gates did. A
+  heading or an open code fence inside a section had passed, and `propose` had ended well with a `brief.md` that
+  did not parse.
+- A delta's gate asks the validator first, which names the ID that is wrong; the round trip could only name a shape.
+  `convert` writes prose as its file holds it (no trailing blanks, one blank line between paragraphs) and splits a
+  list a model gave in one string, so neither costs a retry.
+- The capability index stands between markers, as every other text from a file does. Every gate refuses an answer
+  that repeats this process's marker, which would end a fenced section early in the next stage's instruction.
+- `Workspace.taken()` counts the IDs of a capability only open changes hold, so two changes that each create one
+  capability are numbered apart.
+- Questions that could not be worded leave the brief standing, its points open, and the command says so.
+- `models` says a provider's refusal in a sentence; `plan` replaces a task list that does not parse; the installed
+  command reads what is typed as UTF-8, and no input at all, or bytes that are no text, are no answer.
+- The `tokens` line counts each stage's calls.
+
+**What executing the plan changed in it** (each a ruling in the ledger, and upheld by the review).
+
+- The roster is `[UsageLedger, SchemaMismatch]`: a plugin that answers a hook ends it for the plugins after it, and
+  an answer off its schema was still paid for.
+- No draft field is nullable. ADK stores a stage's answer with every `None` dropped, so a required field that may
+  be null does not read back. An empty string means none.
+- A workflow node cannot be a lambda: its name must be an identifier.
+- The deltas are held to the brief's capabilities each way. There is no route back to the brief, so watch this in
+  Task 9: the deltas stage can only drop a delta the brief should not have listed, or fail.
+- A round nobody answered ends the asking. Each run has its own deadline; time spent typing is in none.
+- `plan` gives its stages the constitution and the living specs too. The tasks stage opens "You break a change into
+  tasks for a coding agent to carry out".
+
+**Left as they are, for the owner** (the review's minors).
+
+- `plan` replaces an existing `tasks.md` without a word, ticked boxes too, and does not read a `design.md` written
+  by hand where the brief owed none.
+- A folder under `changes/` with no `change.json` is refused only after the model calls are spent.
+- The lock records a process ID nobody reads, a killed run leaves the lock, and `init` writes no ignore rule for it.
+- Findings told back to a stage stand outside the markers; they are this package's sentences, and may quote the
+  model's own names.
+- `living_text` is called by tests alone. `design_reason` is drafted and not shown.
+- A task may name a requirement ID no delta holds: that is plan 3's `check`.
+
 ## What this plan leaves for plan 3
 
 The recorder plugin and replay; `check` (cross-artifact findings to `reports/check.md`, CRITICAL blocks approval); the process and git layer and `verify` from the diff; the `verified` status being set; a labelled set of requests with planted faults; the first measurement on both arms; `status` grouped by who acts next; the `adk web` chat shape; and the first stage to move from the model to Python, chosen from Task 9's ledger.

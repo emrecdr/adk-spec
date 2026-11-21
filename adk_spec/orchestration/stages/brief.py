@@ -33,7 +33,7 @@ def build_brief() -> LlmAgent:
             "",
             "## Capabilities",
             "Known capabilities, each with its purpose:",
-            placeholder(CAPABILITIES, optional=True),
+            fenced("capabilities", placeholder(CAPABILITIES, optional=True)),
             "Name each capability the change touches by its kebab-case slug. Reuse a known one where it fits.",
             "",
             "## What to write",

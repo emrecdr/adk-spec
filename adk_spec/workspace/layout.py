@@ -201,19 +201,25 @@ class Workspace:
         self.save_state(ChangeState(id=change_id, tier=tier))
         return folder
 
-    def taken_ids(self, capability: str, *, but: str | None = None) -> set[str]:
-        """Every requirement ID of `capability` that is spoken for: in its living spec, retired there, or added by an
-        open change other than `but`. A new requirement is numbered past all of them."""
+    def taken(self, *, but: str | None = None) -> dict[str, set[str]]:
+        """By capability, every requirement ID that is spoken for: in its living spec, retired there, or added by an
+        open change other than `but`. A capability no spec holds yet is here too once an open change adds to it, so
+        two changes that each create it are numbered apart."""
         specs, _problems = self.specs()
-        spec = specs.get(capability)
-        taken = {held.id for held in (*spec.requirements, *spec.retired)} if spec else set()
+        taken = {slug: {held.id for held in (*spec.requirements, *spec.retired)} for slug, spec in specs.items()}
         for change_id in self.changes():
             if change_id == but:
                 continue
             change = self.load_change(change_id).change
-            if change.state.status != "archived" and capability in change.deltas:
-                taken |= {added.id for added in change.deltas[capability].added}
+            if change.state.status == "archived":
+                continue
+            for capability, delta in change.deltas.items():
+                taken.setdefault(capability, set()).update(added.id for added in delta.added)
         return taken
+
+    def taken_ids(self, capability: str, *, but: str | None = None) -> set[str]:
+        """`taken` for one capability. A new requirement is numbered past all of them."""
+        return self.taken(but=but).get(capability, set())
 
     def write_change(self, state: ChangeState, files: Mapping[str, str]) -> Path:
         """A new change made whole: its folder, each of `files` by its path in the folder, and its state, written
