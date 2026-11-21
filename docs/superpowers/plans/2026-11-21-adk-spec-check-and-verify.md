@@ -607,6 +607,28 @@ is the owner's and was not run.
 - Three older cases of the next step changed with the table: a draft with an open point is told to settle it in
   `brief.md`, before a plan or a rebase.
 
+**What the cleanup pass after the phase changed** (four reviewers: reuse, simplification, efficiency, depth).
+
+- **Where the work began is the change's own, `ChangeState.base_commit`,** set at the first approval and kept
+  through an approval made again and through a rebase. It had been the approval's, so a person who committed half
+  the work, reworded a task and approved again, as `status` told them to, moved the base past the work already
+  done, and `verify` then judged the rest alone. `Approval.commit` is gone.
+- **One test of a model's quote,** `quoted_at` in `domain/text.py`, serves a finding's quote in a file, a verdict's
+  in a diff, and the measurement, which had a copy of its own that had already drifted.
+- **The lifecycle decides what a check and a verification record:** `checked`, `verified` and `verify_blockers`
+  stand beside `approve`, and `approve_blockers` takes the check's blockers and the override. The command prints
+  and writes.
+- **What holds a draft is one table of codes.** Whatever blocks an approval and has no step of its own falls to
+  "fix what validate lists", so `status` cannot say to approve what `approve` refuses. An approved standard change
+  that was edited is told to check before it approves again.
+- The command reads a change as one record, `Assessed`, asks a model through one helper, `_asked`, and ends on one
+  line, `_say_next`. `plan`, `check` and `verify` share one handler shape, `_drafting`. A recording of one of
+  them ends `answered`: it closes when the model's pass does.
+- `files_of(made)` in `graph.py` is a draft's files, for the command to write and the chat to show.
+  `required_text` is in the verify stage, where `scripts/dump_instructions.py` can see it. `approve` and `plan`
+  each start one git process fewer.
+- Every stage's instruction is byte for byte what it was.
+
 **Validated by a probe before it was built:** what a recorder sees (`q19`), and what the shape `adk web` loads has
 to be (`q20`). `adk web` itself was never started.
 
