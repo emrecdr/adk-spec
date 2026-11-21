@@ -11,7 +11,7 @@ import re
 
 from .model import Brief, GrammarError
 from .spec_md import fenced_lines, paragraphs, sections_of, title_of
-from .text import lines_of, normalise
+from .text import flat, lines_of, normalise, plain
 
 SECTIONS = ("Why", "What changes", "Non-goals", "Capabilities", "Impact", "Assumptions")
 #: A point left open for a person to settle, with or without its question.
@@ -34,6 +34,18 @@ _FIELDS = {
 def markers(text: str) -> list[str]:
     """Every clarification marker in `text`, in order."""
     return MARKER.findall(text)
+
+
+def marker_of(question: str) -> str:
+    """The marker a brief's file holds for an open point: its question as plain text on one line, with no bracket
+    in it that would end the marker early."""
+    return f"[NEEDS CLARIFICATION: {plain(question).replace('[', '(').replace(']', ')')}]"
+
+
+def asked_by(marker: str) -> str:
+    """The question a marker holds, or nothing where it holds none."""
+    _name, colon, question = marker.strip().strip("[]").partition(":")
+    return flat(question) if colon else ""
 
 
 def parse_brief(text: str) -> Brief:

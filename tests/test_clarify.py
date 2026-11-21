@@ -1,12 +1,14 @@
-"""Clarifying questions on the standard tier: bounded, put to the person between two runs, each answer kept beside
-the question that was shown, and never taken for a new request."""
+"""Clarifying questions on the standard tier: read by code from the open points a brief names, bounded, put to the
+person between two runs, each answer kept beside the question that was shown, and never taken for a new request.
+No model is asked to word a question: the brief's own stage names each open point and the answer it would suggest.
+"""
 
 from __future__ import annotations
 
 import io
 
 import pytest
-from conftest import BRIEF_WITH_A_MARKER, CANNED_BRIEF, CANNED_QUESTIONS, CANNED_TRIAGE, on_the_fake, run, seeded
+from conftest import BRIEF_WITH_A_MARKER, CANNED_BRIEF, CANNED_TRIAGE, OPEN_POINT, between, on_the_fake, run, seeded
 
 from adk_spec.domain.brief_md import markers
 from adk_spec.workspace.files import read_text
@@ -14,7 +16,14 @@ from adk_spec.workspace.files import read_text
 REQUEST = "Let users sign in with a passkey."
 #: Triage's own call for the standard tier: a tier given by hand is not asked of the model at all.
 STANDARD = {**CANNED_TRIAGE, "tier": "standard"}
-TRIAGE, BRIEF, QUESTIONS = "You size a change request", "You write the brief of a change", "You word the open points"
+TRIAGE, BRIEF, DELTAS = (
+    "You size a change request",
+    "You write the brief of a change",
+    "You write the requirement deltas",
+)
+#: How the stage that worded questions opened, while there was one.
+WORDING = "You word the open points"
+ASKED = "Which browsers are in scope?"
 
 
 def proposed(root, *argv: str) -> int:
@@ -27,12 +36,16 @@ def asked(fake_provider, opening: str) -> list[str]:
     return [instruction for instruction in sent if instruction.startswith(opening)]
 
 
+def brief_md(root, change: str) -> str:
+    return read_text(root / f".spec/changes/{change}/brief.md")
+
+
 @pytest.fixture(autouse=True)
 def _fake_arm(monkeypatch) -> None:
     on_the_fake(monkeypatch)
 
 
-def test_a_marker_becomes_a_question_and_the_answer_reaches_the_next_brief(
+def test_an_open_point_becomes_a_question_with_no_model_asked_to_word_it(
     tmp_path, monkeypatch, capsys, fake_provider
 ) -> None:
     seeded(tmp_path)
@@ -41,12 +54,13 @@ def test_a_marker_becomes_a_question_and_the_answer_reaches_the_next_brief(
     monkeypatch.setattr("sys.stdin", io.StringIO("Chrome and Firefox\n"))
     assert proposed(tmp_path, "--id", "asked") == 0
     first, second = asked(fake_provider, BRIEF)
-    assert "Which browsers are in scope? -> Chrome and Firefox" in second and "Chrome and Firefox" not in first
-    assert markers(read_text(tmp_path / ".spec/changes/asked/brief.md")) == []
+    assert f"{ASKED} -> Chrome and Firefox" in second and "Chrome and Firefox" not in first
+    assert markers(brief_md(tmp_path, "asked")) == []
     out = capsys.readouterr().out
-    assert "Which browsers are in scope?" in out and "Evergreen browsers only" in out
+    assert f"1. {ASKED}" in out and "suggested: Evergreen browsers only" in out
     assert "The brief leaves 1 point open." in out
-    assert len(asked(fake_provider, QUESTIONS)) == 1 and len(asked(fake_provider, TRIAGE)) == 1
+    assert "triage 120 in 1 call, brief 240 in 2 calls, deltas 120 in 1 call: 480 total" in out
+    assert asked(fake_provider, WORDING) == [] and len(fake_provider.requests) == 4
 
 
 def test_the_suggestion_is_taken_with_an_equals_sign(tmp_path, monkeypatch, fake_provider) -> None:
@@ -54,7 +68,19 @@ def test_the_suggestion_is_taken_with_an_equals_sign(tmp_path, monkeypatch, fake
     fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
     monkeypatch.setattr("sys.stdin", io.StringIO("=\n"))
     assert proposed(tmp_path, "--tier", "standard", "--id", "taken") == 0
-    assert "Which browsers are in scope? -> Evergreen browsers only" in asked(fake_provider, BRIEF)[1]
+    assert f"{ASKED} -> Evergreen browsers only" in asked(fake_provider, BRIEF)[1]
+
+
+def test_an_open_point_with_nothing_suggested_is_asked_without_one_and_equals_takes_nothing(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    seeded(tmp_path)
+    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "open_points": [{**OPEN_POINT, "suggested": ""}]})
+    monkeypatch.setattr("sys.stdin", io.StringIO("=\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "unsuggested") == 0
+    assert "suggested: (none)" in capsys.readouterr().out
+    assert len(asked(fake_provider, BRIEF)) == 1, "nothing was taken for an answer, so the brief stands"
+    assert len(markers(brief_md(tmp_path, "unsuggested"))) == 1
 
 
 def test_no_answer_leaves_the_point_open_and_ends_the_asking(tmp_path, monkeypatch, fake_provider) -> None:
@@ -63,74 +89,64 @@ def test_no_answer_leaves_the_point_open_and_ends_the_asking(tmp_path, monkeypat
     fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
     monkeypatch.setattr("sys.stdin", io.StringIO(""))  # the input has ended: no terminal, or a pipe that closed
     assert proposed(tmp_path, "--id", "open") == 0
-    assert len(markers(read_text(tmp_path / ".spec/changes/open/brief.md"))) == 1
+    assert markers(brief_md(tmp_path, "open")) == [f"[NEEDS CLARIFICATION: {ASKED}]"]
     assert len(asked(fake_provider, TRIAGE)) == 1, "an answer is never taken for a new request"
-    assert len(asked(fake_provider, QUESTIONS)) == 1, "a round nobody answered is not asked again"
+    assert len(asked(fake_provider, BRIEF)) == 1, "a round nobody answered keeps the brief that passed its gate"
 
 
-def test_the_asking_stops_after_three_rounds(tmp_path, monkeypatch, fake_provider) -> None:
+def test_the_asking_stops_after_three_rounds(tmp_path, monkeypatch, capsys, fake_provider) -> None:
     seeded(tmp_path)
     fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)  # the model never settles the point
     monkeypatch.setattr("sys.stdin", io.StringIO("Chrome\nChrome\nChrome\nChrome\nChrome\n"))
     assert proposed(tmp_path, "--tier", "standard", "--id", "stubborn") == 0
-    assert len(asked(fake_provider, QUESTIONS)) == 3 and len(asked(fake_provider, BRIEF)) == 4
-    assert asked(fake_provider, BRIEF)[-1].count("Which browsers are in scope? -> Chrome") == 3
+    assert len(asked(fake_provider, BRIEF)) == 4 and capsys.readouterr().out.count(f"1. {ASKED}") == 3
+    assert asked(fake_provider, BRIEF)[-1].count(f"{ASKED} -> Chrome") == 3
 
 
-def test_no_input_asks_nothing_and_the_lean_tier_asks_nothing(tmp_path, fake_provider) -> None:
+def test_no_input_asks_nothing_and_the_lean_tier_asks_nothing(tmp_path, capsys, fake_provider) -> None:
     seeded(tmp_path)
     fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
     assert proposed(tmp_path, "--tier", "standard", "--no-input", "--id", "quiet") == 0
     assert proposed(tmp_path, "--tier", "lean", "--id", "lean-one") == 0
-    assert asked(fake_provider, QUESTIONS) == []
+    assert "A line answers" not in capsys.readouterr().out and len(fake_provider.requests) == 4
+    for change in ("quiet", "lean-one"):
+        assert len(markers(brief_md(tmp_path, change))) == 1, "the point stands in the file, for a person to settle"
 
 
-def test_at_most_five_questions_are_asked(tmp_path, monkeypatch, capsys, fake_provider) -> None:
+def test_more_open_points_than_the_budget_send_the_brief_back(tmp_path, capsys, fake_provider) -> None:
     seeded(tmp_path)
-    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
-    seven = [{**CANNED_QUESTIONS["questions"][0], "question": f"Question {n}?"} for n in range(1, 8)]
-    fake_provider.answers_when(QUESTIONS, {"questions": seven})
-    monkeypatch.setattr("sys.stdin", io.StringIO("a\n" * 7))
-    assert proposed(tmp_path, "--tier", "standard", "--id", "many") == 0
-    out = capsys.readouterr().out
-    assert "Question 5?" in out and "Question 6?" not in out
-
-
-def test_more_markers_than_the_budget_send_the_brief_back(tmp_path, capsys, fake_provider) -> None:
-    seeded(tmp_path)
-    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "assumptions": "[NEEDS CLARIFICATION] " * 4})
+    four = [{"question": f"Question {n}?", "suggested": ""} for n in range(1, 5)]
+    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "open_points": four})
     assert proposed(tmp_path, "--no-input", "--id", "many") == 3
     assert "brief.markers-over-budget" in capsys.readouterr().err and len(asked(fake_provider, BRIEF)) == 3
 
 
-TWO_MARKERS = {
-    **CANNED_BRIEF,
-    "assumptions": "[NEEDS CLARIFICATION: which browsers?] [NEEDS CLARIFICATION: how long is a session?]",
-}
-TWO_QUESTIONS = {
-    "questions": [
-        {"marker": "[NEEDS CLARIFICATION: which browsers?]", "question": "Which browsers?", "recommended": "Evergreen"},
-        {
-            "marker": "[NEEDS CLARIFICATION: how long is a session?]",
-            "question": "How long is a session?",
-            "recommended": "8 h",
-        },
-    ]
-}
+def test_three_open_points_are_three_questions_each_answered_in_its_turn(tmp_path, monkeypatch, fake_provider) -> None:
+    seeded(tmp_path)
+    three = [{"question": f"Question {n}?", "suggested": f"Answer {n}"} for n in range(1, 4)]
+    fake_provider.answers_each_time(BRIEF, iter([{**CANNED_BRIEF, "open_points": three}, CANNED_BRIEF]))
+    monkeypatch.setattr("sys.stdin", io.StringIO("first\n\n=\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "three") == 0
+    told = between(asked(fake_provider, BRIEF)[1], "answers")
+    assert told == "Question 1? -> first\nQuestion 3? -> Answer 3", "the second was left open, and is not told"
 
 
 def test_an_answer_is_kept_beside_the_question_the_person_was_shown(tmp_path, monkeypatch, fake_provider) -> None:
-    """Found by review: a pause inside a run made ADK re-run, unseen, a stage that had answered off its schema, and
-    the person's answers were attached to that second set of questions."""
+    """Found by review, while a model worded the questions: a pause inside a run made ADK run that stage again,
+    unseen, and the answers were attached to its second set of questions. The questions are code's now, read from
+    the brief that passed its gate: a brief off its schema first changes nothing of what is asked."""
     seeded(tmp_path)
-    fake_provider.answers_each_time(BRIEF, iter([TWO_MARKERS, CANNED_BRIEF]))
-    swapped = {"questions": TWO_QUESTIONS["questions"][::-1]}
-    fake_provider.answers_each_time(QUESTIONS, iter(["not json", TWO_QUESTIONS, swapped, swapped]))
+    two = [
+        {"question": "Which browsers?", "suggested": "Evergreen"},
+        {"question": "How long is a session?", "suggested": "8 h"},
+    ]
+    drafts = iter(["not json", {**CANNED_BRIEF, "open_points": two}, CANNED_BRIEF])
+    fake_provider.answers_each_time(BRIEF, drafts)
     monkeypatch.setattr("sys.stdin", io.StringIO("Chrome and Firefox\n30 minutes\n"))
     assert proposed(tmp_path, "--tier", "standard", "--id", "paired") == 0
-    told = asked(fake_provider, BRIEF)[1]
-    assert "Which browsers? -> Chrome and Firefox" in told and "How long is a session? -> 30 minutes" in told
-    assert len(asked(fake_provider, QUESTIONS)) == 2, "one answer off its schema, one good: no stage is run unseen"
+    told = between(asked(fake_provider, BRIEF)[2], "answers")
+    assert told == "Which browsers? -> Chrome and Firefox\nHow long is a session? -> 30 minutes"
+    assert len(asked(fake_provider, BRIEF)) == 3, "one draft off its schema, one asked about, one settled"
 
 
 def test_a_stage_off_its_schema_early_does_not_break_a_later_round(tmp_path, monkeypatch, fake_provider) -> None:
@@ -141,33 +157,19 @@ def test_a_stage_off_its_schema_early_does_not_break_a_later_round(tmp_path, mon
     fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
     monkeypatch.setattr("sys.stdin", io.StringIO("one\ntwo\n"))
     assert proposed(tmp_path, "--id", "two-rounds") == 0
-    assert len(asked(fake_provider, TRIAGE)) == 2 and len(asked(fake_provider, QUESTIONS)) == 2
+    assert len(asked(fake_provider, TRIAGE)) == 2 and len(asked(fake_provider, BRIEF)) == 3
     last = asked(fake_provider, BRIEF)[-1]
-    assert "Which browsers are in scope? -> one" in last and "Which browsers are in scope? -> two" in last
+    assert f"{ASKED} -> one" in last and f"{ASKED} -> two" in last
 
 
-def test_a_round_nobody_answered_keeps_the_brief_that_passed_its_gate(tmp_path, monkeypatch, fake_provider) -> None:
-    """Found by review: an unanswered round threw the checked brief away and drafted another, which could fail its
-    gate, or come back with the marker gone though nobody had answered."""
+def test_a_marker_the_model_wrote_in_a_section_is_asked_as_well(tmp_path, monkeypatch, capsys, fake_provider) -> None:
     seeded(tmp_path)
-    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
-    monkeypatch.setattr("sys.stdin", io.StringIO(""))
-    assert proposed(tmp_path, "--tier", "standard", "--id", "kept") == 0
-    assert len(asked(fake_provider, BRIEF)) == 1, "the brief is not drafted again"
-    assert len(markers(read_text(tmp_path / ".spec/changes/kept/brief.md"))) == 1, "the marker stays: code decides it"
-
-
-def test_questions_that_cannot_be_worded_do_not_lose_the_brief(tmp_path, capsys, fake_provider) -> None:
-    seeded(tmp_path)
-    fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
-    fake_provider.answers_when(QUESTIONS, "not json")
-    assert proposed(tmp_path, "--tier", "standard", "--id", "unworded") == 0
-    assert len(markers(read_text(tmp_path / ".spec/changes/unworded/brief.md"))) == 1
-    said = capsys.readouterr()
-    assert len(asked(fake_provider, QUESTIONS)) == 3 and "Traceback" not in said.err
-    assert "note      the brief's open points were not put to you" in said.out
-    (deltas,) = asked(fake_provider, "You write the requirement deltas")
-    assert "did not fit its schema" not in deltas, "the questions' findings are not told to the deltas stage"
+    by_hand = {**CANNED_BRIEF, "assumptions": "EU only. [NEEDS CLARIFICATION: which regions?]"}
+    fake_provider.answers_each_time(BRIEF, iter([by_hand, CANNED_BRIEF]))
+    monkeypatch.setattr("sys.stdin", io.StringIO("EU and UK\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "by-hand") == 0
+    assert "1. which regions?" in capsys.readouterr().out
+    assert "which regions? -> EU and UK" in asked(fake_provider, BRIEF)[1]
 
 
 def test_no_terminal_at_all_is_no_answer(tmp_path, monkeypatch, fake_provider) -> None:
@@ -175,11 +177,12 @@ def test_no_terminal_at_all_is_no_answer(tmp_path, monkeypatch, fake_provider) -
     fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
     monkeypatch.setattr("sys.stdin", None)
     assert proposed(tmp_path, "--tier", "standard", "--id", "headless") == 0
+    assert len(markers(brief_md(tmp_path, "headless"))) == 1
 
 
 def test_ctrl_c_at_a_question_stops_at_once_and_leaves_nothing_behind(tmp_path, monkeypatch, fake_provider) -> None:
-    """Coverage the review asked for. The question is put between two runs, outside the engine's event loop, so a
-    Ctrl-C there is Python's own and is not swallowed once, as it was while the engine held the read."""
+    """The question is put between two runs, outside the engine's event loop, so a Ctrl-C there is Python's own and
+    is not swallowed once, as it was while the engine held the read."""
 
     class Interrupted(io.StringIO):
         def readline(self, *_args) -> str:
@@ -200,7 +203,7 @@ def test_an_answer_that_is_no_text_is_no_answer(tmp_path, monkeypatch, fake_prov
     fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
     monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(bytes([0xFF, 0xFE, 0x0A])), encoding="utf-8"))
     assert proposed(tmp_path, "--tier", "standard", "--id", "bytes") == 0
-    assert len(markers(read_text(tmp_path / ".spec/changes/bytes/brief.md"))) == 1
+    assert len(markers(brief_md(tmp_path, "bytes"))) == 1
 
 
 def test_piped_bytes_that_are_no_text_are_no_answer_in_the_installed_command(
@@ -218,16 +221,15 @@ def test_piped_bytes_that_are_no_text_are_no_answer_in_the_installed_command(
     monkeypatch.setattr("sys.argv", argv)
     assert cli.run() == 0
     assert len(asked(fake_provider, BRIEF)) == 1, "nothing was taken for an answer"
-    assert len(markers(read_text(tmp_path / ".spec/changes/bytes/brief.md"))) == 1
+    assert len(markers(brief_md(tmp_path, "bytes"))) == 1
 
 
 def test_a_question_cannot_write_to_the_terminal_what_is_no_text(tmp_path, monkeypatch, capsys, fake_provider) -> None:
     """Raised by two reviews: a model's question and suggestion were printed as they came, control sequences too."""
     seeded(tmp_path)
-    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
     clear, bell = chr(27) + "[2J", chr(7)
-    hostile = {**CANNED_QUESTIONS["questions"][0], "question": f"Which browsers?{clear}", "recommended": f"All{bell}"}
-    fake_provider.answers_when(QUESTIONS, {"questions": [hostile]})
+    hostile = {"question": f"Which browsers?{clear}", "suggested": f"All{bell}"}
+    fake_provider.answers_each_time(BRIEF, iter([{**CANNED_BRIEF, "open_points": [hostile]}, CANNED_BRIEF]))
     monkeypatch.setattr("sys.stdin", io.StringIO("Chrome\n"))
     assert proposed(tmp_path, "--tier", "standard", "--id", "plain") == 0
     out = capsys.readouterr().out
@@ -237,13 +239,20 @@ def test_a_question_cannot_write_to_the_terminal_what_is_no_text(tmp_path, monke
 def test_a_new_draft_is_given_the_brief_it_replaces(tmp_path, monkeypatch, fake_provider) -> None:
     """The first live run: each new draft was written from the request and the answers alone, raised a new open
     point each time, and once contradicted an answer. A new draft now reads the brief it replaces."""
-    from conftest import between
-
     seeded(tmp_path)
     fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
     monkeypatch.setattr("sys.stdin", io.StringIO("Chrome and Firefox\n"))
     assert proposed(tmp_path, "--tier", "standard", "--id", "replaced") == 0
     first, second = (between(text, "replaces") for text in asked(fake_provider, BRIEF))
     assert first == "", "a first draft replaces nothing"
-    assert second.startswith("# Sign in with a passkey\n") and "[NEEDS CLARIFICATION" in second
+    assert second.startswith("# Sign in with a passkey\n") and f"[NEEDS CLARIFICATION: {ASKED}]" in second
     assert "## Assumptions" in second, "the brief as its file, whole"
+
+
+def test_the_brief_is_told_where_an_open_point_goes(tmp_path, fake_provider) -> None:
+    seeded(tmp_path)
+    assert proposed(tmp_path, "--tier", "lean", "--id", "told") == 0
+    (sent,) = asked(fake_provider, BRIEF)
+    assert "goes in open_points" in sent and "Write no [NEEDS CLARIFICATION] marker yourself." in sent
+    assert "On the lean tier no question is asked: leave open_points empty there" in sent
+    assert "is a point that draft left open: do not copy it." in sent, "the brief it replaces shows its markers"

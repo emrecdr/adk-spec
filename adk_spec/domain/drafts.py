@@ -72,6 +72,13 @@ class DeltasDraft(BaseModel):
     deltas: list[DeltaDraft] = Field(description="One entry for each capability the change touches.")
 
 
+class OpenPointDraft(BaseModel):
+    """One point a brief cannot settle from the request, as a question for the person who made it."""
+
+    question: str = Field(description="The open point as one question a person can answer in a sentence.")
+    suggested: str = Field(description="The answer you would suggest, in a sentence. Empty where you have none.")
+
+
 class BriefDraft(BaseModel):
     """The brief of a change."""
 
@@ -81,8 +88,9 @@ class BriefDraft(BaseModel):
     non_goals: str = Field(description="What the change leaves alone. Empty where nothing needs saying.")
     capabilities: list[str] = Field(description="Kebab-case slugs of the capabilities the change touches.")
     impact: str = Field(description="What else is affected: code, people, data.")
-    assumptions: str = Field(
-        description="What is assumed. A point that cannot be settled is marked [NEEDS CLARIFICATION: question]."
+    assumptions: str = Field(description="What is assumed. A point that cannot be settled goes in open_points.")
+    open_points: list[OpenPointDraft] = Field(
+        description="Each point that cannot be settled from the request. Three at most. Empty where all is settled."
     )
     design_needed: bool = Field(
         description=(
@@ -91,20 +99,6 @@ class BriefDraft(BaseModel):
         )
     )
     design_reason: str = Field(description="One sentence: why a design is needed, or why not.")
-
-
-class Question(BaseModel):
-    """One open point of a brief, worded for a person to answer."""
-
-    marker: str = Field(description="The marker from the brief this asks about, exactly as written there.")
-    question: str = Field(description="One question a person can answer in a sentence.")
-    recommended: str = Field(description="The answer you would give, in a sentence.")
-
-
-class QuestionsDraft(BaseModel):
-    """The open points of a brief, as questions."""
-
-    questions: list[Question] = Field(description="One question for each marker in the brief, in the brief's order.")
 
 
 class TaskDraft(BaseModel):

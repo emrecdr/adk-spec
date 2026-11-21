@@ -519,7 +519,7 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     ended = sys.stdin is None  # a process started with no terminal and no pipe
     for number, question in enumerate(questions, 1):
         print(f"{number}. {plain(question['question'])}")
-        print(f"   suggested: {plain(question['recommended'])}", flush=True)
+        print(f"   suggested: {plain(question['recommended']) or '(none)'}", flush=True)
         line = "" if ended else _line()
         ended = ended or line == ""  # no line at all: the input is over
         typed = line.strip()
@@ -593,7 +593,7 @@ def _propose(args: argparse.Namespace) -> int:
         workspace.free(args.id)  # a name that cannot be taken is refused before anything is spent
     from ..orchestration.models import require_ready
 
-    drafting = ("brief", "questions", "deltas")  # a tier given by hand is not asked of triage
+    drafting = ("brief", "deltas")  # a tier given by hand is not asked of triage
     if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
         raise UsageError(why)
     with lock_held(workspace):
@@ -900,7 +900,7 @@ def _verdicts(
 
 def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     from ..orchestration.gate import FAILURE
-    from ..orchestration.graph import UNWORDED, Known
+    from ..orchestration.graph import Known
     from ..orchestration.plugins import UsageLedger
     from ..orchestration.stages import CAPABILITIES, REQUEST, TIER
     from ..orchestration.stages import CONSTITUTION as RULES
@@ -933,8 +933,6 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
             print(f"no spec is owed: {sized if isinstance(sized, str) else sized.reason}")
             print(f"tokens    {_spent(ledger)}")
             return EXIT_OK
-        if why := state.get(UNWORDED):
-            print(f"note      the brief's open points were not put to you ({why}). They stay in the brief")
         try:
             kept.change = _written(args, workspace, known, state, tier)
         except WorkspaceError as exc:  # the calls are paid for by now: say so beside the refusal

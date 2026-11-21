@@ -35,6 +35,7 @@ CANNED_BRIEF = {
     "capabilities": ["auth"],
     "impact": "The sign-in page and the session service.",
     "assumptions": "Browsers in scope support WebAuthn.",
+    "open_points": [],
     "design_needed": False,
     "design_reason": "One capability, and no new dependency.",
 }
@@ -63,20 +64,9 @@ DELTAS_ON_A_MISSING_ID = {
     ]
 }
 #: The answers the fake gives by default, one a schema: the first one a request's schema accepts.
-#: A brief draft that leaves one point open, and the question a model words for it.
-BRIEF_WITH_A_MARKER = {
-    **CANNED_BRIEF,
-    "assumptions": "Browsers support WebAuthn. [NEEDS CLARIFICATION: which browsers?]",
-}
-CANNED_QUESTIONS = {
-    "questions": [
-        {
-            "marker": "[NEEDS CLARIFICATION: which browsers?]",
-            "question": "Which browsers are in scope?",
-            "recommended": "Evergreen browsers only",
-        }
-    ]
-}
+#: A brief draft that leaves one point open: its question, and the answer the brief stage would suggest.
+OPEN_POINT = {"question": "Which browsers are in scope?", "suggested": "Evergreen browsers only"}
+BRIEF_WITH_A_MARKER = {**CANNED_BRIEF, "open_points": [OPEN_POINT]}
 CANNED_TASKS = {
     "groups": [
         {
@@ -146,7 +136,6 @@ CANNED: tuple[dict, ...] = (
     CANNED_TRIAGE,
     CANNED_BRIEF,
     CANNED_DELTAS,
-    CANNED_QUESTIONS,
     CANNED_TASKS,
     CANNED_DESIGN,
     CANNED_FINDINGS,

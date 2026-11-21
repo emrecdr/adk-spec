@@ -25,11 +25,11 @@ from google.adk.plugins.base_plugin import BasePlugin
 from google.adk.workflow import Workflow
 from google.genai import types
 
-from ..domain.brief_md import markers, parse_brief, render_brief
+from ..domain.brief_md import parse_brief, render_brief
 from ..domain.check import coverage
-from ..domain.convert import DESIGN_SECTIONS, render_design, to_brief, to_deltas, to_tasks
+from ..domain.convert import DESIGN_SECTIONS, questions_of, render_design, to_brief, to_deltas, to_tasks
 from ..domain.delta_md import parse_delta, render_delta
-from ..domain.drafts import BriefDraft, DeltasDraft, DesignDraft, QuestionsDraft, TasksDraft, Triage, VerdictsDraft
+from ..domain.drafts import BriefDraft, DeltasDraft, DesignDraft, TasksDraft, Triage, VerdictsDraft
 from ..domain.ids import slug_problem
 from ..domain.lifecycle import capture_bases
 from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
@@ -46,22 +46,20 @@ from .stages import brief as brief_stage
 from .stages import check as check_stage
 from .stages import deltas as deltas_stage
 from .stages import design as design_stage
-from .stages import questions as questions_stage
 from .stages import tasks as tasks_stage
 from .stages import triage as triage_stage
 from .stages import verify as verify_stage
 
 NAME = "adk_spec"
 GO, NONE, STOP, SOME = "GO", "NONE", "STOP", "SOME"
-#: How many questions one round asks, and how many rounds a command asks in all.
-QUESTION_BUDGET = 5
+#: How many rounds of questions a command asks in all. A round asks one question a marker, and a brief that passed
+#: its gate holds `MARKER_BUDGET` of them at most.
 ROUND_BUDGET = 3
 #: The state keys of the asking: the rounds answered so far, and the questions a run ended on. The second is
-#: written by code alone, so each answer is kept beside the very question that was put to the person.
+#: written by code alone, read from the brief that passed its gate, so each answer is kept beside the very question
+#: that was put to the person.
 ROUNDS = "rounds"
 ASKING = "asking"
-#: The state key the reason is left under where a brief's open points could not be worded as questions.
-UNWORDED = "unworded"
 #: Where a propose run starts: at the request, at a brief to draft with a person's answers or tier, or at the
 #: deltas of a brief that stands.
 Entry = Literal["triage", "brief", "deltas"]
@@ -173,11 +171,6 @@ def _check_brief(state: Mapping[str, Any]) -> list[str]:
     return _errors(validate_brief(brief, text))
 
 
-def _check_questions(state: Mapping[str, Any]) -> list[str]:
-    held = QuestionsDraft.model_validate(state[questions_stage.KEY]).questions
-    return [] if held else ["the brief leaves a point open and no question was written. Write one for each marker."]
-
-
 def _deltas_check(known: Known) -> Callable[[Mapping[str, Any]], list[str]]:
     def check_deltas(state: Mapping[str, Any]) -> list[str]:
         made = drafted(state, known)
@@ -268,25 +261,16 @@ def _sized(ctx: Context) -> Event:
 def _open_points(ask: bool) -> Callable[[Context], Event]:
     def open_points(ctx: Context) -> Event:
         """Ask only where the command may, only on the standard tier, only while the rounds last, and only while
-        the brief leaves a point open."""
-        text = render_brief(_brief(ctx.state.to_dict()))
-        asking = ask and ctx.state.get(TIER) == "standard" and (ctx.state.get(ROUNDS) or 0) < ROUND_BUDGET
-        return Event(route=SOME, state={BRIEF_TEXT: text}) if asking and markers(text) else Event(route=NONE)
+        the brief leaves a point open. The questions are read by code from the brief that passed its gate, and the
+        run ends on them: the command puts them to the person, and `next_run` starts the run after with what was
+        answered."""
+        if not (ask and ctx.state.get(TIER) == "standard" and (ctx.state.get(ROUNDS) or 0) < ROUND_BUDGET):
+            return Event(route=NONE)
+        draft = BriefDraft.model_validate(ctx.state[brief_stage.KEY])
+        questions = questions_of(draft, to_brief(draft))
+        return Event(route=SOME, state={ASKING: questions}) if questions else Event(route=NONE)
 
     return open_points
-
-
-def _pending(ctx: Context) -> Event:
-    """The run ends here, on the round's questions, the first `QUESTION_BUDGET` of them: the command puts them to
-    the person, and `next_run` starts the run after with what was answered."""
-    held = QuestionsDraft.model_validate(ctx.state[questions_stage.KEY]).questions[:QUESTION_BUDGET]
-    return Event(state={ASKING: [one.model_dump() for one in held]})
-
-
-def _unasked(ctx: Context) -> Event:
-    """No question could be worded: the brief that passed its gate stands, its points left open for a person, and
-    the gate's failure becomes a note."""
-    return Event(state={FAILURE: None, UNWORDED: ctx.state.get(FAILURE)})
 
 
 def _gathering(known: Known) -> Callable[[Context], Event]:
@@ -325,15 +309,11 @@ def _propose_edges(
         return [(start, gathered), *edges]
     open_points = _open_points(ask)
     brief, brief_gate = brief_stage.build_brief(), checked(brief_stage.KEY, _check_brief)
-    questions, questions_gate = questions_stage.build_questions(), checked(questions_stage.KEY, _check_questions)
     return [
         *_opening(brief, entry, start, ended),
         (brief, brief_gate),
         (brief_gate, {OK: open_points, AGAIN: brief, GIVE_UP: ended}),
-        (open_points, {NONE: gathered, SOME: questions}),
-        (questions, questions_gate),
-        (questions_gate, {OK: _pending, AGAIN: questions, GIVE_UP: _unasked}),
-        (_unasked, gathered),
+        (open_points, {NONE: gathered, SOME: _ended}),  # a run that asks ends there; a chat never asks
         *edges,
     ]
 
@@ -365,12 +345,12 @@ def build_propose_app(
 #: Every key a propose run leaves in state, each set back to nothing. A command's run starts on a session of its
 #: own; a chat keeps one session for all its messages, so what one message drafted, and how often its stages were
 #: asked, would otherwise still be there for the next: a stage that failed would be answered with the old draft.
-_DRAFTING = (triage_stage.KEY, brief_stage.KEY, questions_stage.KEY, deltas_stage.KEY)
+_DRAFTING = (triage_stage.KEY, brief_stage.KEY, deltas_stage.KEY)
 _NOTHING_YET: dict[str, None] = dict.fromkeys(
     (
         *_DRAFTING,
         *(tries_key(stage) for stage in _DRAFTING),
-        *(FAILURE, FINDINGS, STAGE_ERROR, TIER, ASKING, UNWORDED, ROUNDS, BRIEF_TEXT, LIVING),
+        *(FAILURE, FINDINGS, STAGE_ERROR, TIER, ASKING, ROUNDS, BRIEF_TEXT, LIVING),
         *(brief_stage.ANSWERS, brief_stage.REPLACES),
     )
 )

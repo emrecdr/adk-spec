@@ -95,6 +95,7 @@ def test_a_brief_draft_becomes_a_brief_the_validator_passes() -> None:
         capabilities=["auth"],
         impact="The sign-in page.",
         assumptions="",
+        open_points=[],
         design_needed=False,
         design_reason="",
     )
@@ -151,7 +152,7 @@ def _objects(schema: Any) -> list[dict]:
     return here + [found for held in schema.values() for found in _objects(held)]
 
 
-DRAFTS = ("Triage", "BriefDraft", "QuestionsDraft", "DeltasDraft", "TasksDraft", "DesignDraft")
+DRAFTS = ("Triage", "BriefDraft", "DeltasDraft", "TasksDraft", "DesignDraft")
 
 
 @pytest.mark.parametrize("name", DRAFTS)
@@ -212,3 +213,108 @@ def test_a_modified_requirement_the_model_copied_unchanged_is_left_out() -> None
         modified=[{"id": "REQ-AUTH-001", "requirement": changed}, {"id": "REQ-AUTH-002", "requirement": copied}]
     )
     assert [req.id for req in to_deltas(draft, LIVING, set())["auth"].modified] == ["REQ-AUTH-001"]
+
+
+# A brief's open points: data in the draft, markers in the file, questions for the person.
+
+
+def brief_draft(**changed: Any) -> BriefDraft:
+    from conftest import BRIEF_WITH_A_MARKER
+
+    return BriefDraft.model_validate({**BRIEF_WITH_A_MARKER, **changed})
+
+
+def test_an_open_point_is_a_marker_in_the_briefs_file_and_a_question_with_its_suggestion() -> None:
+    from adk_spec.domain.brief_md import markers, parse_brief, render_brief
+    from adk_spec.domain.convert import questions_of
+
+    draft = brief_draft()
+    brief = to_brief(draft)
+    assert (
+        brief.assumptions
+        == "Browsers in scope support WebAuthn.\n\n[NEEDS CLARIFICATION: Which browsers are in scope?]"
+    )
+    text = render_brief(brief)
+    assert parse_brief(text) == brief and len(markers(text)) == 1
+    assert questions_of(draft, brief) == [
+        {"question": "Which browsers are in scope?", "recommended": "Evergreen browsers only"}
+    ]
+
+
+def test_a_question_that_would_break_its_marker_is_kept_whole_on_one_line() -> None:
+    from adk_spec.domain.brief_md import markers, parse_brief, render_brief
+    from adk_spec.domain.convert import questions_of
+
+    awkward = {"question": f"Which [evergreen] browsers,\nand since{chr(27)} when?", "suggested": "All of\nthem"}
+    draft = brief_draft(open_points=[awkward])
+    brief = to_brief(draft)
+    text = render_brief(brief)
+    (marker,) = markers(text)
+    assert marker == "[NEEDS CLARIFICATION: Which (evergreen) browsers, and since when?]"
+    assert parse_brief(text) == brief, "the file still reads back as written"
+    assert questions_of(draft, brief) == [
+        {"question": "Which (evergreen) browsers, and since when?", "recommended": "All of them"}
+    ]
+
+
+def test_a_marker_written_in_a_section_is_asked_too_with_nothing_suggested() -> None:
+    from adk_spec.domain.convert import questions_of
+
+    draft = brief_draft(assumptions="EU only. [NEEDS CLARIFICATION: which regions?]")
+    asked = questions_of(draft, to_brief(draft))
+    assert asked == [
+        {"question": "which regions?", "recommended": ""},
+        {"question": "Which browsers are in scope?", "recommended": "Evergreen browsers only"},
+    ], "in the order of the file"
+
+
+def test_a_marker_with_no_question_is_still_put_to_the_person() -> None:
+    from adk_spec.domain.convert import questions_of
+
+    draft = brief_draft(assumptions="Unsure. [NEEDS CLARIFICATION]", open_points=[])
+    assert questions_of(draft, to_brief(draft)) == [
+        {"question": "The brief leaves a point open and names no question.", "recommended": ""}
+    ]
+
+
+def test_no_open_point_and_no_marker_is_no_question_and_an_empty_one_is_left_out() -> None:
+    from adk_spec.domain.convert import questions_of
+
+    plain_ = brief_draft(open_points=[])
+    assert (
+        questions_of(plain_, to_brief(plain_)) == []
+        and to_brief(plain_).assumptions == "Browsers in scope support WebAuthn."
+    )
+    blank = brief_draft(open_points=[{"question": "   ", "suggested": "x"}])
+    assert questions_of(blank, to_brief(blank)) == []
+    only = brief_draft(assumptions="", open_points=[{"question": "Which regions?", "suggested": ""}])
+    assert to_brief(only).assumptions == "[NEEDS CLARIFICATION: Which regions?]"
+
+
+def test_an_open_point_the_model_also_wrote_as_a_marker_is_one_marker_and_one_question() -> None:
+    """A new draft is shown the brief it replaces, markers and all: a model that copies a marker and names the point
+    as well would otherwise ask the person the same thing twice."""
+    from adk_spec.domain.brief_md import markers, render_brief
+    from adk_spec.domain.convert import questions_of
+
+    copied = "Browsers in scope support WebAuthn.\n\n[NEEDS CLARIFICATION: Which browsers are in scope?]"
+    draft = brief_draft(assumptions=copied)
+    brief = to_brief(draft)
+    assert len(markers(render_brief(brief))) == 1
+    assert questions_of(draft, brief) == [
+        {"question": "Which browsers are in scope?", "recommended": "Evergreen browsers only"}
+    ]
+
+
+def test_an_open_point_named_twice_is_asked_once_with_its_first_suggestion() -> None:
+    from adk_spec.domain.brief_md import markers, render_brief
+    from adk_spec.domain.convert import questions_of
+
+    twice = [
+        {"question": "Which regions?", "suggested": "EU"},
+        {"question": " Which  regions? ", "suggested": "All"},
+    ]
+    draft = brief_draft(open_points=twice)
+    brief = to_brief(draft)
+    assert len(markers(render_brief(brief))) == 1
+    assert questions_of(draft, brief) == [{"question": "Which regions?", "recommended": "EU"}]

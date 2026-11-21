@@ -128,10 +128,12 @@ uv run adk-spec verify <id>
   `--override "<your reason>"`, which is recorded. A standard change is archived only once verified. `verify`
   needs a git repository and reads it only; it never cuts a diff, and refuses one past 200,000 characters.
 
-On the standard tier `propose` puts each point the brief leaves open to you as a question, at most five a round and
-three rounds, each with a suggested answer. A line answers, `=` takes the suggestion, and an empty line leaves the
-point open, in which case approval waits until you settle it in the brief. A round you answer nothing in ends the
-asking, and the brief is kept as it stood. The `tokens` line counts each stage's calls, the asked-again ones too.
+On the standard tier `propose` puts each point the brief leaves open to you as a question, at most three a round and
+three rounds, each with the answer the brief's own stage suggests. No further model call words them: the brief names
+its open points, and code asks them. A line answers, `=` takes the suggestion, and an empty line leaves the point
+open, in which case approval waits until you settle it in the brief, where it stands as a
+`[NEEDS CLARIFICATION: ...]` line. A round you answer nothing in ends the asking, and the brief is kept as it stood.
+The `tokens` line counts each stage's calls, the asked-again ones too.
 
 Every command that calls a model keeps what it sent and what came back, one file a command, under `.spec/runs/`:
 each stage's instruction, its answer as it came, and what a gate found wrong where it asked again. The folder
