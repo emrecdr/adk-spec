@@ -28,11 +28,13 @@ from ..domain.lifecycle import (
 )
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import Finding, Spec, Tier
-from ..domain.validate import failed, validate_spec
+from ..domain.validate import failed, finding, validate_spec
 from ..workspace.config import ConfigError
+from ..workspace.context import CONSTITUTION_MAX_CHARS, capability_index, constitution_text
 from ..workspace.files import NotTextError
 from ..workspace.layout import (
     CHANGES,
+    CONSTITUTION,
     ROOT_NAME,
     SPEC_FILE,
     SPECS,
@@ -198,6 +200,15 @@ def _printed(found: list[Finding]) -> None:
 def _validate(args: argparse.Namespace) -> int:
     workspace = _workspace(args)
     living, found = _of_specs(workspace)
+    if (size := len(constitution_text(workspace))) > CONSTITUTION_MAX_CHARS:
+        found.append(
+            finding(
+                "constitution.long",
+                f"The constitution holds {size:,} characters, past {CONSTITUTION_MAX_CHARS:,}. Every stage of every "
+                "run reads it: keep the rules, and move the rest elsewhere.",
+                path=f"{ROOT_NAME}/{CONSTITUTION}",
+            )
+        )
     for change_id in [args.id] if args.id else workspace.changes():
         loaded, of_change, _stale = _assessed(workspace, change_id, living)
         if loaded.change.state.status != "archived":  # an archived change is folded in: its delta has no base now
@@ -374,33 +385,44 @@ def _smoke(args: argparse.Namespace) -> int:
                 os.environ["SPEC_TRIAGE_MODEL"] = held
 
 
+def _checked(args: argparse.Namespace) -> int:
+    """Readiness alone, for `smoke --check`: nothing is built and nothing is sent."""
+    from ..orchestration.models import require_ready, serving
+
+    why = require_ready(roles=("triage",))
+    if args.json:
+        print(json.dumps({"model": serving("triage") if why is None else None, "ready": why is None, "why": why}))
+    elif why is None:
+        print(f"ready: {serving('triage')}")
+    if why is not None:
+        print(f"{PROG}: {why}", file=sys.stderr)
+    return EXIT_OK if why is None else EXIT_USAGE
+
+
 def _smoked(args: argparse.Namespace) -> int:
     import asyncio
     import logging
 
     from ..orchestration.models import require_ready, serving
 
-    why = require_ready(roles=("triage",))
-    if args.check:  # readiness alone: nothing is built and nothing is sent
-        if args.json:
-            print(json.dumps({"model": serving("triage") if why is None else None, "ready": why is None, "why": why}))
-        elif why is None:
-            print(f"ready: {serving('triage')}")
-        if why is not None:
-            print(f"{PROG}: {why}", file=sys.stderr)
-        return EXIT_OK if why is None else EXIT_USAGE
-    if why:
+    if args.check:
+        return _checked(args)
+    if why := require_ready(roles=("triage",)):
         raise UsageError(why)
     from ..orchestration.graph import build_smoke_app
     from ..orchestration.run import run_seeded
     from ..orchestration.stages.triage import CAPABILITIES, KEY, REQUEST, read_triage
 
+    try:  # the capabilities of the workspace this runs in, where it runs in one
+        known = capability_index(_workspace(args))
+    except WorkspaceError:
+        known = ""
     # ADK logs a failed node with its whole traceback; the failure is said below, in one line.
     engine_log = logging.getLogger("google_adk")
     level = engine_log.level
     engine_log.setLevel(logging.CRITICAL)
     try:
-        run = asyncio.run(run_seeded(build_smoke_app(), state={REQUEST: args.request, CAPABILITIES: ""}, prompt=KEY))
+        run = asyncio.run(run_seeded(build_smoke_app(), state={REQUEST: args.request, CAPABILITIES: known}, prompt=KEY))
     finally:
         engine_log.setLevel(level)
     answer = read_triage(run.state)
@@ -408,14 +430,13 @@ def _smoked(args: argparse.Namespace) -> int:
     if isinstance(answer, str):
         failure = run.failure or next(iter(run.errors.values()), None) or answer
     spent = run.usage
-    tokens = {"calls": spent.calls, "prompt": spent.prompt, "output": spent.output, "total": spent.total}
     if args.json:
         result = {
             "model": serving("triage"),
             "schema": "invalid" if failure else "valid",
             "triage": None if isinstance(answer, str) else answer.model_dump(),
             "failure": failure,
-            "tokens": tokens,
+            "tokens": {"calls": spent.calls, "prompt": spent.prompt, "output": spent.output, "total": spent.total},
             "seconds": round(run.seconds, 1),
         }
         print(json.dumps(result, indent=2))

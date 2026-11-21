@@ -19,6 +19,7 @@ from .spec_md import fingerprint
 #: Every rule's severity. The owner's to set: which faults stop work, and which only show.
 SEVERITY: dict[str, Severity] = {
     "syntax": "ERROR",
+    "constitution.long": "WARNING",
     "spec.folder-mismatch": "ERROR",
     "spec.folder-bad-name": "ERROR",
     "spec.id-capability": "ERROR",
