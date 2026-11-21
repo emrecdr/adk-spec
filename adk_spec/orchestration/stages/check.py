@@ -22,6 +22,7 @@ GUIDE = """\
 Look for what the files say against each other, and against the rules of this repository:
 a contradiction between two files; wording in a requirement or a task that allows two readings; something the brief
 promises that no requirement delivers; one requirement stated twice; a rule of the repository the change breaks.
+Report every fault you find. One finding does not excuse the next.
 Report only what you can point to. For each finding, name one file by the path given above it and copy from it the
 exact text the finding is about: a line or a phrase, word for word.
 critical means the change would be built wrong as it stands. warning means worth a look. note is a remark.

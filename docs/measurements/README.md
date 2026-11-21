@@ -23,3 +23,16 @@ planted fault a run missed with what that run found instead, and every finding l
 is not in the file it names. Read them before the table. The second measurement here showed that eight "false"
 findings were one real fault of the set.
 
+A count of three runs is not a rate. Between two measurements an hour apart, on one model and one commit, a case
+moved from three of three to none of three. Read a count as what happened in those runs; to compare two
+instructions, run each case five times or more (`--runs 5`, about 25 calls) and compare the lists as well as the
+counts.
+
+| File | Model | What changed before it |
+|---|---|---|
+| `2026-11-copilot-gpt-4.1.md` | gpt-4.1 on Copilot | The first measurement. |
+| `2026-11-copilot-gpt-4.1-second.md` | gpt-4.1 on Copilot | The script keeps the wording of what it cannot place. It found a fault of the set itself. |
+
+Not yet measured: the set as corrected after the second measurement, and the check's instruction with "Report every
+fault you find. One finding does not excuse the next." (plan 4, Task 4).
+

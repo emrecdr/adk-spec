@@ -285,3 +285,14 @@ def test_a_report_leaves_a_findings_own_words_alone() -> None:
     report = render_check("x", "t", [worded, placeless], model=None)
     assert "- `check.ambiguity` brief.md:3: the ratio a : b is wrong" in report
     assert "- `check.missing`: nothing : here" in report
+
+
+def test_the_check_is_told_to_report_every_fault_it_finds(tmp_path, fake_provider) -> None:
+    """The second live measurement: the model mostly gave one finding a run, and where it named one fault it left
+    the next unsaid: a planted contradiction was caught in one run of three beside a gap it named in all three."""
+    standard(tmp_path)
+    assert run(tmp_path, "check", "passkeys") == 0
+    (sent,) = [str(r.config.system_instruction) for r in fake_provider.requests]
+    assert sent.startswith(CHECK)
+    assert "Report every fault you find. One finding does not excuse the next." in sent
+    assert "An empty list is a good answer." in sent, "and still none where there is none"
