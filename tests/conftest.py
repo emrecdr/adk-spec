@@ -196,3 +196,21 @@ def github_answers(monkeypatch: pytest.MonkeyPatch, reply: object) -> None:
             return reply if isinstance(reply, httpx.Response) else SimpleNamespace(json=lambda: reply)
 
     monkeypatch.setattr(httpx, "Client", Client)  # the login imports httpx and resolves Client at the call
+
+
+def seeded(root: Path):
+    """A workspace at `root` holding the sample living spec of `auth` and one lean draft change, `passkeys`, with
+    its brief, tasks and delta: where most tests of the workspace and the command start."""
+    from samples import BRIEF, DELTA, SPEC, TASKS
+
+    from adk_spec.domain.spec_md import parse_spec
+    from adk_spec.workspace.files import write_text
+    from adk_spec.workspace.layout import Workspace
+
+    workspace = Workspace.init(root)
+    workspace.write_specs({"auth": parse_spec(SPEC)})
+    folder = workspace.new_change("passkeys", "lean")
+    write_text(folder / "brief.md", BRIEF)
+    write_text(folder / "tasks.md", TASKS)
+    write_text(folder / "specs" / "auth" / "spec.md", DELTA)
+    return workspace
