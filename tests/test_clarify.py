@@ -6,16 +6,14 @@ from __future__ import annotations
 import io
 
 import pytest
-from conftest import BRIEF_WITH_A_MARKER, CANNED_BRIEF, CANNED_QUESTIONS, on_the_fake, run, seeded
-from google.adk.apps.app import App
-from google.adk.events.request_input import RequestInput
-from google.adk.workflow import Workflow
+from conftest import BRIEF_WITH_A_MARKER, CANNED_BRIEF, CANNED_QUESTIONS, CANNED_TRIAGE, on_the_fake, run, seeded
 
 from adk_spec.domain.brief_md import markers
-from adk_spec.orchestration.run import run_seeded
 from adk_spec.workspace.files import read_text
 
 REQUEST = "Let users sign in with a passkey."
+#: Triage's own call for the standard tier: a tier given by hand is not asked of the model at all.
+STANDARD = {**CANNED_TRIAGE, "tier": "standard"}
 TRIAGE, BRIEF, QUESTIONS = "You size a change request", "You write the brief of a change", "You word the open points"
 
 
@@ -38,9 +36,10 @@ def test_a_marker_becomes_a_question_and_the_answer_reaches_the_next_brief(
     tmp_path, monkeypatch, capsys, fake_provider
 ) -> None:
     seeded(tmp_path)
+    fake_provider.answers_when(TRIAGE, STANDARD)
     fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
     monkeypatch.setattr("sys.stdin", io.StringIO("Chrome and Firefox\n"))
-    assert proposed(tmp_path, "--tier", "standard", "--id", "asked") == 0
+    assert proposed(tmp_path, "--id", "asked") == 0
     first, second = asked(fake_provider, BRIEF)
     assert "Which browsers are in scope? -> Chrome and Firefox" in second and "Chrome and Firefox" not in first
     assert markers(read_text(tmp_path / ".spec/changes/asked/brief.md")) == []
@@ -60,9 +59,10 @@ def test_the_suggestion_is_taken_with_an_equals_sign(tmp_path, monkeypatch, fake
 
 def test_no_answer_leaves_the_point_open_and_ends_the_asking(tmp_path, monkeypatch, fake_provider) -> None:
     seeded(tmp_path)
+    fake_provider.answers_when(TRIAGE, STANDARD)
     fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
     monkeypatch.setattr("sys.stdin", io.StringIO(""))  # the input has ended: no terminal, or a pipe that closed
-    assert proposed(tmp_path, "--tier", "standard", "--id", "open") == 0
+    assert proposed(tmp_path, "--id", "open") == 0
     assert len(markers(read_text(tmp_path / ".spec/changes/open/brief.md"))) == 1
     assert len(asked(fake_provider, TRIAGE)) == 1, "an answer is never taken for a new request"
     assert len(asked(fake_provider, QUESTIONS)) == 1, "a round nobody answered is not asked again"
@@ -103,19 +103,6 @@ def test_more_markers_than_the_budget_send_the_brief_back(tmp_path, capsys, fake
     assert "brief.markers-over-budget" in capsys.readouterr().err and len(asked(fake_provider, BRIEF)) == 3
 
 
-@pytest.mark.asyncio
-async def test_a_pause_with_nobody_to_answer_ends_the_run_and_restarts_nothing() -> None:
-    ran: list[int] = []
-
-    def ask(node_input=None):  # noqa: ARG001 -- the node's contract
-        ran.append(1)
-        yield RequestInput(message="?", payload={})
-
-    app = App(name="t", root_agent=Workflow(name="t", edges=[("START", ask)]), plugins=[])
-    result = await run_seeded(app, state={}, prompt="go")
-    assert result.failure == "the run asked a question and none could be answered" and ran == [1]
-
-
 TWO_MARKERS = {
     **CANNED_BRIEF,
     "assumptions": "[NEEDS CLARIFICATION: which browsers?] [NEEDS CLARIFICATION: how long is a session?]",
@@ -150,10 +137,10 @@ def test_a_stage_off_its_schema_early_does_not_break_a_later_round(tmp_path, mon
     """Found by review: after one answer off its schema, the second answered round ended the run with a replay
     error and lost both rounds of answers."""
     seeded(tmp_path)
-    fake_provider.answers_each_time(TRIAGE, iter(["not json", None]))
+    fake_provider.answers_each_time(TRIAGE, iter(["not json", STANDARD]))
     fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
     monkeypatch.setattr("sys.stdin", io.StringIO("one\ntwo\n"))
-    assert proposed(tmp_path, "--tier", "standard", "--id", "two-rounds") == 0
+    assert proposed(tmp_path, "--id", "two-rounds") == 0
     assert len(asked(fake_provider, TRIAGE)) == 2 and len(asked(fake_provider, QUESTIONS)) == 2
     last = asked(fake_provider, BRIEF)[-1]
     assert "Which browsers are in scope? -> one" in last and "Which browsers are in scope? -> two" in last

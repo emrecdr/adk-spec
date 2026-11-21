@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
+from ..domain.model import Spec
 from ..domain.spec_md import render_spec
 from ..domain.text import lines_of
 from .files import read_text
@@ -25,16 +26,14 @@ class ContextTooLargeError(WorkspaceError):
     """The living specs a stage would be given pass what it may read."""
 
 
-def capability_index(workspace: Workspace) -> str:
+def capability_index(specs: Mapping[str, Spec]) -> str:
     """One line a capability: its slug, and the first line of its purpose."""
-    specs, _problems = workspace.specs()
     return "\n".join(f"{slug}: {(lines_of(spec.purpose) or [''])[0]}" for slug, spec in sorted(specs.items()))
 
 
-def living_text(workspace: Workspace, capabilities: Iterable[str]) -> str:
+def living_text(specs: Mapping[str, Spec], capabilities: Iterable[str]) -> str:
     """The canonical text of each named capability's living spec, whole, under a line naming it. A capability with
-    no spec yet is one the change creates, and adds nothing."""
-    specs, _problems = workspace.specs()
+    no spec yet is one the change creates, and adds nothing. `ContextTooLargeError` past the limit."""
     return joined({slug: render_spec(specs[slug]) for slug in capabilities if slug in specs})
 
 

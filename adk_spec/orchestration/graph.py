@@ -1,16 +1,20 @@
 """The graphs, built where a command asks for one and never at import.
 
-A command is one short `Workflow` run. A drafting stage is an agent; after each stands a gate, a function node that
-converts the draft, checks it with the domain's validator and routes: on, back to its stage, or out. Nothing is
-written inside a graph. The command reads the drafts from state when the run has ended well, and writes then.
+A command is one short `Workflow` run, or a few. A drafting stage is an agent; after each stands a gate, a function
+node that converts the draft, checks it with the domain's validator and routes: on, back to its stage, or out.
+Nothing is written inside a graph. The command reads the drafts from state when the run has ended well, and writes
+then.
+
+No run pauses for a person. A `propose` whose brief leaves a point open ends its run on the questions; the command
+asks, and `next_run` says where the run after starts and what it is seeded with. The whole of that protocol is
+here: the command holds the terminal, and nothing of the state's keys.
 
 `NAME` is the app's and the root node's, the package folder's own name, as ADK's loader expects of a root agent.
 """
 
 from __future__ import annotations
 
-import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -20,19 +24,18 @@ from google.adk.events import Event
 from google.adk.workflow import Workflow
 
 from ..domain.brief_md import markers, parse_brief, render_brief
-from ..domain.convert import render_design, to_brief, to_deltas, to_tasks
+from ..domain.convert import DESIGN_SECTIONS, render_design, to_brief, to_deltas, to_tasks
 from ..domain.delta_md import parse_delta, render_delta
 from ..domain.drafts import BriefDraft, DeltasDraft, DesignDraft, QuestionsDraft, TasksDraft, Triage
 from ..domain.ids import slug_problem
 from ..domain.lifecycle import capture_bases
 from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
-from ..domain.spec_md import render_spec
 from ..domain.tasks_md import parse_tasks, render_tasks
 from ..domain.validate import validate_brief, validate_delta, validate_tasks
-from ..workspace.context import ContextTooLargeError, joined
-from .gate import AGAIN, FAILURE, FINDINGS, GIVE_UP, OK, checked
+from ..workspace.context import ContextTooLargeError, living_text
+from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked
 from .plugins import UsageLedger, roster
-from .stages import BOUNDARY
+from .stages import BRIEF_TEXT, LIVING
 from .stages import brief as brief_stage
 from .stages import deltas as deltas_stage
 from .stages import design as design_stage
@@ -44,17 +47,17 @@ NAME = "adk_spec"
 #: The state key the tier a run settled on is left under: a tier, or `none` where no spec is owed.
 TIER = "tier"
 GO, NONE, STOP, SOME = "GO", "NONE", "STOP", "SOME"
-#: How many questions one round asks, and how many rounds a run asks in all.
+#: How many questions one round asks, and how many rounds a command asks in all.
 QUESTION_BUDGET = 5
 ROUND_BUDGET = 3
 #: The state keys of the asking: the rounds answered so far, and the questions a run ended on. The second is
-#: written by code alone, so the command pairs each answer with the very question it put to the person.
+#: written by code alone, so each answer is kept beside the very question that was put to the person.
 ROUNDS = "rounds"
 ASKING = "asking"
 #: The state key the reason is left under where a brief's open points could not be worded as questions.
 UNWORDED = "unworded"
-#: Where a propose run starts: at the request, at a brief to draft again with a person's answers, or at the deltas
-#: of a brief that stands.
+#: Where a propose run starts: at the request, at a brief to draft with a person's answers or tier, or at the
+#: deltas of a brief that stands.
 Entry = Literal["triage", "brief", "deltas"]
 
 
@@ -63,18 +66,17 @@ class Known:
     """What a run is told of the workspace, as plain values: no node reads a file."""
 
     living: Mapping[str, Spec]
-    #: By capability: every requirement ID spoken for, in its spec or in another open change.
-    taken: Mapping[str, frozenset[str]]
-    ceiling: int | None = None
+    #: Every requirement ID spoken for, in a living spec or in an open change.
+    taken: frozenset[str]
 
 
 @dataclass(frozen=True)
 class Drafted:
     """A run's drafts as the domain's types: what the gates checked, and what the command writes."""
 
-    draft: BriefDraft
     brief: Brief
     deltas: dict[str, Delta]
+    needs_design: bool
 
 
 def _errors(findings: list[Finding]) -> list[str]:
@@ -82,19 +84,42 @@ def _errors(findings: list[Finding]) -> list[str]:
     return [f"{found.code}: {found.message}" for found in findings if found.severity == "ERROR"]
 
 
-def _brief(state: Mapping[str, Any]) -> tuple[BriefDraft, Brief]:
-    draft = BriefDraft.model_validate(state[brief_stage.KEY])
-    return draft, to_brief(draft)
+def _brief(state: Mapping[str, Any]) -> Brief:
+    return to_brief(BriefDraft.model_validate(state[brief_stage.KEY]))
 
 
 def drafted(state: Mapping[str, Any], known: Known) -> Drafted:
     """The brief and the deltas a run left in state, converted. The same call gives the same IDs, so what a gate
     checked is what the command writes."""
-    draft, brief = _brief(state)
-    deltas = DeltasDraft.model_validate(state[deltas_stage.KEY])
-    touched = {one.capability.strip() for one in deltas.deltas}
-    taken = set().union(*(known.taken.get(capability, frozenset()) for capability in touched))
-    return Drafted(draft, brief, to_deltas(deltas, known.living, taken))
+    draft = BriefDraft.model_validate(state[brief_stage.KEY])
+    deltas = to_deltas(DeltasDraft.model_validate(state[deltas_stage.KEY]), known.living, known.taken)
+    return Drafted(to_brief(draft), deltas, draft.design_needed)
+
+
+def first_run(tier: Tier | None, seed: Mapping[str, Any]) -> tuple[Entry, dict[str, Any]]:
+    """Where a propose starts, and what its run is seeded with: at triage, or straight at the brief where a person
+    named the tier. Triage is asked for the tier alone; with the tier given, nothing would read its answer."""
+    return ("brief", {**seed, TIER: tier}) if tier else ("triage", dict(seed))
+
+
+def next_run(seed: Mapping[str, Any], state: Mapping[str, Any], answers: Sequence[str]) -> tuple[Entry, dict[str, Any]]:
+    """Where the run after a round of questions starts, and what it is seeded with. `seed` is what the run that
+    asked was seeded with, `state` what it left, and `answers` the person's, in the order of the questions under
+    `ASKING`, an empty one for a point left open.
+
+    What was answered starts the next run at the brief, each answer beside the question the person was shown, after
+    those of the rounds before. A round nobody answered starts it at the deltas, with the brief that passed its
+    gate, its points left open."""
+    carried = {**seed, TIER: state[TIER]}
+    if not any(answers):
+        return "deltas", {**carried, brief_stage.KEY: state[brief_stage.KEY]}
+    told = [seed[brief_stage.ANSWERS]] if seed.get(brief_stage.ANSWERS) else []
+    told += [
+        f"{' '.join(asked['question'].split())} -> {answer}"
+        for asked, answer in zip(state[ASKING], answers, strict=True)
+        if answer
+    ]
+    return "brief", {**carried, brief_stage.ANSWERS: "\n".join(told), ROUNDS: (seed.get(ROUNDS) or 0) + 1}
 
 
 def build_smoke_app() -> App:
@@ -103,22 +128,29 @@ def build_smoke_app() -> App:
     return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=[])
 
 
-def _checks(known: Known):
-    """What the brief's gate and the deltas' gate check, each as what is wrong, a sentence a problem."""
+# What each gate checks: what is wrong with the stage's answer, a sentence a problem.
 
-    def check_brief(state: Mapping[str, Any]) -> list[str]:
-        _draft, brief = _brief(state)
-        if not brief.title:
-            return ["the brief has no title. Give it one, on one line."]
-        text = render_brief(brief)
-        try:
-            same = parse_brief(text) == brief
-        except GrammarError as exc:
-            return [f"the brief cannot be written as its file: {exc.message}. Write no heading and no open code fence."]
-        if not same:
-            return ["a section of the brief does not read back as written. Write no line that starts `## ` in one."]
-        return _errors(validate_brief(brief, text))
 
+def _check_brief(state: Mapping[str, Any]) -> list[str]:
+    brief = _brief(state)
+    if not brief.title:
+        return ["the brief has no title. Give it one, on one line."]
+    text = render_brief(brief)
+    try:
+        same = parse_brief(text) == brief
+    except GrammarError as exc:
+        return [f"the brief cannot be written as its file: {exc.message}. Write no heading and no open code fence."]
+    if not same:
+        return ["a section of the brief does not read back as written. Write no line that starts `## ` in one."]
+    return _errors(validate_brief(brief, text))
+
+
+def _check_questions(state: Mapping[str, Any]) -> list[str]:
+    held = QuestionsDraft.model_validate(state[questions_stage.KEY]).questions
+    return [] if held else ["the brief leaves a point open and no question was written. Write one for each marker."]
+
+
+def _deltas_check(known: Known) -> Callable[[Mapping[str, Any]], list[str]]:
     def check_deltas(state: Mapping[str, Any]) -> list[str]:
         made = drafted(state, known)
         listed = set(made.brief.capabilities)
@@ -135,168 +167,7 @@ def _checks(known: Known):
             problems += _of_delta(capability, delta, known)
         return problems
 
-    return check_brief, check_deltas
-
-
-def _routing(known: Known, tier: Tier | None):
-    """The two nodes that decide and prepare between stages: the tier the run goes on with, and what the deltas
-    stage reads."""
-
-    def sized(ctx: Context) -> Event:
-        """The person's tier, else the model's, `strict` read as `standard` for now."""
-        model = Triage.model_validate(ctx.state[triage_stage.KEY]).tier
-        chosen = tier or ("standard" if model == "strict" else model)
-        return Event(route=NONE if chosen == "none" else GO, state={TIER: chosen})
-
-    def gathered(ctx: Context) -> Event:
-        """The brief as its file, and each living spec it touches, whole."""
-        _draft, brief = _brief(ctx.state.to_dict())
-        specs = {slug: render_spec(known.living[slug]) for slug in brief.capabilities if slug in known.living}
-        try:
-            living = joined(specs)
-        except ContextTooLargeError as exc:
-            return Event(route=STOP, state={FAILURE: f"context: {exc}"})
-        return Event(route=GO, state={deltas_stage.BRIEF_TEXT: render_brief(brief), deltas_stage.LIVING: living})
-
-    return sized, gathered
-
-
-def _asking(ask: bool):
-    """The nodes around a standard change's open points: whether to ask, the questions a run ends on, and what
-    happens where none could be worded."""
-
-    def open_points(ctx: Context) -> Event:
-        """Ask only on the standard tier, only while the brief leaves a point open, and only while the rounds last."""
-        _draft, brief = _brief(ctx.state.to_dict())
-        text = render_brief(brief)
-        rounds = ctx.state.get(ROUNDS) or 0
-        if not ask or ctx.state.get(TIER) != "standard" or not markers(text) or rounds >= ROUND_BUDGET:
-            return Event(route=NONE)
-        return Event(route=SOME, state={deltas_stage.BRIEF_TEXT: text})
-
-    def pending(ctx: Context) -> Event:
-        """The run ends here, on the round's questions, the first `QUESTION_BUDGET` of them: the command puts them
-        to the person and starts the next run with what was answered."""
-        held = QuestionsDraft.model_validate(ctx.state[questions_stage.KEY]).questions[:QUESTION_BUDGET]
-        return Event(state={ASKING: [one.model_dump() for one in held]})
-
-    def unasked(ctx: Context) -> Event:
-        """No question could be worded: the brief that passed its gate stands, its points left open for a person.
-        The questions' findings are cleared, or the deltas stage would be told them as its own."""
-        return Event(state={FAILURE: None, FINDINGS: None, UNWORDED: ctx.state.get(FAILURE)})
-
-    return open_points, pending, unasked
-
-
-def _check_questions(state: Mapping[str, Any]) -> list[str]:
-    held = QuestionsDraft.model_validate(state[questions_stage.KEY]).questions
-    return [] if held else ["the brief leaves a point open and no question was written. Write one for each marker."]
-
-
-def _ended() -> Event:
-    return Event(output="ended")
-
-
-def _gate(stage: str, check: Callable[[Mapping[str, Any]], list[str]]):
-    """The gate of `stage`, which first refuses an answer that repeats this process's marker: written to a file and
-    read by the next stage, it would end a fenced section early there."""
-
-    def clean(state: Mapping[str, Any]) -> list[str]:
-        if BOUNDARY in json.dumps(state[stage]):
-            return ["the answer repeats a marker line of your instructions. Write no marker line."]
-        return check(state)
-
-    return checked(stage, clean)
-
-
-def build_propose_app(
-    known: Known, *, tier: Tier | None, ask: bool, entry: Entry = "triage", ledger: UsageLedger | None = None
-) -> App:
-    """Triage, the brief and the deltas, each behind its gate. `tier` is a person's own choice, which wins over the
-    model's; with none, a request the model sizes as `none` ends the run with nothing drafted.
-
-    With `ask`, a standard change whose brief leaves a point open ends its run on the questions, under `ASKING`. The
-    command asks, and starts the next run at `entry`: `brief`, seeded with the answers, to draft the brief again; or
-    `deltas`, seeded with a brief that stands, where nobody answered."""
-    check_brief, check_deltas = _checks(known)
-    sized, gathered = _routing(known, tier)
-    deltas, deltas_gate = deltas_stage.build_deltas(), _gate(deltas_stage.KEY, check_deltas)
-    edges: list[Any] = [
-        (gathered, {GO: deltas, STOP: _ended}),
-        (deltas, deltas_gate),
-        (deltas_gate, {OK: _ended, AGAIN: deltas, GIVE_UP: _ended}),
-    ]
-    if entry == "deltas":
-        edges = [("START", gathered), *edges]
-    else:
-        open_points, pending, unasked = _asking(ask)
-        brief, brief_gate = brief_stage.build_brief(), _gate(brief_stage.KEY, check_brief)
-        questions, questions_gate = questions_stage.build_questions(), _gate(questions_stage.KEY, _check_questions)
-        edges = [
-            *_opening(sized, brief, entry),
-            (brief, brief_gate),
-            (brief_gate, {OK: open_points, AGAIN: brief, GIVE_UP: _ended}),
-            (open_points, {NONE: gathered, SOME: questions}),
-            (questions, questions_gate),
-            (questions_gate, {OK: pending, AGAIN: questions, GIVE_UP: unasked}),
-            (unasked, gathered),
-            *edges,
-        ]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(known.ceiling, ledger))
-
-
-def _opening(sized: Any, brief: Any, entry: Entry) -> list[Any]:
-    """The edges up to the brief: through triage for a new request, straight to it for a brief drafted again."""
-    if entry == "brief":
-        return [("START", brief)]
-    triage, triage_gate = triage_stage.build_triage(), _gate(triage_stage.KEY, lambda _state: [])
-    return [
-        ("START", triage, triage_gate),
-        (triage_gate, {OK: sized, AGAIN: triage, GIVE_UP: _ended}),
-        (sized, {GO: brief, NONE: _ended}),
-    ]
-
-
-def _check_design(state: Mapping[str, Any]) -> list[str]:
-    draft = DesignDraft.model_validate(state[design_stage.KEY])
-    sections = {"context": draft.context, "goals": draft.goals, "decisions": draft.decisions, "risks": draft.risks}
-    return [f"the design's {name} section is empty. Write it." for name, text in sections.items() if not text.strip()]
-
-
-def _check_tasks(state: Mapping[str, Any]) -> list[str]:
-    groups = to_tasks(TasksDraft.model_validate(state[tasks_stage.KEY]))
-    if not any(group.tasks for group in groups):
-        return ["the plan holds no task. Write one task at least for each requirement the deltas add or change."]
-    try:
-        same = parse_tasks(render_tasks(groups)) == groups
-    except GrammarError as exc:
-        return [f"the tasks cannot be written as their file: {exc.message}."]
-    if not same:
-        return ["the tasks do not read back as written: keep each description, file and check on one line."]
-    return _errors(validate_tasks(groups))
-
-
-def _designed(ctx: Context) -> Event:
-    """The design as its file, for the tasks stage to read."""
-    draft = DesignDraft.model_validate(ctx.state[design_stage.KEY])
-    return Event(state={tasks_stage.DESIGN_TEXT: render_design(draft)})
-
-
-def build_plan_app(known: Known, *, design: bool) -> App:
-    """The design, where the change owes one, and then the tasks, each behind its gate."""
-    tasks, tasks_gate = tasks_stage.build_tasks(), _gate(tasks_stage.KEY, _check_tasks)
-    edges: list[Any] = [(tasks, tasks_gate), (tasks_gate, {OK: _ended, AGAIN: tasks, GIVE_UP: _ended})]
-    if design:
-        drafting, design_gate = design_stage.build_design(), _gate(design_stage.KEY, _check_design)
-        edges = [
-            ("START", drafting, design_gate),
-            (design_gate, {OK: _designed, AGAIN: drafting, GIVE_UP: _ended}),
-            (_designed, tasks),
-            *edges,
-        ]
-    else:
-        edges = [("START", tasks), *edges]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(known.ceiling))
+    return check_deltas
 
 
 def _of_delta(capability: str, delta: Delta, known: Known) -> list[str]:
@@ -322,3 +193,144 @@ def _of_delta(capability: str, delta: Delta, known: Known) -> list[str]:
     if read != delta:
         return [f"the delta of `{capability}` does not read back as written: keep each reason on one line."]
     return []
+
+
+def _check_design(state: Mapping[str, Any]) -> list[str]:
+    draft = DesignDraft.model_validate(state[design_stage.KEY])
+    return [
+        f"the design's {name} section is empty. Write it."
+        for name in DESIGN_SECTIONS
+        if not getattr(draft, name).strip()
+    ]
+
+
+def _check_tasks(state: Mapping[str, Any]) -> list[str]:
+    """The validator speaks before the round trip here too: it names the ID or the task that is wrong."""
+    groups = to_tasks(TasksDraft.model_validate(state[tasks_stage.KEY]))
+    if not any(group.tasks for group in groups):
+        return ["the plan holds no task. Write one task at least for each requirement the deltas add or change."]
+    if wrong := _errors(validate_tasks(groups)):
+        return wrong
+    try:
+        same = parse_tasks(render_tasks(groups)) == groups
+    except GrammarError as exc:
+        return [f"the tasks cannot be written as their file: {exc.message}."]
+    return [] if same else ["the tasks do not read back as written: keep each description, file and check on one line."]
+
+
+# The nodes between the stages. One that reads what the command knows is made for it; the rest read state alone.
+
+
+def _ended() -> Event:
+    return Event(output="ended")
+
+
+def _sized(ctx: Context) -> Event:
+    """The model's tier, `strict` read as `standard` for now. `none` ends the run with nothing drafted."""
+    model = Triage.model_validate(ctx.state[triage_stage.KEY]).tier
+    chosen = "standard" if model == "strict" else model
+    return Event(route=NONE if chosen == "none" else GO, state={TIER: chosen})
+
+
+def _open_points(ask: bool) -> Callable[[Context], Event]:
+    def open_points(ctx: Context) -> Event:
+        """Ask only where the command may, only on the standard tier, only while the rounds last, and only while
+        the brief leaves a point open."""
+        text = render_brief(_brief(ctx.state.to_dict()))
+        asking = ask and ctx.state.get(TIER) == "standard" and (ctx.state.get(ROUNDS) or 0) < ROUND_BUDGET
+        return Event(route=SOME, state={BRIEF_TEXT: text}) if asking and markers(text) else Event(route=NONE)
+
+    return open_points
+
+
+def _pending(ctx: Context) -> Event:
+    """The run ends here, on the round's questions, the first `QUESTION_BUDGET` of them: the command puts them to
+    the person, and `next_run` starts the run after with what was answered."""
+    held = QuestionsDraft.model_validate(ctx.state[questions_stage.KEY]).questions[:QUESTION_BUDGET]
+    return Event(state={ASKING: [one.model_dump() for one in held]})
+
+
+def _unasked(ctx: Context) -> Event:
+    """No question could be worded: the brief that passed its gate stands, its points left open for a person, and
+    the gate's failure becomes a note."""
+    return Event(state={FAILURE: None, UNWORDED: ctx.state.get(FAILURE)})
+
+
+def _gathering(known: Known) -> Callable[[Context], Event]:
+    def gathered(ctx: Context) -> Event:
+        """What the deltas stage reads: the brief as its file, and each living spec it touches, whole."""
+        brief = _brief(ctx.state.to_dict())
+        try:
+            living = living_text(known.living, brief.capabilities)
+        except ContextTooLargeError as exc:
+            return Event(route=STOP, state={FAILURE: f"context: {exc}"})
+        return Event(route=GO, state={BRIEF_TEXT: render_brief(brief), LIVING: living})
+
+    return gathered
+
+
+def _designed(ctx: Context) -> Event:
+    """The design as its file, for the tasks stage to read."""
+    draft = DesignDraft.model_validate(ctx.state[design_stage.KEY])
+    return Event(state={tasks_stage.DESIGN_TEXT: render_design(draft)})
+
+
+def build_propose_app(known: Known, *, ask: bool, entry: Entry, ledger: UsageLedger) -> App:
+    """Triage, the brief and the deltas, each behind its gate, from `entry` on. A request the model sizes as `none`
+    ends the run with nothing drafted.
+
+    With `ask`, a standard change whose brief leaves a point open ends its run on the questions, under `ASKING`.
+    `first_run` and `next_run` say which entry a run takes and what it is seeded with."""
+    gathered = _gathering(known)
+    deltas, deltas_gate = deltas_stage.build_deltas(), checked(deltas_stage.KEY, _deltas_check(known))
+    edges: list[Any] = [
+        (gathered, {GO: deltas, STOP: _ended}),
+        (deltas, deltas_gate),
+        (deltas_gate, {OK: _ended, AGAIN: deltas, GIVE_UP: _ended}),
+    ]
+    if entry == "deltas":
+        edges = [("START", gathered), *edges]
+    else:
+        open_points = _open_points(ask)
+        brief, brief_gate = brief_stage.build_brief(), checked(brief_stage.KEY, _check_brief)
+        questions, questions_gate = questions_stage.build_questions(), checked(questions_stage.KEY, _check_questions)
+        edges = [
+            *_opening(brief, entry),
+            (brief, brief_gate),
+            (brief_gate, {OK: open_points, AGAIN: brief, GIVE_UP: _ended}),
+            (open_points, {NONE: gathered, SOME: questions}),
+            (questions, questions_gate),
+            (questions_gate, {OK: _pending, AGAIN: questions, GIVE_UP: _unasked}),
+            (_unasked, gathered),
+            *edges,
+        ]
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger))
+
+
+def _opening(brief: Any, entry: Entry) -> list[Any]:
+    """The edges up to the brief: through triage for a request to size, straight to it otherwise."""
+    if entry == "brief":
+        return [("START", brief)]
+    triage, triage_gate = triage_stage.build_triage(), checked(triage_stage.KEY, lambda _state: [])
+    return [
+        ("START", triage, triage_gate),
+        (triage_gate, {OK: _sized, AGAIN: triage, GIVE_UP: _ended}),
+        (_sized, {GO: brief, NONE: _ended}),
+    ]
+
+
+def build_plan_app(*, design: bool, ledger: UsageLedger) -> App:
+    """The design, where the change owes one, and then the tasks, each behind its gate."""
+    tasks, tasks_gate = tasks_stage.build_tasks(), checked(tasks_stage.KEY, _check_tasks)
+    edges: list[Any] = [(tasks, tasks_gate), (tasks_gate, {OK: _ended, AGAIN: tasks, GIVE_UP: _ended})]
+    if design:
+        drafting, design_gate = design_stage.build_design(), checked(design_stage.KEY, _check_design)
+        edges = [
+            ("START", drafting, design_gate),
+            (design_gate, {OK: _designed, AGAIN: drafting, GIVE_UP: _ended}),
+            (_designed, tasks),
+            *edges,
+        ]
+    else:
+        edges = [("START", tasks), *edges]
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger))

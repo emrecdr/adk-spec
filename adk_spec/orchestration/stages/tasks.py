@@ -8,10 +8,7 @@ from typing import Any
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import TasksDraft
-from . import ENDING, RETRY, fenced, placeholder, read_back, stage
-from .brief import CONSTITUTION
-from .deltas import BRIEF_TEXT, LIVING
-from .design import DELTAS_TEXT
+from . import LIVING_SPECS, RULES, THE_BRIEF, THE_DELTAS, instruction, read_back, section, stage
 
 KEY = "tasks"
 #: The state key the change's design is read from, where it has one.
@@ -27,33 +24,9 @@ Write no task for anything the brief lists as a non-goal."""
 
 
 def build_tasks() -> LlmAgent:
-    instruction = "\n".join(
-        [
-            OPENING,
-            "",
-            "## What to write",
-            GUIDE,
-            "",
-            RETRY,
-            "",
-            "## The rules of this repository",
-            fenced("constitution", placeholder(CONSTITUTION, optional=True)),
-            "",
-            "## The living specs the change touches",
-            fenced("living", placeholder(LIVING, optional=True)),
-            "",
-            "## The brief",
-            fenced("brief", placeholder(BRIEF_TEXT)),
-            "",
-            "## The requirement deltas",
-            fenced("deltas", placeholder(DELTAS_TEXT, optional=True)),
-            "",
-            "## The design",
-            fenced("design", placeholder(DESIGN_TEXT, optional=True)),
-            ENDING,
-        ]
-    )
-    return stage(KEY, "Breaks a change into tasks.", instruction, TasksDraft)
+    design = section("## The design", "design", DESIGN_TEXT, optional=True)
+    text = instruction(OPENING, GUIDE, RULES, LIVING_SPECS, THE_BRIEF, THE_DELTAS, design)
+    return stage(KEY, "Breaks a change into tasks.", text, TasksDraft)
 
 
 def read_tasks(state: Mapping[str, Any]) -> TasksDraft | str:

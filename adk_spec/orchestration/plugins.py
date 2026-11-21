@@ -30,13 +30,15 @@ from .run import Usage
 #: The state key a plugin leaves its reason under, for the gate after the stage.
 STAGE_ERROR = "stage_error"
 MISMATCH = "the answer did not fit its schema"
+#: How the ledger's refusal begins, and its error code: the one refusal no second asking can pass.
+CEILING = "CEILING"
 
 
 class SchemaMismatch(BasePlugin):
     """An answer off the schema its request asked for becomes the stage's own error."""
 
-    def __init__(self, name: str = "schema_mismatch") -> None:
-        super().__init__(name=name)
+    def __init__(self) -> None:
+        super().__init__(name="schema_mismatch")
         self.schemas: dict[str, type[BaseModel]] = {}
 
     @override
@@ -68,47 +70,35 @@ class SchemaMismatch(BasePlugin):
 class UsageLedger(BasePlugin):
     """Each stage's calls and tokens, and a ceiling no call is sent past."""
 
-    def __init__(self, ceiling: int | None = None, name: str = "usage_ledger") -> None:
-        super().__init__(name=name)
+    def __init__(self, ceiling: int | None = None) -> None:
+        super().__init__(name="usage_ledger")
         self.ceiling = ceiling
         #: What each stage spent, by its agent's name.
         self.spent: dict[str, Usage] = {}
 
     @property
     def total(self) -> Usage:
-        rows = self.spent.values()
-        return Usage(
-            calls=sum(row.calls for row in rows),
-            prompt=sum(row.prompt for row in rows),
-            output=sum(row.output for row in rows),
-            total=sum(row.total for row in rows),
-        )
+        return sum(self.spent.values(), Usage())
 
     @override
     async def before_model_callback(self, *, callback_context: Any, llm_request: Any) -> LlmResponse | None:
         if self.ceiling is None or self.total.total < self.ceiling:
             return None
-        why = f"CEILING: the run's token ceiling of {self.ceiling:,} is spent"
+        why = f"{CEILING}: the run's token ceiling of {self.ceiling:,} is spent"
         callback_context.state[STAGE_ERROR] = why
-        return LlmResponse(error_code="CEILING", error_message=why)
+        return LlmResponse(error_code=CEILING, error_message=why)
 
     @override
     async def after_model_callback(self, *, callback_context: Any, llm_response: Any) -> LlmResponse | None:
         usage = llm_response.usage_metadata
         if llm_response.partial or usage is None:  # a streamed piece, or a call refused before it was sent
             return None
-        was = self.spent.get(callback_context.agent_name, Usage())
-        prompt, output = usage.prompt_token_count or 0, usage.candidates_token_count or 0
-        self.spent[callback_context.agent_name] = Usage(
-            calls=was.calls + 1,
-            prompt=was.prompt + prompt,
-            output=was.output + output,
-            total=was.total + (usage.total_token_count or prompt + output),
-        )
+        stage = callback_context.agent_name
+        self.spent[stage] = self.spent.get(stage, Usage()) + Usage.of(usage)
         return None
 
 
-def roster(ceiling: int | None, ledger: UsageLedger | None = None) -> list[BasePlugin]:
-    """The plugins of every app, the ledger first: it must read an answer before a mismatch replaces it. A command
-    of several runs hands each the one `ledger`, so the count and the ceiling are the command's."""
-    return [ledger or UsageLedger(ceiling=ceiling), SchemaMismatch()]
+def roster(ledger: UsageLedger) -> list[BasePlugin]:
+    """The plugins of every app, the ledger first: it must read an answer before a mismatch replaces it. The ledger
+    is the command's own, one for all its runs, so the count and the ceiling are the command's."""
+    return [ledger, SchemaMismatch()]

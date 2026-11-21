@@ -14,6 +14,7 @@ from .drafts import BriefDraft, DeltasDraft, DesignDraft, RequirementDraft, Task
 from .ids import SLUG_MAX, next_requirement_id, slug_problem
 from .model import Brief, Delta, GrammarError, Removal, Requirement, Scenario, Spec, Task, TaskGroup
 from .spec_md import fenced_lines, paragraphs
+from .text import lines_of, normalise
 
 _STEP = re.compile(r"(?:-\s*)?(?:\*\*)?(GIVEN|WHEN|THEN|AND)(?:\*\*)?\s+(\S.*)", re.IGNORECASE | re.DOTALL)
 _WORD = re.compile(r"[a-z0-9]+")
@@ -26,9 +27,9 @@ def _line(text: str) -> str:
 
 
 def _text(text: str) -> str:
-    """Prose as its file holds it, so a draft reads back as written: no trailing blanks, one blank line between
-    paragraphs, none at the ends. Text with a fence left open is passed on as it is, for a gate to name."""
-    lines = [line.rstrip() for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    """Prose as its file holds it, so a draft reads back as written: the lines the parsers read, one blank line
+    between paragraphs, none at the ends. Text with a fence left open is passed on as it is, for a gate to name."""
+    lines = lines_of(normalise(text))
     try:
         return paragraphs(lines, fenced_lines(lines), 0, len(lines))
     except GrammarError:
@@ -74,8 +75,8 @@ def to_deltas(draft: DeltasDraft, living: Mapping[str, Spec], taken: Iterable[st
     for one in draft.deltas:
         capability = one.capability.strip()
         slot = slots.setdefault(capability, {"purpose": None, "added": [], "modified": [], "removed": []})
-        if one.purpose.strip() and capability not in living:
-            slot["purpose"] = slot["purpose"] or one.purpose.strip()
+        if capability not in living:
+            slot["purpose"] = slot["purpose"] or _text(one.purpose) or None
         names = {req.id: req.name for req in living[capability].requirements} if capability in living else {}
         for added in one.added:
             req_id = next_requirement_id(capability, held)
@@ -121,14 +122,13 @@ def to_tasks(draft: TasksDraft) -> tuple[TaskGroup, ...]:
     return tuple(groups)
 
 
+#: The sections of a design, in the order of its file: each a field of `DesignDraft`.
+DESIGN_SECTIONS = ("context", "goals", "decisions", "risks")
+
+
 def render_design(draft: DesignDraft) -> str:
-    sections = (
-        ("Context", draft.context),
-        ("Goals", draft.goals),
-        ("Decisions", draft.decisions),
-        ("Risks", draft.risks),
-    )
-    return "# Design\n\n" + "\n\n".join(f"## {name}\n\n{text.strip()}" for name, text in sections) + "\n"
+    sections = (f"## {name.capitalize()}\n\n{getattr(draft, name).strip()}" for name in DESIGN_SECTIONS)
+    return "# Design\n\n" + "\n\n".join(sections) + "\n"
 
 
 def slug_of(title: str, held: Iterable[str]) -> str:

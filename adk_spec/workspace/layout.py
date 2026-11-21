@@ -187,8 +187,9 @@ class Workspace:
             raise WorkspaceError(f"there is no change `{change_id}`. `adk-spec status --all` lists every change")
         return folder
 
-    def new_change(self, change_id: str, tier: Tier) -> Path:
-        """A new draft change's folder, holding its state file."""
+    def free(self, change_id: str) -> Path:
+        """The folder a new change of this name would take. `WorkspaceError` where the name cannot be a change's, or
+        something holds it already: a change, or a folder that is none."""
         if why := slug_problem(change_id):
             raise WorkspaceError(f"a change cannot be named so: {why}")
         try:
@@ -197,42 +198,42 @@ class Workspace:
             raise WorkspaceError(f"a change cannot be named so: {exc}") from exc
         if folder.exists():
             raise WorkspaceError(f"the change `{change_id}` exists already")
-        folder.mkdir(parents=True)
-        self.save_state(ChangeState(id=change_id, tier=tier))
         return folder
 
-    def taken(self, *, but: str | None = None) -> dict[str, set[str]]:
-        """By capability, every requirement ID that is spoken for: in its living spec, retired there, or added by an
-        open change other than `but`. A capability no spec holds yet is here too once an open change adds to it, so
-        two changes that each create it are numbered apart."""
-        specs, _problems = self.specs()
-        taken = {slug: {held.id for held in (*spec.requirements, *spec.retired)} for slug, spec in specs.items()}
+    def names_held(self) -> list[str]:
+        """Every name under `changes/`, a change's or not: none of them is free for a new change."""
+        folder = self.home / CHANGES
+        return sorted(entry.name for entry in folder.iterdir()) if folder.is_dir() else []
+
+    def new_change(self, change_id: str, tier: Tier) -> Path:
+        """A new draft change's folder, holding its state file."""
+        return self.write_change(ChangeState(id=change_id, tier=tier), {})
+
+    def taken(self, specs: Mapping[str, Spec]) -> set[str]:
+        """Every requirement ID that is spoken for: in a living spec of `specs`, retired there, or added by an open
+        change. A new requirement is numbered past all of its capability's, so two open changes never share one,
+        in a capability a spec holds or in one they both create."""
+        taken = {held.id for spec in specs.values() for held in (*spec.requirements, *spec.retired)}
         for change_id in self.changes():
-            if change_id == but:
+            folder = self._folder(change_id)
+            if self._state(folder, change_id).status == "archived":  # history grows, and is not read
                 continue
-            change = self.load_change(change_id).change
-            if change.state.status == "archived":
-                continue
-            for capability, delta in change.deltas.items():
-                taken.setdefault(capability, set()).update(added.id for added in delta.added)
+            for delta in self.load_change(change_id).change.deltas.values():
+                taken.update(added.id for added in delta.added)
         return taken
 
-    def taken_ids(self, capability: str, *, but: str | None = None) -> set[str]:
-        """`taken` for one capability. A new requirement is numbered past all of them."""
-        return self.taken(but=but).get(capability, set())
+    def _placed(self, folder: Path, files: Mapping[str, str]) -> dict[Path, str]:
+        """Each of `files` by the path it takes in `folder`. `WorkspaceError` for a path that leaves it."""
+        try:
+            return {inside(folder, *path.split("/")): text for path, text in files.items()}
+        except PathError as exc:
+            raise WorkspaceError(f"the change cannot be written: {exc}") from exc
 
     def write_change(self, state: ChangeState, files: Mapping[str, str]) -> Path:
         """A new change made whole: its folder, each of `files` by its path in the folder, and its state, written
         as one set. Where the write fails the folder is removed again, so no half-made change is left."""
-        if why := slug_problem(state.id):
-            raise WorkspaceError(f"a change cannot be named so: {why}")
-        try:
-            folder = inside(self.home, CHANGES, state.id)
-            texts = {inside(folder, *path.split("/")): text for path, text in files.items()}
-        except PathError as exc:
-            raise WorkspaceError(f"the change cannot be written: {exc}") from exc
-        if folder.exists():
-            raise WorkspaceError(f"the change `{state.id}` exists already")
+        folder = self.free(state.id)
+        texts = self._placed(folder, files)
         texts[folder / STATE] = state.model_dump_json(indent=2)
         try:
             write_all(texts)
@@ -243,20 +244,15 @@ class Workspace:
 
     def write_into(self, change_id: str, files: Mapping[str, str]) -> list[Path]:
         """Each of `files` written into an existing change's folder, by its path there, as one set."""
-        folder = self._folder(change_id)
-        try:
-            texts = {inside(folder, *path.split("/")): text for path, text in files.items()}
-        except PathError as exc:
-            raise WorkspaceError(f"the change cannot be written: {exc}") from exc
+        texts = self._placed(self._folder(change_id), files)
         write_all(texts)
         return list(texts)
 
     def save_state(self, state: ChangeState) -> None:
         write_text(inside(self.home, CHANGES, state.id, STATE), state.model_dump_json(indent=2))
 
-    def load_change(self, change_id: str) -> LoadedChange:
-        """The change read from its folder. `WorkspaceError` where there is none, or its state file does not read."""
-        folder = self._folder(change_id)
+    def _state(self, folder: Path, change_id: str) -> ChangeState:
+        """A change's state file alone. `WorkspaceError` where it does not read, or names another change."""
         try:
             state = ChangeState.model_validate_json(read_text(folder / STATE))
         except ValidationError as exc:
@@ -268,6 +264,12 @@ class Workspace:
                 f"{self.shown(folder / STATE)} names the change `{state.id}`, and its folder is `{change_id}`. "
                 "Make the two the same"
             )
+        return state
+
+    def load_change(self, change_id: str) -> LoadedChange:
+        """The change read from its folder. `WorkspaceError` where there is none, or its state file does not read."""
+        folder = self._folder(change_id)
+        state = self._state(folder, change_id)
         problems: list[Finding] = []
         raw = _read(folder / BRIEF, str, BRIEF, problems) if (folder / BRIEF).is_file() else None
         brief = _parsed(raw, parse_brief, BRIEF, problems) if raw is not None else None

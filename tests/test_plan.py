@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from conftest import approved, on_the_fake, run, seeded
+from conftest import CANNED_TASKS, approved, on_the_fake, run, seeded
 
 from adk_spec.workspace.files import read_text, write_text
 
@@ -95,3 +95,14 @@ def test_plan_replaces_a_task_list_that_does_not_parse(tmp_path, fake_provider) 
     assert ws.load_change("passkeys").problems != [], "the premise: the file does not parse"
     assert run(tmp_path, "plan", "passkeys") == 0
     assert ws.load_change("passkeys").problems == [] and len(fake_provider.requests) == 1
+
+
+def test_a_task_naming_what_is_no_requirement_id_is_told_which(tmp_path, capsys, fake_provider) -> None:
+    """Found by the cleanup review: the read-back ran before the validator, so the model was told to keep each line
+    short, three times, and never which ID was wrong."""
+    seeded(tmp_path)
+    group = CANNED_TASKS["groups"][0]
+    bad = {"groups": [{**group, "tasks": [{**group["tasks"][0], "requirements": ["[REQ-AUTH-004]"]}]}]}
+    fake_provider.answers_when(TASKS, bad)
+    assert run(tmp_path, "plan", "passkeys") == 3
+    assert "tasks.bad-requirement-id" in capsys.readouterr().err

@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
-
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import DeltasDraft
-from . import ENDING, RETRY, fenced, placeholder, read_back, stage
+from . import LIVING_SPECS, THE_BRIEF, instruction, stage
 
 KEY = "deltas"
-#: The state keys the instruction reads: the brief as its canonical file, and the living specs it touches, whole.
-BRIEF_TEXT = "brief_text"
-LIVING = "living"
 OPENING = "You write the requirement deltas of a change. You write no code."
 GUIDE = """\
 Write one delta for each capability the brief lists, and for no other.
@@ -26,25 +20,5 @@ Give a purpose only for a capability that has no living spec yet."""
 
 
 def build_deltas() -> LlmAgent:
-    instruction = "\n".join(
-        [
-            OPENING,
-            "",
-            "## What to write",
-            GUIDE,
-            "",
-            RETRY,
-            "",
-            "## The living specs the change touches",
-            fenced("living", placeholder(LIVING, optional=True)),
-            "",
-            "## The brief",
-            fenced("brief", placeholder(BRIEF_TEXT)),
-            ENDING,
-        ]
-    )
-    return stage(KEY, "Writes the requirement deltas of a change.", instruction, DeltasDraft)
-
-
-def read_deltas(state: Mapping[str, Any]) -> DeltasDraft | str:
-    return read_back(state, KEY, DeltasDraft)
+    text = instruction(OPENING, GUIDE, LIVING_SPECS, THE_BRIEF)
+    return stage(KEY, "Writes the requirement deltas of a change.", text, DeltasDraft)

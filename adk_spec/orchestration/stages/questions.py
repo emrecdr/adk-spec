@@ -5,14 +5,10 @@ Python counts the points and holds the budget. The model only words them, and su
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
-
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import QuestionsDraft
-from . import ENDING, RETRY, fenced, placeholder, read_back, stage
-from .deltas import BRIEF_TEXT
+from . import THE_BRIEF, instruction, stage
 
 KEY = "questions"
 OPENING = "You word the open points of a brief as questions a person can answer in a sentence. You settle none of them."
@@ -23,22 +19,6 @@ correct it."""
 
 
 def build_questions() -> LlmAgent:
-    instruction = "\n".join(
-        [
-            OPENING,
-            "",
-            "## What to write",
-            GUIDE,
-            "",
-            RETRY,
-            "",
-            "## The brief",
-            fenced("brief", placeholder(BRIEF_TEXT)),
-            ENDING,
-        ]
+    return stage(
+        KEY, "Words a brief's open points as questions.", instruction(OPENING, GUIDE, THE_BRIEF), QuestionsDraft
     )
-    return stage(KEY, "Words a brief's open points as questions.", instruction, QuestionsDraft)
-
-
-def read_questions(state: Mapping[str, Any]) -> QuestionsDraft | str:
-    return read_back(state, KEY, QuestionsDraft)

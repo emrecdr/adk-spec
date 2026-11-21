@@ -21,7 +21,6 @@ from typing import Any, NoReturn, get_args
 from ..domain.brief_md import render_brief
 from ..domain.convert import render_design, slug_of, to_tasks
 from ..domain.delta_md import render_delta
-from ..domain.ids import slug_problem
 from ..domain.lifecycle import (
     approval_files,
     approval_stale,
@@ -33,12 +32,12 @@ from ..domain.lifecycle import (
 )
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import ChangeState, Finding, Spec, Tier
-from ..domain.spec_md import render_spec
 from ..domain.tasks_md import render_tasks
 from ..domain.validate import failed, finding, validate_spec
 from ..workspace.config import ConfigError
-from ..workspace.context import CONSTITUTION_MAX_CHARS, capability_index, constitution_text, joined
+from ..workspace.context import CONSTITUTION_MAX_CHARS, capability_index, constitution_text, living_text
 from ..workspace.files import NotTextError
+from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGES,
     CONSTITUTION,
@@ -50,6 +49,7 @@ from ..workspace.layout import (
     WorkspaceError,
     findings_of,
 )
+from ..workspace.layout import DESIGN as DESIGN_FILE
 from ..workspace.layout import TASKS as TASKS_FILE
 from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
@@ -398,12 +398,12 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     answers: list[str] = []
     ended = sys.stdin is None  # a process started with no terminal and no pipe
     for number, question in enumerate(questions, 1):
-        print(f"{number}. {question.get('question', '')}")
-        print(f"   suggested: {question.get('recommended', '')}", flush=True)
+        print(f"{number}. {question['question']}")
+        print(f"   suggested: {question['recommended']}", flush=True)
         line = "" if ended else _line()
         ended = ended or line == ""  # no line at all: the input is over
         typed = line.strip()
-        answers.append(str(question.get("recommended", "")) if typed == "=" else typed)
+        answers.append(question["recommended"] if typed == "=" else typed)
     return answers
 
 
@@ -424,11 +424,8 @@ def _ran(app: Any, seed: dict[str, Any], prompt: str) -> Any:
         engine_log.setLevel(level)
 
 
-def _spent(app: Any) -> str:
-    """What a command's stages spent, from the app's ledger: each stage with its calls, then the total."""
-    from ..orchestration.plugins import UsageLedger
-
-    ledger = next(plugin for plugin in app.plugins if isinstance(plugin, UsageLedger))
+def _spent(ledger: Any) -> str:
+    """What a command's stages spent, from its ledger: each stage with its calls, then the total."""
     stages = ", ".join(
         f"{name} {row.total:,} in {row.calls} call{'' if row.calls == 1 else 's'}" for name, row in ledger.spent.items()
     )
@@ -438,14 +435,12 @@ def _spent(app: Any) -> str:
 def _propose(args: argparse.Namespace) -> int:
     _load_env()
     workspace = _workspace(args)
-    if args.id:  # refused before anything is spent
-        if why := slug_problem(args.id):
-            raise UsageError(f"a change cannot be named so: {why}")
-        if args.id in workspace.changes():
-            raise UsageError(f"the change `{args.id}` exists already")
+    if args.id:
+        workspace.free(args.id)  # a name that cannot be taken is refused before anything is spent
     from ..orchestration.models import require_ready
 
-    if why := require_ready(roles=("triage", "brief", "questions", "deltas")):
+    drafting = ("brief", "questions", "deltas")  # a tier given by hand is not asked of triage
+    if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
         raise UsageError(why)
     with lock_held(workspace):
         return _proposed(args, workspace)
@@ -482,34 +477,34 @@ def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     if why := require_ready(roles=roles):
         raise UsageError(why)
     from ..orchestration.gate import FAILURE
-    from ..orchestration.graph import Known, build_plan_app
-    from ..orchestration.stages.brief import CONSTITUTION as RULES
-    from ..orchestration.stages.deltas import BRIEF_TEXT, LIVING
-    from ..orchestration.stages.design import DELTAS_TEXT, read_design
+    from ..orchestration.graph import build_plan_app
+    from ..orchestration.plugins import UsageLedger
+    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, LIVING
+    from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages.design import read_design
     from ..orchestration.stages.tasks import read_tasks
 
     seed = {
         RULES: constitution_text(workspace),
         BRIEF_TEXT: render_brief(change.brief),
         DELTAS_TEXT: "\n".join(render_delta(delta) for _capability, delta in sorted(change.deltas.items())),
-        LIVING: joined({slug: render_spec(specs[slug]) for slug in sorted(change.deltas) if slug in specs}),
+        LIVING: living_text(specs, sorted(change.deltas)),
     }
-    known = Known(living=specs, taken={}, ceiling=workspace.config().max_tokens or None)
-    app = build_plan_app(known, design=state.needs_design)
-    run = _ran(app, seed, "plan")
+    ledger = UsageLedger(workspace.config().max_tokens or None)
+    run = _ran(build_plan_app(design=state.needs_design, ledger=ledger), seed, "plan")
     tasks = read_tasks(run.state)
     failure = run.state.get(FAILURE) or run.failure or (tasks if isinstance(tasks, str) else None)
     if failure or isinstance(tasks, str):
         print(f"{PROG}: no plan was written: {failure}", file=sys.stderr)
-        print(f"tokens    {_spent(app)}")
+        print(f"tokens    {_spent(ledger)}")
         return EXIT_ENGINE
-    files = {"tasks.md": render_tasks(to_tasks(tasks))}
+    files = {TASKS_FILE: render_tasks(to_tasks(tasks))}
     design = read_design(run.state) if state.needs_design else None
     if design is not None and not isinstance(design, str):
-        files["design.md"] = render_design(design)
+        files[DESIGN_FILE] = render_design(design)
     for path in workspace.write_into(args.id, files):
         print(f"wrote     {workspace.shown(path)}")
-    print(f"tokens    {_spent(app)}")
+    print(f"tokens    {_spent(ledger)}")
     loaded, found, stale = _assessed(workspace, args.id, specs)
     print(f"next      {next_action(loaded.change.state, found, stale)}")
     return EXIT_OK
@@ -520,7 +515,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     from ..orchestration.graph import TIER, UNWORDED, Known
     from ..orchestration.plugins import UsageLedger
     from ..orchestration.stages import CAPABILITIES, REQUEST
-    from ..orchestration.stages.brief import CONSTITUTION as RULES
+    from ..orchestration.stages import CONSTITUTION as RULES
     from ..orchestration.stages.brief import KEY as BRIEF_KEY
     from ..orchestration.stages.deltas import KEY as DELTAS_KEY
     from ..orchestration.stages.triage import read_triage
@@ -530,61 +525,48 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
         _printed(of_specs)
         print(f"{PROG}: nothing was drafted: a living spec does not read. Fix it first", file=sys.stderr)
         return EXIT_FINDINGS
-    taken = {capability: frozenset(ids) for capability, ids in workspace.taken().items()}
-    known = Known(living=specs, taken=taken, ceiling=workspace.config().max_tokens or None)
-    ledger = UsageLedger(known.ceiling)  # one for every run of this command: the count and the ceiling are its own
-    seed = {REQUEST: args.request, CAPABILITIES: capability_index(workspace), RULES: constitution_text(workspace)}
-    app, run = _rounds(args, known, ledger, seed)
-    tier = run.state.get(TIER)
-    failure = run.state.get(FAILURE) or run.failure
-    if not failure and tier != "none" and not (run.state.get(BRIEF_KEY) and run.state.get(DELTAS_KEY)):
-        failure = "the run ended before its drafts were whole"
-    if failure:
+    known = Known(living=specs, taken=frozenset(workspace.taken(specs)))
+    # One ledger for every run of this command: the count and the ceiling are the command's.
+    ledger = UsageLedger(workspace.config().max_tokens or None)
+    seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES: constitution_text(workspace)}
+    state = _rounds(args, known, ledger, seed)
+    tier = state.get(TIER)
+    whole = tier == "none" or (state.get(BRIEF_KEY) and state.get(DELTAS_KEY))
+    if tier is None or not whole or state.get(FAILURE):
+        failure = state.get(FAILURE) or "the run ended before its drafts were whole"
         print(f"{PROG}: no change was written: {failure}", file=sys.stderr)
-        print(f"tokens    {_spent(app)}")
+        print(f"tokens    {_spent(ledger)}")
         return EXIT_ENGINE
     if tier == "none":
-        sized = read_triage(run.state)
+        sized = read_triage(state)
         print(f"no spec is owed: {sized if isinstance(sized, str) else sized.reason}")
-        print(f"tokens    {_spent(app)}")
+        print(f"tokens    {_spent(ledger)}")
         return EXIT_OK
-    if why := run.state.get(UNWORDED):
+    if why := state.get(UNWORDED):
         print(f"note      the brief's open points were not put to you ({why}). They stay in the brief")
-    change_id = _written(args, workspace, known, run.state, tier)
-    print(f"tokens    {_spent(app)}")
+    change_id = _written(args, workspace, known, state, tier)
+    print(f"tokens    {_spent(ledger)}")
     loaded, found, stale = _assessed(workspace, change_id, specs)
     print(f"next      {next_action(loaded.change.state, found, stale)}")
     return EXIT_OK
 
 
-def _rounds(args: argparse.Namespace, known: Any, ledger: Any, seed: dict[str, Any]) -> tuple[Any, Any]:
-    """The runs of one `propose`, and the last of them with its app: the first from the request, then one more for
-    each round of questions. A run ends on its questions and the person answers between two runs. Run on the pinned
-    engine: a run paused and resumed runs again, unseen, any stage that had answered off its schema.
-
-    What was answered starts the next run at the brief, each answer beside the question the person was shown. A
-    round nobody answered starts it at the deltas, with the brief that passed its gate, its points left open."""
+def _rounds(args: argparse.Namespace, known: Any, ledger: Any, seed: dict[str, Any]) -> dict[str, Any]:
+    """The runs of one `propose`, and the state the last of them left, a failure of the engine's own under the
+    gate's key: the first run, then one more for each round of questions. A run ends on its questions and the
+    person answers here, between two runs. Run on the pinned engine: a run paused and resumed runs again, unseen,
+    any stage that had answered off its schema. Which run comes next, and seeded with what, is the graph's to say."""
     from ..orchestration.gate import FAILURE
-    from ..orchestration.graph import ASKING, ROUNDS, TIER, build_propose_app
-    from ..orchestration.stages.brief import ANSWERS
-    from ..orchestration.stages.brief import KEY as BRIEF_KEY
+    from ..orchestration.graph import ASKING, build_propose_app, first_run, next_run
 
-    entry, told = "triage", []
+    entry, seed = first_run(args.tier, seed)
     while True:
-        app = build_propose_app(known, tier=args.tier, ask=not args.no_input, entry=entry, ledger=ledger)
+        app = build_propose_app(known, ask=not args.no_input, entry=entry, ledger=ledger)
         run = _ran(app, seed, "propose")
-        asking = run.state.get(ASKING)
-        if asking is None or run.failure or run.state.get(FAILURE):
-            return app, run
-        answers = _answered(asking)
-        told += [f"{' '.join(str(q['question']).split())} -> {a}" for q, a in zip(asking, answers, strict=True) if a]
-        seed = {**seed, TIER: run.state[TIER]}
-        if any(answers):
-            entry = "brief"
-            seed = {**seed, ANSWERS: "\n".join(told), ROUNDS: (seed.get(ROUNDS) or 0) + 1}
-        else:
-            entry = "deltas"
-            seed = {**seed, BRIEF_KEY: run.state[BRIEF_KEY]}
+        state = {**run.state, FAILURE: run.state.get(FAILURE) or run.failure}
+        if state[FAILURE] or state.get(ASKING) is None:
+            return state
+        entry, seed = next_run(seed, state, _answered(state[ASKING]))
 
 
 def _written(args: argparse.Namespace, workspace: Workspace, known: Any, state: dict[str, Any], tier: Tier) -> str:
@@ -592,14 +574,11 @@ def _written(args: argparse.Namespace, workspace: Workspace, known: Any, state: 
     from ..orchestration.graph import drafted
 
     made = drafted(state, known)
-    change_id = args.id or slug_of(made.brief.title, workspace.changes())
+    change_id = args.id or slug_of(made.brief.title, workspace.names_held())
     held = ChangeState(
-        id=change_id,
-        tier=tier,
-        bases=capture_bases(made.deltas, known.living),
-        needs_design=made.draft.design_needed,
+        id=change_id, tier=tier, bases=capture_bases(made.deltas, known.living), needs_design=made.needs_design
     )
-    files = {"brief.md": render_brief(made.brief)}
+    files = {BRIEF_FILE: render_brief(made.brief)}
     files.update(
         {f"{SPECS}/{capability}/{SPEC_FILE}": render_delta(delta) for capability, delta in made.deltas.items()}
     )
@@ -620,8 +599,6 @@ def _login(args: argparse.Namespace) -> int:
 
 def _models(args: argparse.Namespace) -> int:
     _load_env()
-    import httpx
-
     from ..orchestration.catalog import CatalogError, list_models, shown
     from ..orchestration.models import require_ready
 
@@ -629,7 +606,7 @@ def _models(args: argparse.Namespace) -> int:
         raise UsageError(why)
     try:
         models = list_models()
-    except (CatalogError, httpx.HTTPError) as exc:
+    except CatalogError as exc:  # whatever a provider's client raised, said by `list_models`
         print(f"{PROG}: the models could not be listed: {exc}", file=sys.stderr)
         return EXIT_ENGINE
     print(json.dumps({"models": models}, indent=2) if args.json else "\n".join(shown(models)))
@@ -674,10 +651,11 @@ def _smoked(args: argparse.Namespace) -> int:
     if why := require_ready(roles=("triage",)):
         raise UsageError(why)
     from ..orchestration.graph import build_smoke_app
-    from ..orchestration.stages.triage import CAPABILITIES, KEY, REQUEST, read_triage
+    from ..orchestration.stages import CAPABILITIES, REQUEST
+    from ..orchestration.stages.triage import KEY, read_triage
 
     try:  # the capabilities of the workspace this runs in, where it runs in one
-        known = capability_index(_workspace(args))
+        known = capability_index(_workspace(args).specs()[0])
     except WorkspaceError:
         known = ""
     run = _ran(build_smoke_app(), {REQUEST: args.request, CAPABILITIES: known}, KEY)

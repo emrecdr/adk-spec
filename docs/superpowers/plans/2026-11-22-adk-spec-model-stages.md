@@ -835,15 +835,34 @@ work alone; they do not work together.
 - `plan` gives its stages the constitution and the living specs too. The tasks stage opens "You break a change into
   tasks for a coding agent to carry out".
 
+**What the cleanup pass after the phase changed** (four reviewers: reuse, simplification, efficiency, depth).
+
+- **A tier given by hand is not asked of triage.** Nothing read triage's answer then; `propose --tier` is one model
+  call shorter. `first_run` and `next_run` in `graph.py` say where each run of a `propose` starts and what it is
+  seeded with; the command keeps the loop and the terminal, and none of the state's keys.
+- The command makes the one `UsageLedger` and hands it to each app: `roster(ledger)`, `build_plan_app(*, design,
+  ledger)`, `build_propose_app(known, *, ask, entry, ledger)`. `Known` is `living` and `taken`, a flat set of IDs.
+- Every gate refuses an echoed marker, in `gate.checked` itself, and clears its findings wherever a run leaves the
+  stage. `FINDINGS` lives in `stages/__init__.py`, whose instructions read it.
+- `stages.instruction(opening, guide, *sections)` builds what four stage modules built by hand, with each shared
+  section written once. Every stage's instruction is byte for byte what it was.
+- `capability_index(specs)` and `living_text(specs, capabilities)` are pure over the specs a command already holds.
+  `Workspace.taken(specs)` reads an archived change's state file and nothing more.
+- `Workspace.free(id)` is the one check of a new change's name, and `propose` makes it before any call: a stray
+  folder under `changes/` is refused at once, and a name made from a title steps past it.
+- The tasks' gate asks the validator before the read-back, as the deltas' gate does. A new capability's purpose is
+  written as its file holds it.
+- Gone: the guard for a pause no graph can make, three readers nothing called, a re-export in the triage module.
+- Left: `Run.usage` beside the ledger (the smoke test reads it); one table for what blocks approval, for plan 3.
+
 **Left as they are, for the owner** (the review's minors).
 
 - `plan` replaces an existing `tasks.md` without a word, ticked boxes too, and does not read a `design.md` written
   by hand where the brief owed none.
-- A folder under `changes/` with no `change.json` is refused only after the model calls are spent.
 - The lock records a process ID nobody reads, a killed run leaves the lock, and `init` writes no ignore rule for it.
 - Findings told back to a stage stand outside the markers; they are this package's sentences, and may quote the
   model's own names.
-- `living_text` is called by tests alone. `design_reason` is drafted and not shown.
+- `design_reason` is drafted and not shown.
 - A task may name a requirement ID no delta holds: that is plan 3's `check`.
 
 ## What this plan leaves for plan 3

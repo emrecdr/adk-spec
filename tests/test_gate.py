@@ -11,7 +11,7 @@ from google.adk.events import Event
 from google.adk.workflow import Workflow
 
 from adk_spec.orchestration.gate import AGAIN, FAILURE, GIVE_UP, OK, checked
-from adk_spec.orchestration.plugins import roster
+from adk_spec.orchestration.plugins import UsageLedger, roster
 from adk_spec.orchestration.run import run_seeded
 from adk_spec.orchestration.stages.triage import build_triage
 
@@ -36,7 +36,7 @@ def flow(check: Callable[[Mapping[str, Any]], list[str]], ceiling: int | None = 
         return Event(output="lost")
 
     edges = [("START", agent, gate), (gate, {OK: done, AGAIN: agent, GIVE_UP: lost})]
-    return App(name="t", root_agent=Workflow(name="t", edges=edges), plugins=roster(ceiling))
+    return App(name="t", root_agent=Workflow(name="t", edges=edges), plugins=roster(UsageLedger(ceiling)))
 
 
 @pytest.mark.asyncio

@@ -18,7 +18,8 @@ from google.genai import types
 from adk_spec.domain.drafts import Triage
 from adk_spec.interfaces.cli import main
 from adk_spec.orchestration.models import build_model, request_config
-from adk_spec.orchestration.stages.triage import BOUNDARY, build_triage
+from adk_spec.orchestration.stages import BOUNDARY
+from adk_spec.orchestration.stages.triage import build_triage
 
 REQUEST = "Let users sign in with a passkey."
 

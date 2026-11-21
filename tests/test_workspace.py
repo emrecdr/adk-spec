@@ -174,9 +174,10 @@ def test_ids_added_by_another_open_change_are_taken(tmp_path) -> None:
     from adk_spec.domain.ids import next_requirement_id
 
     ws = seeded(tmp_path)  # the living spec holds 001 and 002 and has retired 003; `passkeys` adds 004
-    assert ws.taken_ids("auth") == {"REQ-AUTH-001", "REQ-AUTH-002", "REQ-AUTH-003", "REQ-AUTH-004"}
-    assert "REQ-AUTH-004" not in ws.taken_ids("auth", but="passkeys") and ws.taken_ids("search") == set()
-    assert next_requirement_id("auth", ws.taken_ids("auth")) == "REQ-AUTH-005"
+    taken = ws.taken(ws.specs()[0])
+    assert taken == {"REQ-AUTH-001", "REQ-AUTH-002", "REQ-AUTH-003", "REQ-AUTH-004"}
+    assert next_requirement_id("auth", taken) == "REQ-AUTH-005"
+    assert next_requirement_id("search", taken) == "REQ-SEARCH-001", "another capability's IDs do not count"
 
 
 def test_a_change_is_written_whole_or_not_at_all(tmp_path, monkeypatch) -> None:

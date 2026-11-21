@@ -69,7 +69,8 @@ uv run adk-spec plan <id>
 
 - `propose` drafts a change from a request: its brief and one delta for each capability it touches. A model writes
   each draft; a gate after each stage checks it and asks again at most twice; nothing is written until the whole
-  run has ended well. `--tier lean` or `--tier standard` sets the ceremony by hand, `--id` names the change, and
+  run has ended well. `--tier lean` or `--tier standard` sets the ceremony by hand and saves the call that would
+  have sized the request, `--id` names the change, and
   `--no-input` asks no question. `[limits] max_tokens` in `.spec/config.toml` caps what one command may spend:
   once that much is spent no further call is sent, so a command overshoots by its last call at most.
   The first live runs spent about 2,800 tokens on a lean change and 9,600 on a standard one with three rounds of

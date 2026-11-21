@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
-
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import BriefDraft
-from . import CAPABILITIES, ENDING, REQUEST, RETRY, fenced, placeholder, read_back, stage
+from . import CAPABILITIES, ENDING, REQUEST, RETRY, RULES, fenced, placeholder, stage
 
 KEY = "brief"
-#: The state keys the instruction reads beside the request: the repository's rules, and a person's answers.
-CONSTITUTION = "constitution"
+#: The state key a person's answers are read from, each beside the question that was put.
 ANSWERS = "answers"
 OPENING = "You write the brief of a change for a spec-driven workflow. You write no spec and no code."
 GUIDE = """\
@@ -28,8 +24,7 @@ def build_brief() -> LlmAgent:
         [
             OPENING,
             "",
-            "## The rules of this repository",
-            fenced("constitution", placeholder(CONSTITUTION, optional=True)),
+            RULES,
             "",
             "## Capabilities",
             "Known capabilities, each with its purpose:",
@@ -50,7 +45,3 @@ def build_brief() -> LlmAgent:
         ]
     )
     return stage(KEY, "Writes the brief of a change.", instruction, BriefDraft)
-
-
-def read_brief(state: Mapping[str, Any]) -> BriefDraft | str:
-    return read_back(state, KEY, BriefDraft)

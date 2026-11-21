@@ -10,6 +10,7 @@ state under `FAILURE`, which the command says to the person in one sentence.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -17,17 +18,18 @@ from google.adk.agents.context import Context
 from google.adk.events import Event
 from google.adk.workflow import FunctionNode
 
-from .plugins import MISMATCH, STAGE_ERROR
+from .plugins import CEILING, MISMATCH, STAGE_ERROR
+from .stages import BOUNDARY, FINDINGS
 
 #: How often a stage is asked in all: once, and twice more with what was wrong.
 MAX_TRIES = 3
-#: The state key a stage's instruction reads what was wrong with its last answer from.
-FINDINGS = "findings"
 #: The state key the reason is left under where a stage is given up.
 FAILURE = "failure"
 OK, AGAIN, GIVE_UP = "OK", "AGAIN", "GIVE_UP"
-#: A refusal no second asking can pass.
-_FINAL = "CEILING"
+#: What a stage is told where its answer repeats this process's marker: written to a file and read by the next
+#: stage, the marker would end a fenced section early there. Only a model can repeat it, and every answer of a
+#: model comes through a gate.
+ECHO = "the answer repeats a marker line of your instructions. Write no marker line."
 
 
 def tries_key(stage: str) -> str:
@@ -40,14 +42,18 @@ def checked(stage: str, check: Callable[[Mapping[str, Any]], list[str]]) -> Func
 
     def gate(ctx: Context) -> Event:
         tries = (ctx.state.get(tries_key(stage)) or 0) + 1
-        if ctx.state.get(stage) is None:  # the plugin's reason, or an answer that never came
+        answer = ctx.state.get(stage)
+        if answer is None:  # the plugin's reason, or an answer that never came
             problems = [ctx.state.get(STAGE_ERROR) or MISMATCH]
+        elif BOUNDARY in json.dumps(answer):
+            problems = [ECHO]
         else:
             problems = check(ctx.state.to_dict())
-        counted = {tries_key(stage): tries, STAGE_ERROR: None}
+        # The findings are a stage's own: cleared wherever the run leaves it, so no later stage is told them.
+        counted = {tries_key(stage): tries, STAGE_ERROR: None, FINDINGS: None}
         if not problems:
-            return Event(route=OK, state={**counted, FINDINGS: None})
-        if tries >= MAX_TRIES or problems[0].startswith(_FINAL):
+            return Event(route=OK, state=counted)
+        if tries >= MAX_TRIES or problems[0].startswith(CEILING):  # no second asking passes the ceiling
             return Event(route=GIVE_UP, state={**counted, FAILURE: f"{stage}: {'; '.join(problems)}"})
         # The refused answer is cleared: were the next one off its schema, this one would stand there and be
         # checked a second time.

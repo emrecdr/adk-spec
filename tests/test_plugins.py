@@ -45,7 +45,9 @@ async def test_an_answer_off_its_schema_is_the_stages_own_error_and_the_run_goes
     def after(node_input=None):
         reached.append(node_input)
 
-    app = App(name="t", root_agent=Workflow(name="t", edges=[("START", build_triage(), after)]), plugins=roster(None))
+    app = App(
+        name="t", root_agent=Workflow(name="t", edges=[("START", build_triage(), after)]), plugins=roster(UsageLedger())
+    )
     run = await run_seeded(app, state=dict(STATE), prompt="go")
     assert run.failure is None and reached == [None] and "triage" not in run.state
     assert run.errors["triage"].startswith("SCHEMA_MISMATCH")
@@ -73,7 +75,7 @@ async def test_with_no_ceiling_every_stage_is_counted_under_its_own_name(fake_pr
 @pytest.mark.asyncio
 async def test_an_answer_off_its_schema_is_still_paid_for_and_counted(fake_provider) -> None:
     fake_provider.answers_when("You size a change request", "Sure! It is lean.")
-    plugins = roster(None)
+    plugins = roster(UsageLedger())
     app = App(name="t", root_agent=Workflow(name="t", edges=[("START", build_triage())]), plugins=plugins)
     await run_seeded(app, state=dict(STATE), prompt="go")
     ledger = next(plugin for plugin in plugins if isinstance(plugin, UsageLedger))

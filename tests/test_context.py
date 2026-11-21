@@ -14,20 +14,21 @@ from adk_spec.workspace.layout import Workspace
 
 
 def test_the_index_gives_each_capability_its_purpose(tmp_path) -> None:
-    assert capability_index(seeded(tmp_path / "one")) == "auth: Sign-in and session handling."
-    assert capability_index(Workspace.init(tmp_path / "empty")) == ""
+    assert capability_index(seeded(tmp_path / "one").specs()[0]) == "auth: Sign-in and session handling."
+    assert capability_index(Workspace.init(tmp_path / "empty").specs()[0]) == ""
 
 
 def test_living_text_is_each_named_spec_whole_and_skips_one_not_there_yet(tmp_path) -> None:
-    text = living_text(seeded(tmp_path), ["auth", "search"])
+    specs = seeded(tmp_path).specs()[0]
+    text = living_text(specs, ["auth", "search"])
     assert text.startswith("=== auth\n# auth\n") and "REQ-AUTH-002" in text and "search" not in text
-    assert living_text(seeded(tmp_path / "other"), ["search"]) == ""
+    assert living_text(specs, ["search"]) == ""
 
 
 def test_a_context_past_the_limit_is_refused_by_name_and_never_cut(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(context, "CONTEXT_MAX_CHARS", 100)
     with pytest.raises(ContextTooLargeError, match="auth"):
-        living_text(seeded(tmp_path), ["auth"])
+        living_text(seeded(tmp_path).specs()[0], ["auth"])
 
 
 def test_the_constitution_is_read_as_it_stands(tmp_path) -> None:
@@ -58,4 +59,4 @@ def test_the_index_breaks_a_purpose_at_a_newline_alone(tmp_path) -> None:
     ws = seeded(tmp_path)
     odd = "Sign-in" + chr(0x2028) + "and sessions."
     write_text(tmp_path / ".spec/specs/auth/spec.md", SPEC.replace("Sign-in and session handling.", odd))
-    assert capability_index(ws) == f"auth: {odd}"
+    assert capability_index(ws.specs()[0]) == f"auth: {odd}"
