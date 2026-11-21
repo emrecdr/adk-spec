@@ -140,3 +140,16 @@ def test_the_command_starts_with_the_engine_absent() -> None:
         f"print(code, sorted(m for m in sys.modules if sys.modules[m] and m.startswith({ENGINE!r})))\n"
     )
     assert _probe(body) == "0 []"
+
+
+def test_the_commands_that_call_no_model_run_with_the_engine_absent(tmp_path: Path) -> None:
+    """`validate` exits 1 here, on the empty draft `new` made: it ran, and found what is missing."""
+    body = (
+        "import contextlib, io\nfrom adk_spec.interfaces.cli import main\n"
+        f"root = {str(tmp_path)!r}\n"
+        "asked = (['init'], ['new', 'x'], ['validate'], ['status'])\n"
+        "with contextlib.redirect_stdout(io.StringIO()):\n"
+        "    codes = [main(['--root', root, *argv]) for argv in asked]\n"
+        f"print(codes, sorted(m for m in sys.modules if sys.modules[m] and m.startswith({ENGINE!r})))\n"
+    )
+    assert _probe(body) == "[0, 0, 1, 0] []"

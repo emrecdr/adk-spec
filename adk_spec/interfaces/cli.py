@@ -1,8 +1,8 @@
 """The `adk-spec` command. `main` is a function of its arguments and returns the exit code; `run` is the process
 boundary, which sets the console's encoding once and turns Ctrl-C into a sentence.
 
-Nothing heavy is imported at the top: a handler imports the engine inside itself, so `--version`, a usage error and
-every command that calls no model start without it.
+The engine is never imported at the top: a handler that calls a model imports it inside itself, so `--version`, a
+usage error and every command that calls no model start without it.
 """
 
 from __future__ import annotations
@@ -13,7 +13,24 @@ import os
 import sys
 from importlib import metadata
 from pathlib import Path
-from typing import NoReturn
+from typing import NoReturn, get_args
+
+from ..domain.lifecycle import approval_files, approval_stale, next_action
+from ..domain.model import Finding, Spec, Tier
+from ..domain.validate import failed, validate_spec
+from ..workspace.config import ConfigError
+from ..workspace.files import NotTextError
+from ..workspace.layout import (
+    CHANGES,
+    ROOT_NAME,
+    SPEC_FILE,
+    SPECS,
+    LoadedChange,
+    Workspace,
+    WorkspaceError,
+    findings_of,
+)
+from ..workspace.paths import PathError
 
 EXIT_OK = 0
 #: A gate refused, or findings at the bar.
@@ -28,6 +45,8 @@ PROG = "adk-spec"
 #: The checkout's root, whose `.env` alone is read: never one of the repository being worked on.
 CHECKOUT = Path(__file__).resolve().parents[2]
 SMOKE_REQUEST = "Let users reset a forgotten password by email."
+#: What the workspace refuses with one sentence: said to the person, and `EXIT_USAGE`.
+REFUSALS = (WorkspaceError, ConfigError, PathError, NotTextError)
 
 
 class UsageError(Exception):
@@ -44,7 +63,27 @@ class _Parser(argparse.ArgumentParser):
 def _parser() -> argparse.ArgumentParser:
     parser = _Parser(prog=PROG, description="Spec-driven development on Google ADK.")
     parser.add_argument("--version", action="version", version=f"{PROG} {metadata.version('adk-spec')}")
+    parser.add_argument("--root", default=".", help="a folder in the repository to work in (default: this one)")
     commands = parser.add_subparsers(metavar="command", parser_class=_Parser)
+
+    init = commands.add_parser("init", help=f"make the {ROOT_NAME} tree in this repository")
+    init.set_defaults(handler=_init)
+
+    new = commands.add_parser("new", help="start a change: its folder and its state file")
+    new.add_argument("id", help="the change's name: lowercase words joined by hyphens")
+    new.add_argument("--tier", choices=get_args(Tier), help="how much ceremony it gets (default: the config's)")
+    new.set_defaults(handler=_new)
+
+    validate = commands.add_parser("validate", help="check the structure of the living specs and of open changes")
+    validate.add_argument("id", nargs="?", help="one change to check, in place of every open one")
+    validate.add_argument("--strict", action="store_true", help="fail on a warning too")
+    validate.add_argument("--json", action="store_true", help="print the findings as JSON")
+    validate.set_defaults(handler=_validate)
+
+    status = commands.add_parser("status", help="list each open change and what to do next with it")
+    status.add_argument("--all", action="store_true", help="list archived changes too")
+    status.add_argument("--json", action="store_true", help="print the list as JSON")
+    status.set_defaults(handler=_status)
 
     smoke = commands.add_parser("smoke", help="run the triage stage alone, to prove an arm answers in a schema")
     smoke.add_argument("--model", help="the model for this run alone, in place of the arm's")
@@ -67,9 +106,99 @@ def main(argv: list[str]) -> int:
         return EXIT_USAGE
     try:
         return handler(args)
-    except UsageError as exc:
+    except (UsageError, *REFUSALS) as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)
         return EXIT_USAGE
+
+
+# The commands that call no model.
+
+
+def _workspace(args: argparse.Namespace) -> Workspace:
+    return Workspace.find(Path(args.root).absolute())
+
+
+def _init(args: argparse.Namespace) -> int:
+    workspace = Workspace.init(Path(args.root).absolute())
+    print(f"made {workspace.shown(workspace.home)}: write its constitution.md, then run `{PROG} new <id>`")
+    return EXIT_OK
+
+
+def _new(args: argparse.Namespace) -> int:
+    workspace = _workspace(args)
+    tier = args.tier or workspace.config().default_tier
+    folder = workspace.new_change(args.id, tier)
+    print(f"made {workspace.shown(folder)}, a {tier} draft: write its brief.md, its deltas and its tasks.md")
+    return EXIT_OK
+
+
+def _assessed(
+    workspace: Workspace, change_id: str, living: dict[str, Spec]
+) -> tuple[LoadedChange, list[Finding], list[str]]:
+    """A change as every command reads it: loaded, its findings with their paths from the root, and what its
+    approval no longer covers."""
+    loaded = workspace.load_change(change_id)
+    prefix = f"{ROOT_NAME}/{CHANGES}/{change_id}/"
+    found = [held.model_copy(update={"path": prefix + (held.path or "")}) for held in findings_of(loaded, living)]
+    stale = approval_stale(loaded.change.state, approval_files(workspace.approval_texts(change_id)))
+    return loaded, found, stale
+
+
+def _of_specs(workspace: Workspace) -> tuple[dict[str, Spec], list[Finding]]:
+    """The living specs that read, and every finding of the living specs, with its path from the root."""
+    living, found = workspace.specs()
+    for capability, spec in sorted(living.items()):
+        path = f"{ROOT_NAME}/{SPECS}/{capability}/{SPEC_FILE}"
+        found += [held.model_copy(update={"path": path}) for held in validate_spec(spec)]
+    return living, found
+
+
+def _printed(found: list[Finding]) -> None:
+    for held in found:
+        place = f"{held.path}:{held.line}" if held.line else (held.path or "")
+        print(f"{held.severity} {held.code} {place}  {held.message}")
+
+
+def _validate(args: argparse.Namespace) -> int:
+    workspace = _workspace(args)
+    living, found = _of_specs(workspace)
+    for change_id in [args.id] if args.id else workspace.changes():
+        loaded, of_change, _stale = _assessed(workspace, change_id, living)
+        if loaded.change.state.status != "archived":  # an archived change is folded in: its delta has no base now
+            found += of_change
+    stops = failed(found, strict=args.strict)
+    if args.json:
+        print(json.dumps({"findings": [held.model_dump() for held in found], "failed": stops}, indent=2))
+        return EXIT_FINDINGS if stops else EXIT_OK
+    _printed(found)
+    errors = sum(held.severity == "ERROR" for held in found)
+    print(f"{errors} errors, {sum(held.severity == 'WARNING' for held in found)} warnings")
+    return EXIT_FINDINGS if stops else EXIT_OK
+
+
+def _status(args: argparse.Namespace) -> int:
+    workspace = _workspace(args)
+    living, _found = workspace.specs()
+    rows = []
+    for change_id in workspace.changes():
+        loaded, found, stale = _assessed(workspace, change_id, living)
+        state = loaded.change.state
+        if state.status == "archived" and not args.all:
+            continue
+        step = next_action(state, found, stale)
+        rows.append({"id": change_id, "tier": state.tier, "status": state.status, "next": step})
+    if args.json:
+        print(json.dumps({"changes": rows}, indent=2))
+    elif not rows:
+        print(f"no open changes: run {PROG} new <id>")
+    else:
+        width = max(len(row["id"]) for row in rows)
+        for row in rows:
+            print(f"{row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
+    return EXIT_OK
+
+
+# The commands that call a model, or log in to one.
 
 
 def _load_env() -> None:
