@@ -562,7 +562,7 @@ def test_the_chat_shape_drafts_and_writes_nothing(tmp_path, monkeypatch, fake_pr
 
 Every step here calls a model with the owner's account, or needs a machine or a key this session does not have.
 
-- [ ] **Step 1 (owner, live): Copilot, macOS.** `uv run python -m scripts.measure --runs 3 --out docs/measurements/2026-11-copilot-gpt-4.1.md`. It prints its call count first: about 60 calls, near 150,000 tokens at the first live run's rates.
+- [ ] **Step 1 (owner, live): Copilot, macOS.** `uv run python -m scripts.measure --runs 3 --out docs/measurements/2026-11-copilot-gpt-4.1.md`. It prints its call count first: 15 calls for the six cases at three runs each (one case is decided by code and costs none), near 40,000 tokens at the first live run's rates.
 - [ ] **Step 2 (owner, live): the standard tier once more.** The request of the first live run's second command, each question answered with `=`. Record beside the first run whether the asking now ends before the third round, and whether any answer is contradicted.
 - [ ] **Step 3: Decide from the two records**, and write the decisions in the measurement file: a planted fault caught in fewer than two runs of three names the instruction to change first; a clean case blocked in any run names the severity rule to loosen; the largest command sets the README's `max_tokens` example.
 - [ ] **Step 4 (owner): the Gemini arm**, once a key is set: `adk-spec smoke`, then Step 1 with `SPEC_PROVIDER=gemini`.
