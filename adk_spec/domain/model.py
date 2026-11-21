@@ -129,6 +129,8 @@ class ChangeState(_Held):
     #: The fingerprint each modified or removed requirement had in the living spec when the delta was based on it.
     bases: dict[str, str] = {}
     approval: Approval | None = None
+    #: Whether the change owes a design before its tasks: the brief's own call, or the strict tier's.
+    needs_design: bool = False
 
 
 class Change(_Held):

@@ -14,6 +14,7 @@ others show. The state file is the code's own, so one that does not read as it w
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -198,6 +199,40 @@ class Workspace:
             raise WorkspaceError(f"the change `{change_id}` exists already")
         folder.mkdir(parents=True)
         self.save_state(ChangeState(id=change_id, tier=tier))
+        return folder
+
+    def taken_ids(self, capability: str, *, but: str | None = None) -> set[str]:
+        """Every requirement ID of `capability` that is spoken for: in its living spec, retired there, or added by an
+        open change other than `but`. A new requirement is numbered past all of them."""
+        specs, _problems = self.specs()
+        spec = specs.get(capability)
+        taken = {held.id for held in (*spec.requirements, *spec.retired)} if spec else set()
+        for change_id in self.changes():
+            if change_id == but:
+                continue
+            change = self.load_change(change_id).change
+            if change.state.status != "archived" and capability in change.deltas:
+                taken |= {added.id for added in change.deltas[capability].added}
+        return taken
+
+    def write_change(self, state: ChangeState, files: Mapping[str, str]) -> Path:
+        """A new change made whole: its folder, each of `files` by its path in the folder, and its state, written
+        as one set. Where the write fails the folder is removed again, so no half-made change is left."""
+        if why := slug_problem(state.id):
+            raise WorkspaceError(f"a change cannot be named so: {why}")
+        try:
+            folder = inside(self.home, CHANGES, state.id)
+            texts = {inside(folder, *path.split("/")): text for path, text in files.items()}
+        except PathError as exc:
+            raise WorkspaceError(f"the change cannot be written: {exc}") from exc
+        if folder.exists():
+            raise WorkspaceError(f"the change `{state.id}` exists already")
+        texts[folder / STATE] = state.model_dump_json(indent=2)
+        try:
+            write_all(texts)
+        except BaseException:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
         return folder
 
     def save_state(self, state: ChangeState) -> None:

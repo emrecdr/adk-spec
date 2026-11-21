@@ -167,3 +167,37 @@ def test_the_config_takes_an_optional_token_ceiling(tmp_path) -> None:
     write_text(config, '[project]\ndefault_tier = "lean"\n\n[limits]\nmax_tokens = -5\n')
     with pytest.raises(ConfigError, match="max_tokens"):
         ws.config()
+
+
+def test_ids_added_by_another_open_change_are_taken(tmp_path) -> None:
+    """Two open changes each add a requirement to one capability: the second is given the next free number."""
+    from adk_spec.domain.ids import next_requirement_id
+
+    ws = seeded(tmp_path)  # the living spec holds 001 and 002 and has retired 003; `passkeys` adds 004
+    assert ws.taken_ids("auth") == {"REQ-AUTH-001", "REQ-AUTH-002", "REQ-AUTH-003", "REQ-AUTH-004"}
+    assert "REQ-AUTH-004" not in ws.taken_ids("auth", but="passkeys") and ws.taken_ids("search") == set()
+    assert next_requirement_id("auth", ws.taken_ids("auth")) == "REQ-AUTH-005"
+
+
+def test_a_change_is_written_whole_or_not_at_all(tmp_path, monkeypatch) -> None:
+    import os
+
+    def held_open(*_args):
+        raise PermissionError("another process holds the file")
+
+    ws = Workspace.init(tmp_path)
+    folder = ws.write_change(ChangeState(id="one", tier="lean"), {"brief.md": BRIEF, "specs/auth/spec.md": DELTA})
+    assert folder == tmp_path / ".spec" / "changes" / "one" and ws.load_change("one").problems == []
+    with pytest.raises(WorkspaceError, match="exists"):
+        ws.write_change(ChangeState(id="one", tier="lean"), {"brief.md": BRIEF})
+    with pytest.raises(WorkspaceError):
+        ws.write_change(ChangeState(id="Bad Name", tier="lean"), {"brief.md": BRIEF})
+    monkeypatch.setattr(os, "replace", held_open)
+    with pytest.raises(PermissionError):
+        ws.write_change(ChangeState(id="two", tier="lean"), {"brief.md": BRIEF})
+    assert not (tmp_path / ".spec" / "changes" / "two").exists()
+
+
+def test_a_state_file_written_before_a_field_was_added_still_reads(tmp_path) -> None:
+    ws = seeded(tmp_path)
+    assert ws.load_change("passkeys").change.state.needs_design is False
