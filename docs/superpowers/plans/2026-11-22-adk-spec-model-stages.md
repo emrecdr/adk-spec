@@ -855,6 +855,21 @@ work alone; they do not work together.
 - Gone: the guard for a pause no graph can make, three readers nothing called, a re-export in the triage module.
 - Left: `Run.usage` beside the ledger (the smoke test reads it); one table for what blocks approval, for plan 3.
 
+**What the code review after the phase found** (one fault this phase made, four older ones, each fixed with a test
+that failed first).
+
+- The installed command read what is typed with bad bytes replaced, so a UTF-16 file piped in was taken for an
+  answer. What is typed is now read strictly: bytes that are no text are no answer.
+- An answer the provider itself ended (cut at the model's output limit, or filtered) was called a schema fault and
+  asked for again twice. It is now the stage's failure at once, in the provider's words: `plugins.FINAL` names the
+  reasons no second asking can change. `gpt-4.1` lists an output limit of 16,384 tokens in the pinned model map.
+- An open change whose delta did not parse gave up the IDs it adds. `Workspace.taken` reads each open delta as
+  text.
+- A name made from a title was compared by its exact letters, then refused as a twin by case after every call was
+  paid for. Names are compared case-folded, and a change that cannot be written still says what was spent.
+- A section holding a no-break space alone passed for written.
+- A model's question and suggestion are printed with every character that is no printable one shown as a space.
+
 **Left as they are, for the owner** (the review's minors).
 
 - `plan` replaces an existing `tasks.md` without a word, ticked boxes too, and does not read a `design.md` written

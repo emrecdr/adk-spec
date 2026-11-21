@@ -18,7 +18,7 @@ from google.adk.agents.context import Context
 from google.adk.events import Event
 from google.adk.workflow import FunctionNode
 
-from .plugins import CEILING, MISMATCH, STAGE_ERROR
+from .plugins import FINAL, MISMATCH, STAGE_ERROR
 from .stages import BOUNDARY, FINDINGS
 
 #: How often a stage is asked in all: once, and twice more with what was wrong.
@@ -53,7 +53,7 @@ def checked(stage: str, check: Callable[[Mapping[str, Any]], list[str]]) -> Func
         counted = {tries_key(stage): tries, STAGE_ERROR: None, FINDINGS: None}
         if not problems:
             return Event(route=OK, state=counted)
-        if tries >= MAX_TRIES or problems[0].startswith(CEILING):  # no second asking passes the ceiling
+        if tries >= MAX_TRIES or problems[0].startswith(FINAL):  # no second asking changes a final reason
             return Event(route=GIVE_UP, state={**counted, FAILURE: f"{stage}: {'; '.join(problems)}"})
         # The refused answer is cleared: were the next one off its schema, this one would stand there and be
         # checked a second time.

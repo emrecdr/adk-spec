@@ -201,3 +201,34 @@ def test_an_answer_that_is_no_text_is_no_answer(tmp_path, monkeypatch, fake_prov
     monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(bytes([0xFF, 0xFE, 0x0A])), encoding="utf-8"))
     assert proposed(tmp_path, "--tier", "standard", "--id", "bytes") == 0
     assert len(markers(read_text(tmp_path / ".spec/changes/bytes/brief.md"))) == 1
+
+
+def test_piped_bytes_that_are_no_text_are_no_answer_in_the_installed_command(
+    tmp_path, monkeypatch, fake_provider
+) -> None:
+    """Found by the code review: the installed command read what was typed with bad bytes replaced, so a UTF-16 file
+    piped in was taken for an answer, and the test above could not see it: it calls `main`, not `run`."""
+    from adk_spec.interfaces import cli
+
+    seeded(tmp_path)
+    fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
+    utf16 = bytes([0xFF, 0xFE, 0x43, 0x00, 0x0A, 0x00])
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(utf16), encoding="cp1252"))
+    argv = ["adk-spec", "--root", str(tmp_path), "propose", REQUEST, "--tier", "standard", "--id", "bytes"]
+    monkeypatch.setattr("sys.argv", argv)
+    assert cli.run() == 0
+    assert len(asked(fake_provider, BRIEF)) == 1, "nothing was taken for an answer"
+    assert len(markers(read_text(tmp_path / ".spec/changes/bytes/brief.md"))) == 1
+
+
+def test_a_question_cannot_write_to_the_terminal_what_is_no_text(tmp_path, monkeypatch, capsys, fake_provider) -> None:
+    """Raised by two reviews: a model's question and suggestion were printed as they came, control sequences too."""
+    seeded(tmp_path)
+    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
+    clear, bell = chr(27) + "[2J", chr(7)
+    hostile = {**CANNED_QUESTIONS["questions"][0], "question": f"Which browsers?{clear}", "recommended": f"All{bell}"}
+    fake_provider.answers_when(QUESTIONS, {"questions": [hostile]})
+    monkeypatch.setattr("sys.stdin", io.StringIO("Chrome\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "plain") == 0
+    out = capsys.readouterr().out
+    assert chr(27) not in out and bell not in out and "Which browsers?" in out and "suggested: All" in out

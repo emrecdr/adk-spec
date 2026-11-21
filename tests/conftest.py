@@ -149,7 +149,7 @@ class FakeProvider:
             if text in instruction:
                 if isinstance(rule, BaseException):
                     raise rule
-                if isinstance(rule, dict | str):
+                if isinstance(rule, dict | str | LlmResponse):
                     return rule
                 return next(rule, None)  # an iterator: one answer a request
         return None
@@ -174,6 +174,9 @@ class FakeModel(Gemini):
     ) -> AsyncGenerator[LlmResponse]:
         PROVIDER.requests.append(llm_request)
         payload = PROVIDER.answer(llm_request)
+        if isinstance(payload, LlmResponse):  # a whole response, as a provider would stamp it
+            yield payload
+            return
         schema = llm_request.config.response_schema
         if payload is None and schema is not None:
             payload = canned_for(schema)

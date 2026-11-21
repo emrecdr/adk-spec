@@ -23,7 +23,7 @@ from pydantic import ValidationError
 
 from ..domain.brief_md import parse_brief
 from ..domain.delta_md import parse_delta
-from ..domain.ids import slug_problem
+from ..domain.ids import REQ_ID, slug_problem
 from ..domain.model import Change, ChangeState, Finding, GrammarError, Spec, Tier
 from ..domain.spec_md import parse_spec, render_spec
 from ..domain.tasks_md import parse_tasks
@@ -210,16 +210,19 @@ class Workspace:
         return self.write_change(ChangeState(id=change_id, tier=tier), {})
 
     def taken(self, specs: Mapping[str, Spec]) -> set[str]:
-        """Every requirement ID that is spoken for: in a living spec of `specs`, retired there, or added by an open
-        change. A new requirement is numbered past all of its capability's, so two open changes never share one,
-        in a capability a spec holds or in one they both create."""
+        """Every requirement ID that is spoken for: in a living spec of `specs`, retired there, or spelled in a
+        delta of an open change. A new requirement is numbered past all of its capability's, so two open changes
+        never share one, in a capability a spec holds or in one they both create.
+
+        A delta is read as text, not parsed: one that is off its grammar, mid-edit, still holds the IDs it adds."""
         taken = {held.id for spec in specs.values() for held in (*spec.requirements, *spec.retired)}
         for change_id in self.changes():
             folder = self._folder(change_id)
             if self._state(folder, change_id).status == "archived":  # history grows, and is not read
                 continue
-            for delta in self.load_change(change_id).change.deltas.values():
-                taken.update(added.id for added in delta.added)
+            for capability in self._holding(folder / SPECS, SPEC_FILE):
+                text = _text_or_bytes(folder / SPECS / capability / SPEC_FILE)
+                taken.update(spelled.group(0) for spelled in REQ_ID.finditer(text))
         return taken
 
     def _placed(self, folder: Path, files: Mapping[str, str]) -> dict[Path, str]:

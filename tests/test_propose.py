@@ -301,3 +301,73 @@ def test_a_purpose_with_stray_spaces_costs_no_retry(tmp_path, fake_provider) -> 
     loose = {**CANNED_DELTAS["deltas"][0], "capability": "search", "purpose": "Find things.  \r\n\r\n\r\nFast.\t"}
     fake_provider.answers_when(DELTAS, {"deltas": [loose]})
     assert proposed(tmp_path, "--tier", "lean", "--id", "loose-purpose") == 0 and asked(fake_provider, DELTAS) == 1
+
+
+def test_an_open_change_whose_delta_does_not_read_still_holds_its_ids(tmp_path, fake_provider) -> None:
+    """Found by the code review: a delta off its grammar gave up the IDs it adds, and the next change was given
+    REQ-AUTH-004 as well."""
+    ws = seeded(tmp_path)  # `passkeys` adds REQ-AUTH-004
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, read_text(delta) + "\n## Notes\n\nMid-edit.\n")
+    assert ws.load_change("passkeys").problems != [], "the premise: the delta does not parse"
+    assert proposed(tmp_path, "--tier", "lean", "--id", "second") == 0
+    assert [r.id for r in ws.load_change("second").change.deltas["auth"].added] == ["REQ-AUTH-005"]
+    assert asked(fake_provider, DELTAS) == 1
+
+
+def test_an_answer_the_provider_cut_short_is_not_asked_again(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: a reply cut at the model's output limit was called a schema fault, asked for again
+    twice with the same request, and paid for three times."""
+    from google.adk.models.llm_response import LlmResponse
+    from google.genai import types
+
+    seeded(tmp_path)
+    spent = types.GenerateContentResponseUsageMetadata(
+        prompt_token_count=100, candidates_token_count=20, total_token_count=120
+    )
+    cut = LlmResponse(
+        content=types.ModelContent('{"deltas": [{"capa'),
+        error_code="MAX_TOKENS",
+        error_message="Maximum tokens reached",
+        usage_metadata=spent,
+    )
+    fake_provider.answers_when(DELTAS, cut)
+    assert proposed(tmp_path, "--tier", "lean", "--id", "cut") == 3
+    said = capsys.readouterr()
+    assert "MAX_TOKENS" in said.err and "schema" not in said.err
+    assert asked(fake_provider, DELTAS) == 1 and "deltas 120 in 1 call" in said.out
+
+
+def test_a_name_made_from_the_title_steps_past_one_that_differs_only_by_case(tmp_path, fake_provider) -> None:
+    """Found by the code review: the name was compared by its exact letters, the folder was then refused as a twin
+    by case, and the drafts were dropped after every call was paid for."""
+    ws = seeded(tmp_path)
+    (tmp_path / ".spec/changes/Sign-in-with-a-passkey").mkdir()
+    assert proposed(tmp_path, "--tier", "lean") == 0
+    assert "sign-in-with-a-passkey-2" in ws.changes() and asked(fake_provider, DELTAS) == 1
+
+
+def test_a_change_that_cannot_be_written_still_says_what_was_spent(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    from adk_spec.workspace.layout import Workspace, WorkspaceError
+
+    def refuse(_self, _state, _files):
+        raise WorkspaceError("the folder cannot be made")
+
+    seeded(tmp_path)
+    monkeypatch.setattr(Workspace, "write_change", refuse)
+    assert proposed(tmp_path, "--tier", "lean", "--id", "unwritten") == 2
+    said = capsys.readouterr()
+    assert "no change was written: the folder cannot be made" in said.err and "240 total" in said.out
+    assert len(fake_provider.requests) == 2
+
+
+def test_a_section_of_nothing_but_a_space_no_keyboard_shows_is_empty(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: a no-break space alone passed for a written section."""
+    from conftest import CANNED_BRIEF
+
+    seeded(tmp_path)
+    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "why": chr(0xA0)})
+    assert proposed(tmp_path, "--tier", "lean", "--id", "blank") == 3
+    assert "brief.section-empty" in capsys.readouterr().err and asked(fake_provider, BRIEF) == 3

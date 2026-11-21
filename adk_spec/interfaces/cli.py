@@ -388,6 +388,12 @@ def _line() -> str:
         return ""
 
 
+def _plain(text: str) -> str:
+    """A model's text as a terminal may be handed it: every character that is no printable one, an escape or a bell
+    among them, shown as a space."""
+    return "".join(char if char.isprintable() else " " for char in text)
+
+
 def _answered(questions: list[dict[str, Any]]) -> list[str]:
     """A round of questions put to the person on the terminal, one at a time: the answer to each, in their order.
     A line is the answer; `=` takes the suggestion; an empty line leaves the point open; the end of the input, or
@@ -398,8 +404,8 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     answers: list[str] = []
     ended = sys.stdin is None  # a process started with no terminal and no pipe
     for number, question in enumerate(questions, 1):
-        print(f"{number}. {question['question']}")
-        print(f"   suggested: {question['recommended']}", flush=True)
+        print(f"{number}. {_plain(question['question'])}")
+        print(f"   suggested: {_plain(question['recommended'])}", flush=True)
         line = "" if ended else _line()
         ended = ended or line == ""  # no line at all: the input is over
         typed = line.strip()
@@ -544,7 +550,12 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
         return EXIT_OK
     if why := state.get(UNWORDED):
         print(f"note      the brief's open points were not put to you ({why}). They stay in the brief")
-    change_id = _written(args, workspace, known, state, tier)
+    try:
+        change_id = _written(args, workspace, known, state, tier)
+    except WorkspaceError as exc:  # the calls are paid for by now: say so beside the refusal
+        print(f"{PROG}: no change was written: {exc}", file=sys.stderr)
+        print(f"tokens    {_spent(ledger)}")
+        return EXIT_USAGE
     print(f"tokens    {_spent(ledger)}")
     loaded, found, stale = _assessed(workspace, change_id, specs)
     print(f"next      {next_action(loaded.change.state, found, stale)}")
@@ -695,10 +706,12 @@ def _smoked(args: argparse.Namespace) -> int:
 
 def run() -> int:
     """The process boundary of the installed `adk-spec`."""
-    for stream in (sys.stdout, sys.stderr, sys.stdin):
+    # A Windows console is not UTF-8 by default, and an answer piped in there is read in the ANSI code page. What
+    # is printed has its odd characters replaced; what is read is read strictly, so bytes that are no text raise
+    # and are no answer, never a line of replacement marks taken for one.
+    for stream, errors in ((sys.stdout, "replace"), (sys.stderr, "replace"), (sys.stdin, "strict")):
         if hasattr(stream, "reconfigure"):
-            # A Windows console is not UTF-8 by default, and an answer piped in there is read in the ANSI code page.
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            stream.reconfigure(encoding="utf-8", errors=errors)
     try:
         return main(sys.argv[1:])
     except KeyboardInterrupt:

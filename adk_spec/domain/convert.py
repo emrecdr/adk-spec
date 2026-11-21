@@ -29,7 +29,7 @@ def _line(text: str) -> str:
 def _text(text: str) -> str:
     """Prose as its file holds it, so a draft reads back as written: the lines the parsers read, one blank line
     between paragraphs, none at the ends. Text with a fence left open is passed on as it is, for a gate to name."""
-    lines = lines_of(normalise(text))
+    lines = [line if line.strip() else "" for line in lines_of(normalise(text))]  # a no-break space is no text
     try:
         return paragraphs(lines, fenced_lines(lines), 0, len(lines))
     except GrammarError:
@@ -144,7 +144,7 @@ def slug_of(title: str, held: Iterable[str]) -> str:
         base = f"{base}-{word}"
     if slug_problem(base):  # a name Windows reserves
         base = f"{base}-{FALLBACK}"
-    taken, slug, number = set(held), base, 1
+    taken, slug, number = {name.casefold() for name in held}, base, 1  # macOS and Windows read a twin by case as one
     while slug in taken:
         number += 1
         tail = f"-{number}"

@@ -30,8 +30,12 @@ from .run import Usage
 #: The state key a plugin leaves its reason under, for the gate after the stage.
 STAGE_ERROR = "stage_error"
 MISMATCH = "the answer did not fit its schema"
-#: How the ledger's refusal begins, and its error code: the one refusal no second asking can pass.
+#: How the ledger's refusal begins, and its error code.
 CEILING = "CEILING"
+#: How the reason begins where the provider itself ended an answer: cut at the model's output limit, or filtered.
+ENDED = "the provider ended the answer"
+#: The reasons no second asking can change: the same request would meet the same ceiling, or be cut the same way.
+FINAL = (CEILING, ENDED)
 
 
 class SchemaMismatch(BasePlugin):
@@ -52,6 +56,12 @@ class SchemaMismatch(BasePlugin):
     async def after_model_callback(self, *, callback_context: Any, llm_response: Any) -> LlmResponse | None:
         if llm_response.partial:  # a streamed piece: the whole answer follows it
             return None
+        if llm_response.error_code:  # the provider's own verdict, which a cut answer's broken JSON would hide
+            why = f"{ENDED}: {llm_response.error_code}: {llm_response.error_message or 'no reason given'}"
+            callback_context.state[STAGE_ERROR] = why
+            return LlmResponse(
+                error_code=llm_response.error_code, error_message=why, usage_metadata=llm_response.usage_metadata
+            )
         schema = self.schemas.get(callback_context.agent_name)
         text = extract_text_from_content(llm_response.content) if schema is not None else ""
         if schema is None or not text.strip():
