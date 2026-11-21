@@ -95,7 +95,9 @@ PASSKEY = _req(
 BRIEF = Brief(
     title="Sign in with a passkey",
     why="Passwords are the top source of account takeovers.",
-    what_changes="Users can register a passkey and sign in with it. Password sign-in stays as it is.",
+    # What the delta delivers, and no more: a promise no requirement keeps is a fault of its own, and the model
+    # finds it. The second live measurement did, in the clean case too.
+    what_changes="Users can sign in with a passkey. Password sign-in stays as it is.",
     non_goals="No change to session length. No change to the lock after failed attempts.",
     capabilities=("auth",),
     impact="The sign-in page and the session service.",

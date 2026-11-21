@@ -26,6 +26,7 @@ from pydantic import ValidationError
 
 from adk_spec.domain.convert import pointed_at
 from adk_spec.domain.drafts import FindingDraft, FindingsDraft
+from adk_spec.domain.text import plain
 from adk_spec.interfaces import cli
 from adk_spec.workspace.git import GitError, head
 from adk_spec.workspace.layout import Workspace, findings_of
@@ -73,6 +74,9 @@ class Row:
     strays: list[str] = field(default_factory=list)
     #: Each planted fault a run did not catch, with what that run found.
     missed: list[str] = field(default_factory=list)
+    #: Each finding of the model's that was left out for quoting text that is not in the file it names: it may be
+    #: the planted fault, quoted a word off.
+    left_out: list[str] = field(default_factory=list)
 
 
 def scored(case: Case, seen: list[Seen]) -> Score:
@@ -83,8 +87,8 @@ def scored(case: Case, seen: list[Seen]) -> Score:
     return Score(caught, len(case.expect) - caught, stray)
 
 
-def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], int, int, float]:
-    """What a run of `case` left: what was found, how many of the model's findings quoted nothing real, and the
+def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[str], int, float]:
+    """What a run of `case` left: what was found, each of the model's findings that quoted nothing real, and the
     tokens and seconds of its model calls."""
     workspace = Workspace.find(root)
     loaded = workspace.load_change(change)
@@ -93,14 +97,17 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], int, int,
     tokens, seconds = sum(call.tokens for call in calls), sum(call.seconds for call in calls)
     if case.command == "verify":
         verdicts = loaded.change.state.verification.verdicts if loaded.change.state.verification else {}
-        return [Seen(f"verdict.{verdict}", req, "", False) for req, verdict in verdicts.items()], 0, tokens, seconds
+        return [Seen(f"verdict.{verdict}", req, "", False) for req, verdict in verdicts.items()], [], tokens, seconds
     found = findings_of(loaded, workspace.specs()[0])
     seen = [Seen(one.code, one.path or "", one.message, one.severity == "ERROR") for one in found]
-    texts, dropped = workspace.approval_texts(change), 0
+    texts = workspace.approval_texts(change)
+    dropped: list[str] = []
     answer = next((call.answer for call in reversed(calls) if call.answer and not call.error), None)
     for one in _findings(answer):
         if (at := pointed_at(one, texts)) is None:  # the command left this one out, by the same test
-            dropped += 1
+            dropped.append(
+                f"`check.{one.kind}` {one.file.strip()}: quoted `{plain(one.quote)[:200]}`: {plain(one.message)[:200]}"
+            )
         else:  # the quote is kept here beside the message: a planted fault is named by either
             seen.append(Seen(f"check.{one.kind}", at[0], f"{one.quote} {one.message}", one.severity == "critical"))
     return seen, dropped, tokens, seconds
@@ -140,7 +147,8 @@ def measured(case: Case, *, runs: int, folder: Path) -> Row:
             for one in seen
             if one.blocking and not any(wanted.met_by(one) for wanted in case.expect)
         ]
-        row.dropped += dropped
+        row.dropped += len(dropped)
+        row.left_out += [f"run {run + 1}: {said}" for said in dropped]
         row.tokens += tokens
         row.seconds += seconds
     return row
@@ -171,7 +179,12 @@ def rendered(rows: list[Row], *, model: str, commit: str | None, at: str) -> str
         "the false ones, since a model may find a real fault nobody planted.",
         "",
     ]
-    for heading, held in (("Blocking on nothing planted", "strays"), ("Missed", "missed")):
+    sections = (
+        ("Blocking on nothing planted", "strays"),
+        ("Missed", "missed"),
+        ("Left out, no such quote", "left_out"),
+    )
+    for heading, held in sections:
         listed = [f"- `{row.name}`, {said}" for row in rows for said in getattr(row, held)]
         if listed:
             lines += [f"## {heading}", "", *listed, ""]

@@ -124,3 +124,26 @@ def test_what_was_found_beyond_what_was_planted_is_kept_in_its_own_words(tmp_pat
     page = measure.rendered([clean, missed], model="a model", commit=None, at="t")
     assert "## Blocking on nothing planted" in page and "- `clean`, run 1: `check.gap` brief.md" in page
     assert "## Missed" in page and "- `ambiguity`, run 1: wanted check.ambiguity" in page
+
+
+def test_the_clean_case_promises_nothing_its_delta_does_not_deliver() -> None:
+    """Found by the second live measurement: the brief every case shares said users can register a passkey, and no
+    requirement covered registering. The model named that gap, rightly, in the clean case too, and where it named
+    it, it often left the planted fault unsaid."""
+    promised = cases.BRIEF.what_changes.lower()
+    assert "register" not in promised and "sign in with a passkey" in promised
+    assert cases.PASSKEY.statement == "The system SHALL let a user sign in with a passkey."
+
+
+def test_a_finding_left_out_for_its_quote_is_kept_in_its_own_words_too(tmp_path, fake_provider) -> None:
+    """Found by the second live measurement: two findings were left out for quoting text that is not in the file.
+    Whether one of them was the planted fault, quoted a word off, nobody can say: only their number was kept."""
+    invented = {"kind": "ambiguity", "severity": "critical", "file": "specs/auth/spec.md", "message": "How fast?"}
+    invented["quote"] = "The system SHALL respond very quickly indeed"
+    fake_provider.answers_when("You review the files of a change", {"findings": [invented]})
+    row = measure.measured(case("ambiguity"), runs=1, folder=tmp_path)
+    assert row.dropped == 1 and row.left_out == [
+        "run 1: `check.ambiguity` specs/auth/spec.md: quoted `The system SHALL respond very quickly indeed`: How fast?"
+    ]
+    page = measure.rendered([row], model="a model", commit=None, at="t")
+    assert "## Left out, no such quote" in page and "- `ambiguity`, run 1: `check.ambiguity`" in page

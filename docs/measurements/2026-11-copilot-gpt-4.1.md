@@ -17,6 +17,11 @@ the false ones, since a model may find a real fault nobody planted.
 
 ## Read by hand, and decided
 
+**Corrected by the second measurement** (`2026-11-copilot-gpt-4.1-second.md`), which kept what this one threw
+away: the labelled set held a fault nobody planted, so its clean case was not clean, the three unplaced findings
+below were very likely right, and the figures of the table moved a great deal an hour later. Read "caught in at
+least two runs of three" as what happened once, not as a rate.
+
 Run on the owner's go-ahead on 21 November 2026 ("Run it in full"): 15 model calls, about 18,700 tokens, three
 minutes. No run failed, and no finding of the model's was left out for quoting text that is not there.
 

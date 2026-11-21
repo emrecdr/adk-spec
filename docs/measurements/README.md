@@ -11,9 +11,15 @@ with none.
 | `ambiguity` | A requirement that says "quickly", with a scenario that says "fast". | the model, in `check` |
 | `no-task` | Two requirements added, tasks for one. | code, in `check`, with no model asked |
 | `constitution` | The repository's rules ask for a test with every change; the tasks hold none. | the model, in `check` |
-| `clean` | Nothing. A blocking finding here is a false one. | |
+| `clean` | Nothing. A blocking finding here is a false one, or a fault of the set itself: read its wording. | |
 | `half-done` | Two requirements approved, one implemented. | the model, in `verify`, held to the diff by code |
 
 A measurement calls a model with the account the environment names: about `5 x runs` calls for the whole set. The
 script says the number before the first call. It holds for the model it ran on and for the instructions at that
 commit; a change to a stage's instruction is a reason to measure again.
+
+Under its table a report lists, each in its own words: every blocking finding that matched nothing planted, every
+planted fault a run missed with what that run found instead, and every finding left out because the text it quotes
+is not in the file it names. Read them before the table. The second measurement here showed that eight "false"
+findings were one real fault of the set.
+
