@@ -434,3 +434,21 @@ def test_a_change_too_large_for_the_models_check_is_told_the_way_without_one(
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 2
     assert "adk-spec check passkeys --no-model" in capsys.readouterr().err
     assert fake_provider.requests == [] and state(ws).approval is None
+
+
+def test_a_finding_that_quotes_a_line_as_the_model_was_shown_it_is_kept(tmp_path, fake_provider) -> None:
+    """The same fault as in `verify`: a finding on a line the scrub had rewritten was left out, its quote being
+    looked for in the file as it stood before."""
+    from adk_spec.domain.secrets import scrub
+
+    ws = standard(tmp_path)
+    line = 'The test account signs in with password = "' + "hunter2-" + 'hunter2".'
+    shown = scrub(line)[0]
+    assert shown != line
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief).replace("Browsers in scope support WebAuthn.", line))
+    written = {**REAL, "quote": shown, "message": "A password is written out in the brief."}
+    fake_provider.answers_when(CHECK, {"findings": [written]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    assert state(ws).check.blocking == 1 and "A password is written out in the brief." in read_text(tmp_path / REPORT)
+    assert "hunter2" not in str(fake_provider.requests[-1].config.system_instruction)

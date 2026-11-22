@@ -342,3 +342,22 @@ def scrub(text: str, *, cut: bool = False) -> tuple[str, int]:
         total += count
         unprefixed = unprefixed and not count
     return text, total
+
+
+def scrub_lines(text: str, *, cut: bool = False) -> tuple[str, int]:
+    """`scrub`, with every line of `text` left at its own number: a shape that ran over several lines, a private
+    key's block, is replaced by its mark and by as many line ends as it held.
+
+    Not the reference project's: added here for text that a model is shown and that its quotes are then looked for
+    in. Such text is scrubbed once, whole, before anything is cut out of it, and both uses read the result: a line
+    is then the same line to the model and to the code that holds the model to it, at the number the file has it."""
+    total = 0
+    for _kind, pattern, replacement in (*_PATTERNS, _OPEN_AT_THE_CUT) if cut else _PATTERNS:
+
+        def hidden(found: re.Match[str], replacement: str = replacement) -> str:
+            mark = found.expand(replacement)
+            return mark + "\n" * max(found.group(0).count("\n") - mark.count("\n"), 0)
+
+        text, count = pattern.subn(hidden, text)
+        total += count
+    return text, total

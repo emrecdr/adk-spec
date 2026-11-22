@@ -333,7 +333,7 @@ def test_a_standard_change_takes_four_commands_from_request_to_record(tmp_path, 
     assert run(tmp_path, "verify", "four") == 0
     assert run(tmp_path, "archive", "four") == 0
     assert state_of(tmp_path, "four")["status"] == "archived"
-    assert len(fake_provider.requests) == 6, "brief, deltas, the scout, tasks, the check and the verdicts"
+    assert len(fake_provider.requests) == 7, "brief, deltas, the scout, the survey, tasks, the check, the verdicts"
 
 
 def test_a_lean_change_takes_three(tmp_path, fake_provider) -> None:
@@ -365,3 +365,24 @@ def test_verify_is_sent_no_excluded_path(tmp_path, fake_provider) -> None:
     assert run(tmp_path, "verify", "passkeys") == 0
     sent = str(fake_provider.requests[-1].config.system_instruction)
     assert "return passkey(user)" in sent and "VENDORED" not in sent and "vendor/lib.py" not in sent
+
+
+def test_a_verdict_that_quotes_a_line_as_the_model_was_shown_it_is_grounded(tmp_path, fake_provider) -> None:
+    """Found by the cleanup review: every request is scrubbed of secret shapes, and a verdict's quote was then
+    looked for in the diff as it stood before. A change about sign-in, whose lines hold `password = "..."`, could
+    not be verified: its evidence was "not in the diff"."""
+    from conftest import state_of
+
+    from adk_spec.domain.secrets import scrub
+
+    approved_in_a_repository(tmp_path)
+    line = 'PASSKEY_SECRET = "' + "hunter2-" + 'hunter2"'
+    shown = scrub(line)[0]
+    assert shown != line and "hunter2" not in shown
+    write_text(tmp_path / "src/auth.py", AFTER + line + "\n")
+    quoted = {"004": {"evidence": [{"path": "src/auth.py", "quote": shown}]}}
+    fake_provider.answers_when(VERIFY, verdicts(**quoted))
+    assert run(tmp_path, "verify", "passkeys") == 0
+    sent = str(fake_provider.requests[-1].config.system_instruction)
+    assert shown in sent and "hunter2" not in sent
+    assert state_of(tmp_path)["verification"]["verdicts"]["REQ-AUTH-004"] == "met"

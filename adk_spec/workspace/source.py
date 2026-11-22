@@ -6,8 +6,12 @@ ignores, nothing of `.spec/`, and nothing a person excluded. A path is never bui
 looked for: it is looked up, and only a path that was found is joined to the root. So no text a file holds, and no
 text of a request, can steer a reading to another file.
 
-A file's text is kept as it was shown, each line at its own number, so that a quote found in it is found at the
-line it has in the file.
+A file is scrubbed of known secret shapes whole, once, before anything is cut out of it: a range of lines, a line a
+search found and a file cut at a cap are all taken from the scrubbed text. A private key's block is known by its
+first and last line together, so a piece cut out first would show its middle. Each line keeps its own number, so
+that a quote found in the text is found at the line the file has it.
+
+What cannot be given is left out and named, and is never an error: a reading goes on without it.
 """
 
 from __future__ import annotations
@@ -18,11 +22,11 @@ from dataclasses import dataclass, field
 from itertools import zip_longest
 from pathlib import Path
 
-from ..domain.secrets import scrub
+from ..domain.secrets import scrub_lines
 from ..domain.text import lines_of, normalise, plain
 from .files import NotTextError, read_text
+from .git import GitError, grep
 from .git import files as listed_by_git
-from .git import grep
 
 #: What one round of reading holds at most. Provisional, as the context limits are, until a live run measures them.
 FILES_A_ROUND = 12
@@ -52,18 +56,8 @@ class Gathered:
     read: tuple[str, ...]
     #: What was asked for and not given, each with why.
     left_out: tuple[str, ...]
-
-
-def scrubbed(lines: Sequence[str]) -> list[str]:
-    """`lines` with every known secret shape hidden, each line still at its own number. A shape on one line is
-    hidden there. A shape over several, a private key's block, becomes one line: the lines after it are put back
-    where they stood, so a quote found in them is found at the line the file has it."""
-    each = [scrub(line)[0] for line in lines]
-    whole = scrub("\n".join(each))[0].split("\n")
-    if len(whole) == len(each):
-        return whole
-    at = next((n for n, (was, now) in enumerate(zip(each, whole, strict=False)) if was != now), len(whole) - 1)
-    return [*whole[: at + 1], *[""] * (len(each) - len(whole)), *whole[at + 1 :]]
+    #: For each file read, the first and the last line shown and how many lines it has.
+    reached: dict[str, tuple[int, int, int]]
 
 
 def merged(one: str, other: str) -> str:
@@ -78,6 +72,7 @@ class _Round:
     parts: list[str] = field(default_factory=list)
     read: list[str] = field(default_factory=list)
     left_out: list[str] = field(default_factory=list)
+    reached: dict[str, tuple[int, int, int]] = field(default_factory=dict)
 
     def shows(self, block: str) -> bool:
         """Whether `block` still fits the round, in which case it is taken."""
@@ -89,8 +84,7 @@ class _Round:
 
     def holds(self, path: str, line: int, text: str) -> None:
         """`text` kept as what `path` holds from `line` on."""
-        padded = "\n" * (line - 1) + text
-        self.texts[path] = merged(self.texts[path], padded) if path in self.texts else padded
+        self.texts[path] = merged(self.texts.get(path, ""), "\n" * (line - 1) + text)
 
 
 def _named(asked: str, missing: str) -> str:
@@ -105,16 +99,18 @@ def _counted(count: int, one: str, many: str) -> str:
 class Source:
     """The files of one repository that a stage may be shown."""
 
-    def __init__(self, root: Path, paths: Sequence[str], *, exclude: Sequence[str] = ()) -> None:
+    def __init__(self, root: Path, paths: Sequence[str], *, exclude: Sequence[str]) -> None:
         self.root = root
         #: Every path git lists, in order, from `root`, with forward slashes.
         self.paths = sorted(paths)
         self._listed = frozenset(paths)
         self._exclude = tuple(exclude)
+        #: Each file opened so far: its lines as they may be shown, or why it is not read.
+        self._opened: dict[str, list[str] | str] = {}
 
     @classmethod
-    def of(cls, root: Path, *, exclude: Sequence[str] = ()) -> Source:
-        """The source of the repository at `root`, as git lists it now."""
+    def of(cls, root: Path, *, exclude: Sequence[str]) -> Source:
+        """The source of the repository at `root`, as git lists it now, less what a person excluded."""
         return cls(root, listed_by_git(root, exclude=exclude), exclude=exclude)
 
     def gathered(self, files: Sequence[str], folders: Sequence[str], searches: Sequence[str]) -> Gathered:
@@ -127,11 +123,11 @@ class Source:
             (searches, SEARCHES_A_ROUND, self._search, ("search", "searches"), "makes"),
         )
         for wanted, cap, give, (one, many), does in asked:
-            for item in list(wanted)[:cap]:
+            for item in wanted[:cap]:
                 give(item, got)
             if (over := len(wanted) - cap) > 0:
                 got.left_out.append(f"{over:,} more {one if over == 1 else many} asked for than a round {does}")
-        return Gathered(got.texts, "\n".join(got.parts), tuple(got.read), tuple(got.left_out))
+        return Gathered(got.texts, "\n".join(got.parts), tuple(got.read), tuple(got.left_out), got.reached)
 
     def _asked(self, asked: str) -> tuple[str, int | None, int | None]:
         """The path a model asked for, and the lines of it where it named a range. A path git lists is taken as it
@@ -141,45 +137,56 @@ class Source:
             return ranged["path"], int(ranged["first"]), int(ranged["last"])
         return asked, None, None
 
-    def _unreadable(self, path: str) -> str | None:
-        """Why `path` is not read, or nothing where it is."""
-        if path not in self._listed:
-            return "git lists no such file"
-        target = self.root / path  # joined only now, and only a path that was found in the list
-        if target.is_symlink():
-            return "a symbolic link is not read"
-        if not target.is_file():
-            return "git lists it, and no file is there"
-        if not target.resolve().is_relative_to(self.root.resolve()):
-            return "it stands outside the repository"
-        if (size := target.stat().st_size) > FILE_MAX_BYTES:
-            return f"{size:,} bytes, too large to read"
-        return None
+    def _lines(self, path: str) -> list[str] | str:
+        """Every line of a file git lists, as it may be shown: scrubbed whole, each line at its own number. Or why
+        the file is not read. A file is opened and scrubbed once, however often it is asked for."""
+        if path not in self._opened:
+            self._opened[path] = self._read(path)
+        return self._opened[path]
+
+    def _read(self, path: str) -> list[str] | str:
+        target = self.root / path  # joined only here, and only for a path that was found in git's list
+        try:
+            if target.is_symlink():
+                return "a symbolic link is not read"
+            if not target.is_file():
+                return "git lists it, and no file is there"
+            if not target.resolve().is_relative_to(self.root.resolve()):
+                return "it stands outside the repository"
+            if (size := target.stat().st_size) > FILE_MAX_BYTES:
+                return f"{size:,} bytes, too large to read"
+            return lines_of(scrub_lines(normalise(read_text(target)))[0])
+        except NotTextError:
+            return "is not text adk-spec reads, which is UTF-8"
+        except OSError as exc:
+            return f"could not be read: {exc.strerror or exc}"
 
     def _file(self, asked: str, got: _Round) -> None:
         path, first, last = self._asked(asked)
-        if why := self._unreadable(path):
-            got.left_out.append(f"{_named(asked, '(no path)')}: {why}")
+        if path not in self._listed:
+            got.left_out.append(f"{_named(asked, '(no path)')}: git lists no such file")
             return
-        try:
-            lines = lines_of(normalise(read_text(self.root / path)))
-        except NotTextError:
-            got.left_out.append(f"{path}: is not text adk-spec reads, which is UTF-8")
+        lines = self._lines(path)
+        if isinstance(lines, str):
+            got.left_out.append(f"{path}: {lines}")
             return
         total = len(lines)
         first = min(max(first or 1, 1), max(total, 1))
         kept: list[str] = []
+        size = 0
         for line in lines[first - 1 : min(last or total, total)]:
-            if kept and sum(map(len, kept)) + len(kept) + len(line) > FILE_MAX_CHARS:
+            if kept and size + len(line) + 1 > FILE_MAX_CHARS:
                 break
             kept.append(line)
+            size += len(line) + 1
         upto = first + len(kept) - 1
         said = "whole" if first == 1 and upto >= total else f"lines {first} to {upto} of {total}"
-        text = "\n".join(scrubbed(kept))  # what is shown and kept holds no secret: none can be quoted from it
+        text = "\n".join(kept)
         if not got.shows(f"=== {path} ({said})\n{text}"):
             got.left_out.append(f"{path}: past what a round reads")
             return
         got.read.append(f"{path} ({said})")
+        got.reached[path] = (first, upto, total)
         got.holds(path, first, text)
 
     def _folder(self, asked: str, got: _Round) -> None:
@@ -200,18 +207,31 @@ class Source:
         if not term or not term.isprintable() or len(term) > TERM_MAX_CHARS:
             got.left_out.append(f"{_named(asked, '(no word)')}: no search adk-spec makes")
             return
-        hits: list[tuple[str, int, str]] = []
-        for line in grep(self.root, term, exclude=self._exclude):
+        try:
+            found = grep(self.root, term, exclude=self._exclude)
+        except GitError as exc:
+            got.left_out.append(f"search for {term}: {exc}")
+            return
+        hits: list[tuple[str, int]] = []
+        for line in found:
             path, _, rest = line.partition(":")
-            number, _, text = rest.partition(":")
-            if path in self._listed and number.isdigit() and not (self.root / path).is_symlink():
-                hits.append((path, int(number), scrub(text[:LINE_MAX_CHARS].rstrip())[0]))
-        shown = hits[:SEARCH_MAX_LINES]
+            number = rest.partition(":")[0]
+            if path in self._listed and number.isdigit():
+                hits.append((path, int(number)))
+        # A line is shown as the file's scrubbed text has it, not as git gave it: only the lines shown are opened.
+        rows: list[tuple[str, int, str]] = []
+        for path, number in hits[:SEARCH_MAX_LINES]:
+            lines = self._lines(path)
+            text = (
+                lines[number - 1][:LINE_MAX_CHARS].rstrip() if isinstance(lines, list) and number <= len(lines) else ""
+            )
+            if text:
+                rows.append((path, number, text))
         note = _counted(len(hits), "line", "lines")
-        note += f", the first {len(shown)} shown" if len(shown) < len(hits) else ""
-        rows = [f"{path}:{number}:{text}" for path, number, text in shown]
-        if not got.shows("\n".join([f"=== search: {term} ({note})", *rows])):
+        note += f", the first {SEARCH_MAX_LINES} shown" if len(hits) > SEARCH_MAX_LINES else ""
+        shown = [f"{path}:{number}:{text}" for path, number, text in rows]
+        if not got.shows("\n".join([f"=== search: {term} ({note})", *shown])):
             got.left_out.append(f"search for {term}: past what a round reads")
             return
-        for path, number, text in shown:
+        for path, number, text in rows:
             got.holds(path, number, text)

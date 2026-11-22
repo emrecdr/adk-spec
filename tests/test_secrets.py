@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from conftest import on_the_fake, run, seeded
 
-from adk_spec.domain.secrets import scrub
+from adk_spec.domain.secrets import scrub, scrub_lines
 from adk_spec.workspace.files import read_text
 from adk_spec.workspace.layout import Workspace
 from adk_spec.workspace.runs import listed
@@ -69,3 +69,19 @@ def test_a_scrub_that_fails_sends_nothing(tmp_path, monkeypatch, capsys, fake_pr
     assert run(tmp_path, "propose", "Let users sign in with a passkey.", "--tier", "lean", "--id", "unsent") == 3
     assert fake_provider.requests == [], "nothing unscrubbed is sent"
     assert "REDACTION_FAILED" in capsys.readouterr().err and not (tmp_path / ".spec/changes/unsent").exists()
+
+
+@pytest.mark.parametrize(("text", "secret"), SHAPES)
+def test_a_scrub_that_keeps_lines_hides_the_same_shapes_with_every_line_at_its_number(text: str, secret: str) -> None:
+    """Text a model is shown is also the text its quotes are looked for in, so a line must keep its number after a
+    shape that ran over several lines, a private key's block, was replaced by one mark."""
+    whole = f"before\n{text}\nafter\nlast"
+    scrubbed, count = scrub_lines(whole)
+    assert secret not in scrubbed and "[REDACTED" in scrubbed and count >= 1
+    assert len(scrubbed.split("\n")) == len(whole.split("\n")), "no line moved"
+    assert scrubbed.split("\n")[0] == "before" and scrubbed.split("\n")[-2:] == ["after", "last"]
+
+
+def test_a_scrub_that_keeps_lines_leaves_text_with_no_secret_as_it_is() -> None:
+    code = "token = get_token(request)\n\nclass TokenBucket: ...\n"
+    assert scrub_lines(code) == (code, 0)

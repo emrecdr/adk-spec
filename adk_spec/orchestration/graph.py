@@ -66,7 +66,8 @@ Entry = Literal["triage", "brief", "deltas"]
 
 @dataclass(frozen=True)
 class Known:
-    """What a run is told of the workspace, as plain values: no node reads a file."""
+    """What a run is told of the workspace, as plain values: no node of this module reads a file. The one app that
+    reads during its run is the reading of a repository's code, `explore.py`, through a reader it is handed."""
 
     living: Mapping[str, Spec]
     #: Every requirement ID spoken for, in a living spec or in an open change.

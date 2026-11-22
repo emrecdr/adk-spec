@@ -4,7 +4,7 @@ list, a survey states what it shows, and code keeps a statement only where its q
 from __future__ import annotations
 
 import pytest
-from conftest import between, repository
+from conftest import between, on_the_fake, repository
 
 from adk_spec.orchestration import explore
 from adk_spec.orchestration.explore import build_explore_app, explored
@@ -27,10 +27,8 @@ DOCS = {"kind": "convention", "file": "docs/auth.md", "quote": "Sessions last ei
 
 
 @pytest.fixture(autouse=True)
-def _on_the_fake(monkeypatch) -> None:
-    monkeypatch.setenv("SPEC_PROVIDER", "gemini")
-    monkeypatch.setenv("SPEC_MODEL", "fake")
-    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+def _fake_arm(monkeypatch) -> None:
+    on_the_fake(monkeypatch)
 
 
 def survey(*statements: dict, files: tuple[str, ...] = ()) -> dict:
@@ -39,7 +37,7 @@ def survey(*statements: dict, files: tuple[str, ...] = ()) -> dict:
 
 async def read(root):
     repository(root, FILES)
-    held = Source.of(root)
+    held = Source.of(root, exclude=())
     seed = {BRIEF_TEXT: "# Sign in with a passkey\n", DELTAS_TEXT: "", CONSTITUTION: "", TREE: tree_text(held.paths)}
     return await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
 
@@ -125,3 +123,24 @@ async def test_no_more_statements_are_kept_than_the_budget(tmp_path, monkeypatch
     fake_provider.answers_when(SURVEY, survey(APP, more, {**APP, "kind": "risk"}, files=("src/auth/session.py",)))
     found = explored((await read(tmp_path)).state)
     assert len(found.statements) == 2 and len(sent(fake_provider, SURVEY)) == 1, "a full budget ends the reading"
+
+
+@pytest.mark.asyncio
+async def test_a_reader_that_fails_on_a_later_look_loses_no_statement_already_made(
+    tmp_path, monkeypatch, fake_provider
+) -> None:
+    """Found by the cleanup review: one node held a statement to its quote and then read on, so a failure of the
+    reading threw away the statement the survey had just been paid to make."""
+    looks = []
+    real = Source.gathered
+
+    def flaky(self, files, folders, searches):
+        looks.append(files)
+        if len(looks) == 2:
+            raise OSError("the disk went away")
+        return real(self, files, folders, searches)
+
+    monkeypatch.setattr(Source, "gathered", flaky)
+    fake_provider.answers_when(SURVEY, survey(APP, files=("src/auth/session.py",)))
+    run = await read(tmp_path)
+    assert [one.path for one in explored(run.state).statements] == ["src/app.py"] and len(looks) == 2

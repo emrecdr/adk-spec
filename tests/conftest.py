@@ -4,8 +4,10 @@ The fake goes through ADK's own resolution path: `LLMRegistry` maps a model name
 `FakeModel` for `fake.*` and setting `SPEC_MODEL=fake` on the Gemini arm makes the real `build_model()` hand its
 agents the fake. Nothing in the package is patched: the real runner, workflow and agents all run. The fake answers
 the canned answer the request's schema accepts, a sentence where there is no schema, and what a test told it for a
-request whose instruction contains a text. One canned answer is fitted to its request: a task list names the
-requirements the request's deltas add or modify (`tasks_serving`), since a list that serves others fails its gate.
+request whose instruction contains a text. Three canned answers are fitted to their request, since one that does
+not fit would pass for work it did not do: a task list names the requirements the request's deltas add or modify
+(`tasks_serving`), a scout names a file the request lists (`scout_naming`), and a survey quotes text the request
+shows (`survey_quoting`).
 """
 
 from __future__ import annotations
@@ -201,6 +203,42 @@ def tasks_serving(instruction: str) -> dict:
     return {"groups": groups}
 
 
+def scout_naming(instruction: str) -> dict:
+    """The canned scout, naming a file the request's own list of files holds: its own where that is listed, and the
+    first one otherwise. A scout that names a file the repository does not hold reads nothing, and a test would
+    then pass without the reading it thinks it made."""
+    try:
+        listed = [line for line in between(instruction, "tree").split("\n") if line and not line.endswith(")")]
+    except ValueError:
+        return CANNED_SCOUT
+    if not listed or set(CANNED_SCOUT["files"]) <= set(listed):
+        return CANNED_SCOUT
+    return {**CANNED_SCOUT, "files": listed[:1]}
+
+
+_SHOWN = re.compile(
+    r"^=== (?P<path>\S+) \((?:whole|lines \d+ to \d+ of \d+)\)\n(?P<text>(?:(?!===).*\n?)*)", re.MULTILINE
+)
+
+
+def survey_quoting(instruction: str) -> dict:
+    """The canned survey, quoting text the request really shows: the first line of eight characters or more of the
+    first file under `material`. Where the canned statement's own file is shown, it is the canned survey itself."""
+    try:
+        material = between(instruction, "material")
+    except ValueError:
+        return CANNED_SURVEY
+    canned = CANNED_SURVEY["statements"][0]
+    for found in _SHOWN.finditer(material):
+        if found["path"] == canned["file"] and canned["quote"] in found["text"]:
+            return CANNED_SURVEY
+    for found in _SHOWN.finditer(material):
+        quote = next((line.strip() for line in found["text"].split("\n") if len(line.strip()) >= 8), None)
+        if quote:
+            return {**CANNED_SURVEY, "statements": [{**canned, "file": found["path"], "quote": quote}]}
+    return {**CANNED_SURVEY, "statements": []}
+
+
 class FakeProvider:
     """What the fake does for a request whose instruction contains a text, per test, and every request it was sent."""
 
@@ -271,8 +309,13 @@ class FakeModel(Gemini):
         schema = llm_request.config.response_schema
         if payload is None and schema is not None:
             payload = canned_for(schema)
-            if payload is CANNED_TASKS:
-                payload = tasks_serving(str(llm_request.config.system_instruction or ""))
+            fitted = {
+                id(CANNED_TASKS): tasks_serving,
+                id(CANNED_SCOUT): scout_naming,
+                id(CANNED_SURVEY): survey_quoting,
+            }
+            if fit := fitted.get(id(payload)):
+                payload = fit(str(llm_request.config.system_instruction or ""))
         if isinstance(payload, str):
             text = payload
         else:

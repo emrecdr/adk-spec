@@ -471,9 +471,9 @@ def test_propose_reads_the_code_once_the_change_is_written(tmp_path, capsys, fak
     capsys.readouterr()
     assert proposed(tmp_path, "--tier", "lean", "--id", "read") == 0
     scout, survey = "You choose what to read", "You read parts of a repository's code"
-    assert [asked(fake_provider, opening) for opening in (BRIEF, DELTAS, scout, survey, TASKS)] == [1, 1, 1, 1, 1]
-    order = [str(r.config.system_instruction).split(".")[0] for r in fake_provider.requests]
-    assert order.index(scout.split(".")[0] + " of a repository's code before a change to it is planned") > 1
+    sent = [str(r.config.system_instruction) for r in fake_provider.requests]
+    order = [next(o for o in (BRIEF, DELTAS, scout, survey, TASKS) if text.startswith(o)) for text in sent]
+    assert order == [BRIEF, DELTAS, scout, survey, TASKS], "the reading comes after the specs and before the plan"
     assert "return password()" in read_text(tmp_path / ".spec/changes/read/context.md")
     out = capsys.readouterr().out
     assert "explored  1 file: 1 statement kept" in out and ".spec/changes/read/context.md" in out

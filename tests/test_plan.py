@@ -10,10 +10,11 @@ from adk_spec.domain.spec_md import parse_spec
 from adk_spec.workspace.files import read_text, write_text
 
 DESIGN, TASKS = "You write the design of a change", "You break a change into tasks"
+SCOUT, SURVEY = "You choose what to read", "You read parts of a repository's code"
 
 
 def openings(fake_provider) -> list[str]:
-    known = (DESIGN, TASKS)
+    known = (DESIGN, TASKS, SCOUT, SURVEY)
     sent = (str(r.config.system_instruction) for r in fake_provider.requests)
     return [next((opening for opening in known if instruction.startswith(opening)), "?") for instruction in sent]
 
@@ -138,9 +139,8 @@ def test_plans_stages_are_shown_the_repositorys_files(tmp_path, fake_provider) -
     ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"needs_design": True}))
     repository(tmp_path, {"src/app.py": "x = 1\n", "tests/test_app.py": "def test_x(): ...\n"})
     assert run(tmp_path, "plan", "passkeys", "--replace") == 0
-    drafting = [str(r.config.system_instruction) for r in fake_provider.requests][-2:]
-    assert [text.startswith(opening) for text, opening in zip(drafting, (DESIGN, TASKS), strict=True)] == [True, True]
-    design, tasks = (between(text, "tree") for text in drafting)
+    assert openings(fake_provider)[-2:] == [DESIGN, TASKS]
+    design, tasks = (between(str(r.config.system_instruction), "tree") for r in fake_provider.requests[-2:])
     assert design == tasks == "src/app.py\ntests/test_app.py", "what git tracks, and nothing of .spec/"
 
 
@@ -232,16 +232,14 @@ def test_the_plan_is_shown_no_excluded_file(tmp_path, fake_provider) -> None:
 
 # The plan reads the code first: brownfield, part 1.
 
-SCOUT, SURVEY = "You choose what to read", "You read parts of a repository's code"
 CONTEXT = ".spec/changes/passkeys/context.md"
 STATED = "- `src/app.py:2` Sign-in is decided here.\n  > return password()"
 
 
 def stages(fake_provider) -> list[str]:
-    """The stage each request went to, in order, by the first words of its instruction."""
+    """The stage each request went to, in order."""
     names = {SCOUT: "scout", SURVEY: "survey", TASKS: "tasks", DESIGN: "design"}
-    sent = [str(r.config.system_instruction) for r in fake_provider.requests]
-    return [next(name for opening, name in names.items() if text.startswith(opening)) for text in sent]
+    return [names[opening] for opening in openings(fake_provider)]
 
 
 def test_plan_reads_the_code_and_the_tasks_are_shown_what_it_found(tmp_path, capsys, fake_provider) -> None:
@@ -299,6 +297,7 @@ def test_a_reading_that_fails_does_not_stop_the_plan(tmp_path, capsys, fake_prov
 def test_a_scout_that_finds_nothing_to_read_says_so_and_the_plan_is_drafted(tmp_path, capsys, fake_provider) -> None:
     seeded(tmp_path)
     repository(tmp_path, {"lib/other.py": "x = 1\n"})
+    fake_provider.answers_when(SCOUT, {"files": ["src/gone.py"], "folders": [], "searches": [], "reason": "A guess."})
     capsys.readouterr()
     assert run(tmp_path, "plan", "passkeys", "--replace") == 0
     assert "explored  nothing: nothing the scout named could be read" in capsys.readouterr().out
@@ -347,3 +346,13 @@ def test_context_md_is_no_part_of_an_approval(tmp_path, capsys) -> None:
     write_text(tmp_path / CONTEXT, read_text(tmp_path / CONTEXT) + "\nA note of mine.\n")
     capsys.readouterr()
     assert run(tmp_path, "status") == 0 and "approve again" not in capsys.readouterr().out
+
+
+def test_a_context_that_is_no_text_is_said_and_not_read_as_none(tmp_path, capsys, fake_provider) -> None:
+    """Found by the cleanup review: a `context.md` saved in another encoding was read as nothing, and being there
+    it also stopped the code from being read."""
+    seeded(tmp_path)
+    repository(tmp_path)
+    (tmp_path / CONTEXT).write_bytes(bytes([0xFF, 0xFE, 0x43, 0x00]))
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 2
+    assert "context.md is not UTF-8" in capsys.readouterr().err and fake_provider.requests == []

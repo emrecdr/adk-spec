@@ -18,31 +18,32 @@ from google.adk.agents.context import Context
 from google.adk.apps.app import App
 from google.adk.events import Event
 from google.adk.plugins.base_plugin import BasePlugin
-from google.adk.workflow import Workflow
 
 from ..domain.convert import to_statements
 from ..domain.drafts import ScoutDraft, SurveyDraft
 from ..domain.model import Statement
-from ..workspace.source import Source, merged
+from ..workspace.source import FILES_A_ROUND, FOLDERS_A_ROUND, SEARCHES_A_ROUND, Source, merged
 from .gate import AGAIN, GIVE_UP, OK, checked, tries_key
-from .plugins import UsageLedger, roster
+from .graph import NONE, SOME, _app, _ended
+from .plugins import UsageLedger
 from .stages import scout as scout_stage
 from .stages import survey as survey_stage
 from .stages.survey import MATERIAL, READ, STATED
 
-NAME = "adk_spec"
 #: How many rounds of reading one change gets, and how many statements are kept of it.
 LOOK_BUDGET = 3
 STATEMENT_BUDGET = 40
-SOME, NONE = "SOME", "NONE"
 #: The state keys of a reading: the statements kept, each file's text as it was shown, what was asked for and not
-#: given, how many statements quoted nothing real, and how many rounds were read.
+#: given, how many statements quoted nothing real, how many rounds were read, every file read, how far each file
+#: was read from its top, and every request that was made.
 KEPT = "kept"
 SEEN = "seen"
 LEFT_OUT = "left_out"
 DROPPED = "dropped"
 LOOKS = "looks"
 _READ_LIST = "read_list"
+_REACHED = "reached"
+_ASKED = "asked"
 
 
 @dataclass(frozen=True)
@@ -66,75 +67,97 @@ def explored(state: Mapping[str, Any]) -> Explored:
     )
 
 
-def _ended() -> Event:
-    return Event(output="ended")
-
-
 def _said(statements: Sequence[Statement]) -> str:
     """The statements kept so far, as a later round reads them: one a line."""
     return "\n".join(f"- {one.kind}: {one.path}:{one.line} {one.note}" for one in statements)
 
 
+def _new(state: Mapping[str, Any], files: Sequence[str], folders: Sequence[str], searches: Sequence[str]) -> Any:
+    """What of a request has not been answered yet, within a round's caps, with the key each piece is remembered
+    by. A file read to its end and a request made before are left out: the same text shown again would be paid for
+    with a model call and tell it nothing. A file read from its top and cut there is read on from where it stopped,
+    which is what asking for it again by its path means."""
+    reached, asked = state.get(_REACHED) or {}, set(state.get(_ASKED) or ())
+    wanted: list[tuple[str, str]] = []
+    for one in files:
+        path = one.strip()
+        if path in reached:
+            upto, total = reached[path]
+            wanted += [(f"{path}:{upto + 1}-{total}", f"file {path}:{upto + 1}")] if upto < total else []
+        else:
+            wanted.append((path, f"file {path}"))
+    fresh = [(what, key) for what, key in wanted if key not in asked][:FILES_A_ROUND]
+    listed = [(one, f"folder {one.strip().strip('/')}") for one in folders]
+    sought = [(one, f"search {one.strip()}") for one in searches]
+    fresh_folders = [(what, key) for what, key in listed if key not in asked][:FOLDERS_A_ROUND]
+    fresh_searches = [(what, key) for what, key in sought if key not in asked][:SEARCHES_A_ROUND]
+    return fresh, fresh_folders, fresh_searches
+
+
 def _looking(source: Source) -> tuple[Callable[[Context], Event], Callable[[Context], Event]]:
     """The two nodes that read: the first look, of what the scout named, and each look after a survey."""
 
-    def look(
-        state: Mapping[str, Any], files: Sequence[str], folders: Sequence[str], searches: Sequence[str]
-    ) -> tuple[str, dict[str, Any]]:
-        """One round read: where the run goes next, and what the round leaves in state. It goes to the survey with
-        what was read, or to its end where there is nothing to show."""
-        read = list(state.get(_READ_LIST) or ())
-        whole = {note.removesuffix(" (whole)") for note in read if note.endswith(" (whole)")}
-        got = source.gathered([path for path in files if path.strip() not in whole], folders, searches)
+    def look(state: Mapping[str, Any], files: Sequence[str], folders: Sequence[str], searches: Sequence[str]) -> Event:
+        """One round read and left in state for the survey, or the run's end where nothing new is left to show."""
+        fresh = _new(state, files, folders, searches)
+        if not any(fresh):
+            return Event(route=NONE)
+        got = source.gathered(*([what for what, _key in part] for part in fresh))
         seen = dict(state.get(SEEN) or {})
         for path, text in got.texts.items():
-            seen[path] = merged(seen[path], text) if path in seen else text
+            seen[path] = merged(seen.get(path, ""), text)
+        reached = dict(state.get(_REACHED) or {})
+        for path, (first, upto, total) in got.reached.items():
+            if first == 1 or (path in reached and first == reached[path][0] + 1):  # read on from its top
+                reached[path] = [upto, total]
+        read = list(state.get(_READ_LIST) or ())
         read += [note for note in got.read if note not in read]
         update = {
             SEEN: seen,
+            _REACHED: reached,
+            _ASKED: [*(state.get(_ASKED) or ()), *(key for part in fresh for _what, key in part)],
             _READ_LIST: read,
             READ: "\n".join(read),
             LEFT_OUT: [*(state.get(LEFT_OUT) or ()), *got.left_out],
         }
         if not got.shown:
-            return NONE, update
+            return Event(route=NONE, state=update)
         # The survey of this round starts anew: its own tries, and no answer of the round before to be taken for it.
-        fresh = {survey_stage.KEY: None, tries_key(survey_stage.KEY): 0, LOOKS: (state.get(LOOKS) or 0) + 1}
-        return SOME, {**update, **fresh, MATERIAL: got.shown}
+        anew = {survey_stage.KEY: None, tries_key(survey_stage.KEY): 0, LOOKS: (state.get(LOOKS) or 0) + 1}
+        return Event(route=SOME, state={**update, **anew, MATERIAL: got.shown})
 
     def first_look(ctx: Context) -> Event:
         asked = ScoutDraft.model_validate(ctx.state[scout_stage.KEY])
-        route, update = look(ctx.state.to_dict(), asked.files, asked.folders, asked.searches)
-        return Event(route=route, state=update)
+        return look(ctx.state.to_dict(), asked.files, asked.folders, asked.searches)
 
-    def grounded(ctx: Context) -> Event:
-        """What the survey stated is held to the text it was shown, and what it asked for is read while a round and
-        room for a statement are left."""
-        state = ctx.state.to_dict()
-        answer = SurveyDraft.model_validate(state[survey_stage.KEY])
-        fresh, dropped = to_statements(answer, state.get(SEEN) or {})
-        kept = [Statement.model_validate(one) for one in state.get(KEPT) or ()]
-        held = {(one.path, one.line, one.kind) for one in kept}
-        kept += [one for one in fresh if (one.path, one.line, one.kind) not in held]
-        kept = kept[:STATEMENT_BUDGET]
-        update = {
-            KEPT: [one.model_dump() for one in kept],
-            STATED: _said(kept),
-            DROPPED: (state.get(DROPPED) or 0) + dropped,
-        }
-        more = (answer.more_files, answer.more_folders, answer.more_searches)
-        if not any(more) or (state.get(LOOKS) or 0) >= LOOK_BUDGET or len(kept) >= STATEMENT_BUDGET:
-            return Event(route=NONE, state=update)
-        route, read = look({**state, **update}, *more)
-        return Event(route=route, state={**update, **read})
+    def next_look(ctx: Context) -> Event:
+        asked = SurveyDraft.model_validate(ctx.state[survey_stage.KEY])
+        return look(ctx.state.to_dict(), asked.more_files, asked.more_folders, asked.more_searches)
 
-    return first_look, grounded
+    return first_look, next_look
+
+
+def _grounded(ctx: Context) -> Event:
+    """What the survey stated is held to the text it was shown, and kept. It is a node of its own, before any
+    further reading: what was kept is in state whatever becomes of the reading after it. The run reads on where the
+    survey asked for more and a round and room for a statement are left."""
+    state = ctx.state.to_dict()
+    answer = SurveyDraft.model_validate(state[survey_stage.KEY])
+    fresh, dropped = to_statements(answer, state.get(SEEN) or {})
+    before = explored(state)
+    held = {(one.path, one.line, one.kind) for one in before.statements}
+    kept = [*before.statements, *(one for one in fresh if (one.path, one.line, one.kind) not in held)]
+    kept = kept[:STATEMENT_BUDGET]
+    update = {KEPT: [one.model_dump() for one in kept], STATED: _said(kept), DROPPED: before.dropped + dropped}
+    more = any((answer.more_files, answer.more_folders, answer.more_searches))
+    on = more and (state.get(LOOKS) or 0) < LOOK_BUDGET and len(kept) < STATEMENT_BUDGET
+    return Event(route=SOME if on else NONE, state=update)
 
 
 def build_explore_app(*, source: Source, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:
     """The scout behind its gate, the first look, and then the survey behind its gate for as many rounds as it asks
     for and the budget leaves. Every way out ends the run: what was kept is read from its state by `explored`."""
-    first_look, grounded = _looking(source)
+    first_look, next_look = _looking(source)
     scout, scout_gate = scout_stage.build_scout(), checked(scout_stage.KEY, lambda _state: [])
     survey, survey_gate = survey_stage.build_survey(), checked(survey_stage.KEY, lambda _state: [])
     edges: list[Any] = [
@@ -142,7 +165,8 @@ def build_explore_app(*, source: Source, ledger: UsageLedger, recorder: BasePlug
         (scout_gate, {OK: first_look, AGAIN: scout, GIVE_UP: _ended}),
         (first_look, {SOME: survey, NONE: _ended}),
         (survey, survey_gate),
-        (survey_gate, {OK: grounded, AGAIN: survey, GIVE_UP: _ended}),
-        (grounded, {SOME: survey, NONE: _ended}),
+        (survey_gate, {OK: _grounded, AGAIN: survey, GIVE_UP: _ended}),
+        (_grounded, {SOME: next_look, NONE: _ended}),
+        (next_look, {SOME: survey, NONE: _ended}),
     ]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
+    return _app(edges, ledger, recorder)

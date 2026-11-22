@@ -67,14 +67,20 @@ def load_config(path: Path) -> Config:
     return Config(default_tier=tier, max_tokens=ceiling, keep_runs=keep, exclude=_excluded(path, held))
 
 
+def _pattern(one: str) -> bool:
+    """Whether `one` is a pattern git takes for a path under the workspace's root: some text on one line, with no
+    colon at its start, which git reads as an instruction of its own, and no way out of the root, which git refuses,
+    so that every file would then be listed and read with nothing said."""
+    inside = not one.startswith(("/", ":")) and ".." not in one.split("/")
+    return bool(one.strip()) and one.isprintable() and one == one.strip() and inside
+
+
 def _excluded(path: Path, held: dict[str, object]) -> tuple[str, ...]:
     """The patterns under `[repository] exclude`, or none. Each is handed to git as a path to leave out, so one
     that opens with `:` is refused: git would read it as an instruction of its own."""
     repository = held.get("repository", {})
     value = repository.get("exclude", []) if isinstance(repository, dict) else []
-    good = isinstance(value, list) and all(
-        isinstance(one, str) and one.strip() and one.isprintable() and not one.startswith(":") for one in value
-    )
+    good = isinstance(value, list) and all(isinstance(one, str) and _pattern(one) for one in value)
     if not good:
         raise ConfigError(
             f"{path} sets exclude to `{value}`: a list of patterns, each a path from the workspace's root as git "

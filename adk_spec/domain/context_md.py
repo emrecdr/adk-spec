@@ -12,6 +12,8 @@ from collections.abc import Sequence
 
 from .model import Statement, StatementKind
 
+#: How the line begins that a reading which ended early carries at its top.
+PARTIAL = "This reading is partial: "
 #: The kinds of statement, each with the heading it stands under, in the order of the file.
 SECTIONS: tuple[tuple[StatementKind, str], ...] = (
     ("exists", "What exists"),
@@ -37,9 +39,7 @@ def render_context(
     where = f" at commit {commit[:12]}" if commit else ""
     lines = [f"# Context: {change_id}", "", f"Read from the repository{where} on {at[:10]}.", ""]
     if partial:
-        lines += [f"This reading is partial: {partial}.", ""]
-    if not statements:
-        lines += ["No statement was kept.", ""]
+        lines += [f"{PARTIAL}{partial}.", ""]
     for kind, heading in SECTIONS:
         held = [one for one in statements if one.kind == kind]
         if held:

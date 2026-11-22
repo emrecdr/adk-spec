@@ -88,7 +88,7 @@ def test_context_md_has_a_section_a_kind_and_says_what_was_read_and_left_out() -
     assert [kind for kind, _heading in SECTIONS] == ["exists", "touches", "convention", "risk"]
 
 
-def test_a_partial_reading_says_so_at_its_top_and_an_empty_one_says_nothing_was_kept() -> None:
+def test_a_partial_reading_says_so_at_its_top() -> None:
     text = render_context(
         "passkeys",
         at="2026-11-22T10:00:00+00:00",
@@ -98,4 +98,4 @@ def test_a_partial_reading_says_so_at_its_top_and_an_empty_one_says_nothing_was_
         partial="the token ceiling was spent",
     )
     assert "Read from the repository on 2026-11-22.\n\nThis reading is partial: the token ceiling was spent.\n" in text
-    assert "No statement was kept." in text and "## What was read\n\n- nothing\n" in text
+    assert "## What was read\n\n- nothing\n" in text

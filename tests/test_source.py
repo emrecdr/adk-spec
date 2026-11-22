@@ -19,7 +19,7 @@ FILES = {"src/app.py": APP, "src/auth/session.py": "def start_session(user):\n  
 
 def made(root, files: dict[str, str] | None = None) -> Source:
     repository(root, files or FILES)
-    return Source.of(root)
+    return Source.of(root, exclude=())
 
 
 def test_a_file_git_lists_is_read_whole_and_one_past_the_cap_is_cut_and_says_so(tmp_path, monkeypatch) -> None:
@@ -111,7 +111,9 @@ def test_a_search_is_a_fixed_string_and_its_lines_can_be_quoted(tmp_path) -> Non
     assert "=== search: .* (0 lines)" in got.shown and "=== search: $(touch pwned) (0 lines)" in got.shown
     assert not (tmp_path / "pwned").exists()
     assert got.texts["src/auth/session.py"].split("\n")[0] == "def start_session(user):"
-    assert grep(tmp_path, "PASSWORD") == ["src/app.py:2:    return password(user)"], "letters match in either case"
+    assert grep(tmp_path, "PASSWORD", exclude=()) == ["src/app.py:2:    return password(user)"], (
+        "letters match in either case"
+    )
 
 
 def test_a_round_holds_no_more_than_its_caps(tmp_path, monkeypatch) -> None:
@@ -127,3 +129,52 @@ def test_a_round_holds_no_more_than_its_caps(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(source, "ROUND_MAX_CHARS", 60)
     tight = held.gathered(["src/f00.py", "src/f01.py", "src/f02.py"], [], [])
     assert len(tight.read) < 3 and any("past what a round reads" in said for said in tight.left_out)
+
+
+# Found by the cleanup review: a private key's body was shown.
+
+KEY_LINE = "BAAKCAQEA7x1yQ9"
+PEM = "-----BEGIN RSA " + "PRIVATE KEY-----\n" + "".join(f"MIIEow{n}{KEY_LINE}\n" for n in range(6))
+PEM += "-----END RSA " + "PRIVATE KEY-----\n"
+
+
+def test_a_private_keys_body_is_never_shown_whole_by_range_or_by_search(tmp_path) -> None:
+    """Each line was scrubbed alone before the whole text was: the header line was hidden first, so the block that
+    starts with it was no longer known for one, and its body was shown. A range of lines, and a line a search
+    found, were cut out of the file before anything was scrubbed at all."""
+    held = made(tmp_path, {**FILES, "deploy/key.pem": "# the deploy key\n" + PEM + "after = 1\n"})
+    whole = held.gathered(["deploy/key.pem"], [], [])
+    ranged = held.gathered(["deploy/key.pem:3-6"], [], [])
+    found = held.gathered([], [], [KEY_LINE])
+    for got in (whole, ranged, found):
+        assert "MIIEow" not in got.shown and all("MIIEow" not in text for text in got.texts.values())
+    assert found.shown.startswith(f"=== search: {KEY_LINE} (5 lines)"), "the word is the model's own; no line is shown"
+    lines = whole.texts["deploy/key.pem"].split("\n")
+    assert lines[0] == "# the deploy key" and lines[9] == "after = 1", "the line after the block keeps its number"
+    assert "[REDACTED" in whole.shown
+
+
+def test_a_file_that_cannot_be_opened_and_a_search_git_refuses_are_left_out_and_are_no_error(
+    tmp_path, monkeypatch
+) -> None:
+    """Found by the cleanup review: the reader raised where it promises to leave out. One locked file ended a
+    whole reading."""
+    from adk_spec.workspace.git import GitError
+
+    held = made(tmp_path)
+    locked = tmp_path / "src/app.py"
+    locked.chmod(0)
+    try:
+        if os.access(locked, os.R_OK):
+            pytest.skip("this account reads a file whatever its mode")
+        got = held.gathered(["src/app.py", "src/auth/session.py"], [], [])
+    finally:
+        locked.chmod(0o644)
+    assert got.read == ("src/auth/session.py (whole)",) and "src/app.py: could not be read" in got.left_out[0]
+
+    def refused(*_args, **_kwargs):
+        raise GitError("git grep failed: a bad pattern")
+
+    monkeypatch.setattr(source, "grep", refused)
+    got = held.gathered([], [], ["login"])
+    assert got.shown == "" and "search for login: git grep failed" in got.left_out[0]

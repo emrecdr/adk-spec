@@ -216,7 +216,9 @@ def test_excluded_paths_are_read_from_the_config(tmp_path) -> None:
     assert ws.config().exclude == ("vendor/**", "**/*.pem")
 
 
-@pytest.mark.parametrize("value", ['"vendor/**"', "[3]", '[""]', '[":(top)secret"]', '["a\\nb"]'])
+@pytest.mark.parametrize(
+    "value", ['"vendor/**"', "[3]", '[""]', '[":(top)secret"]', '["a\\nb"]', '["/vendor/**"]', '["src/../../x/**"]']
+)
 def test_exclude_must_be_a_list_of_patterns(tmp_path, value) -> None:
     """A pattern is handed to git as a path to leave out. One that opens with `:` would be read by git as an
     instruction of its own, so it is refused by name."""

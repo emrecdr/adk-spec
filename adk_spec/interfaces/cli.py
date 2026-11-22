@@ -23,7 +23,7 @@ from typing import Any, NoReturn, get_args
 
 from ..domain.brief_md import render_brief
 from ..domain.check import nameable, owed, removed
-from ..domain.context_md import render_context
+from ..domain.context_md import PARTIAL, render_context
 from ..domain.convert import render_design, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
@@ -47,6 +47,7 @@ from ..domain.lifecycle import (
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import Brief, ChangeState, Finding, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_verify
+from ..domain.secrets import scrub_lines
 from ..domain.spec_md import render_spec
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
@@ -58,13 +59,13 @@ from ..workspace.context import (
     ContextTooLargeError,
     capability_index,
     constitution_text,
+    context_text,
     files_text,
     living_text,
     tree_text,
 )
-from ..workspace.files import NotTextError, read_text
+from ..workspace.files import NotTextError
 from ..workspace.git import DIFF_MAX_CHARS, GitError, diff, head, is_repository, resolves
-from ..workspace.git import files as tracked_files
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGES,
@@ -785,12 +786,14 @@ def _of_tasks(found: Finding) -> bool:
     return found.code.startswith("tasks.") or (found.path or "").rsplit("/", 1)[-1] == TASKS_FILE
 
 
-def _tree(workspace: Workspace) -> str:
-    """The repository's files as a stage is shown them, or nothing: no repository here, or no git to ask."""
+def _source(workspace: Workspace) -> Source | None:
+    """The repository's files, as git lists them once for a command, less what a person excluded: what a stage is
+    shown the names of, and what a reading of the code is made through. None where there is no repository here, or
+    no git to ask."""
     try:
-        return tree_text(tracked_files(workspace.root, exclude=workspace.config().exclude))
+        return Source.of(workspace.root, exclude=workspace.config().exclude)
     except GitError:
-        return ""
+        return None
 
 
 #: A ticked box of a task list, wherever its line stands: read in the text of a list that no longer parses.
@@ -866,20 +869,21 @@ def _plan_made(
     from ..orchestration.stages.design import read_design
     from ..orchestration.stages.tasks import DESIGN_TEXT, read_tasks
 
+    source = _source(workspace)
     seed = {
         RULES: constitution_text(workspace),
         BRIEF_TEXT: render_brief(brief),
         DELTAS_TEXT: _deltas_text(change),
         LIVING: living_text(specs, sorted(change.deltas)),
-        TREE: _tree(workspace),
+        TREE: tree_text(source.paths) if source else "",
     }
     if change.design and not state.needs_design:  # a design a person wrote, where the brief owed none
         seed[DESIGN_TEXT] = change.design.strip()
     serves = {"owed": owed(change.deltas), "nameable": nameable(change.deltas, specs)}
     if ledger is None:  # one ceiling for the reading and the drafting: they are one command's
         ledger = UsageLedger(workspace.config().max_tokens or None)
-    said, context = _read_code(workspace, change_id, seed, ledger) if explore else ("", None)
-    seed[CONTEXT_TEXT] = _context_text(workspace, change_id)
+    said, context = _read_code(workspace, change_id, seed, ledger, source) if explore else ("", None)
+    seed[CONTEXT_TEXT] = context_text(workspace, change_id)
     read = [(context, False)] if context else []
 
     def build(ledger: Any, recorder: Any) -> Any:
@@ -887,7 +891,7 @@ def _plan_made(
 
     run, tasks, ledger, failure = _asked(workspace, "plan", change_id, build, seed, read_tasks, ledger=ledger)
     if failure:
-        return _Planned(read, ledger, failure, said)
+        return _Planned(ledger=ledger, failure=failure, explored=said)
     files = {TASKS_FILE: render_tasks(to_tasks(tasks))}
     design = read_design(run.state) if state.needs_design else None
     if design is not None and not isinstance(design, str):
@@ -899,36 +903,20 @@ def _plan_made(
     return _Planned([*read, *drafted], ledger, explored=said)
 
 
-#: How much of a `context.md` a stage is given.
-CONTEXT_MAX_CHARS = 20_000
-
-
-def _context_text(workspace: Workspace, change_id: str) -> str:
-    """A change's `context.md` as a stage reads it: as the file stands, a person's edits and all, or nothing where
-    there is none. One past the cap is cut, and says so."""
-    path = workspace.home / CHANGES / change_id / CONTEXT_FILE
-    try:
-        text = read_text(path).strip() if path.is_file() else ""
-    except NotTextError:
-        return ""
-    cut = "\n(cut here: context.md is longer than a stage is given)"
-    return text if len(text) <= CONTEXT_MAX_CHARS else text[:CONTEXT_MAX_CHARS] + cut
-
-
-def _read_code(workspace: Workspace, change_id: str, seed: dict[str, Any], ledger: Any) -> tuple[str, Path | None]:
-    """The repository's code read for a change, and `context.md` written from what was kept: what to say of it, and
-    the file where one was written. Nothing is read, and nothing said, where the change has a `context.md` already,
-    which is then a person's to keep, or where there is no repository or no file in it.
+def _read_code(
+    workspace: Workspace, change_id: str, seed: dict[str, Any], ledger: Any, source: Source | None
+) -> tuple[str, Path | None]:
+    """The repository's code read for a change, through `source`, and `context.md` written from what was kept:
+    what to say of it, and the file where one was written. Nothing is read where the change has a `context.md`
+    already, which is then a person's to keep, or where there is no repository or no file in it.
 
     A reading never stops a plan: one that fails, or keeps nothing, is said in a line, and the plan is drafted
     without it. One that ends early writes what it kept and says that it is partial."""
-    if (workspace.home / CHANGES / change_id / CONTEXT_FILE).is_file():
-        return "", None
-    try:
-        root = workspace.root
-        source = Source.of(root, exclude=workspace.config().exclude) if is_repository(root) else None
-    except GitError:
-        source = None
+    kept = workspace.home / CHANGES / change_id / CONTEXT_FILE
+    if kept.is_file():
+        # A reading that ended early is said each time it is used: nothing else would show that it is no whole one.
+        early = PARTIAL in context_text(workspace, change_id)
+        return ("kept: context.md is of a reading that ended early. Delete it to read again" if early else ""), None
     if source is None or not source.paths:
         return "", None
     from ..orchestration.explore import build_explore_app, explored
@@ -943,7 +931,10 @@ def _read_code(workspace: Workspace, change_id: str, seed: dict[str, Any], ledge
         return build_explore_app(source=source, ledger=ledger, recorder=recorder)
 
     reading = {key: seed[key] for key in (RULES, BRIEF_TEXT, DELTAS_TEXT, TREE)}
-    run, _answer, _ledger, failure = _asked(workspace, "explore", change_id, build, reading, explored, ledger=ledger)
+    nothing_to_read_back = lambda _state: None  # noqa: E731 -- what a reading kept is in its state, also where it failed
+    run, _none, _ledger, failure = _asked(
+        workspace, "explore", change_id, build, reading, nothing_to_read_back, ledger=ledger
+    )
     found = explored(run.state)
     if not found.statements:
         nothing = "nothing the scout named could be read" if not found.read else "no statement quoted what was read"
@@ -1066,6 +1057,9 @@ def _judged(
     from ..orchestration.stages import CONSTITUTION as RULES
     from ..orchestration.stages.check import read_check
 
+    # What a model is shown and what its quotes are looked for in are one text: every request is scrubbed of
+    # secret shapes, so a quote of a scrubbed line is found only in the scrubbed file.
+    texts = {path: scrub_lines(text)[0] for path, text in texts.items()}
     seed = {
         RULES: constitution_text(workspace),
         LIVING: living_text(specs, sorted(change.deltas)),
@@ -1155,6 +1149,9 @@ def _verdicts(
     from ..orchestration.stages import DELTAS_TEXT
     from ..orchestration.stages.verify import DIFF, REQUIRED, TASKS_TEXT, read_verify, required_text
 
+    # As in a check: the diff a model is shown and the diff its evidence is looked for in are one text, scrubbed
+    # once. The fingerprint of the work is of the diff as it stands, and is taken where the diff is cut.
+    text = scrub_lines(text)[0]
     seed = {
         DELTAS_TEXT: _deltas_text(change),
         TASKS_TEXT: render_tasks(change.tasks) if change.tasks else "",

@@ -14,6 +14,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .model import StatementKind
+
 
 class Triage(BaseModel):
     """How much ceremony a change request needs, and which capabilities it touches."""
@@ -209,7 +211,7 @@ class ScoutDraft(BaseModel):
 class StatementDraft(BaseModel):
     """One thing the code shows that matters for the change, with the text it rests on."""
 
-    kind: Literal["exists", "touches", "convention", "risk"] = Field(
+    kind: StatementKind = Field(
         description=(
             "exists: behaviour or code already there that the change builds on, or must not write a second time. "
             "touches: where the change plugs in, code that would be called, extended or changed. convention: how "
@@ -229,7 +231,10 @@ class SurveyDraft(BaseModel):
         description="Each thing the text above shows that matters for the change. Empty where it shows none."
     )
     more_files: list[str] = Field(
-        description="Files still worth reading, as for a first look. Empty where enough was read."
+        description=(
+            "Files still worth reading, each by its path, or with a range of lines: src/app.py:260-400. A file "
+            "that was cut is read on from where it stopped when you name it again. Empty where enough was read."
+        )
     )
     more_folders: list[str] = Field(description="Folders still worth listing. Empty where none is.")
     more_searches: list[str] = Field(description="Words still worth searching for. Empty where none is.")

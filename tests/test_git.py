@@ -20,7 +20,7 @@ def test_a_diff_is_the_base_against_the_working_tree_without_the_spec_tree(tmp_p
     base = repository(tmp_path, {"src/app.py": "def login():\n    return password()\n", ".spec/config.toml": "# a\n"})
     changed(tmp_path)
     (tmp_path / ".spec/config.toml").write_text("# changed\n", encoding="utf-8")
-    text = diff(tmp_path, base)
+    text = diff(tmp_path, base, exclude=())
     assert "+    return passkey()" in text and "-    return password()" in text and ".spec/" not in text
     assert "+++ b/src/app.py" in text
 
@@ -32,18 +32,20 @@ def test_a_file_git_does_not_track_yet_reads_as_added(tmp_path) -> None:
     (tmp_path / ".gitignore").write_text("build/\n", encoding="utf-8")
     (tmp_path / "build").mkdir()
     (tmp_path / "build/out.txt").write_text("generated\n", encoding="utf-8")
-    text = diff(tmp_path, base)
+    text = diff(tmp_path, base, exclude=())
     assert "+++ b/src/new.py" in text and "+def passkey():" in text and "generated" not in text
-    assert files(tmp_path) == [".gitignore", "src/app.py", "src/new.py"], "what git tracks or would: nothing ignored"
+    assert files(tmp_path, exclude=()) == [".gitignore", "src/app.py", "src/new.py"], (
+        "what git tracks or would: nothing ignored"
+    )
 
 
 def test_a_diff_of_a_subfolder_names_paths_from_that_folder(tmp_path) -> None:
     base = repository(tmp_path, {"service/src/app.py": "a = 1\n", "other/x.py": "x = 1\n"})
     (tmp_path / "service/src/app.py").write_text("a = 2\n", encoding="utf-8")
     (tmp_path / "other/x.py").write_text("x = 2\n", encoding="utf-8")
-    text = diff(tmp_path / "service", base)
+    text = diff(tmp_path / "service", base, exclude=())
     assert "+++ b/src/app.py" in text and "other/" not in text
-    assert files(tmp_path / "service") == ["src/app.py"]
+    assert files(tmp_path / "service", exclude=()) == ["src/app.py"]
 
 
 def test_git_is_never_started_from_the_current_folder(tmp_path, monkeypatch) -> None:
@@ -59,11 +61,13 @@ def test_a_persons_own_git_settings_change_nothing(tmp_path, monkeypatch) -> Non
     base = repository(tmp_path / "one")
     repository(tmp_path / "other", {"else.py": "x = 1\n"})
     changed(tmp_path / "one")
-    plain = diff(tmp_path / "one", base)
+    plain = diff(tmp_path / "one", base, exclude=())
     monkeypatch.setenv("GIT_DIR", str(tmp_path / "other/.git"))
     monkeypatch.setenv("GIT_EXTERNAL_DIFF", "a-program-that-must-not-run")
     monkeypatch.setenv("GIT_DIFF_OPTS", "-u0")
-    assert diff(tmp_path / "one", base) == plain and "def login():" in plain, "the context line is still there"
+    assert diff(tmp_path / "one", base, exclude=()) == plain and "def login():" in plain, (
+        "the context line is still there"
+    )
 
 
 def test_a_folder_that_is_no_repository_and_a_ref_that_is_none(tmp_path) -> None:
@@ -73,9 +77,9 @@ def test_a_folder_that_is_no_repository_and_a_ref_that_is_none(tmp_path) -> None
     assert resolves(tmp_path / "repo", "main") == sha and resolves(tmp_path / "repo", "no-such") is None
     assert resolves(tmp_path / "repo", "--version") is None, "an option is no revision"
     with pytest.raises(GitError, match="no-such"):
-        diff(tmp_path / "repo", "no-such")
+        diff(tmp_path / "repo", "no-such", exclude=())
     with pytest.raises(GitError):
-        diff(tmp_path, "HEAD")
+        diff(tmp_path, "HEAD", exclude=())
 
 
 def test_a_repository_with_no_commit_has_no_head(tmp_path) -> None:
@@ -117,9 +121,9 @@ def test_what_a_person_ignores_everywhere_is_no_new_work(tmp_path, monkeypatch) 
     (tmp_path / "repo/.idea").mkdir()
     (tmp_path / "repo/.idea/ws.xml").write_text("<x/>\n", encoding="utf-8")
     changed(tmp_path / "repo")
-    text = diff(tmp_path / "repo", base)
+    text = diff(tmp_path / "repo", base, exclude=())
     assert "supersecret-value" not in text and ".idea" not in text and "+    return passkey()" in text
-    assert files(tmp_path / "repo") == ["src/app.py"]
+    assert files(tmp_path / "repo", exclude=()) == ["src/app.py"]
 
 
 def test_a_subfolder_of_a_repository_another_account_owns_is_still_a_repository(tmp_path, monkeypatch) -> None:
@@ -153,7 +157,7 @@ def test_a_repositorys_own_diff_settings_change_no_path(tmp_path) -> None:
     _git(tmp_path, "config", "diff.noprefix", "true")
     _git(tmp_path, "config", "diff.mnemonicPrefix", "true")
     changed(tmp_path)
-    assert "+++ b/src/app.py" in diff(tmp_path, base)
+    assert "+++ b/src/app.py" in diff(tmp_path, base, exclude=())
 
 
 # Paths a person keeps out of every command: `[repository] exclude`.
@@ -162,7 +166,7 @@ def test_a_repositorys_own_diff_settings_change_no_path(tmp_path) -> None:
 def test_an_excluded_path_is_never_listed(tmp_path) -> None:
     repository(tmp_path, {"src/app.py": "x = 1\n", "vendor/lib.py": "y = 2\n", "keys/prod.pem": "k\n"})
     (tmp_path / "vendor/untracked.py").write_text("z = 3\n", encoding="utf-8")
-    assert files(tmp_path) == ["keys/prod.pem", "src/app.py", "vendor/lib.py", "vendor/untracked.py"]
+    assert files(tmp_path, exclude=()) == ["keys/prod.pem", "src/app.py", "vendor/lib.py", "vendor/untracked.py"]
     assert files(tmp_path, exclude=("vendor/**", "**/*.pem")) == ["src/app.py"]
 
 
@@ -175,6 +179,6 @@ def test_an_excluded_path_is_no_part_of_the_diff_tracked_or_not(tmp_path) -> Non
         "src/new.py": "m = 1\n",
     }.items():
         (tmp_path / path).write_text(text, encoding="utf-8")
-    whole, kept = diff(tmp_path, commit), diff(tmp_path, commit, exclude=("vendor/**",))
+    whole, kept = diff(tmp_path, commit, exclude=()), diff(tmp_path, commit, exclude=("vendor/**",))
     assert "vendor/lib.py" in whole and "vendor/new.py" in whole
     assert "src/app.py" in kept and "src/new.py" in kept and "vendor" not in kept

@@ -14,7 +14,7 @@ from ..domain.model import Spec
 from ..domain.spec_md import render_spec
 from ..domain.text import lines_of
 from .files import read_text
-from .layout import CONSTITUTION, Workspace, WorkspaceError
+from .layout import CHANGES, CONSTITUTION, CONTEXT, Workspace, WorkspaceError
 
 #: What a stage may be given of living specs, in characters. Provisional: sized for the smallest model a role may
 #: run on, 128,000 input tokens in the pinned LiteLLM map, until a live run measures it.
@@ -59,6 +59,20 @@ def joined(
 def files_text(texts: Mapping[str, str]) -> str:
     """A change's own files, each under a line naming its path in the change's folder, whole."""
     return joined(texts, what="the change's files", remedy="Split the change")
+
+
+#: How much of a change's `context.md` a stage is given.
+CONTEXT_FILE_MAX_CHARS = 20_000
+
+
+def context_text(workspace: Workspace, change_id: str) -> str:
+    """A change's `context.md` as a stage reads it: as the file stands, a person's edits and all, or nothing where
+    there is none. One past the cap is cut, and says so. `NotTextError` where the file is no text: it is there, and
+    reading it as nothing would also keep the code from being read again."""
+    path = workspace.home / CHANGES / change_id / CONTEXT
+    text = read_text(path).strip() if path.is_file() else ""
+    cut = "\n(cut here: context.md is longer than a stage is given)"
+    return text if len(text) <= CONTEXT_FILE_MAX_CHARS else text[:CONTEXT_FILE_MAX_CHARS] + cut
 
 
 def constitution_text(workspace: Workspace) -> str:

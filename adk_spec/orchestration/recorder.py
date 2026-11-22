@@ -25,8 +25,9 @@ from .stages import FINDINGS
 
 
 def _kept(answer: str | None) -> str | None:
-    """An answer as a recording keeps it: as it came, less any known secret shape. A model is sent none, since the
-    scrub reads every request first; an answer that holds one all the same is not written to disk."""
+    """A model's words as a recording keeps them: as they came, less any known secret shape. A model is sent none,
+    since the scrub reads every request first; words that hold one all the same are not written to a recording.
+    That is all this covers: an answer is also what a command writes its files from."""
     return scrub(answer)[0] if answer else None
 
 
@@ -59,7 +60,7 @@ class Recorder(BasePlugin):
         sent = {
             "stage": callback_context.agent_name,
             "instruction": str(llm_request.config.system_instruction or ""),
-            "findings": callback_context.state.get(FINDINGS),
+            "findings": _kept(callback_context.state.get(FINDINGS)),
         }
         self._sent = (sent, time.perf_counter())
         if self._heard is not None:

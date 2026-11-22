@@ -106,7 +106,8 @@ rest on what is there and not on file names.
 
 To keep paths out of every command, name them in `.spec/config.toml`. Each is a path from the folder that holds
 `.spec/`, as git reads a pattern. An excluded path is never read, never listed among the repository's files, and
-never part of the diff `verify` sends, so work done only there is no evidence for `verify`.
+never part of the diff `verify` sends, so work done only there is no evidence for `verify`. A `context.md` written
+before a path was excluded still holds what it quoted from it: delete the file to read again.
 
 ```toml
 [repository]

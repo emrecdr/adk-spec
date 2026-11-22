@@ -6,13 +6,10 @@ that file. The stage may ask to see more; code decides whether another round is 
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
-
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import SurveyDraft
-from . import THE_BRIEF, THE_DELTAS, instruction, read_back, section, stage
+from . import THE_BRIEF, THE_DELTAS, instruction, section, stage
 
 KEY = "survey"
 #: The state keys of a round: what was read for it, the statements kept so far, and every file read so far.
@@ -45,7 +42,3 @@ def build_survey() -> LlmAgent:
         THE_DELTAS,
     )
     return stage(KEY, "States what the code that was read shows for a change.", text, SurveyDraft)
-
-
-def read_survey(state: Mapping[str, Any]) -> SurveyDraft | str:
-    return read_back(state, KEY, SurveyDraft)

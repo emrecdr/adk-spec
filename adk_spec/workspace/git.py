@@ -195,19 +195,20 @@ def head(root: Path) -> str | None:
     return resolves(root, "HEAD")
 
 
-def _here(exclude: Sequence[str] = ()) -> tuple[str, ...]:
+def _here(exclude: Sequence[str]) -> tuple[str, ...]:
     """What limits a git command to the files under the folder it runs in: none of `.spec/`, and none a person
     excluded. Each of `exclude` is a pattern from that folder, read as a glob."""
     return (*_HERE, *(f":(exclude,glob){pattern}" for pattern in exclude))
 
 
-def _listed(root: Path, *which: str, exclude: Sequence[str] = ()) -> list[str]:
+def _listed(root: Path, *which: str, exclude: Sequence[str]) -> list[str]:
     return sorted(path for path in git(root, "ls-files", "-z", *which, *_here(exclude)).split("\0") if path)
 
 
-def files(root: Path, *, exclude: Sequence[str] = ()) -> list[str]:
+def files(root: Path, *, exclude: Sequence[str]) -> list[str]:
     """Every file under `root` that git tracks or would: nothing it ignores, nothing of `.spec/`, and nothing a
-    person excluded. Paths from `root`, with forward slashes."""
+    person excluded. Paths from `root`, with forward slashes. `exclude` has no default, here or in any reader of
+    the repository: a caller that forgot it would read what a person asked to keep out, and no test would fail."""
     return sorted(set(_listed(root, "--cached", "--others", "--exclude-standard", exclude=exclude)))
 
 
@@ -215,7 +216,7 @@ def files(root: Path, *, exclude: Sequence[str] = ()) -> list[str]:
 GREP_A_FILE = 5
 
 
-def grep(root: Path, term: str, *, exclude: Sequence[str] = ()) -> list[str]:
+def grep(root: Path, term: str, *, exclude: Sequence[str]) -> list[str]:
     """Each `path:line:text` git finds for `term` among the text files it tracks or would track under `root`:
     nothing it ignores, nothing of `.spec/`, nothing a person excluded, and `GREP_A_FILE` lines of a file at most.
     `term` is a fixed string, never a pattern, its letters matched in either case."""
@@ -223,7 +224,7 @@ def grep(root: Path, term: str, *, exclude: Sequence[str] = ()) -> list[str]:
     return [line for line in git(root, "grep", *asked, *_here(exclude), ok=(0, 1)).split("\n") if line]
 
 
-def diff(root: Path, base: str, *, exclude: Sequence[str] = ()) -> str:
+def diff(root: Path, base: str, *, exclude: Sequence[str]) -> str:
     """`base` against the working tree under `root`, as one unified diff with paths from `root`. A file git does
     not track yet reads as added: new work is new files, and a person may not have added them. `.spec/` is left
     out. `GitError` where `base` names no commit, or too many files are neither tracked nor ignored."""

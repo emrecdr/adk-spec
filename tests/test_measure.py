@@ -91,7 +91,7 @@ def test_the_measurement_runs_whole_on_the_fake(tmp_path, capsys, fake_provider)
     assert "| `no-task` | check | 2/2 |" in text and "| `half-done` | verify | 2/2, 2/2 |" in text
     assert "| `clean` | check | nothing planted | 0 |" in text
     assert "about 16 model calls" in capsys.readouterr().out, "it says what it is about to spend before it starts"
-    assert len(fake_provider.requests) == 14, "five cases of one call, and a plan whose scout found nothing to read"
+    assert len(fake_provider.requests) == 16, "five cases of one call, and a plan: its scout, its survey, its tasks"
 
 
 def test_one_case_can_be_measured_alone(tmp_path, fake_provider) -> None:

@@ -126,23 +126,19 @@ class Scrub(BasePlugin):
 
     def __init__(self) -> None:
         super().__init__(name="scrub")
-        #: How many secrets were hidden, over every call.
-        self.redacted = 0
 
     @override
     async def before_model_callback(self, *, callback_context: Any, llm_request: Any) -> LlmResponse | None:
         try:
             instruction = llm_request.config.system_instruction
             if isinstance(instruction, str):
-                llm_request.config.system_instruction, count = scrub(instruction)
-                self.redacted += count
+                llm_request.config.system_instruction = scrub(instruction)[0]
             elif instruction is not None:  # ADK writes a string: any other shape is refused, never sent unread
                 raise TypeError(f"the instruction is a {type(instruction).__name__}, and the scrub reads a string")
             for content in llm_request.contents or ():
                 for part in content.parts or ():
                     if part.text:
-                        part.text, count = scrub(part.text)
-                        self.redacted += count
+                        part.text = scrub(part.text)[0]
         except Exception as exc:  # noqa: BLE001 -- a scrub that breaks must not send what it did not read
             why = f"{REDACTION}: nothing was sent, since it could not be scrubbed of secrets first: {exc}"
             callback_context.state[STAGE_ERROR] = why
