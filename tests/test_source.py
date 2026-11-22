@@ -10,9 +10,10 @@ import shutil
 import pytest
 from conftest import repository
 
-from adk_spec.workspace import source
+from adk_spec.workspace import context, source
+from adk_spec.workspace.context import tree_text
 from adk_spec.workspace.git import diff, grep
-from adk_spec.workspace.source import Source
+from adk_spec.workspace.source import Source, SourceError
 
 APP = "def login(user):\n    return password(user)\n\n\ndef logout(user):\n    return None\n"
 FILES = {"src/app.py": APP, "src/auth/session.py": "def start_session(user):\n    return Session(user)\n"}
@@ -273,6 +274,131 @@ def test_what_was_left_out_for_room_is_named_to_the_stage_and_may_be_asked_for_a
     assert made(tmp_path / "b").gathered(["src/app.py", "src/auth/session.py"], [], []).deferred == (
         "src/auth/session.py",
     )
+
+
+# A change's other repositories: each read under its name, by the same rules as the first.
+
+API = {
+    "src/routes.py": "def sign_in(request):\n    return start_session(request.user)\n",
+    "README.md": "# The API\n",
+}
+
+
+def two(tmp_path, api: dict[str, str] | None = None) -> Source:
+    """A workspace repository and an API repository beside it, read as one source."""
+    repository(tmp_path / "app", FILES)
+    repository(tmp_path / "api", api or API)
+    return Source.of(tmp_path / "app", exclude=(), others=[("api", "../api")])
+
+
+def test_another_repository_is_read_under_its_name(tmp_path) -> None:
+    held = two(tmp_path)
+    assert held.paths == ["src/app.py", "src/auth/session.py", "api/README.md", "api/src/routes.py"]
+    assert held.names == ("api",) and held.missing == () and set(held.commits()) == {"api"}
+    got = held.gathered(["api/src/routes.py"], ["api/src"], [])
+    assert got.read == ("api/src/routes.py (whole)",) and got.texts["api/src/routes.py"].startswith("def sign_in(")
+    assert "=== api/src/routes.py (whole)\ndef sign_in(request):" in got.shown
+    assert "=== api/src/ (1 file)\napi/src/routes.py" in got.shown
+
+
+def test_a_search_finds_lines_in_every_repository(tmp_path) -> None:
+    got = two(tmp_path).gathered([], [], ["start_session"])
+    assert got.shown.startswith("=== search: start_session (2 lines)\n")
+    assert "src/auth/session.py:1:def start_session(user):" in got.shown
+    assert "api/src/routes.py:2:    return start_session(request.user)" in got.shown
+    assert set(got.texts) == {"src/auth/session.py", "api/src/routes.py"}
+
+
+def test_a_rounds_caps_are_shared_by_the_repositories(tmp_path, monkeypatch) -> None:
+    held = two(tmp_path)
+    monkeypatch.setattr(source, "ROUND_MAX_CHARS", 120)
+    got = held.gathered(["src/app.py", "api/src/routes.py"], [], [])
+    assert got.read == ("src/app.py (whole)",) and got.deferred == ("api/src/routes.py",)
+
+
+def test_every_rule_of_phase_6_holds_in_another_repository(tmp_path) -> None:
+    """git's own list, nothing ignored, the repository's own exclusions, no key file, no link on the path."""
+    own = '[project]\ndefault_tier = "lean"\n\n[repository]\nexclude = ["fixtures"]\n'
+    api = {**API, ".gitignore": "private/\n", "keys/live.pem": PEM, "fixtures/big.json": "{}\n"}
+    api |= {".spec/config.toml": own, "conf/settings.py": "DEBUG = False\n"}
+    repository(tmp_path / "app", FILES)
+    repository(tmp_path / "api", api)
+    (tmp_path / "api/private").mkdir()
+    (tmp_path / "api/private/settings.py").write_text("PRIVATE = 1\n", encoding="utf-8")
+    shutil.rmtree(tmp_path / "api/conf")
+    try:
+        os.symlink("private", tmp_path / "api/conf", target_is_directory=True)
+    except OSError:
+        pytest.skip("this system does not let a test make a symbolic link")
+    held = Source.of(tmp_path / "app", exclude=(), others=[("api", "../api")])
+    assert not [path for path in held.paths if path.startswith(("api/fixtures/", "api/private/", "api/.spec/"))]
+    got = held.gathered(["api/keys/live.pem", "api/conf/settings.py", "api/fixtures/big.json"], [], ["PRIVATE = 1"])
+    assert got.texts == {} and "=== search: PRIVATE = 1 (0 lines)" in got.shown, "the word is the model's; no line"
+    assert got.left_out == (
+        "api/keys/live.pem: holds a private key, which is never shown",
+        "api/conf/settings.py: a symbolic link is not read",
+        "api/fixtures/big.json: git lists no such file",
+    )
+
+
+def test_a_missing_repository_or_one_whose_config_does_not_load_is_named_and_left_out(tmp_path) -> None:
+    repository(tmp_path / "app", FILES)
+    repository(tmp_path / "api", {**API, ".spec/config.toml": "[project]\n"})
+    (tmp_path / "plain").mkdir()
+    others = [("api", "../api"), ("web", "../web"), ("plain", "../plain")]
+    held = Source.of(tmp_path / "app", exclude=(), others=others)
+    assert held.names == () and held.paths == ["src/app.py", "src/auth/session.py"]
+    assert held.missing[0].startswith("api: ") and "default_tier" in held.missing[0]
+    assert held.missing[1:] == ("web: no git repository at ../web", "plain: no git repository at ../plain")
+
+
+@pytest.mark.parametrize("spelled", [".", "./", "../app/src", "absolute", "link"])
+def test_this_repository_by_another_spelling_is_refused(tmp_path, spelled) -> None:
+    repository(tmp_path / "app", FILES)
+    if spelled == "absolute":
+        spelled = str(tmp_path / "app")
+    elif spelled == "link":
+        try:
+            os.symlink(tmp_path / "app", tmp_path / "again", target_is_directory=True)
+        except OSError:
+            pytest.skip("this system does not let a test make a symbolic link")
+        spelled = "../again"
+    with pytest.raises(SourceError, match="this repository itself"):
+        Source.of(tmp_path / "app", exclude=(), others=[("api", spelled)])
+
+
+def test_a_name_that_is_a_folder_here_is_refused(tmp_path) -> None:
+    repository(tmp_path / "app", FILES)
+    repository(tmp_path / "api", API)
+    with pytest.raises(SourceError, match="`src` is also a folder of this repository"):
+        Source.of(tmp_path / "app", exclude=(), others=[("src", "../api")])
+
+
+def test_each_repository_folds_its_own_files_and_one_repository_reads_as_before(tmp_path, monkeypatch) -> None:
+    solo = made(tmp_path / "solo")
+    assert solo.tree() == tree_text(solo.paths)
+    held = two(tmp_path, {**API, "docs/a.md": "a\n"})
+    monkeypatch.setattr(context, "TREE_MAX_PATHS", 2)
+    tree = held.tree()
+    assert tree.startswith("src/app.py\nsrc/auth/session.py\n=== api (3 files)\n3 files: too many to list."), tree
+
+
+def test_a_round_makes_its_searches_before_it_reads_its_files(tmp_path, monkeypatch) -> None:
+    """Measured live: files taken first filled a round, and every search the scout asked for was left out."""
+    long = "".join(f"line {n} of a long file\n" for n in range(1, 10))
+    held = made(tmp_path, {**FILES, "src/long.py": long})
+    monkeypatch.setattr(source, "ROUND_MAX_CHARS", len("=== src/long.py (whole)\n" + long) + 20)
+    got = held.gathered(["src/long.py"], [], ["start_session"])
+    assert "=== search: start_session (1 line)" in got.shown and got.deferred == ("src/long.py",)
+
+
+def test_the_line_that_opens_a_quoted_lines_block_is_found_in_the_file_as_it_stands(tmp_path) -> None:
+    """Measured live: a real quote from `_approve` was kept under a note about `propose`. The block a line stands in
+    is found by code, in the whole file, also where the stage was shown a range below its opening line."""
+    held = two(tmp_path)
+    assert held.within("src/app.py", 2) == "def login(user):" and held.within("src/app.py", 6) == "def logout(user):"
+    assert held.within("src/app.py", 1) == "" and held.within("src/nope.py", 1) == ""
+    assert held.within("api/src/routes.py", 2) == "def sign_in(request):"
 
 
 PPK_BODY = ["AAAAgQC" + "Z" * 57, "AAAAQQD" + "Y" * 57, "AAAAQQC" + "X" * 30]

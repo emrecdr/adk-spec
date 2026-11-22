@@ -76,7 +76,7 @@ def _environment(root: Path) -> dict[str, str]:
     env |= {"GIT_TERMINAL_PROMPT": "0"}
     # With a person's own config unread, so is their list of safe folders: the repository the folder they named is
     # in is trusted. Git asks about the repository's top, not about the folder a command runs in.
-    settled = _SETTLED | {"safe.directory": Path(os.path.realpath(_top(root))).as_posix()}
+    settled = _SETTLED | {"safe.directory": Path(os.path.realpath(top(root))).as_posix()}
     # And so is the file of what they ignore in every repository, which is read and passed on: without it a `.env`
     # or an editor's folder they never see in `git status` would be read as new work.
     if ignored := _excludes(
@@ -89,7 +89,7 @@ def _environment(root: Path) -> dict[str, str]:
     return env
 
 
-def _top(root: Path) -> Path:
+def top(root: Path) -> Path:
     """The top of the repository `root` is in, found without asking git: the nearest folder at or above it that
     holds `.git`. `root` itself where none does."""
     return next((folder for folder in (root, *root.parents) if (folder / ".git").exists()), root)

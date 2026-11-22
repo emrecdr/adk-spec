@@ -1,10 +1,14 @@
-"""A repository's source, read for a stage that asked for it: through git's own list of files, and within caps.
+"""The source a stage may be shown, read when a stage asks: through git's own list of files, and within caps.
 
 A model names what it wants to see: files, folders, words to search for. Nothing it names is trusted. A path is
 used only where it is, to the letter, one of the paths git lists for the repository, which holds nothing git
 ignores, nothing of `.spec/`, and nothing a person excluded. A path is never built from a model's text and then
 looked for: it is looked up, and only a path that was found is joined to the root. So no text a file holds, and no
 text of a request, can steer a reading to another file.
+
+The other repositories a change names are read by the same rules, each under its name: `api/src/routes.py` is
+`src/routes.py` of the repository named `api`, looked up in the list git gives for that repository, with that
+repository's own exclusions. A round's caps are shared by them all: they bound what one model call is shown.
 
 A file is scrubbed of known secret shapes whole, once, before anything is cut out of it: a range of lines, a line a
 search found and a file cut at a cap are all taken from the scrubbed text. A private key's block is known by its
@@ -28,9 +32,12 @@ from pathlib import Path
 from ..domain.secrets import holds_a_key, scrub_lines
 from ..domain.text import lines_of, normalise, plain
 from ..domain.verify import parts_of_diff
+from .config import ConfigError, load_config
+from .context import tree_text
 from .files import NotTextError, read_text
-from .git import GitError, grep
+from .git import GitError, grep, head, is_repository, top
 from .git import files as listed_by_git
+from .layout import CONFIG, ROOT_NAME
 
 #: What one round of reading holds at most. Provisional, as the context limits are, until a live run measures them.
 FILES_A_ROUND = 12
@@ -48,6 +55,15 @@ TERM_MAX_CHARS = 100
 HOLDS_A_KEY = "holds a private key, which is never shown"
 #: A file asked for with a range of lines: `src/app.py:120-260`.
 _RANGE = re.compile(r"(?P<path>.+):(?P<first>[0-9]{1,9})-(?P<last>[0-9]{1,9})")
+#: How much of the line that opens a statement's block is kept.
+WITHIN_MAX_CHARS = 120
+#: The name of another repository, which prefixes its paths: a short word.
+NAME = re.compile(r"[a-z][a-z0-9-]{0,30}")
+
+
+class SourceError(Exception):
+    """A repository a change names that cannot stand beside this one, for a reason the person must fix: it is this
+    repository by another path, or its name is no name, or is a folder here, so that its paths would mean two files."""
 
 
 @dataclass(frozen=True)
@@ -107,53 +123,29 @@ def _counted(count: int, one: str, many: str) -> str:
     return f"{count:,} {one if count == 1 else many}"
 
 
-class Source:
-    """The files of one repository that a stage may be shown."""
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" \t"))
 
-    def __init__(self, root: Path, paths: Sequence[str], *, exclude: Sequence[str]) -> None:
+
+class _Repository:
+    """One repository's files as a reading may give them: git's own list, each file opened and scrubbed once."""
+
+    def __init__(self, name: str, root: Path, paths: Sequence[str], exclude: Sequence[str]) -> None:
+        #: The name its paths are shown under; the workspace's own has none.
+        self.name = name
         self.root = root
         #: Every path git lists, in order, from `root`, with forward slashes.
         self.paths = sorted(paths)
-        self._listed = frozenset(paths)
-        self._exclude = tuple(exclude)
+        self.listed = frozenset(paths)
+        self.exclude = tuple(exclude)
         #: Each file opened so far: its lines as they may be shown, or why it is not read.
         self._opened: dict[str, list[str] | str] = {}
 
-    @classmethod
-    def of(cls, root: Path, *, exclude: Sequence[str]) -> Source:
-        """The source of the repository at `root`, as git lists it now, less what a person excluded."""
-        return cls(root, listed_by_git(root, exclude=exclude), exclude=exclude)
+    def full(self, path: str) -> str:
+        """`path` as a stage is shown it: under the repository's name, where it has one."""
+        return f"{self.name}/{path}" if self.name else path
 
-    def gathered(self, files: Sequence[str], folders: Sequence[str], searches: Sequence[str]) -> Gathered:
-        """One round: each file read, each folder listed and each search made, within the caps. What is past a cap
-        or cannot be given is named among what was left out, and is no error."""
-        got = _Round(ROUND_MAX_CHARS)
-        asked = (
-            (files, FILES_A_ROUND, self._file, ("file", "files"), "reads"),
-            (folders, FOLDERS_A_ROUND, self._folder, ("folder", "folders"), "lists"),
-            (searches, SEARCHES_A_ROUND, self._search, ("search", "searches"), "makes"),
-        )
-        for wanted, cap, give, (one, many), does in asked:
-            for item in wanted[:cap]:
-                give(item, got)
-            if (over := len(wanted) - cap) > 0:
-                got.left_out.append(f"{over:,} more {one if over == 1 else many} asked for than a round {does}")
-                got.deferred += wanted[cap:]
-        if got.parts and got.deferred:  # said where the stage reads: nothing else tells it that asking again helps
-            named = ", ".join(_named(item, "(nothing)") for item in got.deferred)
-            got.parts.append(f"=== not shown, for room. Ask again for what is still needed: {named}")
-        shown = "\n".join(got.parts)
-        return Gathered(got.texts, shown, tuple(got.read), tuple(got.left_out), got.reached, tuple(got.deferred))
-
-    def _asked(self, asked: str) -> tuple[str, int | None, int | None]:
-        """The path a model asked for, and the lines of it where it named a range. A path git lists is taken as it
-        is, a colon in its name too."""
-        asked = asked.strip()
-        if asked not in self._listed and (ranged := _RANGE.fullmatch(asked)) and ranged["path"] in self._listed:
-            return ranged["path"], int(ranged["first"]), int(ranged["last"])
-        return asked, None, None
-
-    def _lines(self, path: str) -> list[str] | str:
+    def lines(self, path: str) -> list[str] | str:
         """Every line of a file git lists, as it may be shown: scrubbed whole, each line at its own number. Or why
         the file is not read. A file is opened and scrubbed once, however often it is asked for."""
         if path not in self._opened:
@@ -189,9 +181,130 @@ class Source:
                 return True
         return False
 
+    def hits(self, term: str, room: int) -> tuple[list[tuple[str, int, str]], bool]:
+        """The lines `term` is on, each by its path as a stage is shown it, its number and its scrubbed text: at
+        most `room`, and whether there were more. `GitError` where git could not search.
+
+        git reads each file as it stands, and a stage is shown it scrubbed. A hit counts only where the line a
+        stage is shown still holds the word: one on a hidden value, counted or numbered, would say that the value
+        holds the word, and asked often enough, the value. A line is opened only until enough are shown."""
+        wanted = term.casefold()
+        rows: list[tuple[str, int, str]] = []
+        for line in grep(self.root, term, exclude=self.exclude):
+            path, _, rest = line.partition(":")
+            number = rest.partition(":")[0]
+            lines = self.lines(path) if path in self.listed and number.isascii() and number.isdecimal() else ""
+            at = int(number) if isinstance(lines, list) else 0
+            if not 1 <= at <= len(lines) or wanted not in lines[at - 1].casefold():
+                continue
+            if len(rows) == room:
+                return rows, True
+            rows.append((self.full(path), at, lines[at - 1][:LINE_MAX_CHARS].rstrip()))
+        return rows, False
+
+
+def _other(root: Path, name: str, given: str, folders: set[str]) -> _Repository | str:
+    """Another repository a change names, read as git lists it with its own exclusions; or why it is left out,
+    where it is not on this machine, or cannot be read. `SourceError` where it can never stand beside this one."""
+    if not NAME.fullmatch(name):
+        raise SourceError(f"`{name}` is no name for a repository: a to z, digits and `-`, from a letter on")
+    if name in folders:
+        raise SourceError(
+            f"`{name}` is also a folder of this repository, so `{name}/…` would mean two files. "
+            "Give the repository another name, as --with NAME=PATH"
+        )
+    path = Path(given) if Path(given).is_absolute() else root / given
+    if not path.is_dir() or not is_repository(path):
+        return f"{name}: no git repository at {given}"
+    if top(path.resolve()) == top(root.resolve()):
+        raise SourceError(f"{name}: {given} is this repository itself")
+    own = path / ROOT_NAME / CONFIG  # its exclusions are its own, where it is an adk-spec project too
+    try:
+        exclude = load_config(own).exclude if own.is_file() else ()
+        return _Repository(name, path, listed_by_git(path, exclude=exclude), exclude)
+    except (ConfigError, NotTextError, GitError, OSError) as exc:
+        return f"{name}: {exc}"
+
+
+class Source:
+    """The files a stage may be shown: those of the repository that holds `.spec/`, and those of each other
+    repository a change names, under its name."""
+
+    def __init__(self, repositories: Sequence[_Repository], missing: Sequence[str] = ()) -> None:
+        here, *others = repositories
+        self.root = here.root
+        self._here = here
+        self._others = {one.name: one for one in others}
+        #: Every path a stage may name: this repository's, then each other's under its name.
+        self.paths = [one.full(path) for one in repositories for path in one.paths]
+        self._listed = frozenset(self.paths)
+        #: The other repositories that were read, and a line for each one that was not.
+        self.names = tuple(self._others)
+        self.missing = tuple(missing)
+
+    @classmethod
+    def of(cls, root: Path, *, exclude: Sequence[str], others: Sequence[tuple[str, str]] = ()) -> Source:
+        """The source of the repository at `root`, as git lists it now, less what a person excluded; and of each of
+        `others`, a name and a path from `root` or an absolute one. `SourceError` for one that can never be read
+        beside this one; one that is not here now is named in `missing`."""
+        here = _Repository("", root, listed_by_git(root, exclude=exclude), exclude)
+        folders = {path.split("/", 1)[0] for path in here.paths if "/" in path}
+        repositories, missing = [here], []
+        for name, given in others:
+            if name in (one.name for one in repositories):
+                raise SourceError(f"`{name}` names two repositories")
+            found = _other(root, name, given, folders)
+            if isinstance(found, str):
+                missing.append(found)
+            else:
+                repositories.append(found)
+        return cls(repositories, missing)
+
+    def tree(self) -> str:
+        """The files for a stage to name real paths by: this repository's, then each other's under a line that names
+        it. Each is folded to its folders on its own, so a large repository does not crowd a small one out."""
+        blocks = [tree_text(self._here.paths)]
+        for one in self._others.values():
+            listed = tree_text([one.full(path) for path in one.paths])
+            blocks.append(f"=== {one.name} ({_counted(len(one.paths), 'file', 'files')})\n{listed}")
+        return "\n".join(blocks)
+
+    def commits(self) -> dict[str, str | None]:
+        """The commit each other repository has checked out, or nothing where git cannot say."""
+        held: dict[str, str | None] = {}
+        for name, one in self._others.items():
+            try:
+                held[name] = head(one.root)
+            except GitError:
+                held[name] = None
+        return held
+
+    def gathered(self, files: Sequence[str], folders: Sequence[str], searches: Sequence[str]) -> Gathered:
+        """One round: each file read, each folder listed and each search made, within the caps. What is past a cap
+        or cannot be given is named among what was left out, and is no error."""
+        got = _Round(ROUND_MAX_CHARS)
+        # Searches first, then folders, then files: a search is small and aimed, a whole file large and often a
+        # guess. Measured live, files taken first filled a round and left every search out.
+        asked = (
+            (searches, SEARCHES_A_ROUND, self._search, ("search", "searches"), "makes"),
+            (folders, FOLDERS_A_ROUND, self._folder, ("folder", "folders"), "lists"),
+            (files, FILES_A_ROUND, self._file, ("file", "files"), "reads"),
+        )
+        for wanted, cap, give, (one, many), does in asked:
+            for item in wanted[:cap]:
+                give(item, got)
+            if (over := len(wanted) - cap) > 0:
+                got.left_out.append(f"{over:,} more {one if over == 1 else many} asked for than a round {does}")
+                got.deferred += wanted[cap:]
+        if got.parts and got.deferred:  # said where the stage reads: nothing else tells it that asking again helps
+            named = ", ".join(_named(item, "(nothing)") for item in got.deferred)
+            got.parts.append(f"=== not shown, for room. Ask again for what is still needed: {named}")
+        shown = "\n".join(got.parts)
+        return Gathered(got.texts, shown, tuple(got.read), tuple(got.left_out), got.reached, tuple(got.deferred))
+
     def without_keys(self, diff: str) -> tuple[str, tuple[str, ...]]:
         """A unified diff less the part of each file that holds a private key, and those files' names. A file is
-        known for one by how it stands in the repository, or by a key's first line among the lines the diff shows
+        known for one by how it stands in its repository, or by a key's first line among the lines the diff shows
         of it: the first covers a change in a key's middle, the second a key that was deleted or lost its first
         line. What is left is the diff a stage may be shown, and is still scrubbed as every text is."""
         kept: list[str] = []
@@ -202,6 +315,38 @@ class Source:
             else:
                 kept.append(part)
         return "".join(kept), tuple(held)
+
+    def within(self, path: str, line: int) -> str:
+        """The line that opens the block `line` of `path` stands in: the nearest line above it, in the file as it
+        stands, scrubbed, that is indented less than it. Nothing at the top level, or where the file is not read.
+        Measured live: a real quote from `_approve` was kept under a note about `propose`, and only the block a line
+        stands in shows that."""
+        lines = self._lines(path) if path in self._listed else ""
+        if not isinstance(lines, list) or not 1 <= line <= len(lines):
+            return ""
+        indent = _indent(lines[line - 1])
+        for above in reversed(lines[: line - 1]):
+            if above.strip() and _indent(above) < indent:
+                return above.strip()[:WITHIN_MAX_CHARS]
+        return ""
+
+    def _where(self, path: str) -> tuple[_Repository, str]:
+        """The repository a path a stage names is in, and the path within it."""
+        name, _, rest = path.partition("/")
+        other = self._others.get(name)
+        return (other, rest) if other is not None and rest else (self._here, path)
+
+    def _lines(self, path: str) -> list[str] | str:
+        where, inner = self._where(path)
+        return where.lines(inner)
+
+    def _asked(self, asked: str) -> tuple[str, int | None, int | None]:
+        """The path a model asked for, and the lines of it where it named a range. A path git lists is taken as it
+        is, a colon in its name too."""
+        asked = asked.strip()
+        if asked not in self._listed and (ranged := _RANGE.fullmatch(asked)) and ranged["path"] in self._listed:
+            return ranged["path"], int(ranged["first"]), int(ranged["last"])
+        return asked, None, None
 
     def _file(self, asked: str, got: _Round) -> None:
         path, first, last = self._asked(asked)
@@ -251,28 +396,19 @@ class Source:
         if not term or not term.isprintable() or len(term) > TERM_MAX_CHARS:
             got.left_out.append(f"{_named(asked, '(no word)')}: no search adk-spec makes")
             return
-        try:
-            found = grep(self.root, term, exclude=self._exclude)
-        except GitError as exc:
-            got.left_out.append(f"search for {term}: {exc}")
-            return
-        # git read each file as it stands, and a stage is shown it scrubbed. A hit counts only where the line a
-        # stage is shown still holds the word: one on a hidden value, counted or numbered, would say that the value
-        # holds the word, and asked often enough, the value. A line is opened only until enough are shown.
-        wanted = term.casefold()
         rows: list[tuple[str, int, str]] = []
-        more = False
-        for line in found:
-            path, _, rest = line.partition(":")
-            number = rest.partition(":")[0]
-            lines = self._lines(path) if path in self._listed and number.isascii() and number.isdecimal() else ""
-            at = int(number) if isinstance(lines, list) else 0
-            if not 1 <= at <= len(lines) or wanted not in lines[at - 1].casefold():
+        more = searched = False
+        for one in (self._here, *self._others.values()):  # one search, in every repository, one block of lines
+            try:
+                found, more = one.hits(term, SEARCH_MAX_LINES - len(rows))
+            except GitError as exc:
+                got.left_out.append(f"search for {term}{f' in {one.name}' if one.name else ''}: {exc}")
                 continue
-            if len(rows) == SEARCH_MAX_LINES:
-                more = True
+            searched, rows = True, rows + found
+            if more:
                 break
-            rows.append((path, at, lines[at - 1][:LINE_MAX_CHARS].rstrip()))
+        if not searched:  # a search git refused everywhere is said among what was left out, and shows nothing
+            return
         note = _counted(len(rows), "line", "lines")
         note = f"more than {SEARCH_MAX_LINES} lines, the first {SEARCH_MAX_LINES} shown" if more else note
         shown = [f"{path}:{number}:{text}" for path, number, text in rows]

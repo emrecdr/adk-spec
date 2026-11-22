@@ -85,7 +85,7 @@ from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
-from ..workspace.source import Source
+from ..workspace.source import Source, SourceError
 
 EXIT_OK = 0
 #: A gate refused, or findings at the bar.
@@ -101,7 +101,7 @@ PROG = "adk-spec"
 CHECKOUT = Path(__file__).resolve().parents[2]
 SMOKE_REQUEST = "Let users reset a forgotten password by email."
 #: What the workspace refuses with one sentence: said to the person, and `EXIT_USAGE`.
-REFUSALS = (WorkspaceError, ConfigError, PathError, NotTextError)
+REFUSALS = (WorkspaceError, ConfigError, PathError, NotTextError, SourceError)
 
 
 class NotYetError(Exception):
