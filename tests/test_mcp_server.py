@@ -84,7 +84,7 @@ async def test_each_tool_hands_the_command_what_the_terminal_would(tmp_path, mon
         await server.call_tool(name, arguments)
     read = {argv[0]: vars(cli._parser().parse_args(argv)) for argv in asked}
     assert read["propose"]["request"] == request and read["propose"]["no_input"]
-    assert (read["propose"]["id"], read["propose"]["tier"], read["propose"]["with_"]) == ("pk", "strict", [])
+    assert (read["propose"]["id"], read["propose"]["tier"]) == ("pk", "strict")
     assert (read["plan"]["replace"], read["plan"]["no_explore"]) == (True, True)
     assert read["check"]["no_model"] and read["verify"]["base"] == ["api=abc"] and read["verify"]["override"] is None
     assert read["status"]["all"] and read["validate"]["strict"] and read["validate"]["id"] == "pk"
@@ -219,3 +219,5 @@ async def test_the_tools_say_which_only_read_and_which_call_a_model(tmp_path) ->
         assert tools[name].read_only_hint and not tools[name].open_world_hint
     for name in ("propose", "plan", "check", "verify"):
         assert not tools[name].read_only_hint and tools[name].open_world_hint
+    assert tools["check"].destructive_hint is False, "check writes its own report alone"
+    assert tools["propose"].destructive_hint is not False, "propose may rewrite a change's files"

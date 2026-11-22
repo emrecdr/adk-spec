@@ -10,7 +10,7 @@ import sys
 import pytest
 
 from adk_spec.workspace.layout import Workspace, WorkspaceError
-from adk_spec.workspace.lock import LOCK, held
+from adk_spec.workspace.lock import LOCK, TAKING, held
 
 
 def ended_pid() -> int:
@@ -70,8 +70,6 @@ def test_a_run_leaves_the_lock_another_run_now_holds(tmp_path) -> None:
 def test_a_takeover_marker_is_ignored_by_git_and_named_where_it_blocks(tmp_path) -> None:
     """Found by an outside audit: a run stopped in a takeover left its marker, which git listed as new work and the
     refusal never named."""
-    from adk_spec.workspace.lock import TAKING
-
     ws = Workspace.init(tmp_path)
     assert TAKING in (ws.home / ".gitignore").read_text(encoding="utf-8").split()
     (ws.home / LOCK).write_text(f"{ended_pid()} {platform.node()}", encoding="ascii")

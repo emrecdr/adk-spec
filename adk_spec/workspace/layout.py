@@ -48,6 +48,8 @@ STATE, BRIEF, DESIGN, TASKS, SPEC_FILE = "change.json", "brief.md", "design.md",
 REPORTS = "reports"
 #: What a reading of the repository's code found for a change. Supporting material: no approval covers it.
 CONTEXT = "context.md"
+#: The writer's lock, and the marker a run makes while it takes over a lock left behind: a run's own, ignored by git.
+LOCK, TAKING = ".lock", ".lock.taking"
 #: What `adk-spec init` writes: the sections teams have found a constitution useful for.
 CONSTITUTION_TEXT = """\
 # Constitution
@@ -143,7 +145,7 @@ class Workspace:
         if workspace.home.exists():
             raise WorkspaceError(f"{workspace.home} is already there. Nothing was changed")
         made = {CONFIG: DEFAULT, CONSTITUTION: CONSTITUTION_TEXT, LESSONS: LESSONS_TEMPLATE}
-        made[".gitignore"] = ".lock\n.lock.taking\n"  # the lock, and a takeover's marker, are a run's own
+        made[".gitignore"] = f"{LOCK}\n{TAKING}\n"
         write_all({workspace.home / name: text for name, text in made.items()})
         for folder in (SPECS, CHANGES):
             (workspace.home / folder).mkdir()

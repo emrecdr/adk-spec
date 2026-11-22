@@ -7,7 +7,7 @@ import os
 import stat
 
 import pytest
-from conftest import PACKAGE
+from conftest import PACKAGE, held_open_from
 
 from adk_spec.workspace.files import NotTextError, read_text, write_all, write_text
 from adk_spec.workspace.paths import PathError, inside
@@ -107,17 +107,7 @@ def test_write_all_puts_back_what_it_replaced_when_a_later_replace_fails(tmp_pat
     """Found by review: the second of three replaces failed, as on a file Windows holds open, and the first stayed."""
     write_text(tmp_path / "a.md", "old a")
     write_text(tmp_path / "b.md", "old b")
-    real, asked, held = os.replace, [], []
-
-    def second_fails(source, target):
-        asked.append(target)
-        if len(asked) == 2:
-            held.append(target)
-        if target in held:  # held open, as Windows holds a file: every try at it fails, the retries too
-            raise PermissionError("another process holds the file")
-        return real(source, target)
-
-    monkeypatch.setattr(os, "replace", second_fails)
+    held_open_from(monkeypatch)
     with pytest.raises(PermissionError):
         write_all({tmp_path / "a.md": "new a", tmp_path / "b.md": "new b", tmp_path / "c.md": "new c"})
     assert (tmp_path / "a.md").read_text(encoding="utf-8") == "old a\n"

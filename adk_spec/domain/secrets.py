@@ -37,15 +37,32 @@ _LEAD = r"[+\- ]?(?:[ \t]*+>)*+[ \t]*+"
 #: An armour header a key's block may hold: PEM's, and PGP's, GnuPG writing `Version:` before the body. Found by an
 #: outside audit: with no footer, `Version:` ended the key's lines, and the body after it reached the model.
 _ARMOUR = r"(?:Proc-Type|DEK-Info|Version|Comment|Hash|Charset): [^\n]*+"
+#: The fields a PuTTY key file writes before and among its base64.
+_PUTTY_FIELD = (
+    r"(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation|Argon2-Memory|Argon2-Passes|Argon2-Parallelism"
+    r"|Argon2-Salt): [^\n]*+"
+)
+#: Base64 as a key's line holds it: any run of it where an end line follows, and sixteen characters or more where none
+#: does, so that a short line of code after a header named in passing is not taken for the key's.
+_ANY_BASE64, _LONG_BASE64 = r"[A-Za-z0-9+/=]++", r"[A-Za-z0-9+/]{16,}={0,2}"
+
+
+def _key_line(base64: str, fields: str) -> str:
+    """A line of a key's block: what may open it, then base64 as `base64` takes it, one of its `fields`, or nothing.
+    Every key shape builds its lines here, so that none takes a field or an opening another does not: found by an
+    outside audit, a PGP key's `Version:` line ended one shape's lines and not its twin's."""
+    return _LEAD + r"(?:" + base64 + r"|" + fields + r")?[ \t]*+\r?"
+
+
 _KEY_HEADER = r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
 _KEY_FOOTER = r"-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
 #: A line of a key's body where no footer follows: base64 of sixteen characters or more, an armour header, or a blank
 #: line. Found by review: a header only named in code, and every short line after it taken for a key line, hid the
 #: code from the model. With a footer, the block between is the key's whatever its lines.
-_KEY_BODY = _LEAD + r"(?:[A-Za-z0-9+/]{16,}={0,2}|" + _ARMOUR + r")?[ \t]*+\r?"
+_KEY_BODY = _key_line(_LONG_BASE64, _ARMOUR)
 #: Each run read once and kept: measured by review, a line's blanks split every way between the two runs, a header and
 #: 8,000 spaces took 0.6 s to scrub, four times as long for each doubling, and every request of a review is scrubbed.
-_KEY_LINE = _LEAD + r"(?:[A-Za-z0-9+/=]++|" + _ARMOUR + r")?[ \t]*+\r?"
+_KEY_LINE = _key_line(_ANY_BASE64, _ARMOUR)
 #: A URL's scheme and user, and its password: up to the last `@` before the host, since a password may hold one,
 #: `P@ssw0rd`. Measured before, the password ended at its first `@`: the rule read `P` as a placeholder, and redaction
 #: sent the rest of the password to the model. The user may be none, as Redis takes a password, `redis://:secret@host`:
@@ -59,16 +76,10 @@ _URL_PASSWORD = r"[^\s/\"']+"
 _BEDROCK = r"\b(?:ABSK[A-Za-z0-9+/]{109,269}={0,2}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{40,})"
 #: A PuTTY key file: its header, then its own lines alone — a diff's marker, then a field PuTTY writes or base64 —
 #: to its MAC, so a header where no rule reads cannot reach a MAC further on, as a private key's block cannot.
-_PUTTY_LINE = (
-    _LEAD + r"(?:[A-Za-z0-9+/=]++|(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation"
-    r"|Argon2-Memory|Argon2-Passes|Argon2-Parallelism|Argon2-Salt): [^\n]*+)?[ \t]*+\r?"
-)
+_PUTTY_LINE = _key_line(_ANY_BASE64, _PUTTY_FIELD)
 #: The key's lines are taken whether or not its MAC line follows: a key pasted in part is a key all the same.
 #: A PuTTY key's line where no MAC line follows: one of its headers, base64 of sixteen characters or more, or nothing.
-_PUTTY_BODY = (
-    _LEAD + r"(?:[A-Za-z0-9+/]{16,}={0,2}|(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation"
-    r"|Argon2-Memory|Argon2-Passes|Argon2-Parallelism|Argon2-Salt): [^\n]*+)?[ \t]*+\r?"
-)
+_PUTTY_BODY = _key_line(_LONG_BASE64, _PUTTY_FIELD)
 _PUTTY = (
     r"\bPuTTY-User-Key-File-[23]: [^\n]*(?:(?:\n(?>"
     + _PUTTY_LINE
@@ -392,7 +403,9 @@ def scrub_lines(text: str, *, cut: bool = False) -> tuple[str, int]:
 #: A private key's first line where a line begins with it, a diff's sign or a block's indent before it: how a key's
 #: own file has it, and how code that only names the line in a string does not. A PEM block's header, or a PuTTY key
 #: file's, whose private lines a diff shows without the header as a PEM block's are.
-_KEY_BEGINS_A_LINE = re.compile(r"(?m)^[+\- ]?[ \t]*(?:" + _KEY_HEADER + r"|PuTTY-User-Key-File-[23]:)")
+#: Opened as a key's line in a block is: a diff's marker, a quote's `>`. Found by review: still the opening from before
+#: quotes, a file quoting a key was not withheld, and a hunk from the middle of its key, with no header, was sent.
+_KEY_BEGINS_A_LINE = re.compile(r"(?m)^" + _LEAD + r"(?:" + _KEY_HEADER + r"|PuTTY-User-Key-File-[23]:)")
 
 
 def holds_a_key(text: str) -> bool:

@@ -551,3 +551,17 @@ def removed(path: Path) -> None:
         remove(name)
 
     shutil.rmtree(path, onexc=writable_then_again)
+
+
+def held_open_from(monkeypatch: pytest.MonkeyPatch, nth: int = 2) -> None:
+    """`os.replace` refused on the file its `nth` call names, from then on: held open, as Windows holds a file, so
+    every try at it fails, a retry's too, and every other file is replaced."""
+    real, asked = os.replace, []
+
+    def replace(source, target) -> None:
+        asked.append(target)
+        if len(asked) >= nth and target == asked[nth - 1]:
+            raise PermissionError("another process holds the file")
+        real(source, target)
+
+    monkeypatch.setattr(os, "replace", replace)

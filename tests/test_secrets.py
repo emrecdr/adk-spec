@@ -186,3 +186,11 @@ def test_a_key_quoted_in_markdown_hides_its_body() -> None:
     ):
         for scrubbed, _count in (scrub(key), scrub_lines(key)):
             assert body not in scrubbed, key
+
+
+def test_a_file_quoting_a_key_is_known_to_hold_one() -> None:
+    """Found by review: the whole-file check, which withholds a file and its diff from the model, still took a key's
+    first line as the scrub did before quotes, so a hunk from the middle of a quoted key, with no header, was sent."""
+    assert holds_a_key("Pasted from the issue:\n\n> -----BEGIN OPENSSH PRIVATE KEY-----\n> b3BlbnNzaC1rZXk\n")
+    assert holds_a_key("+> > PuTTY-User-Key-File-3: ssh-ed25519\n")
+    assert not holds_a_key('KEY = "-----BEGIN RSA PRIVATE KEY-----"\n')

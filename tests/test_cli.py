@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from conftest import approved, run, seeded, state_of
+from conftest import approved, held_open_from, run, seeded, state_of
 from samples import BRIEF, DELTA, SPEC, tasks_for
 
 from adk_spec.domain.spec_md import parse_spec
@@ -224,7 +224,6 @@ def test_the_installed_package_is_found_from_any_folder(tmp_path) -> None:
 def test_an_archive_that_cannot_write_one_file_changes_none_and_says_so(tmp_path, monkeypatch, capsys) -> None:
     """Found by review: a file held open left one spec merged, the other not, and the state behind both; and the
     failure reached the person as a traceback under the exit code that means findings."""
-    import os
 
     ws = seeded(tmp_path)
     ws.write_specs({"billing": parse_spec(SPEC.replace("# auth", "# billing").replace("REQ-AUTH", "REQ-BILLING"))})
@@ -234,17 +233,7 @@ def test_an_archive_that_cannot_write_one_file_changes_none_and_says_so(tmp_path
     write_text(tmp_path / ".spec/changes/passkeys/tasks.md", tasks_for(*served))
     approved(tmp_path)
     before = (living_bytes(tmp_path), living_bytes(tmp_path, "billing"), state_of(tmp_path))
-    real, asked, held = os.replace, [], []
-
-    def second_fails(source, target):
-        asked.append(target)
-        if len(asked) == 2:
-            held.append(target)
-        if target in held:  # held open, as Windows holds a file: every try at it fails, the retries too
-            raise PermissionError("another process holds the file")
-        return real(source, target)
-
-    monkeypatch.setattr(os, "replace", second_fails)
+    held_open_from(monkeypatch)
     capsys.readouterr()
     assert run(tmp_path, "archive", "passkeys") == 3
     said = capsys.readouterr()
