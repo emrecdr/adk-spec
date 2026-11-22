@@ -11,11 +11,12 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
+from ..domain.lessons_md import TEMPLATE as LESSONS_TEMPLATE
 from ..domain.model import Spec
 from ..domain.spec_md import render_spec
 from ..domain.text import lines_of
 from .files import read_text
-from .layout import CHANGES, CONSTITUTION, CONTEXT, PROFILE, Workspace, WorkspaceError
+from .layout import CHANGES, CONSTITUTION, CONTEXT, LESSONS, PROFILE, Workspace, WorkspaceError
 
 #: What a stage may be given of living specs, in characters. Provisional: sized for the smallest model a role may
 #: run on, 128,000 input tokens in the pinned LiteLLM map, until a live run measures it.
@@ -82,6 +83,17 @@ def profile_text(workspace: Workspace) -> str:
     """The repository's `profile.md` as a stage reads it: as the file stands, or nothing where there is none. One
     past the cap is cut, and says so."""
     return _capped(workspace.home / PROFILE, PROFILE_MAX_CHARS)
+
+
+#: How much of `.spec/lessons.md` a drafting stage is given.
+LESSONS_MAX_CHARS = 6_000
+
+
+def lessons_text(workspace: Workspace) -> str:
+    """The lessons file as a drafting stage reads it: as the file stands, cut past the cap, or nothing where there is
+    none or it holds no lesson yet."""
+    text = _capped(workspace.home / LESSONS, LESSONS_MAX_CHARS)
+    return "" if text == LESSONS_TEMPLATE.strip() else text
 
 
 def _capped(path: Path, cap: int) -> str:

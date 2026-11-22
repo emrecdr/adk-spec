@@ -23,6 +23,7 @@ def test_init_makes_the_tree_and_refuses_a_second_time(tmp_path) -> None:
         "changes",
         "config.toml",
         "constitution.md",
+        "lessons.md",
         "specs",
     ]
     assert ws.config() == Config(default_tier="standard") and ws.capabilities() == [] and ws.changes() == []

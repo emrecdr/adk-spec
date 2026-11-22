@@ -26,6 +26,8 @@ from ..domain.brief_md import parse_brief
 from ..domain.check import coverage_of
 from ..domain.delta_md import parse_delta
 from ..domain.ids import REQ_ID, slug_problem
+from ..domain.lessons_md import TEMPLATE as LESSONS_TEMPLATE
+from ..domain.lessons_md import learned
 from ..domain.model import Change, ChangeState, Finding, GrammarError, Spec, Tier
 from ..domain.spec_md import parse_spec, render_spec
 from ..domain.tasks_md import parse_tasks
@@ -38,6 +40,8 @@ ROOT_NAME = ".spec"
 CONFIG, CONSTITUTION, SPECS, CHANGES = "config.toml", "constitution.md", "specs", "changes"
 #: A repository's profile, written by `init` from a reading of its code: no part of any approval.
 PROFILE = "profile.md"
+#: What every draft of the workspace follows: written by people, and by adk-spec for what a gate sent back.
+LESSONS = "lessons.md"
 STATE, BRIEF, DESIGN, TASKS, SPEC_FILE = "change.json", "brief.md", "design.md", "tasks.md", "spec.md"
 #: The folder of a change's generated reports, which no approval fingerprints.
 REPORTS = "reports"
@@ -137,7 +141,8 @@ class Workspace:
         workspace = cls(repo)
         if workspace.home.exists():
             raise WorkspaceError(f"{workspace.home} is already there. Nothing was changed")
-        made = {CONFIG: DEFAULT, CONSTITUTION: CONSTITUTION_TEXT, ".gitignore": ".lock\n"}  # the lock is a run's own
+        made = {CONFIG: DEFAULT, CONSTITUTION: CONSTITUTION_TEXT, LESSONS: LESSONS_TEMPLATE}
+        made[".gitignore"] = ".lock\n"  # the lock is a run's own
         write_all({workspace.home / name: text for name, text in made.items()})
         for folder in (SPECS, CHANGES):
             (workspace.home / folder).mkdir()
@@ -281,6 +286,14 @@ class Workspace:
     def write_report(self, change_id: str, name: str, text: str) -> Path:
         """A generated report of a change, under its `reports/` folder: written whole, replacing the one before."""
         return self.write_into(change_id, {f"{REPORTS}/{name}": text})[0]
+
+    def learn(self, sent_back: Iterable[tuple[str, str]]) -> None:
+        """Each of `sent_back`, a stage and a problem its gate sent back that the next try fixed, noted in the lessons
+        file, which is made where there is none. Where nothing is learned, nothing is written."""
+        path = self.home / LESSONS
+        held = read_text(path) if path.is_file() else LESSONS_TEMPLATE
+        if (after := learned(held, sent_back)) != held:
+            write_text(path, after)
 
     def drafted(self, section: str) -> bool:
         """`section` added at the end of the constitution, only while it is exactly the template `init` wrote:
