@@ -25,9 +25,6 @@ import truststore
 
 from ..orchestration.settings import copilot_key, copilot_token, pin_copilot_dir
 
-# Certificates through the operating system's store, as the model factory verifies them.
-truststore.inject_into_ssl()
-
 
 def keep_private(token: Path) -> None:
     """The token, the key LiteLLM caches beside it, and their folder, readable by their owner alone. No other file
@@ -138,6 +135,7 @@ def main(argv: list[str]) -> int:
 
 def _seconds(info: Mapping[str, object], key: str, default: int) -> int:
     """A count of seconds GitHub's device-code reply names, or `default` where it names none."""
+    truststore.inject_into_ssl()  # certificates through the system's store, as the model factory verifies them
     value = info.get(key)
     return value if type(value) is int else default
 

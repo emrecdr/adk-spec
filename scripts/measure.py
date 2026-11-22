@@ -28,6 +28,7 @@ from pydantic import ValidationError
 from adk_spec.domain.context_md import PROFILE_SECTIONS, SECTIONS
 from adk_spec.domain.convert import pointed_at
 from adk_spec.domain.drafts import FindingDraft, FindingsDraft
+from adk_spec.domain.secrets import scrub_lines
 from adk_spec.domain.text import lines_of, plain
 from adk_spec.interfaces import cli
 from adk_spec.workspace.files import read_text
@@ -107,7 +108,9 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[Seen
         return [Seen(f"verdict.{verdict}", req, "", False) for req, verdict in verdicts.items()], [], tokens, seconds
     found = findings_of(loaded, workspace.specs()[0])
     seen = [Seen(one.code, one.path or "", one.message, one.severity == "ERROR") for one in found]
-    texts = workspace.approval_texts(change)
+    # Scrubbed as the command scrubs them before it grounds a finding: a quote of a secret-shaped line is found or
+    # left out here as there, found by an outside audit.
+    texts = {path: scrub_lines(text)[0] for path, text in workspace.approval_texts(change).items()}
     left_out: list[Seen] = []
     answer = next((call.answer for call in reversed(calls) if call.answer and not call.error), None)
     for one in _findings(answer):

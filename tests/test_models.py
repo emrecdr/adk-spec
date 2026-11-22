@@ -12,6 +12,7 @@ import litellm
 import pytest
 from conftest import ROOT, cached_copilot_token
 from google.adk.models import FallbackModel
+from google.adk.models.base_llm import BaseLlm
 from google.adk.models.lite_llm import LiteLlm, LiteLLMClient
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
@@ -24,7 +25,8 @@ def _fresh(name: str):
 
 
 @pytest.mark.parametrize(
-    ("provider", "expected"), [("gemini", str), ("copilot", LiteLlm), (None, LiteLlm), ("", LiteLlm), ("  ", LiteLlm)]
+    ("provider", "expected"),
+    [("gemini", BaseLlm), ("copilot", LiteLlm), (None, LiteLlm), ("", LiteLlm), ("  ", LiteLlm)],
 )
 def test_both_arms_build_a_model(provider, expected, monkeypatch) -> None:
     if provider is not None:
@@ -158,3 +160,42 @@ def test_reading_the_settings_loads_no_engine() -> None:
     )
     done = subprocess.run([sys.executable, "-c", probe], cwd=ROOT, capture_output=True, encoding="utf-8", check=False)
     assert done.returncode == 0 and done.stdout.strip() == "[]", done.stderr
+
+
+@pytest.mark.asyncio
+async def test_a_call_on_either_arm_has_one_deadline_for_every_retry(monkeypatch) -> None:
+    """Found by an outside audit: on Gemini each of three attempts had a deadline of its own, nine minutes in all, and
+    a call that ran out raised nothing a fallback model moves on from; Copilot's had one deadline and a 408."""
+    import asyncio
+
+    models = _fresh("models")
+
+    class Slow(BaseLlm):
+        async def generate_content_async(self, llm_request, stream=False):  # noqa: ARG002
+            await asyncio.sleep(5)
+            yield None
+
+    monkeypatch.setattr(models, "REQUEST_TIMEOUT_S", 0.05)
+    bounded = models.bounded_over(Slow)(model="slow")
+    with pytest.raises(models.CallTimeoutError):
+        async for _ in bounded.generate_content_async(LlmRequest()):
+            pass
+    monkeypatch.setenv("SPEC_PROVIDER", "gemini")
+    monkeypatch.setenv("SPEC_MODEL", "fake")
+    built = _fresh("models").build_model()
+    assert type(built).__name__ == "Bounded" and built.model == "fake"
+
+
+def test_the_systems_certificates_are_taken_up_when_a_model_is_built_not_on_import() -> None:
+    """Found by an outside audit: importing the models module changed how every TLS connection in the process is
+    verified, which a host that embeds adk-spec did not ask for."""
+    body = (
+        "import ssl\nimport os\n"
+        "os.environ.update(SPEC_PROVIDER='gemini', SPEC_MODEL='gemini-test', GOOGLE_API_KEY='x')\n"
+        "from adk_spec.orchestration import models\nprint(ssl.SSLContext.__module__)\n"
+        "models.build_model()\nprint(ssl.SSLContext.__module__)\n"
+    )
+    done = subprocess.run([sys.executable, "-c", body], cwd=ROOT, capture_output=True, encoding="utf-8", check=False)
+    assert done.returncode == 0, done.stderr
+    before, after = done.stdout.split()
+    assert before == "ssl" and after.startswith("truststore")

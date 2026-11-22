@@ -31,10 +31,6 @@ from google.genai import types
 
 from .settings import copilot_token, fallback_name, model_name, model_pick, pin_copilot_dir, provider
 
-# Certificates are verified through the operating system's own store, as a browser does, before any client is built:
-# a company proxy re-signs HTTPS with a root the machine trusts and Python's bundled list does not.
-truststore.inject_into_ssl()
-
 #: The Copilot arm's provider, as LiteLLM names it.
 COPILOT = "github_copilot"
 #: Where Copilot's calls go where the cached key names no endpoint of its own.
@@ -74,14 +70,24 @@ def serving(role: str = "") -> str:
     return f"{model_name(role)} on {provider()}"
 
 
-def build_model(*, role: str = "") -> str | BaseLlm:
-    """The model for `SPEC_PROVIDER`: a name ADK resolves natively on Gemini, a LiteLLM model otherwise, and, when
-    `SPEC_FALLBACK_MODEL` names another, ADK's `FallbackModel` over both. A fallback the role runs already is not
-    asked again."""
+@functools.cache
+def trust_the_system() -> None:
+    """Certificates verified through the operating system's own store, as a browser does, once, where the first
+    client is built: a company proxy re-signs HTTPS with a root the machine trusts and Python's bundled list does
+    not. Not on import: a process that embeds adk-spec decides how its own connections are verified."""
+    truststore.inject_into_ssl()
+
+
+def build_model(*, role: str = "") -> BaseLlm:
+    """The model for `SPEC_PROVIDER`, the class ADK names for it on Gemini and a LiteLLM model otherwise, each under
+    one deadline for a call and every retry of it, and, when `SPEC_FALLBACK_MODEL` names another, ADK's
+    `FallbackModel` over both. A fallback the role runs already is not asked again."""
+    trust_the_system()
     primary = model_name(role)
     names = [primary] + ([fallback] if (fallback := fallback_name()) and fallback != primary else [])
     if provider() == "gemini":
-        return names[0] if len(names) == 1 else FallbackModel(models=names, retriable_status_codes=_FALL_BACK_ON)
+        gemini = [bounded_over(LLMRegistry.resolve(name))(model=name) for name in names]
+        return gemini[0] if len(gemini) == 1 else FallbackModel(models=gemini, retriable_status_codes=_FALL_BACK_ON)
     litellm = _litellm()
     litellm.suppress_debug_info = True  # else a red "Give Feedback" banner on stdout with every error
     # The instruction as Copilot's system turn. Run below LiteLLM: without this it is sent as an assistant turn, so
@@ -92,7 +98,9 @@ def build_model(*, role: str = "") -> str | BaseLlm:
         log.addFilter(_HideBearer())
     # The attempts are the OpenAI SDK's own retries, `RETRY_ATTEMPTS` in all. LiteLLM's MCP gateway, which nothing
     # here uses, is skipped: on LiteLLM 1.106.x a chat call carrying a tool imported it, and it needs `mcp`.
-    bounded = _bounded()
+    from google.adk.models.lite_llm import LiteLlm
+
+    bounded = bounded_over(LiteLlm)
     models = [
         bounded(model=f"{COPILOT}/{name}", max_retries=RETRY_ATTEMPTS - 1, _skip_mcp_handler=True) for name in names
     ]
@@ -100,12 +108,12 @@ def build_model(*, role: str = "") -> str | BaseLlm:
 
 
 @functools.cache
-def _bounded() -> type[BaseLlm]:
-    """Copilot's model under one deadline for a call and every retry the OpenAI SDK makes of it, where each attempt
-    had a deadline of its own. Built where the arm is, as LiteLLM is imported."""
-    from google.adk.models.lite_llm import LiteLlm
+def bounded_over(base: type[BaseLlm]) -> type[BaseLlm]:
+    """`base` under one deadline for a call and every retry its client makes of it, where each attempt had a deadline
+    of its own: three on Gemini's client, nine minutes in all, found by an outside audit. Past it the call raises
+    `CallTimeoutError`, a 408, which a fallback model moves on from."""
 
-    class Bounded(LiteLlm):
+    class Bounded(base):  # pyrefly: ignore[invalid-inheritance]
         async def generate_content_async(self, llm_request: Any, stream: bool = False) -> AsyncGenerator[Any]:
             # The answer is gathered under the deadline and handed on after it: a deadline held across the yield
             # would count ADK's own time against an answer that came in time.

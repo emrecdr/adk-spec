@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import COPILOT_API, _litellm, said
+from .models import COPILOT_API, _litellm, said, trust_the_system
 from .settings import provider
 
 #: The keys of an entry worth a column, where the entry holds them; a dot reaches into a nested object.
@@ -25,6 +25,7 @@ class CatalogError(Exception):
 
 def list_models() -> list[dict[str, Any]]:
     """The models the chosen arm serves, one entry each. `CatalogError` where the provider will not list them."""
+    trust_the_system()
     try:
         return _gemini() if provider() == "gemini" else _copilot()
     except CatalogError:
