@@ -41,7 +41,8 @@ How it is applied in every phase below:
 
 ## The plan being followed now
 
-None: phases 10 and 11 are done. Phase 12, a lessons file, starts with its design.
+**`2026-11-22-adk-spec-lessons.md`**, phase 12: a lessons file, code only and shared through git, as the owner
+chose. Design `../specs/2026-11-22-lessons-design.md`.
 
 ## How a change flows
 
