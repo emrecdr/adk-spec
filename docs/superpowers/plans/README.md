@@ -39,11 +39,12 @@ How it is applied in every phase below:
 | 9 | Tests as evidence | `2026-11-22-adk-spec-verify-tests.md` | `verify` runs the test command a person wrote in `.spec/config.toml`, in every repository of the change; a failing run blocks "verified" unless overridden. | Built, cleaned up, reviewed and merged. Its live proof needs a test command in a real repository |
 | 10 and 11 | Sizing by rule; revising by instruction | `2026-11-22-adk-spec-sizing-and-revising.md` | A short bug fix is lean and a long feature request standard with no model call. `propose "<instruction>" --id <id>` revises an open change, keeping its tier, its IDs by name and what the instruction does not reach, and says what it added, changed and dropped. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 | 12 | A lessons file | `2026-11-22-adk-spec-lessons.md` | `.spec/lessons.md`, shared through git and read by every drafting stage: a person's corrections, and a line adk-spec adds in code for each fault a gate sent back that the next try fixed. `approve` names a drafted file a person edited, once. No model call. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
+| 13 | The `strict` tier | `2026-11-22-adk-spec-strict-tier.md` | A design always owed; `propose` stops after the brief and specs for a person to read, and `plan` goes on; two different names approve; a warning blocks, with no override. What each tier demands is one table in the domain. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 
 ## The plan being followed now
 
-**`2026-11-22-adk-spec-strict-tier.md`**, phase 13: the `strict` tier, as the owner chose. Design
-`../specs/2026-11-22-strict-tier-design.md`.
+None: every planned phase, 1 to 13, is done. What is left is the owner's, below: the live proofs, the Gemini arm,
+a run on Windows, and the open question of a second way to use adk-spec.
 
 ## How a change flows
 
@@ -322,6 +323,11 @@ second approver recorded. In this tier `propose` pauses after the brief for a re
 
 **From the research.** Kiro keeps its step-by-step flow for "unfamiliar, high-stakes or compliance work" and made
 one pass the default for the rest. That is this tier. **Size.** Medium.
+
+**State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged, as the owner chose. Its reviews moved
+what each tier demands into one table in the domain, which closed gaps where a warning of the check did not block,
+one name could give both approvals, and a third approval dropped an approved change back to a draft. Its live proof
+waits for the owner's go-ahead.
 
 ### Not planned unless a measurement asks for it
 
