@@ -20,7 +20,7 @@ def case(name: str):
     return next(one for one in CASES if one.name == name)
 
 
-def test_the_set_holds_eight_cases_one_clean_one_for_verify_and_two_for_the_reading() -> None:
+def test_the_set_holds_nine_cases_one_clean_one_for_verify_and_three_for_the_reading() -> None:
     assert [one.name for one in CASES] == [
         "contradiction",
         "ambiguity",
@@ -30,9 +30,10 @@ def test_the_set_holds_eight_cases_one_clean_one_for_verify_and_two_for_the_read
         "half-done",
         "integration",
         "across",
+        "profile",
     ]
     assert [one.name for one in CASES if one.clean] == ["clean"] and case("clean").expect == ()
-    assert [one.command for one in CASES if one.command != "check"] == ["verify", "plan", "plan"]
+    assert [one.command for one in CASES if one.command != "check"] == ["verify", "plan", "plan", "init"]
 
 
 def test_a_planted_fault_is_caught_by_a_finding_on_its_file_that_names_it() -> None:
@@ -65,6 +66,9 @@ def test_an_expectation_matches_by_prefix_any_of_its_files_and_any_of_its_words(
 def test_every_case_builds_a_workspace_that_reads(tmp_path, name) -> None:
     """The labelled set is itself well formed: a case that did not validate would measure its own mistake."""
     change = case(name).build(tmp_path)
+    if case(name).command == "init":  # a repository with no `.spec` yet: init makes it
+        assert change == "" and run(tmp_path, "init", "--no-explore") == 0
+        return
     assert run(tmp_path, "validate") in (0, 1), "never a usage error"
     assert run(tmp_path, "status") == 0 and change == cases.CHANGE
 
@@ -88,11 +92,11 @@ def test_the_measurement_runs_whole_on_the_fake(tmp_path, capsys, fake_provider)
     assert measure.main(["--runs", "2", "--out", str(out)]) == 0
     text = out.read_text(encoding="utf-8")
     rows = [line for line in text.split("\n") if line.startswith("| `")]
-    assert len(rows) == 8 and "fake on gemini" in text and "2 runs a case" in text
+    assert len(rows) == 9 and "fake on gemini" in text and "2 runs a case" in text
     assert "| `no-task` | check | 2/2 |" in text and "| `half-done` | verify | 2/2, 2/2 |" in text
     assert "| `clean` | check | nothing planted | 0 |" in text
-    assert "about 26 model calls" in capsys.readouterr().out, "it says what it is about to spend before it starts"
-    assert len(fake_provider.requests) == 26, "five cases of one call, and two plans: scout, survey, review, tasks"
+    assert "about 32 model calls" in capsys.readouterr().out, "it says what it is about to spend before it starts"
+    assert len(fake_provider.requests) == 32, "five cases of one call, two plans of four, and an init of three"
 
 
 def test_one_case_can_be_measured_alone(tmp_path, fake_provider) -> None:
@@ -206,3 +210,18 @@ def test_the_across_case_is_caught_where_a_statement_names_the_planted_file_in_t
     assert "## Where the change plugs in\n\n- `api/src/auth/password.py:7` The API ends here." in (
         built / ".spec/changes/measured/context.md"
     ).read_text(encoding="utf-8")
+
+
+def test_the_profile_case_is_caught_where_a_drafted_rule_names_the_convention(tmp_path, fake_provider) -> None:
+    """Phase 8: a repository whose errors are raised as one class and whose tests stand beside the code. init
+    reads it; the case is caught where a rule it drafted rests on one of the two planted files."""
+    scout = {"files": ["src/errors.py"], "folders": [], "searches": [], "reason": "How errors are raised."}
+    fake_provider.answers_when("You choose what to read", scout)
+    planted = {"kind": "convention", "file": "src/errors.py", "quote": "class AppError(Exception):"}
+    more = {"more_files": [], "more_folders": [], "more_searches": []}
+    fake_provider.answers_when(
+        "You read parts of a repository's code",
+        {"statements": [{**planted, "note": "Every error is an AppError."}], **more},
+    )
+    found = measure.measured(case("profile"), runs=1, folder=tmp_path / "found")
+    assert (found.caught, found.failed) == ([1], 0)

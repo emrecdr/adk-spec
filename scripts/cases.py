@@ -295,6 +295,27 @@ def _across(root: Path) -> str:
     return CHANGE
 
 
+ERRORS_PY = '"""Every error this service raises: one class, and a reason in words."""\n\n\n'
+ERRORS_PY += "class AppError(Exception):\n    pass\n"
+STORE_PY = "from errors import AppError\n\n\ndef save(row):\n    if not row:\n"
+STORE_PY += '        raise AppError("an empty row is not saved")\n    return row\n'
+SESSION_TEST_PY = "from auth.session import start_session\n\n\ndef test_a_session_is_given_to_a_user():\n"
+SESSION_TEST_PY += "    assert start_session('a')['user'] == 'a'\n"
+#: The two conventions planted in the profile case: errors raised as one class, and tests beside the code.
+PROFILE = ("src/errors.py", "src/auth/session_test.py")
+
+
+def _profile(root: Path) -> str:
+    """A repository with no `.spec/` yet, whose errors are raised as one class and whose tests stand beside the code
+    they test. `init` reads it, and what is scored is the rules it drafts into the constitution: there is no change,
+    so the ID is empty."""
+    files = {PROFILE[0]: ERRORS_PY, "src/store.py": STORE_PY, "src/auth/session.py": SESSION_PY}
+    for path, text in {**files, PROFILE[1]: SESSION_TEST_PY, "README.md": "# A service\n"}.items():
+        write_text(root / path, text)
+    _commit_all(root)
+    return ""
+
+
 def _commit_all(root: Path) -> None:
     """A git repository at `root` with one commit of all it holds, made under settings of this script's own."""
     git = shutil.which("git")
@@ -339,4 +360,5 @@ CASES = (
     ),
     Case("integration", _integration, "plan", (Expected(("context.touches", "context.exists"), INTEGRATION),)),
     Case("across", _across, "plan", (Expected(("context.touches", "context.exists"), ACROSS),)),
+    Case("profile", _profile, "init", (Expected("rule", PROFILE),)),
 )

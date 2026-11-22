@@ -25,14 +25,14 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from adk_spec.domain.context_md import SECTIONS
+from adk_spec.domain.context_md import DRAFTED_HEADING, SECTIONS
 from adk_spec.domain.convert import pointed_at
 from adk_spec.domain.drafts import FindingDraft, FindingsDraft
 from adk_spec.domain.text import lines_of, plain
 from adk_spec.interfaces import cli
 from adk_spec.workspace.files import read_text
 from adk_spec.workspace.git import GitError, head
-from adk_spec.workspace.layout import CHANGES, CONTEXT, Workspace, findings_of
+from adk_spec.workspace.layout import CHANGES, CONSTITUTION, CONTEXT, Workspace, findings_of
 from adk_spec.workspace.runs import listed, read
 
 from .cases import CASES, Case
@@ -93,11 +93,13 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[Seen
     """What a run of `case` left: what was found, each of the model's findings that quoted nothing real, and the
     tokens and seconds of its model calls."""
     workspace = Workspace.find(root)
-    loaded = workspace.load_change(change)
     kept = [read(path) for path in listed(workspace)]
     passes = ("explore", "plan") if case.command == "plan" else (case.command,)  # a plan reads the code first
     calls = [call for held in kept if held.command in passes for call in held.calls]
     tokens, seconds = sum(call.tokens for call in calls), sum(call.seconds for call in calls)
+    if case.command == "init":  # no change: what init drafted into the constitution is what is scored
+        return _drafted(workspace.home / CONSTITUTION), [], tokens, seconds
+    loaded = workspace.load_change(change)
     if case.command == "plan":
         return _stated(workspace.home / CHANGES / change / CONTEXT), [], tokens, seconds
     if case.command == "verify":
@@ -115,6 +117,18 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[Seen
         else:  # the quote is kept here beside the message: a planted fault is named by either
             seen.append(Seen(code, at[0], f"{one.quote} {one.message}", critical))
     return seen, left_out, tokens, seconds
+
+
+#: A rule as `init` drafts one into a constitution: what it says, and the file and line its evidence is from.
+_RULE = re.compile(r"- (?P<note>.*) \(`(?P<path>[^`]+):\d+`: .*\)")
+
+
+def _drafted(constitution: Path) -> list[Seen]:
+    """Each rule `init` drafted into the constitution, read back from its section. None where it drafted none."""
+    text = read_text(constitution) if constitution.is_file() else ""
+    _before, heading, drafted = text.partition(DRAFTED_HEADING)
+    found = (_RULE.fullmatch(line) for line in lines_of(drafted) if heading)
+    return [Seen("rule", one["path"], one["note"], False) for one in found if one]
 
 
 #: A statement as `context.md` holds one: the file and the line it rests on, and what it says.
@@ -162,7 +176,7 @@ def measured(case: Case, *, runs: int, folder: Path) -> Row:
         change = case.build(root)
         quiet = io.StringIO()
         with contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
-            code = cli.main(["--root", str(root), case.command, change])
+            code = cli.main(["--root", str(root), case.command, *([change] if change else [])])
         row.failed += code not in (cli.EXIT_OK, cli.EXIT_FINDINGS)
         seen, left_out, tokens, seconds = observed(case, root, change)
         for at, wanted in enumerate(case.expect):
@@ -240,7 +254,7 @@ def main(argv: list[str]) -> int:
         return 2
     # A case code decides costs no call; a plan reads the code first: a scout, a survey or more, a review, then the
     # tasks.
-    calls = args.runs * sum(0 if case.by_code else 4 if case.command == "plan" else 1 for case in cases)
+    calls = args.runs * sum(0 if case.by_code else {"plan": 4, "init": 3}.get(case.command, 1) for case in cases)
     print(
         f"measuring {len(cases)} cases, {args.runs} runs each, on {serving('check')}: about {calls} model calls",
         flush=True,
