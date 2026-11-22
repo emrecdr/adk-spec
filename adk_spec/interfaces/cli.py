@@ -519,11 +519,11 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     ended = sys.stdin is None  # a process started with no terminal and no pipe
     for number, question in enumerate(questions, 1):
         print(f"{number}. {plain(question['question'])}")
-        print(f"   suggested: {plain(question['recommended']) or '(none)'}", flush=True)
+        print(f"   suggested: {plain(question['suggested']) or '(none)'}", flush=True)
         line = "" if ended else _line()
         ended = ended or line == ""  # no line at all: the input is over
         typed = line.strip()
-        answers.append(question["recommended"] if typed == "=" else typed)
+        answers.append(question["suggested"] if typed == "=" else typed)
     return answers
 
 

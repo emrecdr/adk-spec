@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 
-from .brief_md import asked_by, marker_of, markers, render_brief
+from .brief_md import asked_in, marker_of, render_brief, worded
 from .drafts import BriefDraft, DeltasDraft, DesignDraft, FindingDraft, FindingsDraft, RequirementDraft, TasksDraft
 from .ids import SLUG_MAX, next_requirement_id, slug_problem
 from .model import Brief, Delta, Finding, GrammarError, Removal, Requirement, Scenario, Severity, Spec, Task, TaskGroup
@@ -61,7 +61,7 @@ def _open(draft: BriefDraft) -> dict[str, str]:
     point named twice is one point, with its first suggestion; one with no question is none."""
     points: dict[str, str] = {}
     for one in draft.open_points:
-        if asked := asked_by(marker_of(one.question)):
+        if asked := worded(one.question):
             points.setdefault(asked, plain(one.suggested))
     return points
 
@@ -69,29 +69,31 @@ def _open(draft: BriefDraft) -> dict[str, str]:
 def to_brief(draft: BriefDraft) -> Brief:
     """The brief as the domain holds it. Each open point the draft names stands in the assumptions as a marker, a
     paragraph of its own: the file a person reads and the validator counts is what it was before the points were
-    data. A point the model also wrote there as a marker, copied from the brief it replaces, is not written twice."""
-    assumptions = _text(draft.assumptions)
-    written = set(map(asked_by, markers(assumptions)))
-    points = [marker_of(asked) for asked in _open(draft) if asked not in written]
-    return Brief(
+    data. A point the model also wrote as a marker by hand, in any section, copied from the brief it replaces, is
+    not written twice."""
+    held = Brief(
         title=flat(draft.title),
         why=_text(draft.why),
         what_changes=_text(draft.what_changes),
         non_goals=_text(draft.non_goals),
         capabilities=_listed(draft.capabilities),
         impact=_text(draft.impact),
-        assumptions="\n\n".join(part for part in (assumptions, *points) if part),
+        assumptions=_text(draft.assumptions),
     )
+    written = set(asked_in(render_brief(held)))
+    points = [marker_of(asked) for asked in _open(draft) if asked not in written]
+    assumptions = "\n\n".join(part for part in (held.assumptions, *points) if part)
+    return held.model_copy(update={"assumptions": assumptions})
 
 
-def questions_of(draft: BriefDraft, brief: Brief) -> list[dict[str, str]]:
-    """What a person is asked about a brief: one question for each point its file marks as open, in the file's
-    order, each with the answer the draft suggests for it, or none. A marker the model wrote in a section by itself
-    is asked too. This was a model's stage: the question is the marker's own text, and only the suggestion took a
-    model, which the brief stage now gives."""
+def questions_of(draft: BriefDraft) -> list[dict[str, str]]:
+    """What a person is asked about a draft's brief: one question for each point its file marks as open, in the
+    file's order, each with the answer the draft suggests for it, or none. A marker the model wrote in a section by
+    itself is asked too. This was a model's stage: the question is the marker's own text, and only the suggestion
+    took a model, which the brief stage now gives."""
     suggested = _open(draft)
-    asked = dict.fromkeys(map(asked_by, markers(render_brief(brief))))
-    return [{"question": one or NO_QUESTION, "recommended": suggested.get(one, "")} for one in asked]
+    asked = dict.fromkeys(asked_in(render_brief(to_brief(draft))))
+    return [{"question": one or NO_QUESTION, "suggested": suggested.get(one, "")} for one in asked]
 
 
 def to_deltas(draft: DeltasDraft, living: Mapping[str, Spec], taken: Iterable[str]) -> dict[str, Delta]:

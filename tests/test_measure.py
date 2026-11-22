@@ -104,7 +104,7 @@ def test_a_run_that_fails_its_gate_is_counted_and_does_not_end_the_measurement(t
     with a traceback, the runs already paid for lost."""
     fake_provider.answers_when("You review the files of a change", "not json")
     row = measure.measured(case("clean"), runs=1, folder=tmp_path)
-    assert (row.failed, row.false_blocking, row.dropped) == (1, 0, 0) and len(fake_provider.requests) == 3
+    assert (row.failed, row.false_blocking, row.left_out) == (1, 0, []) and len(fake_provider.requests) == 3
 
 
 def test_what_was_found_beyond_what_was_planted_is_kept_in_its_own_words(tmp_path, fake_provider) -> None:
@@ -142,7 +142,7 @@ def test_a_finding_left_out_for_its_quote_is_kept_in_its_own_words_too(tmp_path,
     invented["quote"] = "The system SHALL respond very quickly indeed"
     fake_provider.answers_when("You review the files of a change", {"findings": [invented]})
     row = measure.measured(case("ambiguity"), runs=1, folder=tmp_path)
-    assert row.dropped == 1 and row.left_out == [
+    assert row.left_out == [
         "run 1: `check.ambiguity` specs/auth/spec.md: quoted `The system SHALL respond very quickly indeed`: How fast?"
     ]
     page = measure.rendered([row], model="a model", commit=None, at="t")

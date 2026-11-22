@@ -14,8 +14,8 @@ from .spec_md import fenced_lines, paragraphs, sections_of, title_of
 from .text import flat, lines_of, normalise, plain
 
 SECTIONS = ("Why", "What changes", "Non-goals", "Capabilities", "Impact", "Assumptions")
-#: A point left open for a person to settle, with or without its question.
-MARKER = re.compile(r"\[\s*NEEDS\s+CLARIFICATION\s*(?::[^\]]*)?\]", re.IGNORECASE)
+#: A point left open for a person to settle, with or without its question, which is the pattern's one group.
+MARKER = re.compile(r"\[\s*NEEDS\s+CLARIFICATION\s*(?::([^\]]*))?\]", re.IGNORECASE)
 #: How many markers a brief may hold: past it, the request is not ready to be specified.
 MARKER_BUDGET = 3
 _TITLE = re.compile(r"# (\S.*)")
@@ -33,19 +33,23 @@ _FIELDS = {
 
 def markers(text: str) -> list[str]:
     """Every clarification marker in `text`, in order."""
-    return MARKER.findall(text)
+    return [found[0] for found in MARKER.finditer(text)]
+
+
+def asked_in(text: str) -> list[str]:
+    """The question of each marker in `text`, in order, on one line: nothing for a marker that holds none."""
+    return [flat(found[1] or "") for found in MARKER.finditer(text)]
+
+
+def worded(question: str) -> str:
+    """An open point's question as a marker can hold it, and as `asked_in` reads it back: plain text on one line,
+    with no bracket in it that would end the marker early."""
+    return plain(question).replace("[", "(").replace("]", ")")
 
 
 def marker_of(question: str) -> str:
-    """The marker a brief's file holds for an open point: its question as plain text on one line, with no bracket
-    in it that would end the marker early."""
-    return f"[NEEDS CLARIFICATION: {plain(question).replace('[', '(').replace(']', ')')}]"
-
-
-def asked_by(marker: str) -> str:
-    """The question a marker holds, or nothing where it holds none."""
-    _name, colon, question = marker.strip().strip("[]").partition(":")
-    return flat(question) if colon else ""
+    """The marker a brief's file holds for an open point."""
+    return f"[NEEDS CLARIFICATION: {worded(question)}]"
 
 
 def parse_brief(text: str) -> Brief:

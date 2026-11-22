@@ -129,11 +129,7 @@ def next_run(seed: Mapping[str, Any], state: Mapping[str, Any], answers: Sequenc
     if not any(answers):
         return "deltas", {**carried, brief_stage.KEY: state[brief_stage.KEY]}
     told = [seed[brief_stage.ANSWERS]] if seed.get(brief_stage.ANSWERS) else []
-    told += [
-        f"{' '.join(asked['question'].split())} -> {answer}"
-        for asked, answer in zip(state[ASKING], answers, strict=True)
-        if answer
-    ]
+    told += [f"{asked['question']} -> {answer}" for asked, answer in zip(state[ASKING], answers, strict=True) if answer]
     replaces = render_brief(_brief(state))  # the draft the questions were asked about: the next one starts from it
     return "brief", {
         **carried,
@@ -266,8 +262,7 @@ def _open_points(ask: bool) -> Callable[[Context], Event]:
         answered."""
         if not (ask and ctx.state.get(TIER) == "standard" and (ctx.state.get(ROUNDS) or 0) < ROUND_BUDGET):
             return Event(route=NONE)
-        draft = BriefDraft.model_validate(ctx.state[brief_stage.KEY])
-        questions = questions_of(draft, to_brief(draft))
+        questions = questions_of(BriefDraft.model_validate(ctx.state[brief_stage.KEY]))
         return Event(route=SOME, state={ASKING: questions}) if questions else Event(route=NONE)
 
     return open_points

@@ -64,7 +64,6 @@ class Row:
     #: For each planted fault of the case, in how many runs it was caught.
     caught: list[int]
     false_blocking: int = 0
-    dropped: int = 0
     tokens: int = 0
     seconds: float = 0.0
     #: Runs whose command did not end in a report: a refusal, or the engine's failure.
@@ -87,7 +86,7 @@ def scored(case: Case, seen: list[Seen]) -> Score:
     return Score(caught, len(case.expect) - caught, stray)
 
 
-def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[str], int, float]:
+def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[Seen], int, float]:
     """What a run of `case` left: what was found, each of the model's findings that quoted nothing real, and the
     tokens and seconds of its model calls."""
     workspace = Workspace.find(root)
@@ -101,16 +100,15 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[str]
     found = findings_of(loaded, workspace.specs()[0])
     seen = [Seen(one.code, one.path or "", one.message, one.severity == "ERROR") for one in found]
     texts = workspace.approval_texts(change)
-    dropped: list[str] = []
+    left_out: list[Seen] = []
     answer = next((call.answer for call in reversed(calls) if call.answer and not call.error), None)
     for one in _findings(answer):
+        code, critical = f"check.{one.kind}", one.severity == "critical"
         if (at := pointed_at(one, texts)) is None:  # the command left this one out, by the same test
-            dropped.append(
-                f"`check.{one.kind}` {one.file.strip()}: quoted `{plain(one.quote)[:200]}`: {plain(one.message)[:200]}"
-            )
+            left_out.append(Seen(code, one.file.strip(), f"quoted `{one.quote}`: {one.message}", critical))
         else:  # the quote is kept here beside the message: a planted fault is named by either
-            seen.append(Seen(f"check.{one.kind}", at[0], f"{one.quote} {one.message}", one.severity == "critical"))
-    return seen, dropped, tokens, seconds
+            seen.append(Seen(code, at[0], f"{one.quote} {one.message}", critical))
+    return seen, left_out, tokens, seconds
 
 
 def _findings(answer: str | None) -> list[FindingDraft]:
@@ -120,6 +118,15 @@ def _findings(answer: str | None) -> list[FindingDraft]:
         return FindingsDraft.model_validate_json(answer).findings if answer else []
     except ValidationError:
         return []
+
+
+#: How much of a finding's own words a list under the table keeps.
+WORDS_MAX = 400
+
+
+def _said(run: int, one: Seen) -> str:
+    """A finding in its own words, as one line of a list under the table."""
+    return f"run {run + 1}: `{one.code}` {one.path}: {plain(one.text)[:WORDS_MAX]}"
 
 
 def measured(case: Case, *, runs: int, folder: Path) -> Row:
@@ -133,7 +140,7 @@ def measured(case: Case, *, runs: int, folder: Path) -> Row:
         with contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
             code = cli.main(["--root", str(root), case.command, change])
         row.failed += code not in (cli.EXIT_OK, cli.EXIT_FINDINGS)
-        seen, dropped, tokens, seconds = observed(case, root, change)
+        seen, left_out, tokens, seconds = observed(case, root, change)
         for at, wanted in enumerate(case.expect):
             caught = any(wanted.met_by(one) for one in seen)
             row.caught[at] += caught
@@ -142,13 +149,9 @@ def measured(case: Case, *, runs: int, folder: Path) -> Row:
                 found = "; ".join(f"{one.code} on {one.path}" for one in seen) or "nothing"
                 row.missed.append(f"run {run + 1}: wanted {codes} on {' or '.join(wanted.paths)}; found {found}")
         row.false_blocking += scored(case, seen).false_blocking
-        row.strays += [
-            f"run {run + 1}: `{one.code}` {one.path}: {one.text[:300]}"
-            for one in seen
-            if one.blocking and not any(wanted.met_by(one) for wanted in case.expect)
-        ]
-        row.dropped += len(dropped)
-        row.left_out += [f"run {run + 1}: {said}" for said in dropped]
+        strays = [one for one in seen if one.blocking and not any(wanted.met_by(one) for wanted in case.expect)]
+        row.strays += [_said(run, one) for one in strays]
+        row.left_out += [_said(run, one) for one in left_out]
         row.tokens += tokens
         row.seconds += seconds
     return row
@@ -169,7 +172,7 @@ def rendered(rows: list[Row], *, model: str, commit: str | None, at: str) -> str
     for row in rows:
         caught = ", ".join(f"{times}/{row.runs}" for times in row.caught) or "nothing planted"
         lines.append(
-            f"| `{row.name}` | {row.command} | {caught} | {row.false_blocking} | {row.dropped} | "
+            f"| `{row.name}` | {row.command} | {caught} | {row.false_blocking} | {len(row.left_out)} | "
             f"{row.tokens // row.runs:,} | {row.seconds / row.runs:.1f} | {row.failed} |"
         )
     lines += [

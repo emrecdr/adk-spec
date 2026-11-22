@@ -16,14 +16,8 @@ from adk_spec.workspace.files import read_text
 REQUEST = "Let users sign in with a passkey."
 #: Triage's own call for the standard tier: a tier given by hand is not asked of the model at all.
 STANDARD = {**CANNED_TRIAGE, "tier": "standard"}
-TRIAGE, BRIEF, DELTAS = (
-    "You size a change request",
-    "You write the brief of a change",
-    "You write the requirement deltas",
-)
-#: How the stage that worded questions opened, while there was one.
-WORDING = "You word the open points"
-ASKED = "Which browsers are in scope?"
+TRIAGE, BRIEF = "You size a change request", "You write the brief of a change"
+ASKED = OPEN_POINT["question"]
 
 
 def proposed(root, *argv: str) -> int:
@@ -60,7 +54,7 @@ def test_an_open_point_becomes_a_question_with_no_model_asked_to_word_it(
     assert f"1. {ASKED}" in out and "suggested: Evergreen browsers only" in out
     assert "The brief leaves 1 point open." in out
     assert "triage 120 in 1 call, brief 240 in 2 calls, deltas 120 in 1 call: 480 total" in out
-    assert asked(fake_provider, WORDING) == [] and len(fake_provider.requests) == 4
+    assert len(fake_provider.requests) == 4, "triage, two briefs and the deltas: no call words a question"
 
 
 def test_the_suggestion_is_taken_with_an_equals_sign(tmp_path, monkeypatch, fake_provider) -> None:
