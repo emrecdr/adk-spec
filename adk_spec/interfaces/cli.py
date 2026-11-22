@@ -972,6 +972,16 @@ def _source(workspace: Workspace, repositories: Mapping[str, str]) -> Source | N
         return None
 
 
+def _lessons(workspace: Workspace) -> str:
+    """The lessons as a drafting stage reads them, or nothing: a file that is no text is said, and stops nothing. A
+    person edits it by hand, and may have saved it in another encoding."""
+    try:
+        return lessons_text(workspace)
+    except NotTextError:
+        print(f"left out  {workspace.shown(workspace.home / LESSONS)} is not UTF-8: no stage reads it")
+        return ""
+
+
 def _profile(workspace: Workspace) -> str:
     """The repository's profile as a stage reads it, or nothing: one that is no text is said, and stops no plan.
     It is optional material, which a person may have re-saved in another encoding."""
@@ -1104,7 +1114,7 @@ def _plan_made(
         LIVING: living_text(specs, sorted(change.deltas)),
         TREE: source.tree() if source else "",
         PROFILE_TEXT: _profile(workspace),
-        LESSONS_TEXT: lessons_text(workspace),
+        LESSONS_TEXT: _lessons(workspace),
     }
     if change.design and not drafts_design:  # a design a person wrote, or one the change does not owe
         seed[DESIGN_TEXT] = change.design.strip()
@@ -1611,7 +1621,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     # One ledger for every run of this command: the count and the ceiling are the command's.
     ledger = UsageLedger(workspace.config().max_tokens or None)
     seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES: constitution_text(workspace)}
-    seed |= {LESSONS_TEXT: lessons_text(workspace), **_as_it_stands(workspace, change)}
+    seed |= {LESSONS_TEXT: _lessons(workspace), **_as_it_stands(workspace, change)}
     with _recording(workspace, "propose", args.id) as kept:
         state = _rounds(args, workspace, known, ledger, kept.recorder, seed)
         tier = state.get(TIER)

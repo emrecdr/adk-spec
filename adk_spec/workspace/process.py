@@ -29,6 +29,10 @@ Completed = subprocess.CompletedProcess
 TimedOut = subprocess.TimeoutExpired
 
 
+#: Whether this is Windows, where a process tree is stopped by its root with taskkill.
+WINDOWS = os.name == "nt"
+
+
 def on_path(name: str, path: str | None = None) -> str | None:
     """`name` by its full path, as the absolute entries of `path`, PATH where none is given, find it, or nothing:
     never from the current folder."""
@@ -50,7 +54,7 @@ def run(
     """One program, bytes out: standard error apart, or `merged` into standard out. Past `timeout` its whole tree
     is stopped and `subprocess.TimeoutExpired` raised, holding what it had written by then."""
     stderr = subprocess.STDOUT if merged else subprocess.PIPE
-    windows = os.name == "nt"
+    windows = WINDOWS
     with subprocess.Popen(
         argv,
         cwd=cwd,
@@ -89,7 +93,7 @@ def run_kept(argv: list[str], *, env: Mapping[str, str], timeout: float, keep: i
     """One program, judged by its own exit, its standard error with its standard out, of which only the last `keep`
     bytes are ever held. Once it ends, past `timeout`, or on an interrupt, every process it started is stopped:
     what a run leaves running, a server say, outlives it no more than its output keeps it waiting."""
-    windows = os.name == "nt"
+    windows = WINDOWS
     process = subprocess.Popen(
         argv,
         cwd=cwd,
@@ -109,7 +113,10 @@ def run_kept(argv: list[str], *, env: Mapping[str, str], timeout: float, keep: i
     except BaseException:
         _stopped(process, windows)
         raise
-    _stopped(process, windows)  # what it left running, also where it passed
+    # What it left running, also where it passed: its session outlives it while something in it runs. Not on Windows,
+    # where taskkill finds a tree by its root, which is gone, and whose number may be another program's by now.
+    if code is None or not windows:
+        _stopped(process, windows)
     with contextlib.suppress(subprocess.TimeoutExpired):
         process.wait(timeout=DRAIN_S)
     reader.join(DRAIN_S)  # a process that left the session may hold the output: it is waited for no longer

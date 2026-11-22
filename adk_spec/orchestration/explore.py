@@ -252,7 +252,7 @@ def _weighed(ctx: Context) -> Event:
     unknown = [[question, where] for question, where in asked if question][:UNKNOWN_BUDGET]
     update = {**_holding(kept), DISPUTED: found.disputed + len(found.statements) - len(kept), UNKNOWN: unknown}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
-    on = more and (state.get(REVIEWS) or 0) < REVIEW_BUDGET and 0 < len(kept) < STATEMENT_BUDGET
+    on = more and (state.get(REVIEWS) or 0) < REVIEW_BUDGET and len(kept) < STATEMENT_BUDGET
     return Event(route=SOME if on else NONE, state=update)
 
 

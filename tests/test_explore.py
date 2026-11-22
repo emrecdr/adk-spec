@@ -272,3 +272,12 @@ async def test_a_reading_that_kept_nothing_is_not_reviewed(tmp_path, fake_provid
     fake_provider.answers_when(SURVEY, survey())
     await read(tmp_path)
     assert sent(fake_provider, REVIEW) == []
+
+
+@pytest.mark.asyncio
+async def test_a_review_that_disputes_every_statement_may_look_again(tmp_path, fake_provider) -> None:
+    """Found by an outside review: where the review disputed all and asked for more, nothing more was read."""
+    fake_provider.answers_each_time(SURVEY, iter([survey(APP), survey(DOCS)]))
+    fake_provider.answers_each_time(REVIEW, iter([reviewed(disputed=(1,), files=("docs/auth.md",)), reviewed()]))
+    found = explored((await read(tmp_path)).state)
+    assert len(sent(fake_provider, SURVEY)) == 2 and [one.path for one in found.statements] == ["docs/auth.md"]

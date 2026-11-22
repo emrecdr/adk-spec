@@ -66,8 +66,17 @@ def _environment(root: Path) -> dict[str, str]:
     if env.get("VIRTUAL_ENV") and Path(env["VIRTUAL_ENV"]).resolve() == own:
         del env["VIRTUAL_ENV"]
     entries = env.get("PATH", "").split(os.pathsep)
-    env["PATH"] = os.pathsep.join(entry for entry in entries if Path(entry).resolve().parent != own)
+    env["PATH"] = os.pathsep.join(entry for entry in entries if _not_own(entry, own))
     return env
+
+
+def _not_own(entry: str, own: Path) -> bool:
+    """Whether a PATH entry is not in adk-spec's own virtual environment. One that cannot be resolved, as an
+    unmounted drive on Windows, is kept as it was given: it is no folder of adk-spec's."""
+    try:
+        return Path(entry).resolve().parent != own
+    except OSError, ValueError:
+        return True
 
 
 def _program(word: str, path: str) -> tuple[str | None, str]:

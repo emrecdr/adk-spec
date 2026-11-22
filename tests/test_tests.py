@@ -205,3 +205,40 @@ def test_a_virtual_environment_inside_the_project_is_the_projects_own_and_is_kep
     code = "import os\nprint('venv', os.environ.get('VIRTUAL_ENV'))\nprint('path', os.environ['PATH'])"
     run = run_tests(tmp_path, program(tmp_path, code), timeout=60)
     assert f"venv {own}" in run.tail and str(own / "bin") in run.tail
+
+
+def test_on_windows_a_run_that_ended_is_not_stopped_again(tmp_path, monkeypatch) -> None:
+    """Found by an outside review: taskkill finds a tree by its root, so after a normal exit it stopped nothing, and
+    aimed at a process number Windows may have given another program."""
+    from adk_spec.workspace import process
+
+    stopped = []
+    monkeypatch.setattr(process, "WINDOWS", True)
+    monkeypatch.setattr(process, "_stopped", lambda _proc, windows: stopped.append(windows))
+    run_tests(tmp_path, program(tmp_path, "print('ok')"), timeout=60)
+    assert stopped == []
+    run_tests(tmp_path, program(tmp_path, "import time\ntime.sleep(2)"), timeout=0.5)
+    assert stopped == [True], "a run past its time is stopped, on Windows too"
+
+
+def test_a_path_entry_that_cannot_be_resolved_is_kept_as_it_was(tmp_path, monkeypatch) -> None:
+    """Found by an outside review: an entry `resolve` cannot read, as an unmounted drive on Windows, stopped verify."""
+    from pathlib import Path
+
+    from adk_spec.workspace import tests as module
+
+    own = tmp_path / "adk-spec/.venv"
+    (own / "bin").mkdir(parents=True)
+    monkeypatch.setattr(sys, "prefix", str(own))
+    monkeypatch.setattr(sys, "base_prefix", "/usr")
+    monkeypatch.setenv("PATH", os.pathsep.join(["/unreadable-drive", str(own / "bin"), "/usr/bin"]))
+    resolve = Path.resolve
+
+    def refusing(self, *args, **kwargs):
+        if str(self).startswith("/unreadable-drive"):
+            raise OSError("the drive is not there")
+        return resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", refusing)
+    entries = module._environment(tmp_path / "project")["PATH"].split(os.pathsep)
+    assert entries == ["/unreadable-drive", "/usr/bin"]

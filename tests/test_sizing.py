@@ -1,5 +1,5 @@
-"""Sizing a request by rules: a short bug fix is lean, a long feature standard, and the model sizes everything else,
-a request that may owe no spec above all."""
+"""Sizing a request by rule: a short bug fix that names no risk is lean, and the model sizes everything else: a
+request that may owe no spec, a long one, and one that may be strict."""
 
 from __future__ import annotations
 
@@ -18,8 +18,25 @@ def test_a_short_bug_fix_is_lean(request_) -> None:
     assert sized(request_) == ("lean", "a short bug fix")
 
 
-def test_a_long_request_or_one_naming_features_is_standard() -> None:
-    assert sized("x " * 400) == ("standard", "a request of some length") == sized(FEATURE)
+def test_a_long_request_is_sized_by_the_model_which_alone_may_call_it_strict() -> None:
+    """Found by an outside review: a long request was sized standard by rule, and the model, which alone can call a
+    change strict, was never asked."""
+    assert sized("x " * 400) is None and sized(FEATURE) is None
+
+
+@pytest.mark.parametrize(
+    "request_",
+    [
+        "Fix authentication token validation bug",  # found by the outside review: a security fault, sized lean
+        "Fix the crash when a password reset link expires.",
+        "Fix the error in the payment retry when the card fails.",
+        "Fix the wrong permission check on the admin page.",
+        "Fix the crash in the data migration of old invoices.",
+        "Fix the error when a secret is read from the vault.",
+    ],
+)
+def test_a_fix_that_names_a_risk_is_sized_by_the_model(request_) -> None:
+    assert sized(request_) is None
 
 
 @pytest.mark.parametrize(

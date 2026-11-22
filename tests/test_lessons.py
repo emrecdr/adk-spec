@@ -250,3 +250,14 @@ def test_a_lessons_file_that_cannot_be_written_costs_the_run_nothing(tmp_path, m
     fake_provider.answers_each_time(DELTAS, iter([DELTAS_ON_A_MISSING_ID, None]))
     assert proposed(tmp_path, "--id", "linked") == 0
     assert (ws.home / "changes/linked/brief.md").is_file()
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_lessons_file_that_is_no_text_is_left_out_and_stops_nothing(tmp_path, monkeypatch, capsys) -> None:
+    """Found by an outside review: the profile was left out where it was no text, the lessons stopped propose."""
+    on_the_fake(monkeypatch)
+    ws = seeded(tmp_path)
+    (ws.home / LESSONS).write_bytes("- a lesson\n".encode("utf-16"))
+    capsys.readouterr()
+    assert proposed(tmp_path, "--id", "utf16") == 0
+    assert "left out  .spec/lessons.md is not UTF-8" in capsys.readouterr().out
