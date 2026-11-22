@@ -153,6 +153,35 @@ Each step calls a model with the owner's account, on the owner's go-ahead in so 
 
 ---
 
+## What changed while this plan was executed
+
+Tasks 1 to 3 were built on 21 and 22 November 2026, test first, with no model called.
+
+**Proved by `scripts/dump_instructions.py`, before and after:** the brief's instruction changed, the questions' is
+gone, the check's changed by its one sentence, and triage, deltas, design, tasks and verify are byte for byte what
+they were.
+
+**Where the code departs from the Interfaces above, each a ruling in the ledger:**
+
+- `questions_of(draft)` takes the draft alone. Every caller passed `to_brief(draft)` beside it, two arguments that
+  had to agree with nothing enforcing it.
+- A question's suggestion is keyed `suggested`, as the schema names it, not `recommended` as the removed stage did.
+- `brief_md.asked_by(marker)` became `asked_in(text)` and `worded(question)`. The question is read by the marker
+  pattern's own group: a second parse disagreed with it where a hand-written question ends in a bracket.
+- A point named twice, or named and also written as a marker by hand in any section, is one marker and one
+  question. The brief a new draft replaces is shown with its markers, and the guide says "keep what it says".
+- The brief's guide gained one sentence the plan did not list: "A [NEEDS CLARIFICATION: ...] line in it is a point
+  that draft left open: do not copy it. Settle it from an answer, or name it again in open_points." Its "Leave
+  every point" became "Name every point".
+- A run that asks ends at the graph's own end node, not at the one a caller passes: a chat's renders "nothing
+  drafted", and a chat never asks.
+
+**Beside the plan:** `scripts/measure.py` words every list under its table in one place and as plain text, so a
+quote that runs over lines no longer breaks the page; the count of findings left out is the length of their list.
+
+**Not proved:** the brief's new instruction has met the suite's fake model alone. Whether a real model fills
+`open_points`, with a suggestion each, and writes no marker by hand, is Task 4.
+
 ## What this plan leaves
 
 Tests as evidence for `verify`; the Gemini arm and Windows, which are the owner's; a measurement that reports a range and not a count.
