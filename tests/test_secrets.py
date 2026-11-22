@@ -204,3 +204,15 @@ def test_a_comment_line_after_a_header_named_in_code_is_not_taken_for_the_key() 
     for text, kept in ((code, "Comment: this line of code is the change"), (prose, "Comment: this is prose")):
         for scrubbed, _count in (scrub(text), scrub_lines(text)):
             assert kept in scrubbed
+
+
+@pytest.mark.parametrize("mark", ["# ", "// ", " * ", "; ", "+# ", "+    // "])
+def test_a_key_behind_a_comment_mark_hides_its_body_and_its_file(mark) -> None:
+    """Found by review: a key commented out in code, as a fixture or a config keeps one, had its header hidden and its
+    body sent, and the file holding it was not withheld."""
+    body = "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ"
+    header, footer = "-----BEGIN OPENSSH PRIVATE KEY-----", "-----END OPENSSH PRIVATE KEY-----"
+    for key in (f"{mark}{header}\n{mark}{body}\n{mark}{body}\n", f"{mark}{header}\n{mark}{body}\n{mark}{footer}\n"):
+        for scrubbed, _count in (scrub(key), scrub_lines(key)):
+            assert body not in scrubbed, key
+        assert holds_a_key(key)

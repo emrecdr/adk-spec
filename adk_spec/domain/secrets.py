@@ -32,8 +32,10 @@ _STAND_IN = r"(?![$%{<]|\[REDACTED)"
 #: header, or nothing — so a header where no rule reads, a file's name or an unchanged line, cannot reach a footer
 #: further on: measured with any text allowed between them, the change in between was hidden from every model call.
 #: What may open a key's line: a diff's marker, then a quote's `>` as Markdown nests them, as a pasted issue or review
-#: holds a key. Found by an outside audit: a quoted key had its header hidden and its body sent.
-_LEAD = r"[+\- ]?(?:[ \t]*+>)*+[ \t]*+"
+#: holds a key, or a comment's mark, `#`, `//`, `;` or a block comment's `*`, as a fixture or a config keeps one
+#: commented out. Found by an outside audit and by review: a quoted key, then a commented one, had its header hidden
+#: and its body sent.
+_LEAD = r"[+\- ]?(?:[ \t]*+(?:>|#|//|;|\*))*+[ \t]*+"
 #: An armour header a key's block may hold: PEM's, and PGP's, GnuPG writing `Version:` before the body. Found by an
 #: outside audit: with no footer, `Version:` ended the key's lines, and the body after it reached the model.
 _ARMOUR = r"(?:Proc-Type|DEK-Info|Version|Comment|Hash|Charset): [^\n]*+"
