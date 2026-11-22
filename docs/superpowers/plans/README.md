@@ -35,12 +35,12 @@ How it is applied in every phase below:
 | 5 | The simple flow | `2026-11-22-adk-spec-simple-flow.md` | A standard change in four commands, a lean one in three: `propose` writes the whole change, `approve` records bases and makes the check. Help in three groups, progress lines, a `next` line. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 | 6 | Brownfield, part 1 | `2026-11-22-adk-spec-brownfield-context.md` | `propose` reads the code that matters before it plans, and writes `context.md`, every statement with a quote code found. Secrets scrubbed from every request; `[repository] exclude`. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 | 7 | Brownfield, part 2 | `2026-11-22-adk-spec-across-repositories.md` | A change names the repositories it spans (`--with`); one reading covers them, a model reviews it, `context.md` says what is unknown; `verify` judges the work in all of them. | Built, cleaned up, reviewed and merged. Measured live: `across` caught 5/5 |
-| 8 | Brownfield, part 3 | `2026-11-22-adk-spec-init-profile.md` | `init` reads the code, writes `.spec/profile.md`, drafts rules already true of the code into the template constitution; every change's reading starts from the profile. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
+| 8 | Brownfield, part 3 | `2026-11-22-adk-spec-init-profile.md` | `init` reads the code, writes `.spec/profile.md`, drafts rules already true of the code into the template constitution; every change's reading starts from the profile. | Built, cleaned up, reviewed and merged. Measured live: `profile` 3/5 and 5/5, then a fix |
+| 9 | Tests as evidence | `2026-11-22-adk-spec-verify-tests.md` | `verify` runs the test command a person wrote in `.spec/config.toml`, in every repository of the change; a failing run blocks "verified" unless overridden. | Built, cleaned up, reviewed and merged. Its live proof needs a test command in a real repository |
 
 ## The plan being followed now
 
-**`2026-11-22-adk-spec-verify-tests.md`**, phase 9: tests as evidence inside `verify`. Design
-`../specs/2026-11-22-verify-tests-design.md`, with the owner's two decisions.
+None: phase 9 is done. Phase 10, sizing requests by rules, starts with its design.
 
 ## How a change flows
 
@@ -247,6 +247,14 @@ a gate already and stays one, and the tests run inside it, with no new command.
 
 **Depends on.** Nothing unbuilt. **Size.** Large, and security-sensitive: it is the first phase in which adk-spec
 runs a command of the project's. Only a command the person wrote is ever run.
+
+**Decided by the owner, 22 November 2026.** The command is one a person writes in `.spec/config.toml`, run by every
+`verify` before the model judges, and another repository's from its own config; a failing run blocks "verified",
+`--override` with a reason being the way through.
+
+**State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged. Its reviews made the run itself safe:
+judged by its own exit, its whole tree stopped when it ends or is interrupted, its output a rolling window, withheld
+where it names a private key. Its live proof needs a test command in a real repository and the owner's go-ahead.
 
 ### Phase 10. Triage by rules
 

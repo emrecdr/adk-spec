@@ -81,3 +81,20 @@ runs each command before the model, passes the results to its stage and to the r
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the gate.** Expected: all pass.
 - [ ] **Step 5: Commit** `feat: verify runs the tests, and a failing run blocks`.
+
+## What changed while this plan was executed
+
+The three tasks were built as written; the branch began with phase 8's live follow-up. The reviews changed these:
+
+- **A run is judged by its own exit and stopped whole.** `process.run_kept` keeps a rolling window of the output,
+  waits for the program itself rather than for its output to close, and stops its whole session when it ends, when
+  its time is up and on an interrupt; a process that left the session is waited for five seconds at most. git's
+  calls stop their tree on an interrupt too.
+- **What is shown of the output.** It is cut to a window, from a whole line, scrubbed as cut, and withheld whole
+  where it names a private key, since a test runner's prefixes break the shapes the scrub knows. A command is
+  scrubbed wherever it is shown.
+- **The work is judged as it stands after the tests**, read again once they have run.
+- **The model is asked after before the tests run**, so a refusal costs no test run.
+- **Refused:** a timeout past a day, a word that is no printable text, and on Windows a batch file.
+- Each other repository's test command is read by the reader with its exclusions; a test run is the domain's type,
+  rendered once for the report and the stage; `PASSED` is named once.
