@@ -20,6 +20,8 @@ KEY = "verify"
 TASKS_TEXT = "tasks_text"
 REQUIRED = "required"
 DIFF = "diff"
+#: Each run of the project's tests, and the end of its output: evidence a diff alone cannot give.
+TESTS = "tests"
 OPENING = "You judge whether a diff meets the requirements of a change. You change nothing."
 GUIDE = """\
 Give one verdict for each requirement listed under the requirements to judge, and for no other.
@@ -29,6 +31,7 @@ quote lines the diff adds. For one the change removes, quote lines the diff remo
 unmet: the diff shows it not done, or done wrong. Say what is missing.
 unclear: the diff does not let you tell. Say what you would need to see.
 A test that exercises the behaviour is good evidence. A comment or a name alone is not.
+Where the project's tests were run, their result is shown below. A requirement the tests show failing is not met.
 Judge what the diff shows, not which boxes of the tasks are ticked."""
 
 
@@ -49,6 +52,7 @@ def build_verify() -> LlmAgent:
         section("## The tasks", "tasks", TASKS_TEXT, optional=True),
         section("## The requirements to judge", "required", REQUIRED),
         section("## The diff", "diff", DIFF),
+        section("## The tests", "tests", TESTS, optional=True),
     )
     return stage(KEY, "Judges a diff against a change's requirements.", text, VerdictsDraft)
 

@@ -571,3 +571,12 @@ def test_verify_names_each_other_repository_it_judges(tmp_path, capsys) -> None:
     capsys.readouterr()
     assert run(root, "verify", "passkeys") == 0
     assert f"with      api from ../api, since {head(api)[:12]}\n" in capsys.readouterr().out
+
+
+def test_the_verify_stage_reads_the_test_runs_and_a_failing_one_shows_nothing_met() -> None:
+    """Phase 9: the stage is shown each run of the project's tests, and told what a failing one means."""
+    from adk_spec.orchestration.stages.verify import TESTS, build_verify
+
+    text = " ".join(str(build_verify().instruction).split())
+    assert "## The tests" in text and f"{{{TESTS}?}}" in text
+    assert "A requirement the tests show failing is not met" in text
