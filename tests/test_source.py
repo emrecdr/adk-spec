@@ -11,6 +11,7 @@ import pytest
 from conftest import repository
 
 from adk_spec.workspace import context, source
+from adk_spec.workspace import git as git_layer
 from adk_spec.workspace.context import tree_text
 from adk_spec.workspace.git import diff, grep
 from adk_spec.workspace.source import Source, SourceError
@@ -438,3 +439,46 @@ def test_finding_the_key_files_of_a_diff_scrubs_no_file(tmp_path, monkeypatch) -
     monkeypatch.setattr(source, "scrub_lines", refused)
     text = diff(tmp_path, commit, exclude=())
     assert held.without_keys(text) == (text, ())
+
+
+def test_a_repository_another_account_owns_is_left_out_and_said(tmp_path, monkeypatch) -> None:
+    repository(tmp_path / "app", FILES)
+    repository(tmp_path / "api", API)
+    own = git_layer._environment
+    monkeypatch.setattr(
+        git_layer, "_environment", lambda root, trust=True: {**own(root, trust), "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+    )
+    held = Source.of(tmp_path / "app", exclude=(), others={"api": "../api"})
+    assert held.names == () and held.paths == ["src/app.py", "src/auth/session.py"]
+    assert held.missing[0].startswith("api: ") and "dubious ownership" in held.missing[0]
+
+
+def test_two_names_for_one_repository_are_refused(tmp_path) -> None:
+    repository(tmp_path / "app", FILES)
+    repository(tmp_path / "api", API)
+    with pytest.raises(SourceError, match="the same repository as `a`"):
+        Source.of(tmp_path / "app", exclude=(), others={"a": "../api", "b": "../api/src"})
+
+
+def test_this_repository_in_other_letters_is_refused_where_the_disk_ignores_case(tmp_path) -> None:
+    repository(tmp_path / "app", FILES)
+    if not (tmp_path / "APP").exists():
+        pytest.skip("this disk tells letter cases apart")
+    with pytest.raises(SourceError, match="this repository itself"):
+        Source.of(tmp_path / "app", exclude=(), others={"x": "../APP"})
+
+
+def test_a_folder_inside_another_adk_spec_project_is_refused(tmp_path) -> None:
+    """Its exclusions are read from the project's own `.spec/config.toml`: named by a folder inside it, the files it
+    keeps out were listed and read."""
+    own = '[project]\ndefault_tier = "lean"\n\n[repository]\nexclude = ["secrets"]\n'
+    repository(tmp_path / "app", FILES)
+    repository(tmp_path / "other", {"sub/ok.py": "x = 1\n", "sub/secrets/s.txt": "s\n", ".spec/config.toml": own})
+    with pytest.raises(SourceError, match=r"inside the adk-spec project at \.\./other"):
+        Source.of(tmp_path / "app", exclude=(), others={"o": "../other/sub"})
+
+
+def test_the_line_that_opens_a_block_is_never_a_bracket_alone(tmp_path) -> None:
+    cs = "public class Auth\n{\n    public void SignIn()\n    {\n        StartSession(user);\n    }\n}\n"
+    held = made(tmp_path, {**FILES, "Auth.cs": cs})
+    assert held.within("Auth.cs", 5) == "public void SignIn()" and held.within("Auth.cs", 3) == "public class Auth"

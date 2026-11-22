@@ -537,6 +537,7 @@ def test_a_verified_change_whose_other_repository_is_gone_reads_as_drifted(tmp_p
     [
         (["--base", "web=HEAD"], "`web` is no repository of `passkeys`"),
         (["--base", "api=HEAD", "--base", "api=HEAD~1"], "names the starting point of api twice"),
+        (["--base", "api="], "--base api= names no commit"),
     ],
 )
 def test_a_base_for_another_repository_names_one_of_the_change_once(
@@ -549,3 +550,24 @@ def test_a_base_for_another_repository_names_one_of_the_change_once(
     capsys.readouterr()
     assert run(root, "verify", "passkeys", *given) == 2
     assert said in capsys.readouterr().err and fake_provider.requests == []
+
+
+def test_a_repository_missing_at_approval_is_said_and_one_recorded_late_is_warned_of(tmp_path, capsys) -> None:
+    """Recorded at a later approval, a starting point may stand after work already done there."""
+    root, api = tmp_path / "app", tmp_path / "api"
+    capsys.readouterr()
+    approved_in_a_repository(root, "lean", repositories={"api": "../api"})
+    assert "left out  api: no git repository at ../api: its starting point is not recorded" in capsys.readouterr().out
+    began = repository(api, {"src/routes.py": ROUTES_BEFORE})
+    assert run(root, "approve", "passkeys", "--by", "reviewer") == 0
+    assert f"recorded  api starts at {began[:12]}" in capsys.readouterr().out
+    assert state_of(root)["base_commits"] == {"api": began}
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_verify_names_each_other_repository_it_judges(tmp_path, capsys) -> None:
+    _ws, root, api = across(tmp_path)
+    implemented(root)
+    capsys.readouterr()
+    assert run(root, "verify", "passkeys") == 0
+    assert f"with      api from ../api, since {head(api)[:12]}\n" in capsys.readouterr().out

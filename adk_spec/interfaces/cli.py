@@ -564,7 +564,15 @@ def _began(workspace: Workspace, state: ChangeState) -> dict[str, str]:
     unrecorded = {name: path for name, path in state.repositories.items() if name not in state.base_commits}
     if not unrecorded or (source := _source(workspace, unrecorded)) is None:
         return {}
-    return {name: commit for name, commit in source.commits().items() if commit}
+    for missing in source.missing:
+        print(f"left out  {missing}: its starting point is not recorded")
+    began = {name: commit for name, commit in source.commits().items() if commit}
+    for name, commit in began.items() if state.base_commit else ():  # a later approval: the work may have begun
+        print(
+            f"recorded  {name} starts at {commit[:12]}, after the first approval: where its work began before, "
+            f"give verify --base {name}=REF"
+        )
+    return began
 
 
 def _commit(workspace: Workspace) -> str | None:
@@ -825,13 +833,34 @@ def _source(workspace: Workspace, repositories: Mapping[str, str]) -> Source | N
         return None
 
 
-def _with_checked(workspace: Workspace, given: Sequence[str], held: Mapping[str, str]) -> dict[str, str]:
-    """`repositories_named`, and each repository named now checked before anything is spent: `SourceError` for one
-    that can never be read beside this one."""
-    named = repositories_named(given, held)
-    if given:
-        _source(workspace, named)
-    return named
+def _with_checked(workspace: Workspace, given: Sequence[str], held: Mapping[str, str], here: Path) -> dict[str, str]:
+    """A change's repositories, `held`, with each one `--with` names now: its path read from `here`, the folder the
+    command was told to work from, as a shell reads one, and recorded from the workspace's root. Each named now is
+    checked before anything is spent: `SourceError` for one that can never be read beside this one, `UsageError`
+    for one that is not there at all, which a typo would otherwise cost a whole run to find."""
+    named = {name: _as_recorded(workspace, here, path) for name, path in repositories_named(given, {}).items()}
+    if named and (source := _source(workspace, named)) is not None and source.missing:
+        raise UsageError(f"--with names no repository adk-spec can read: {source.missing[0]}")
+    return {**held, **named}
+
+
+def _as_recorded(workspace: Workspace, here: Path, path: str) -> str:
+    """A path a person typed, read from `here`, as a change records it: from the workspace's root, with forward
+    slashes. One on another drive, which no path from the root reaches, stays whole."""
+    target = Path(path) if Path(path).is_absolute() else here.absolute() / path
+    try:
+        return Path(os.path.relpath(target, workspace.root)).as_posix()
+    except ValueError:
+        return target.as_posix()
+
+
+def _said_sources(source: Source | None, repositories: Mapping[str, str]) -> None:
+    """Each other repository a command reads, and each it cannot: a change's state is a file a teammate may commit,
+    and nothing is read on the strength of it unsaid."""
+    for name in source.names if source else ():
+        print(f"with      {name} from {repositories[name]}")
+    for missing in source.missing if source else ():
+        print(f"left out  {missing}")
 
 
 #: A ticked box of a task list, wherever its line stands: read in the text of a list that no longer parses.
@@ -886,6 +915,7 @@ def _plan_made(
     replace: bool,
     ledger: Any = None,
     explore: bool = True,
+    repositories: Mapping[str, str] | None = None,
 ) -> _Planned:
     """A draft change's tasks drafted, and first its design where the brief owes one, from what a reading of the
     repository's code found: one is made first where `explore` allows it and the change has no `context.md` yet.
@@ -907,9 +937,9 @@ def _plan_made(
     from ..orchestration.stages.design import read_design
     from ..orchestration.stages.tasks import DESIGN_TEXT, read_tasks
 
-    source = _source(workspace, state.repositories)
-    for missing in source.missing if source else ():
-        print(f"left out  {missing}")
+    held = state.repositories if repositories is None else repositories
+    source = _source(workspace, held)
+    _said_sources(source, held)
     seed = {
         RULES: constitution_text(workspace),
         BRIEF_TEXT: render_brief(brief),
@@ -989,7 +1019,7 @@ def _read_code(
         read=found.read,
         left_out=found.left_out,
         dropped=found.dropped,
-        partial=failure,
+        partial="; ".join(part for part in (failure, *source.missing) if part) or None,
         others=source.commits(),
         unknown=found.unknown,
         disputed=found.disputed,
@@ -1010,23 +1040,36 @@ def _explored_said(found: Any, others: int) -> str:
 def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     """The `plan` command: the plan drafted, and what was written said. A repository named with `--with` is added to
     the change first, and checked before anything is spent."""
+    named = None
     if args.with_:
         state = workspace.load_change(args.id).change.state
-        named = _with_checked(workspace, args.with_, state.repositories)
-        workspace.save_state(state.model_copy(update={"repositories": named}))
+        named = _with_checked(workspace, args.with_, state.repositories, Path(args.root))
         if (workspace.home / CHANGES / args.id / CONTEXT_FILE).is_file():
             print(f"kept      {CONTEXT_FILE} was read before: delete it to read again with what --with named")
     specs, of_specs = workspace.specs()
-    made = _plan_made(workspace, args.id, specs, of_specs, replace=args.replace, explore=not args.no_explore)
+    made = _plan_made(
+        workspace, args.id, specs, of_specs, replace=args.replace, explore=not args.no_explore, repositories=named
+    )
     if made.explored:
         print(f"explored  {made.explored}")
     if made.failure:
         return _unfinished(f"no plan was written: {made.failure}", made.ledger)
+    if named is not None:  # a plan refused or not made changes nothing of the change
+        _widened(workspace, args.id, named)
     for path, replaced in made.written:
         print(f"{'replaced' if replaced else 'wrote':<10}{workspace.shown(path)}")
     print(f"tokens    {_spent(made.ledger)}")
     _say_next(workspace, args.id, specs)
     return EXIT_OK
+
+
+def _widened(workspace: Workspace, change_id: str, named: Mapping[str, str]) -> None:
+    """A change's repositories recorded as `named`. A repository given a new path loses the starting point it had:
+    that commit is another repository's."""
+    state = workspace.load_change(change_id).change.state
+    moved = {name for name, path in named.items() if state.repositories.get(name, path) != path}
+    began = {name: commit for name, commit in state.base_commits.items() if name not in moved}
+    workspace.save_state(state.model_copy(update={"repositories": dict(named), "base_commits": began}))
 
 
 @dataclass
@@ -1151,6 +1194,8 @@ def _bases(given: Sequence[str], state: ChangeState) -> tuple[str | None, dict[s
             raise UsageError(f"`{name}` is no repository of `{state.id}`. Its repositories: {held}")
         elif name in named:
             raise UsageError(f"--base names the starting point of {name} twice")
+        elif not ref:
+            raise UsageError(f"--base {name}= names no commit: give one, as {name}=REF")
         else:
             named[name] = ref
     if len(here) > 1:
@@ -1168,10 +1213,10 @@ def _starts(named: Mapping[str, str], source: Source, state: ChangeState) -> dic
             raise UsageError(f"{source.why_not(name)}: the work cannot be judged on part of it")
         if not (ref := named.get(name) or state.base_commits.get(name)):
             raise UsageError(
-                f"{name} has no starting point: it was named after `{state.id}` was first approved. Name where its "
+                f"{name} has no starting point: none was recorded when `{state.id}` was approved. Name where its "
                 f"work began with --base {name}=REF"
             )
-        if (commit := resolves(root, ref)) is None:
+        if (commit := resolves(root, ref, trust=False)) is None:
             raise UsageError(f"`{ref}` names no commit in {name}")
         bases[name] = commit
     return bases
@@ -1220,6 +1265,8 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     if why := verify_blockers(state, assessed.stale):
         raise NotYetError(why[0])
     base, bases, text, held = _work(args, workspace, state)
+    for name, commit in bases.items():
+        print(f"with      {name} from {state.repositories[name]}, since {commit[:12]}")
     if held:
         print(f"left out  {_key_files(held, ': ')}")
     added, gone = owed(change.deltas), removed(change.deltas)
@@ -1292,7 +1339,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     from ..orchestration.stages.deltas import KEY as DELTAS_KEY
     from ..orchestration.stages.triage import read_triage
 
-    repositories = _with_checked(workspace, args.with_, {})  # refused before any call, where it can never be read
+    repositories = _with_checked(workspace, args.with_, {}, Path(args.root))  # checked before any call
     specs, of_specs = workspace.specs()
     if of_specs:  # a spec that does not read would pass for a capability not yet there
         _printed(of_specs)

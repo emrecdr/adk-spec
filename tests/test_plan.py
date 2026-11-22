@@ -19,7 +19,9 @@ from conftest import (
 from samples import DELTA, SPEC, tasks_for
 
 from adk_spec.domain.spec_md import parse_spec
+from adk_spec.interfaces.cli import main
 from adk_spec.workspace.files import read_text, write_text
+from adk_spec.workspace.layout import Workspace
 from adk_spec.workspace.source import repositories_named
 
 DESIGN, TASKS = "You write the design of a change", "You break a change into tasks"
@@ -389,6 +391,7 @@ ROUTES = {
 def test_plan_with_adds_a_repository_and_a_name_given_again_takes_its_new_path(tmp_path) -> None:
     root = beside(tmp_path)
     repository(tmp_path / "api-2", API)
+    repository(tmp_path / "web", {"index.js": "export const x = 1;\n"})
     assert run(root, "plan", "passkeys", "--replace", "--no-explore", "--with", "../api") == 0
     assert state_of(root, "passkeys")["repositories"] == {"api": "../api"}
     assert run(root, "plan", "passkeys", "--replace", "--no-explore", "--with", "api=../api-2", "--with", "../web") == 0
@@ -414,8 +417,9 @@ def test_the_scout_is_shown_each_repository_and_a_statement_may_name_one(tmp_pat
 @pytest.mark.usefixtures("fake_provider")
 def test_a_missing_repository_is_said_and_the_plan_goes_on(tmp_path, capsys) -> None:
     root = beside(tmp_path)
+    holding(root, api="../api", web="../web")  # recorded in the change, and not on this machine
     capsys.readouterr()
-    assert run(root, "plan", "passkeys", "--replace", "--with", "../web") == 0
+    assert run(root, "plan", "passkeys", "--replace") == 0
     out = capsys.readouterr().out
     assert "left out  web: no git repository at ../web\n" in out and ".spec/changes/passkeys/tasks.md" in out
 
@@ -478,3 +482,60 @@ def test_design_and_tasks_are_told_not_to_plan_on_an_unknown(tmp_path, fake_prov
     assert run(tmp_path, "plan", "passkeys", "--replace", "--no-explore") == 0
     rule = "do not plan on it as if it were known: a task that depends on it says so"
     assert all(rule in " ".join(str(request.config.system_instruction).split()) for request in fake_provider.requests)
+
+
+def holding(root, **repositories: str) -> None:
+    """The change's repositories as its state records them, set by hand."""
+    ws = Workspace.find(root)
+    state = ws.load_change("passkeys").change.state
+    ws.save_state(state.model_copy(update={"repositories": repositories}))
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_every_other_repository_read_is_named(tmp_path, capsys) -> None:
+    """A change's state is a file a teammate may commit: a repository read on the strength of it is said."""
+    root = beside(tmp_path)
+    holding(root, api="../api")
+    capsys.readouterr()
+    assert run(root, "plan", "passkeys", "--replace") == 0
+    assert "with      api from ../api\n" in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_plan_with_that_is_refused_changes_nothing_and_a_new_path_drops_its_old_start(tmp_path) -> None:
+    root = beside(tmp_path)
+    assert run(root, "plan", "passkeys", "--with", "../api") == 1, "a task is ticked: no --replace, no plan"
+    assert not state_of(root).get("repositories")
+    ws = Workspace.find(root)
+    state = ws.load_change("passkeys").change.state
+    ws.save_state(state.model_copy(update={"repositories": {"api": "../api"}, "base_commits": {"api": "c0ffee"}}))
+    repository(tmp_path / "api-2", API)
+    assert run(root, "plan", "passkeys", "--replace", "--no-explore", "--with", "api=../api-2") == 0
+    assert (state_of(root)["repositories"], state_of(root)["base_commits"]) == ({"api": "../api-2"}, {})
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_relative_with_is_read_from_the_folder_the_command_runs_in(tmp_path) -> None:
+    root = beside(tmp_path)
+    (root / "web").mkdir()
+    assert (
+        main(["--root", str(root / "web"), "plan", "passkeys", "--replace", "--no-explore", "--with", "../../api"]) == 0
+    )
+    assert state_of(root)["repositories"] == {"api": "../api"}
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_reading_without_a_repository_of_the_change_is_partial(tmp_path) -> None:
+    """context.md is kept and used by every later plan: one written without a repository of the change says so,
+    and a later plan says to read again."""
+    root = beside(tmp_path)
+    holding(root, api="../api", web="../web")
+    assert run(root, "plan", "passkeys", "--replace") == 0
+    assert "This reading is partial: web: no git repository at ../web." in read_text(root / CONTEXT)
+
+
+def test_a_with_that_names_no_repository_is_refused_before_any_call(tmp_path, capsys, fake_provider) -> None:
+    root = beside(tmp_path)
+    assert run(root, "plan", "passkeys", "--replace", "--with", "../apl") == 2
+    assert "apl: no git repository at ../apl" in capsys.readouterr().err and fake_provider.requests == []
+    assert not state_of(root).get("repositories")

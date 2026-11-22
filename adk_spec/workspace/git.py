@@ -68,15 +68,19 @@ def _found(name: str, path: str) -> str | None:
     return shutil.which(name, path=absolute)
 
 
-def _environment(root: Path) -> dict[str, str]:
+def _environment(root: Path, trust: bool = True) -> dict[str, str]:
     env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
     env |= {"LC_ALL": "C", "LANGUAGE": ""}  # git's messages as written, whatever the person's language
     env |= {"GIT_NO_LAZY_FETCH": "1", "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0"}
     env |= {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_ATTR_NOSYSTEM": "1"}
     env |= {"GIT_TERMINAL_PROMPT": "0"}
-    # With a person's own config unread, so is their list of safe folders: the repository the folder they named is
-    # in is trusted. Git asks about the repository's top, not about the folder a command runs in.
-    settled = _SETTLED | {"safe.directory": Path(os.path.realpath(top(root))).as_posix()}
+    # With a person's own config unread, so is their list of safe folders: the repository adk-spec runs in is
+    # trusted, whoever owns it. Git asks about the repository's top, not about the folder a command runs in. Another
+    # repository a change names is not: git's own check of who owns it holds, so on a shared machine another
+    # account's repository is not opened, and nothing of its config runs.
+    settled = dict(_SETTLED)
+    if trust:
+        settled["safe.directory"] = Path(os.path.realpath(top(root))).as_posix()
     # And so is the file of what they ignore in every repository, which is read and passed on: without it a `.env`
     # or an editor's folder they never see in `git status` would be read as new work.
     if ignored := _excludes(
@@ -128,7 +132,7 @@ def _run(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[by
     return subprocess.CompletedProcess(argv, process.returncode, out, err)
 
 
-def _called(root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+def _called(root: Path, *args: str, trust: bool = True) -> subprocess.CompletedProcess[bytes]:
     """One git command in `root`, run to its end whatever its code. `GitError` where git is not found, cannot
     start, or does not answer in time."""
     verb = _verb(args)
@@ -136,7 +140,7 @@ def _called(root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
     if program is None:  # Git for Windows can be installed for Git Bash alone
         raise GitError("git is not on PATH. Install git, with its folder among PATH's absolute entries")
     try:
-        return _run([program, "-C", str(root), *args], _environment(root))
+        return _run([program, "-C", str(root), *args], _environment(root, trust))
     except subprocess.TimeoutExpired:
         raise GitError(f"git {verb} did not answer within {GIT_TIMEOUT_S:g} s") from None
     except OSError as exc:  # found, and still could not start
@@ -155,20 +159,21 @@ def _refusal(done: subprocess.CompletedProcess[bytes]) -> str:
     return lines[0] if lines else f"exit {done.returncode}"
 
 
-def git(root: Path, *args: str, ok: tuple[int, ...] = (0,)) -> str:
+def git(root: Path, *args: str, ok: tuple[int, ...] = (0,), trust: bool = True) -> str:
     """One git command in `root`: its output as text. `GitError` where git is not found, does not answer in time,
-    or ends with a code outside `ok`, with git's own first line as the reason."""
-    done = _called(root, *args)
+    or ends with a code outside `ok`, with git's own first line as the reason. `trust` off for a repository other
+    than the one adk-spec runs in."""
+    done = _called(root, *args, trust=trust)
     if done.returncode not in ok:
         raise GitError(f"git {_verb(args)} failed: {_refusal(done)}")
     return done.stdout.decode("utf-8", "replace")
 
 
-def _answered(root: Path, *args: str, no: tuple[int, ...] = ()) -> str | None:
+def _answered(root: Path, *args: str, no: tuple[int, ...] = (), trust: bool = True) -> str | None:
     """A question git answers with its output, or with no: an exit code of `no`, or its refusal where `root` is in
     no repository at all. Any other refusal is raised, never read as a no: a repository git will not open, say for
     whose it is, is there."""
-    done = _called(root, *args)
+    done = _called(root, *args, trust=trust)
     if done.returncode == 0:
         return done.stdout.decode("utf-8", "replace").strip()
     why = _refusal(done)
@@ -177,22 +182,22 @@ def _answered(root: Path, *args: str, no: tuple[int, ...] = ()) -> str | None:
     raise GitError(f"git {_verb(args)} failed: {why}")
 
 
-def is_repository(root: Path) -> bool:
+def is_repository(root: Path, *, trust: bool = True) -> bool:
     """Whether `root` is inside a git work tree."""
-    return _answered(root, "rev-parse", "--is-inside-work-tree") == "true"
+    return _answered(root, "rev-parse", "--is-inside-work-tree", trust=trust) == "true"
 
 
-def resolves(root: Path, ref: str) -> str | None:
+def resolves(root: Path, ref: str, *, trust: bool = True) -> str | None:
     """The full ID of the commit `ref` names in `root`, or nothing where it names none. A name that starts with a
     hyphen is an option to git and a revision to nobody."""
     if not ref or ref.startswith("-"):
         return None
-    return _answered(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", no=(1,)) or None
+    return _answered(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", no=(1,), trust=trust) or None
 
 
-def head(root: Path) -> str | None:
+def head(root: Path, *, trust: bool = True) -> str | None:
     """The commit checked out in `root`, or nothing: no repository, or no commit yet."""
-    return resolves(root, "HEAD")
+    return resolves(root, "HEAD", trust=trust)
 
 
 def _here(exclude: Sequence[str]) -> tuple[str, ...]:
@@ -207,44 +212,48 @@ def _here(exclude: Sequence[str]) -> tuple[str, ...]:
     return (*_HERE, *(f":(exclude,glob,icase){one}" for one in spelled))
 
 
-def _listed(root: Path, *which: str, exclude: Sequence[str]) -> list[str]:
-    return sorted(path for path in git(root, "ls-files", "-z", *which, *_here(exclude)).split("\0") if path)
+def _listed(root: Path, *which: str, exclude: Sequence[str], trust: bool = True) -> list[str]:
+    listed = git(root, "ls-files", "-z", *which, *_here(exclude), trust=trust)
+    return sorted(path for path in listed.split("\0") if path)
 
 
-def files(root: Path, *, exclude: Sequence[str]) -> list[str]:
+def files(root: Path, *, exclude: Sequence[str], trust: bool = True) -> list[str]:
     """Every file under `root` that git tracks or would: nothing it ignores, nothing of `.spec/`, and nothing a
     person excluded. Paths from `root`, with forward slashes. `exclude` has no default, here or in any reader of
     the repository: a caller that forgot it would read what a person asked to keep out, and no test would fail."""
-    return sorted(set(_listed(root, "--cached", "--others", "--exclude-standard", exclude=exclude)))
+    return sorted(set(_listed(root, "--cached", "--others", "--exclude-standard", exclude=exclude, trust=trust)))
 
 
 #: How many lines of one file a search gives back.
 GREP_A_FILE = 5
 
 
-def grep(root: Path, term: str, *, exclude: Sequence[str]) -> list[str]:
+def grep(root: Path, term: str, *, exclude: Sequence[str], trust: bool = True) -> list[str]:
     """Each `path:line:text` git finds for `term` among the text files it tracks or would track under `root`:
     nothing it ignores, nothing of `.spec/`, nothing a person excluded, and `GREP_A_FILE` lines of a file at most.
     `term` is a fixed string, never a pattern, its letters matched in either case."""
     asked = ("-n", "-I", "-F", "-i", "--untracked", "--no-color", f"--max-count={GREP_A_FILE}", "-e", term)
-    return [line for line in git(root, "grep", *asked, *_here(exclude), ok=(0, 1)).split("\n") if line]
+    return [line for line in git(root, "grep", *asked, *_here(exclude), ok=(0, 1), trust=trust).split("\n") if line]
 
 
-def diff(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "") -> str:
+def diff(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", trust: bool = True) -> str:
     """`base` against the working tree under `root`, as one unified diff with paths from `root`. A file git does
     not track yet reads as added: new work is new files, and a person may not have added them. `.spec/` is left
     out. `GitError` where `base` names no commit, or too many files are neither tracked nor ignored."""
-    commit = resolves(root, base)
+    commit = resolves(root, base, trust=trust)
     if commit is None:
         raise GitError(f"`{base}` names no commit in {root}")
     # Paths as `a/` and `b/` say, whatever a person's settings say, and under `prefix` for another repository's diff.
     named = (f"--src-prefix=a/{prefix}", f"--dst-prefix=b/{prefix}")
-    changed = git(root, "diff", *_PLAIN, *named, "--relative", commit, *_here(exclude))
-    new = _listed(root, "--others", "--exclude-standard", exclude=exclude)
+    changed = git(root, "diff", *_PLAIN, *named, "--relative", commit, *_here(exclude), trust=trust)
+    new = _listed(root, "--others", "--exclude-standard", exclude=exclude, trust=trust)
     if len(new) > UNTRACKED_MAX:
         raise GitError(
             f"{len(new):,} files under {root} are neither tracked nor ignored. Add them to git, or ignore what is "
             "no source, such as a virtual environment or a build folder"
         )
-    added = [git(root, "diff", *_PLAIN, *named, "--no-index", "--", "/dev/null", path, ok=(0, 1)) for path in new]
+    added = [
+        git(root, "diff", *_PLAIN, *named, "--no-index", "--", "/dev/null", path, ok=(0, 1), trust=trust)
+        for path in new
+    ]
     return changed + "".join(added)

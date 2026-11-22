@@ -131,7 +131,9 @@ def test_a_subfolder_of_a_repository_another_account_owns_is_still_a_repository(
     workspace in a subfolder of a bind mount or a shared folder was told it is in no git repository."""
     sha = repository(tmp_path / "repo", {"service/src/app.py": "a = 1\n"})
     own = layer._environment
-    monkeypatch.setattr(layer, "_environment", lambda root: {**own(root), "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"})
+    monkeypatch.setattr(
+        layer, "_environment", lambda root, trust=True: {**own(root, trust), "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+    )
     assert is_repository(tmp_path / "repo/service") and head(tmp_path / "repo/service") == sha
 
 
@@ -139,8 +141,8 @@ def test_a_refusal_of_gits_that_is_no_missing_repository_is_said_and_never_read_
     repository(tmp_path / "repo")
     own = layer._environment
 
-    def distrusted(root):
-        env = {**own(root), "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+    def distrusted(root, trust=True):
+        env = {**own(root, trust), "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
         return {name: value for name, value in env.items() if not name.startswith("GIT_CONFIG_")}
 
     monkeypatch.setattr(layer, "_environment", distrusted)
@@ -211,3 +213,17 @@ def test_a_diff_names_its_paths_under_a_prefix(tmp_path) -> None:
     text = diff(tmp_path, base, exclude=(), prefix="api/")
     assert "diff --git a/api/src/app.py b/api/src/app.py" in text and "+++ b/api/src/new.py" in text
     assert lines_of_diff(text)["api/src/app.py"] == (["x = 2"], ["x = 1"])
+
+
+def test_another_repository_is_given_no_trust_of_its_own(tmp_path, monkeypatch) -> None:
+    """The workspace's repository is trusted whoever owns it: the person runs adk-spec there. Another repository a
+    change names gets git's own check of who owns it: on a shared machine, another account's repository is not
+    opened, and nothing of its config runs."""
+    repository(tmp_path / "repo")
+    own = layer._environment
+    monkeypatch.setattr(
+        layer, "_environment", lambda root, trust=True: {**own(root, trust), "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
+    )
+    assert is_repository(tmp_path / "repo")
+    with pytest.raises(GitError, match="dubious ownership"):
+        is_repository(tmp_path / "repo", trust=False)

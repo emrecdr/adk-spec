@@ -133,8 +133,14 @@ adk-spec propose "Let users sign in with a passkey." --with ../api --with web=..
 adk-spec plan sign-in-with-a-passkey --with ../mobile
 ```
 
-- `--with PATH` names a repository after its folder; `--with NAME=PATH` names it yourself. The names are recorded
-  in the change, and the next change names its own, or none.
+- `--with PATH` names a repository after its folder; `--with NAME=PATH` names it yourself. A path is read from the
+  folder you run the command in, as your shell reads it, and recorded in the change; the next change names its own,
+  or none. A path that is no repository is refused before anything is spent.
+- Every command that reads another repository names it: `with      api from ../api`. A change's file is one a
+  teammate may commit, and nothing is read on the strength of it unsaid.
+- Name a repository by its own folder. One inside another adk-spec project is refused, so that project's
+  exclusions hold, and so is this repository by another spelling. On a shared machine, a repository another account
+  owns is not opened.
 - The reading covers them all, by the same rules: each one's own git list, its own exclusions where it is an
   adk-spec project too, no file that holds a key. A statement names `api/src/routes.py` for a file of `api`, and
   `context.md` says at what commit each repository was read.

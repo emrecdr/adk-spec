@@ -124,15 +124,17 @@ def _counted(count: int, one: str, many: str) -> str:
 
 
 def _indent(line: str) -> int:
-    return len(line) - len(line.lstrip(" \t"))
+    expanded = line.expandtabs()
+    return len(expanded) - len(expanded.lstrip(" "))
 
 
 class _Repository:
     """One repository's files as a reading may give them: git's own list, each file opened and scrubbed once."""
 
     def __init__(self, name: str, root: Path, paths: Sequence[str], exclude: Sequence[str]) -> None:
-        #: The name its paths are shown under; the workspace's own has none.
+        #: The name its paths are shown under; the workspace's own has none, and is the one git is told to trust.
         self.name = name
+        self.trust = not name
         self.root = root
         #: Every path git lists, in order, from `root`, with forward slashes.
         self.paths = sorted(paths)
@@ -204,7 +206,7 @@ class _Repository:
         holds the word, and asked often enough, the value. A line is opened only until enough are shown."""
         wanted = term.casefold()
         rows: list[tuple[str, int, str]] = []
-        for line in grep(self.root, term, exclude=self.exclude):
+        for line in grep(self.root, term, exclude=self.exclude, trust=self.trust):
             path, _, rest = line.partition(":")
             number = rest.partition(":")[0]
             lines = self.lines(path) if path in self.listed and number.isascii() and number.isdecimal() else ""
@@ -241,9 +243,12 @@ def repositories_named(given: Sequence[str], held: Mapping[str, str]) -> dict[st
     return named
 
 
-def _other(root: Path, name: str, given: str, folders: set[str]) -> _Repository | str:
-    """Another repository a change names, read as git lists it with its own exclusions; or why it is left out,
-    where it is not on this machine, or cannot be read. `SourceError` where it can never stand beside this one."""
+def _other(root: Path, name: str, given: str, folders: set[str], tops: dict[str, Path]) -> _Repository | str:
+    """Another repository a change names, read as git lists it with its own exclusions, and given no trust of its
+    own; or why it is left out, where it is not on this machine, cannot be read, or belongs to another account.
+    `SourceError` where it can never stand beside this one: this repository, or one already named, by another
+    spelling; a name that is a folder here; or a folder inside another adk-spec project, whose exclusions would not
+    hold. `tops` holds the top of each repository taken so far, by name, this one's under the empty name."""
     if not NAME.fullmatch(name):
         raise SourceError(f"`{name}` is no name for a repository: a to z, digits and `-`, from a letter on")
     if name in folders:
@@ -252,14 +257,29 @@ def _other(root: Path, name: str, given: str, folders: set[str]) -> _Repository 
             "Give the repository another name, as --with NAME=PATH"
         )
     path = Path(given) if Path(given).is_absolute() else root / given
-    if not path.is_dir() or not is_repository(path):
-        return f"{name}: no git repository at {given}"
-    if top(path.resolve()) == top(root.resolve()):
-        raise SourceError(f"{name}: {given} is this repository itself")
+    try:
+        if not path.is_dir() or not is_repository(path, trust=False):
+            return f"{name}: no git repository at {given}"
+    except GitError as exc:  # another account's, say: git will not open it untrusted
+        return f"{name}: {exc}"
+    its_top = top(path.resolve())
+    for taken, held in tops.items():  # compared as the disk compares them, letter case and links included
+        if its_top.samefile(held):
+            raise SourceError(
+                f"{name}: {given} is " + (f"the same repository as `{taken}`" if taken else "this repository itself")
+            )
+    project = next((folder for folder in path.resolve().parents if (folder / ROOT_NAME / CONFIG).is_file()), None)
+    if project is not None and project.is_relative_to(its_top):
+        shown = Path(given).parent if not Path(given).is_absolute() else project
+        raise SourceError(
+            f"{name}: {given} is inside the adk-spec project at {shown.as_posix()}, whose exclusions are written "
+            "from there. Name that folder"
+        )
+    tops[name] = its_top
     own = path / ROOT_NAME / CONFIG  # its exclusions are its own, where it is an adk-spec project too
     try:
         exclude = load_config(own).exclude if own.is_file() else ()
-        return _Repository(name, path, listed_by_git(path, exclude=exclude), exclude)
+        return _Repository(name, path, listed_by_git(path, exclude=exclude, trust=False), exclude)
     except (ConfigError, NotTextError, GitError, OSError) as exc:
         return f"{name}: {exc}"
 
@@ -287,8 +307,9 @@ class Source:
         here = _Repository("", root, listed_by_git(root, exclude=exclude), exclude)
         folders = {path.split("/", 1)[0] for path in here.paths if "/" in path}
         repositories, missing = [here], []
+        tops = {"": top(root.resolve())}
         for name, given in (others or {}).items():
-            found = _other(root, name, given, folders)
+            found = _other(root, name, given, folders, tops)
             if isinstance(found, str):
                 missing.append(found)
             else:
@@ -321,7 +342,7 @@ class Source:
         for name, commit in bases.items():
             if (one := self._others.get(name)) is None:
                 raise SourceError(f"{self.why_not(name)}: the work cannot be judged on part of it")
-            parts.append(diff(one.root, commit, exclude=one.exclude, prefix=one.full("")))
+            parts.append(diff(one.root, commit, exclude=one.exclude, prefix=one.full(""), trust=False))
         return self.without_keys("".join(parts))
 
     def commits(self) -> dict[str, str | None]:
@@ -329,7 +350,7 @@ class Source:
         held: dict[str, str | None] = {}
         for name, one in self._others.items():
             try:
-                held[name] = head(one.root)
+                held[name] = head(one.root, trust=False)
             except GitError:
                 held[name] = None
         return held
@@ -381,7 +402,8 @@ class Source:
             return ""
         indent = _indent(lines[line - 1])
         for above in reversed(lines[: line - 1]):
-            if above.strip() and _indent(above) < indent:
+            # A line of brackets alone, a C# or Java `{`, opens no block a person would name.
+            if any(char.isalnum() for char in above) and _indent(above) < indent:
                 return above.strip()[:WITHIN_MAX_CHARS]
         return ""
 
