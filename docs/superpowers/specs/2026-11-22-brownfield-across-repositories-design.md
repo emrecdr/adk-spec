@@ -13,8 +13,11 @@ Design for phase 7 of adk-spec. Written on 22 November 2026.
 - Standing: the model points and Python reads (phase 6); reading the code happens inside `propose`, with no command
   of its own; the golden rule of few commands and simple flows.
 
-Three decisions are the owner's and are marked **Owner** below, each with a recommendation. Everything else is the
-builder's call, listed at the end.
+- The same day, the three decisions marked **Owner** below, each as recommended: **A** (adk-spec reads every named
+  repository and a model reviews the reading), **`verify` across repositories in this phase**, and **an unknown is
+  said, and `propose` does not stop on it**.
+
+Everything else is the builder's call, listed at the end for the owner to check.
 
 ## Intent, and why
 

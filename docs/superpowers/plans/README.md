@@ -37,7 +37,7 @@ How it is applied in every phase below:
 
 ## The plan being followed now
 
-None yet for phase 7: its design is written first, for the owner to approve.
+**`2026-11-22-adk-spec-across-repositories.md`**, phase 7: context across repositories, checked by a model.
 
 ## How a change flows
 
@@ -172,9 +172,15 @@ enough and what is still unknown.
 **By the end of this phase, you can:** plan a feature that changes an API and the web app that calls it, from one
 workspace, and read in `context.md` what was found in each and what nobody could establish.
 
-**Not yet, at the end of this phase.** `verify` judges the work in the workspace's own repository only.
+- **`verify` across repositories**: approval records where each repository's work began, and `verify` judges the
+  work in all of them.
 
-**Depends on.** Phase 6. **Size.** Medium.
+**Decided by the owner, 22 November 2026.** adk-spec reads every named repository and a model reviews the reading;
+`verify` covers every repository in this phase; an unknown is said, and `propose` does not stop on it.
+
+**Design.** `../specs/2026-11-22-brownfield-across-repositories-design.md`.
+
+**Depends on.** Phase 6. **Size.** Medium to large.
 
 ### Phase 8. Brownfield, part 3: `init` describes the repository
 
