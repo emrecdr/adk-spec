@@ -8,6 +8,7 @@ invented piece of evidence never reads as a pass.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .drafts import VerdictsDraft
@@ -49,6 +50,19 @@ def lines_of_diff(diff: str) -> dict[str, tuple[list[str], list[str]]]:
         elif in_hunk and sides is not None and line[:1] in "+-" and line:
             sides[0 if line[0] == "+" else 1].append(line[1:])
     return files
+
+
+def parts_of_diff(diff: str) -> list[tuple[str | None, str]]:
+    """A unified diff by file, in its order: each file's name, as `lines_of_diff` knows it, with its part of the
+    text. The parts put together are the diff. A part with no name shows no line: a file renamed and not changed,
+    or one that is no text."""
+    parts: list[tuple[str | None, str]] = []
+    for part in re.split(r"(?m)^(?=diff --git )", diff):
+        if part:
+            heading = part.split("\n@@", 1)[0]  # a line a hunk adds may itself begin with `+++ `
+            named = {line[:3]: _path(line[4:]) for line in heading.split("\n") if line.startswith(("--- ", "+++ "))}
+            parts.append((named.get("+++") or named.get("---"), part))
+    return parts
 
 
 def _path(named: str) -> str | None:

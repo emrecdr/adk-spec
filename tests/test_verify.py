@@ -7,7 +7,7 @@ import pytest
 from conftest import CANNED_VERDICTS, on_the_fake, repository, run, seeded, state_of
 
 from adk_spec.domain.drafts import VerdictsDraft
-from adk_spec.domain.verify import grounded, lines_of_diff
+from adk_spec.domain.verify import grounded, lines_of_diff, parts_of_diff
 from adk_spec.workspace.files import read_text, write_text
 from adk_spec.workspace.git import head
 from adk_spec.workspace.runs import listed, read
@@ -78,6 +78,12 @@ def test_a_diff_is_read_as_the_lines_it_adds_and_removes_by_file() -> None:
     )
     assert read_["src/old.py"] == ([], ["LEGACY = True"]), "a deleted file is known by the name it had"
     assert read_["src/new.py"] == (["+++ b/not/a/header", "NEW = True"], []), "a line of content is no header"
+
+
+def test_a_diff_is_split_by_file_and_is_whole_again_when_put_together() -> None:
+    parts = parts_of_diff(DIFF)
+    assert [path for path, _part in parts] == ["src/auth.py", "src/old.py", "src/new.py"]
+    assert "".join(part for _path, part in parts) == DIFF and parts[2][1].startswith("diff --git a/src/new.py")
 
 
 def test_met_stands_only_on_a_line_the_diff_holds_on_the_right_side() -> None:
@@ -386,3 +392,38 @@ def test_a_verdict_that_quotes_a_line_as_the_model_was_shown_it_is_grounded(tmp_
     sent = str(fake_provider.requests[-1].config.system_instruction)
     assert shown in sent and "hunter2" not in sent
     assert state_of(tmp_path)["verification"]["verdicts"]["REQ-AUTH-004"] == "met"
+
+
+PEM = "-----BEGIN RSA " + "PRIVATE KEY-----\n" + "".join(f"MIIEow{n}BAAKCAQEA7x1yQ9\n" for n in range(6))
+PEM += "-----END RSA " + "PRIVATE KEY-----\n"
+
+
+def with_a_key(root):
+    """An approved change in a repository whose first commit holds a private key."""
+    (root / "keys").mkdir(parents=True)
+    write_text(root / "keys/live.pem", PEM)
+    return approved_in_a_repository(root, tier="lean")
+
+
+def test_verify_is_sent_no_line_of_a_file_that_holds_a_private_key(tmp_path, fake_provider, capsys) -> None:
+    """One line changed in the middle of a key: the diff shows lines of the key and neither its first nor its last,
+    so no scrub knows them. The file's part is left out of what a model reads, and that is said."""
+    with_a_key(tmp_path)
+    implemented(tmp_path)
+    write_text(tmp_path / "keys/live.pem", PEM.replace("MIIEow3", "MIINew3"))
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys") == 0
+    sent = str(fake_provider.requests[-1].config.system_instruction)
+    assert "return passkey(user)" in sent and "MII" not in sent and "keys/live.pem" not in sent
+    assert "left out  keys/live.pem: holds a private key, which is never shown\n" in capsys.readouterr().out
+
+
+def test_work_done_only_in_a_file_that_holds_a_private_key_is_nothing_to_verify(
+    tmp_path, fake_provider, capsys
+) -> None:
+    with_a_key(tmp_path)
+    write_text(tmp_path / "keys/live.pem", PEM.replace("MIIEow3", "MIINew3"))
+    sent_before = len(fake_provider.requests)
+    assert run(tmp_path, "verify", "passkeys") == 1
+    assert "keys/live.pem holds a private key, which is never shown" in capsys.readouterr().err
+    assert len(fake_provider.requests) == sent_before, "no model is asked"

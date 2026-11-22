@@ -11,6 +11,9 @@ search found and a file cut at a cap are all taken from the scrubbed text. A pri
 first and last line together, so a piece cut out first would show its middle. Each line keeps its own number, so
 that a quote found in the text is found at the line the file has it.
 
+A file that holds a private key is shown in no piece at all, here or in a diff: a key with no last line is hidden by
+no scrub, and a diff shows a file in pieces that hold neither line.
+
 What cannot be given is left out and named, and is never an error: a reading goes on without it.
 """
 
@@ -22,8 +25,9 @@ from dataclasses import dataclass, field
 from itertools import zip_longest
 from pathlib import Path
 
-from ..domain.secrets import scrub_lines
+from ..domain.secrets import holds_a_key, scrub_lines
 from ..domain.text import lines_of, normalise, plain
+from ..domain.verify import parts_of_diff
 from .files import NotTextError, read_text
 from .git import GitError, grep
 from .git import files as listed_by_git
@@ -40,6 +44,8 @@ ROUND_MAX_CHARS = 40_000
 #: A file past this many bytes is not opened at all, and a word to search for past this many characters is none.
 FILE_MAX_BYTES = 2_000_000
 TERM_MAX_CHARS = 100
+#: Why a file that holds a private key is left out, of a reading and of a diff alike.
+HOLDS_A_KEY = "holds a private key, which is never shown"
 #: A file asked for with a range of lines: `src/app.py:120-260`.
 _RANGE = re.compile(r"(?P<path>.+):(?P<first>\d+)-(?P<last>\d+)")
 
@@ -155,11 +161,26 @@ class Source:
                 return "it stands outside the repository"
             if (size := target.stat().st_size) > FILE_MAX_BYTES:
                 return f"{size:,} bytes, too large to read"
-            return lines_of(scrub_lines(normalise(read_text(target)))[0])
+            text = normalise(read_text(target))
+            return HOLDS_A_KEY if holds_a_key(text) else lines_of(scrub_lines(text)[0])
         except NotTextError:
             return "is not text adk-spec reads, which is UTF-8"
         except OSError as exc:
             return f"could not be read: {exc.strerror or exc}"
+
+    def without_keys(self, diff: str) -> tuple[str, tuple[str, ...]]:
+        """A unified diff less the part of each file that holds a private key, and those files' names. A file is
+        known for one by how it stands in the repository, or by a key's first line among the lines the diff shows
+        of it: the first covers a change in a key's middle, the second a key that was deleted or lost its first
+        line. What is left is the diff a stage may be shown, and is still scrubbed as every text is."""
+        kept: list[str] = []
+        held: list[str] = []
+        for path, part in parts_of_diff(diff):
+            if holds_a_key(part) or (path is not None and self._lines(path) == HOLDS_A_KEY):
+                held.append(path or "(a file with no name)")
+            else:
+                kept.append(part)
+        return "".join(kept), tuple(held)
 
     def _file(self, asked: str, got: _Round) -> None:
         path, first, last = self._asked(asked)

@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from conftest import on_the_fake, run, seeded
 
-from adk_spec.domain.secrets import scrub, scrub_lines
+from adk_spec.domain.secrets import holds_a_key, scrub, scrub_lines
 from adk_spec.workspace.files import read_text
 from adk_spec.workspace.layout import Workspace
 from adk_spec.workspace.runs import listed
@@ -85,3 +85,27 @@ def test_a_scrub_that_keeps_lines_hides_the_same_shapes_with_every_line_at_its_n
 def test_a_scrub_that_keeps_lines_leaves_text_with_no_secret_as_it_is() -> None:
     code = "token = get_token(request)\n\nclass TokenBucket: ...\n"
     assert scrub_lines(code) == (code, 0)
+
+
+BEGINS = "-----BEGIN RSA " + "PRIVATE KEY-----"
+BODY = "MIIEow0BAAKCAQEA7x1yQ9"
+
+
+@pytest.mark.parametrize(
+    ("text", "held"),
+    [
+        (f"{BEGINS}\n{BODY}\n", True),  # a key's own file
+        (f"+{BEGINS}\n+{BODY}\n", True),  # a line a diff adds
+        (f"-{BEGINS}\n", True),  # and one it removes
+        (f"deploy:\n  key: |\n    {BEGINS}\n    {BODY}\n", True),  # a block in a YAML file
+        ("-----BEGIN OPENSSH " + "PRIVATE KEY-----\n", True),
+        ("-----BEGIN PGP " + "PRIVATE KEY BLOCK-----\n", True),
+        (f'HEADER = "{BEGINS}"\n', False),  # code that names the line and holds no key
+        ("-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n", False),
+        ("-----BEGIN CERTIFICATE-----\n", False),
+        ("def login(user):\n    return password(user)\n", False),
+    ],
+)
+def test_a_text_holds_a_key_where_a_line_begins_with_a_private_keys_first_line(text: str, held: bool) -> None:
+    """A key's own file has its first line at a line's start. Code that names that line in a string is still read."""
+    assert holds_a_key(text) is held

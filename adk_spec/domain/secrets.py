@@ -361,3 +361,18 @@ def scrub_lines(text: str, *, cut: bool = False) -> tuple[str, int]:
         text, count = pattern.subn(hidden, text)
         total += count
     return text, total
+
+
+#: A private key's first line where a line begins with it, a diff's sign or a block's indent before it: how a key's
+#: own file has it, and how code that only names the line in a string does not.
+_KEY_BEGINS_A_LINE = re.compile(r"(?m)^[+\- ]?[ \t]*" + _KEY_HEADER)
+
+
+def holds_a_key(text: str) -> bool:
+    """Whether a line of `text` begins a private key.
+
+    Not the reference project's. A key's block is known to `scrub` by its first and last line together, so a piece
+    of one is known for nothing: a hunk of a diff from a key's middle, a key with no last line, a block longer than
+    one is read. Text that is shown in pieces is therefore judged by the file it is a piece of: a file that holds a
+    key is shown in no piece at all."""
+    return _KEY_BEGINS_A_LINE.search(text) is not None

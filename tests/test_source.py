@@ -10,7 +10,7 @@ import pytest
 from conftest import repository
 
 from adk_spec.workspace import source
-from adk_spec.workspace.git import grep
+from adk_spec.workspace.git import diff, grep
 from adk_spec.workspace.source import Source
 
 APP = "def login(user):\n    return password(user)\n\n\ndef logout(user):\n    return None\n"
@@ -142,15 +142,15 @@ def test_a_private_keys_body_is_never_shown_whole_by_range_or_by_search(tmp_path
     """Each line was scrubbed alone before the whole text was: the header line was hidden first, so the block that
     starts with it was no longer known for one, and its body was shown. A range of lines, and a line a search
     found, were cut out of the file before anything was scrubbed at all."""
-    held = made(tmp_path, {**FILES, "deploy/key.pem": "# the deploy key\n" + PEM + "after = 1\n"})
-    whole = held.gathered(["deploy/key.pem"], [], [])
-    ranged = held.gathered(["deploy/key.pem:3-6"], [], [])
+    held = made(tmp_path, {**FILES, "deploy/key.py": "# the deploy key\nKEY = '''" + PEM + "'''\nafter = 1\n"})
+    whole = held.gathered(["deploy/key.py"], [], [])
+    ranged = held.gathered(["deploy/key.py:3-6"], [], [])
     found = held.gathered([], [], [KEY_LINE])
     for got in (whole, ranged, found):
         assert "MIIEow" not in got.shown and all("MIIEow" not in text for text in got.texts.values())
     assert found.shown.startswith(f"=== search: {KEY_LINE} (5 lines)"), "the word is the model's own; no line is shown"
-    lines = whole.texts["deploy/key.pem"].split("\n")
-    assert lines[0] == "# the deploy key" and lines[9] == "after = 1", "the line after the block keeps its number"
+    lines = whole.texts["deploy/key.py"].split("\n")
+    assert lines[0] == "# the deploy key" and lines[10] == "after = 1", "the line after the block keeps its number"
     assert "[REDACTED" in whole.shown
 
 
@@ -178,3 +178,35 @@ def test_a_file_that_cannot_be_opened_and_a_search_git_refuses_are_left_out_and_
     monkeypatch.setattr(source, "grep", refused)
     got = held.gathered([], [], ["login"])
     assert got.shown == "" and "search for login: git grep failed" in got.left_out[0]
+
+
+def test_a_file_that_holds_a_private_key_is_never_shown_however_it_is_asked_for(tmp_path) -> None:
+    """A key's block is known by its first and last line together, so a key with no last line is hidden by no
+    scrub. A file where a line begins a private key is left out whole, and named."""
+    no_last_line = PEM.rsplit("-----END", 1)[0]
+    names_it = 'HEADER = "' + PEM.split("\n")[0] + '"\n'
+    held = made(tmp_path, {**FILES, "deploy/key.pem": no_last_line, "src/pem.py": names_it})
+    whole = held.gathered(["deploy/key.pem"], [], [])
+    ranged = held.gathered(["deploy/key.pem:3-4"], [], [])
+    found = held.gathered([], [], [KEY_LINE])
+    for got in (whole, ranged, found):
+        assert "MIIEow" not in got.shown and got.texts == {} and got.read == ()
+    said = ("deploy/key.pem: holds a private key, which is never shown",)
+    assert whole.left_out == said and ranged.left_out == said
+    assert held.gathered(["src/pem.py"], [], []).read == ("src/pem.py (whole)",), "code that names the line is read"
+
+
+def test_a_diff_loses_the_part_of_each_file_that_holds_a_private_key(tmp_path) -> None:
+    """A diff shows a file in pieces, and a piece from the middle of a key holds neither its first line nor its
+    last: no scrub knows it for a key. The file is known by how it stands, or by a first line the diff itself
+    shows, and its part of the diff is left out whole."""
+    commit = repository(tmp_path, {**FILES, "keys/live.pem": PEM, "keys/old.pem": PEM.replace("MIIEow", "MIIOld")})
+    (tmp_path / "keys/live.pem").write_text(PEM.replace("MIIEow3", "MIINew3"), encoding="utf-8", newline="\n")
+    (tmp_path / "keys/old.pem").unlink()
+    (tmp_path / "src/app.py").write_text(APP.replace("password", "passkey"), encoding="utf-8", newline="\n")
+    whole = diff(tmp_path, commit, exclude=())
+    assert "MIINew3" in whole and "-----BEGIN" not in whole.split("keys/old.pem")[0], "a piece from a key's middle"
+    kept, held = Source.of(tmp_path, exclude=()).without_keys(whole)
+    assert held == ("keys/live.pem", "keys/old.pem")
+    assert "return passkey(user)" in kept and "MII" not in kept and "keys/" not in kept
+    assert Source.of(tmp_path, exclude=()).without_keys(kept) == (kept, ()), "a diff that holds no key is as it was"

@@ -14,7 +14,7 @@ import json
 import os
 import re
 import sys
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from importlib import metadata
@@ -1075,9 +1075,15 @@ def _judged(
     return *to_findings(answer, texts), ledger, None
 
 
-def _work(args: argparse.Namespace, workspace: Workspace, state: ChangeState) -> tuple[str, str]:
-    """The commit a change's work is compared with, and the diff from it to the working tree. `UsageError` where
-    there is nothing to compare with; `NotYetError` where nothing was done."""
+def _key_files(held: Sequence[str], then: str) -> str:
+    """What is said of the files a diff was shown without: `a.pem: holds a private key, which is never shown`."""
+    return f"{', '.join(held)}{then}{'holds' if len(held) == 1 else 'hold'} a private key, which is never shown"
+
+
+def _work(args: argparse.Namespace, workspace: Workspace, state: ChangeState) -> tuple[str, str, tuple[str, ...]]:
+    """The commit a change's work is compared with, the diff from it to the working tree as a stage may be shown
+    it, and the files left out of that diff for holding a private key. `UsageError` where there is nothing to
+    compare with; `NotYetError` where nothing was done that can be shown."""
     cid, root = state.id, workspace.root
     if not is_repository(root):
         raise UsageError(f"{root} is in no git repository: verify reads what changed since the approval")
@@ -1089,15 +1095,18 @@ def _work(args: argparse.Namespace, workspace: Workspace, state: ChangeState) ->
     base = resolves(root, named)
     if base is None:
         raise UsageError(f"`{named}` names no commit in this repository")
-    text = diff(root, base, exclude=workspace.config().exclude)
+    exclude = workspace.config().exclude
+    # A file that holds a private key is no part of the work a model is shown, as an excluded path is none.
+    text, held = Source.of(root, exclude=exclude).without_keys(diff(root, base, exclude=exclude))
     if not text.strip():
-        raise NotYetError(f"nothing under {root} changed since {base[:12]}: there is nothing to verify")
+        beside = f"{_key_files(held, ' ')}, and nothing else" if held else "nothing"
+        raise NotYetError(f"{beside} under {root} changed since {base[:12]}: there is nothing to verify")
     if len(text) > DIFF_MAX_CHARS:
         raise UsageError(
             f"the diff since {base[:12]} holds {len(text):,} characters, past the {DIFF_MAX_CHARS:,} a stage is "
             "given. It is never cut. Verify a smaller change, or name a later commit with --base"
         )
-    return base, text
+    return base, text, held
 
 
 def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
@@ -1109,7 +1118,9 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     change, state = assessed.loaded.change, assessed.state
     if why := verify_blockers(state, assessed.stale):
         raise NotYetError(why[0])
-    base, text = _work(args, workspace, state)
+    base, text, held = _work(args, workspace, state)
+    if held:
+        print(f"left out  {_key_files(held, ': ')}")
     added, gone = owed(change.deltas), removed(change.deltas)
     verdicts: list[Verdict] = []
     ledger, model = None, None

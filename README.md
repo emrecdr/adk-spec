@@ -109,6 +109,9 @@ To keep paths out of every command, name them in `.spec/config.toml`. Each is a 
 never part of the diff `verify` sends, so work done only there is no evidence for `verify`. A `context.md` written
 before a path was excluded still holds what it quoted from it: delete the file to read again.
 
+A file that holds a private key is treated as an excluded path is, with nothing to set up: it is never read, and
+`verify` leaves its changes out and says so.
+
 ```toml
 [repository]
 exclude = ["vendor/**", "**/*.pem", "config/production.yaml"]
