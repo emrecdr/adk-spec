@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..domain.secrets import scrub_lines
+from ..domain.secrets import scrub, scrub_lines
 from .process import TimedOut, on_path, run
 
 #: How much of a run's output, its end, a model and the report are shown.
@@ -40,6 +40,11 @@ class TestRun:
     @property
     def passed(self) -> bool:
         return self.outcome == "passed"
+
+    @property
+    def command(self) -> str:
+        """The command as it is shown, scrubbed: a test command may carry a token of its own."""
+        return scrub(" ".join(self.argv))[0]
 
 
 def run_tests(root: Path, argv: Sequence[str], *, timeout: int, name: str = "") -> TestRun:

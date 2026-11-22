@@ -107,14 +107,24 @@ def verified(
     model: str | None = None,
     override: str | None = None,
     bases: Mapping[str, str] | None = None,
+    tests: Mapping[str, str] | None = None,
 ) -> ChangeState:
-    """The state with a verification recorded. The change is `verified` where every requirement's verdict is `met`,
-    or a person says so with a reason, which is kept only where it was needed. Otherwise it is `approved`, also
-    where it was verified before: the newest judgement is the one that stands."""
-    met = all(verdict == "met" for verdict in verdicts.values())
+    """The state with a verification recorded. The change is `verified` where every requirement's verdict is `met`
+    and every run of the project's tests passed, or a person says so with a reason, which is kept only where it was
+    needed. Otherwise it is `approved`, also where it was verified before: the newest judgement is the one that
+    stands."""
+    ran = dict(tests or {})
+    met = all(verdict == "met" for verdict in verdicts.values()) and all(one == "passed" for one in ran.values())
     reason = None if met else (override or None)
     held = Verification(
-        at=at, base=base, diff=diff, verdicts=dict(verdicts), override=reason, model=model, bases=dict(bases or {})
+        at=at,
+        base=base,
+        diff=diff,
+        verdicts=dict(verdicts),
+        override=reason,
+        model=model,
+        bases=dict(bases or {}),
+        tests=ran,
     )
     status = "verified" if met or reason else "approved"
     return state.model_copy(update={"verification": held, "status": status})
@@ -264,6 +274,8 @@ def _after_approval(
         return Step("run", f"run `adk-spec verify {cid}` again: the work changed since it was verified")
     if state.status == "verified":
         return Step("run", f"run `adk-spec archive {cid}`")
+    if state.verification and any(one != "passed" for one in state.verification.tests.values()):
+        return Step("you", f'the tests failed: fix them and run `adk-spec verify {cid}`, or verify --override "<why>"')
     last = "archive" if state.tier == "lean" else "verify"
     return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
 

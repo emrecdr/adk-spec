@@ -6,7 +6,7 @@ from __future__ import annotations
 import shutil
 
 import pytest
-from conftest import CANNED_VERDICTS, on_the_fake, repository, repository_commit, run, seeded, state_of
+from conftest import CANNED_VERDICTS, between, on_the_fake, repository, repository_commit, run, seeded, state_of
 
 from adk_spec.domain.drafts import VerdictsDraft
 from adk_spec.domain.verify import grounded, lines_of_diff, parts_of_diff
@@ -580,3 +580,86 @@ def test_the_verify_stage_reads_the_test_runs_and_a_failing_one_shows_nothing_me
     text = " ".join(str(build_verify().instruction).split())
     assert "## The tests" in text and f"{{{TESTS}?}}" in text
     assert "A requirement the tests show failing is not met" in text
+
+
+# Phase 9: the project's own tests, run by the command a person wrote.
+
+
+def with_tests(root, code: str) -> list[str]:
+    """`[verify] test` set to a small Python program run by this interpreter, written into `root`'s config."""
+    import json
+    import sys
+
+    argv = [sys.executable, "-c", code]
+    config = root / ".spec/config.toml"
+    held = config.read_text(encoding="utf-8") if config.is_file() else '[project]\ndefault_tier = "lean"\n'
+    write_text(config, held.rstrip("\n") + f"\n\n[verify]\ntest = {json.dumps(argv)}\n")
+    return argv
+
+
+def test_a_passing_test_run_lets_the_change_be_verified(tmp_path, capsys, fake_provider) -> None:
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    with_tests(tmp_path, "print('12 passed')")
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys") == 0
+    out = capsys.readouterr().out
+    assert out.index("testing   ") < out.index("tests     passed in ")
+    assert state_of(tmp_path)["status"] == "verified" and state_of(tmp_path)["verification"]["tests"] == {".": "passed"}
+    assert "12 passed" in between(str(fake_provider.requests[-1].config.system_instruction), "tests")
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_failing_test_run_blocks_verified_whatever_the_verdicts(tmp_path, capsys) -> None:
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    with_tests(tmp_path, "import sys; print('1 failed'); sys.exit(1)")
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys") == 1
+    out = capsys.readouterr().out
+    assert "tests     failed (exit 1) in " in out and "the tests failed" in out
+    assert state_of(tmp_path)["status"] == "approved" and "1 failed" in read_text(tmp_path / REPORT)
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_override_verifies_over_a_failing_run(tmp_path) -> None:
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    with_tests(tmp_path, "import sys; sys.exit(1)")
+    assert run(tmp_path, "verify", "passkeys", "--override", "the failure is a known flaky test") == 0
+    held = state_of(tmp_path)
+    assert held["status"] == "verified" and held["verification"]["override"] == "the failure is a known flaky test"
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_without_a_test_command_verify_runs_as_before_and_the_report_says_so(tmp_path) -> None:
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    assert "No test command is set in .spec/config.toml" in read_text(tmp_path / REPORT)
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_another_repositorys_own_test_command_runs_in_its_folder(tmp_path, capsys) -> None:
+    _ws, root, api = across(tmp_path)
+    implemented(root)
+    (api / ".spec").mkdir()
+    with_tests(api, "import os; print('ran in', os.path.basename(os.getcwd()))")
+    capsys.readouterr()
+    assert run(root, "verify", "passkeys") == 0
+    out = capsys.readouterr().out
+    assert "testing   api: " in out and "tests     api passed in " in out
+    assert "ran in api" in read_text(root / REPORT)
+
+
+def test_a_secret_the_tests_print_reaches_no_request_recording_or_report(tmp_path, fake_provider) -> None:
+    key = "AKIA" + "IOSFODNN7EXAMPLE"
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    with_tests(tmp_path, f"print('aws_key = {key}')")
+    assert run(tmp_path, "verify", "passkeys") == 0
+    recorded = " ".join(
+        path.read_text(encoding="utf-8") for path in (tmp_path / ".spec/runs").rglob("*") if path.is_file()
+    )
+    sent = " ".join(str(r.config.system_instruction) for r in fake_provider.requests)
+    assert key not in sent and key not in recorded and key not in read_text(tmp_path / REPORT)

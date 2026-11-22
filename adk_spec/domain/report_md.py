@@ -6,6 +6,7 @@ needs of a check or a verification is in the change's state file, not here.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 
 from .model import Finding
@@ -54,6 +55,7 @@ def render_verify(
     model: str | None,
     override: str | None = None,
     bases: Mapping[str, str] | None = None,
+    tests: Sequence[tuple[str, str, str, str]] | None = None,
 ) -> str:
     """`reports/verify.md`: what the work was compared with, and for each requirement its verdict, the reason, and
     the lines of the diff that show it."""
@@ -76,4 +78,17 @@ def render_verify(
         lines += [f"## {one.id}: {one.verdict}", "", one.reason, ""]
         if one.evidence:
             lines += [*(f"- {path}: {quote}" for path, quote in one.evidence), ""]
+    lines += _tests(tests)
     return "\n".join(lines)
+
+
+def _tests(tests: Sequence[tuple[str, str, str, str]] | None) -> list[str]:
+    """The report's section on the project's tests: each run, by its repository, its command, what it came to and
+    the end of its output; or that no command is set."""
+    if not tests:
+        return ["## Tests", "", "No test command is set in .spec/config.toml: the verdicts rest on the diff alone.", ""]
+    lines = ["## Tests", ""]
+    for name, command, outcome, tail in tests:
+        fence = "`" * max(3, max((len(run) for run in re.findall(r"`+", tail)), default=0) + 1)
+        lines += [f"- {name}: `{command}`: {outcome}", "", fence, tail.rstrip("\n"), fence, ""]
+    return lines

@@ -163,6 +163,8 @@ class Verification(_Held):
     model: str | None = None
     #: The commit each other repository's work was compared with.
     bases: dict[str, str] = {}
+    #: What each run of the project's tests came to, by repository, `.` for the workspace's own: `passed`, or why not.
+    tests: dict[str, str] = {}
 
 
 class ChangeState(_Held):

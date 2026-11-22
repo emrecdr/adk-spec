@@ -77,6 +77,18 @@ A small change is `lean`: it owes no check and no verification, so it takes thre
   verified where every requirement is shown met, or where you say so with `--override "<your reason>"`. `verify`
   needs a git repository and reads it only; `--base <ref>` names another commit to start from.
 
+  Where you name your test command in `.spec/config.toml`, `verify` runs it first, says so, and shows the model and
+  the report its result and the end of its output, scrubbed of secret shapes. A run that fails, cannot start or runs
+  past its time keeps the change from being verified, whatever the verdicts; `--override` still verifies it, with
+  your reason. Only the command you wrote is run, as the list of words you wrote, with no shell to read it; another
+  repository of the change runs the command in its own `.spec/config.toml`, where it has one.
+
+  ```toml
+  [verify]
+  test = ["uv", "run", "pytest", "-q"]
+  timeout = 900  # seconds, 900 where it is not set
+  ```
+
 - **`archive`** folds the change's deltas into the living specs. A standard change is archived only once verified.
   If the living spec changed under a requirement the delta touches, the archive stops and writes nothing: read the
   current requirement, update the delta, then run `adk-spec rebase <id>` and approve again.

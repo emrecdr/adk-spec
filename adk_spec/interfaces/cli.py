@@ -55,13 +55,13 @@ from ..domain.lifecycle import (
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import BUILT_TIERS, Brief, ChangeState, Finding, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_verify
-from ..domain.secrets import scrub_lines
+from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import failed, finding, validate_spec
 from ..domain.verify import Verdict, grounded
-from ..workspace.config import ConfigError
+from ..workspace.config import ConfigError, load_config
 from ..workspace.context import (
     CONSTITUTION_MAX_CHARS,
     ContextTooLargeError,
@@ -87,6 +87,7 @@ from ..workspace.layout import (
     WorkspaceError,
     findings_of,
 )
+from ..workspace.layout import CONFIG as CONFIG_FILE
 from ..workspace.layout import CONTEXT as CONTEXT_FILE
 from ..workspace.layout import DESIGN as DESIGN_FILE
 from ..workspace.layout import TASKS as TASKS_FILE
@@ -1379,6 +1380,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     base, bases, text, held = _work(args, workspace, state)
     for name, commit in bases.items():
         print(f"with      {name} from {state.repositories[name]}, since {commit[:12]}")
+    runs = _tested(workspace, state)
     if held:
         print(f"left out  {_key_files(held, ': ')}")
     added, gone = owed(change.deltas), removed(change.deltas)
@@ -1387,17 +1389,19 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     if added or gone:  # a change with no delta has no requirement to judge
         from ..orchestration.models import serving
 
-        verdicts, ledger, failure = _verdicts(workspace, change, text, added, gone)
+        verdicts, ledger, failure = _verdicts(workspace, change, text, added, gone, _tests_text(runs))
         if failure:
             return _unfinished(f"the verification did not finish, and nothing was recorded: {failure}", ledger)
         model = serving("verify")
     at = datetime.now(UTC).isoformat(timespec="seconds")
     said = {one.id: one.verdict for one in verdicts}
+    ran = {run.name or ".": run.outcome for run in runs}
     after = verified(
-        state, said, base=base, diff=sha256_of(text), at=at, model=model, override=args.override, bases=bases
+        state, said, base=base, diff=sha256_of(text), at=at, model=model, override=args.override, bases=bases, tests=ran
     )
     reason = after.verification.override if after.verification else None
-    report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases)
+    shown = [(run.name or "this repository", run.command, run.outcome, run.tail) for run in runs]
+    report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases, tests=shown)
     path = workspace.write_report(args.id, "verify.md", report)
     workspace.save_state(after)
     for one in verdicts:
@@ -1409,8 +1413,38 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     return EXIT_OK if after.status == "verified" else EXIT_FINDINGS
 
 
+def _tested(workspace: Workspace, state: ChangeState) -> list[Any]:
+    """Each test command of the change's repositories run, each said before it runs: the workspace's own, from its
+    `.spec/config.toml`, then each other repository's, from its own, where it has one. Only a command a person wrote
+    in a config is ever run."""
+    from ..workspace.tests import run_tests
+
+    config = workspace.config()
+    asked = [("", workspace.root, config.test, config.test_timeout)] if config.test else []
+    for name, path in state.repositories.items():
+        root = Path(path) if Path(path).is_absolute() else workspace.root / path
+        if (own := root / ROOT_NAME / CONFIG_FILE).is_file() and (held := load_config(own)).test:
+            asked.append((name, root, held.test, held.test_timeout))
+    runs = []
+    for name, root, argv, timeout in asked:
+        print(f"testing   {f'{name}: ' if name else ''}{scrub(' '.join(argv))[0]}")
+        done = run_tests(root, argv, timeout=timeout, name=name)
+        took = "" if done.outcome.startswith("not run") else f" in {done.seconds:.1f} s"
+        print(f"tests     {f'{name} ' if name else ''}{done.outcome}{took}")
+        runs.append(done)
+    return runs
+
+
+def _tests_text(runs: Sequence[Any]) -> str:
+    """The runs of the project's tests, as the verify stage reads them: each one's command, what it came to and
+    the end of its output, scrubbed."""
+    return "\n\n".join(
+        f"{run.name or 'this repository'}: {run.command}: {run.outcome}\n{run.tail.rstrip()}" for run in runs
+    )
+
+
 def _verdicts(
-    workspace: Workspace, change: Any, text: str, added: frozenset[str], gone: frozenset[str]
+    workspace: Workspace, change: Any, text: str, added: frozenset[str], gone: frozenset[str], tests: str = ""
 ) -> tuple[list[Verdict], Any, str | None]:
     """The model's verdicts on a diff, each held to the lines the diff really holds; the ledger; and the failure,
     where the run did not end well."""
@@ -1420,7 +1454,7 @@ def _verdicts(
         raise UsageError(why)
     from ..orchestration.graph import build_verify_app
     from ..orchestration.stages import DELTAS_TEXT
-    from ..orchestration.stages.verify import DIFF, REQUIRED, TASKS_TEXT, read_verify, required_text
+    from ..orchestration.stages.verify import DIFF, REQUIRED, TASKS_TEXT, TESTS, read_verify, required_text
 
     # As in a check: the diff a model is shown and the diff its evidence is looked for in are one text, scrubbed
     # once. The fingerprint of the work is of the diff as it stands, and is taken where the diff is cut.
@@ -1430,6 +1464,7 @@ def _verdicts(
         TASKS_TEXT: render_tasks(change.tasks) if change.tasks else "",
         REQUIRED: required_text(added, gone),
         DIFF: text,
+        TESTS: tests,
     }
 
     def build(ledger: Any, recorder: Any) -> Any:
