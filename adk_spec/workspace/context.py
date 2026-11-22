@@ -73,8 +73,9 @@ def context_text(workspace: Workspace, change_id: str) -> str:
     return _capped(workspace.home / CHANGES / change_id / CONTEXT, CONTEXT_FILE_MAX_CHARS)
 
 
-#: How much of the repository's `profile.md` a stage is given.
-PROFILE_MAX_CHARS = 10_000
+#: How much of the repository's `profile.md` a stage is given: as much as of a `context.md`. A reading keeps at most
+#: 40 statements, and cut shorter, the profile lost the risks and the unknowns, which come last.
+PROFILE_MAX_CHARS = 20_000
 
 
 def profile_text(workspace: Workspace) -> str:

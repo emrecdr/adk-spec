@@ -360,5 +360,13 @@ CASES = (
     ),
     Case("integration", _integration, "plan", (Expected(("context.touches", "context.exists"), INTEGRATION),)),
     Case("across", _across, "plan", (Expected(("context.touches", "context.exists"), ACROSS),)),
-    Case("profile", _profile, "init", (Expected("context.convention", CONVENTIONS),)),
+    Case(
+        "profile",
+        _profile,
+        "init",
+        (
+            Expected("context.convention", (CONVENTIONS[0], "src/store.py")),  # errors raised as one class
+            Expected("context.convention", (CONVENTIONS[1], "src/auth/session.py")),  # tests beside the code
+        ),
+    ),
 )

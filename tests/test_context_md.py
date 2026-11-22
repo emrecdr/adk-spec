@@ -3,7 +3,14 @@
 
 from __future__ import annotations
 
-from adk_spec.domain.context_md import PROFILE_HEADING, SECTIONS, drafted_rules, render_context, unknown_count
+from adk_spec.domain.context_md import (
+    PROFILE_HEADING,
+    PROFILE_SECTIONS,
+    SECTIONS,
+    drafted_rules,
+    render_context,
+    unknown_count,
+)
 from adk_spec.domain.convert import to_statements
 from adk_spec.domain.drafts import SurveyDraft
 from adk_spec.domain.model import Statement
@@ -155,9 +162,27 @@ def test_drafted_rules_are_the_conventions_each_with_its_evidence() -> None:
     text = drafted_rules([tests, app])
     assert text.startswith("## Drafted from the code\n\n") and "adk-spec init" in text
     assert "keep, edit or delete" in text and "Sign-in is here." not in text
-    assert "- Each module has a test. (`tests/test_app.py:1`: def test_login():)\n" in text
+    assert "- Each module has a test. (`tests/test_app.py:1`: `def test_login():`)\n" in text
 
 
 def test_no_convention_drafts_no_rule() -> None:
     held = Statement(kind="risk", path="src/app.py", line=1, quote="def login(user):", note="Unclear.")
     assert drafted_rules([]) == "" and drafted_rules([held]) == ""
+
+
+def test_a_drafted_rule_holds_its_quote_whole_whatever_backticks_it_holds() -> None:
+    held = Statement(kind="convention", path="a.py", line=3, quote="use `foo", note="Errors are AppError.")
+    assert "- Errors are AppError. (`a.py:3`: `` use `foo ``)\n" in drafted_rules([held])
+
+
+def test_a_profile_says_where_things_live_and_not_where_a_change_plugs_in() -> None:
+    held = Statement(kind="touches", path="src/app.py", line=1, quote="def login(user):", note="Sign-in lives here.")
+    text = render_context(
+        PROFILE_HEADING,
+        at="2026-11-22T10:00:00+00:00",
+        commit=None,
+        statements=[held],
+        read=(),
+        sections=PROFILE_SECTIONS,
+    )
+    assert "## Where things live\n" in text and "Where the change plugs in" not in text

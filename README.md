@@ -89,7 +89,8 @@ A small change is `lean`: it owes no check and no verification, so it takes thre
   it), and writes `.spec/profile.md`: what is here, how this repository does things, risks and what is unknown,
   each statement with a quote. Rules already true of the code are drafted into the new constitution, each with its
   evidence, for you to keep, edit or delete. Every change's reading starts from the profile. `init --refresh` reads
-  the code again and rewrites the profile, never the constitution. Without a model set up, `init` makes the tree
+  the code again and rewrites the profile; it drafts rules only while the constitution is still the template.
+  Without a model set up, `init` makes the tree
   and says how to read the code later.
 
 ### Working in an existing repository

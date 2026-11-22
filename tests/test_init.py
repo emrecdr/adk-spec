@@ -51,7 +51,7 @@ def test_init_reads_the_code_writes_the_profile_and_drafts_the_rules(tmp_path, c
     assert read_text(tmp_path / PROFILE).startswith("# This repository\n\nRead from the repository at commit ")
     constitution = read_text(tmp_path / RULES)
     assert constitution.startswith(CONSTITUTION_TEXT.rstrip("\n")) and "\n## Drafted from the code\n" in constitution
-    assert "- Each module has a test in tests/. (`tests/test_app.py:1`: def test_login():)\n" in constitution
+    assert "- Each module has a test in tests/. (`tests/test_app.py:1`: `def test_login():`)\n" in constitution
 
 
 @pytest.mark.usefixtures("fake_provider")
@@ -66,9 +66,12 @@ def test_no_explore_and_no_repository_read_nothing(tmp_path, capsys, fake_provid
     repository(tmp_path / "repo", FILES)
     assert run(tmp_path / "repo", "init", "--no-explore") == 0
     (tmp_path / "plain").mkdir()
+    assert "init --refresh" in capsys.readouterr().out
     assert run(tmp_path / "plain", "init") == 0
     assert fake_provider.requests == [] and not (tmp_path / "repo" / PROFILE).exists()
-    assert (tmp_path / "plain/.spec").is_dir() and "init --refresh" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert (tmp_path / "plain/.spec").is_dir() and out.split()[0] == "made"
+    assert "refresh" not in out, "outside a repository, a refresh reads nothing either"
 
 
 def test_no_model_ready_makes_the_tree_and_says_how_to_read_later(tmp_path, capsys, monkeypatch, fake_provider) -> None:
@@ -112,6 +115,7 @@ def test_a_reading_that_ends_early_writes_a_partial_profile(tmp_path, fake_provi
     fake_provider.answers_when(REVIEW, "not json")
     assert run(tmp_path, "init") == 0
     assert "This reading is partial: review:" in read_text(tmp_path / PROFILE)
+    assert read_text(tmp_path / RULES) == CONSTITUTION_TEXT, "no rule from a reading the review did not finish"
 
 
 def test_a_secret_reaches_neither_the_profile_nor_a_rule(tmp_path, fake_provider) -> None:
@@ -125,3 +129,40 @@ def test_a_secret_reaches_neither_the_profile_nor_a_rule(tmp_path, fake_provider
     assert run(tmp_path, "init") == 0
     profile, constitution = read_text(tmp_path / PROFILE), read_text(tmp_path / RULES)
     assert key not in profile and key not in constitution and "[REDACTED" in constitution
+
+
+def test_a_refresh_that_reads_nothing_says_so_in_its_exit_code(tmp_path, monkeypatch, fake_provider) -> None:
+    """A first init never fails: the tree is what it owes. A refresh owes the profile."""
+    repository(tmp_path, FILES)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    fake_provider.answers_when(SURVEY, survey())
+    assert run(tmp_path, "init", "--refresh") == 3
+    monkeypatch.delenv("GOOGLE_API_KEY")
+    assert run(tmp_path, "init", "--refresh") == 2
+
+
+def test_init_inside_another_workspace_is_refused(tmp_path, capsys, fake_provider) -> None:
+    repository(tmp_path, FILES)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    capsys.readouterr()
+    assert run(tmp_path / "src", "init") == 2
+    assert "init --refresh" in capsys.readouterr().err and not (tmp_path / "src/.spec").exists()
+    assert fake_provider.requests == []
+
+
+def test_a_refresh_drafts_while_the_constitution_is_still_the_template(tmp_path, fake_provider) -> None:
+    """A first init made with no model, or with --no-explore, drafted nothing: the refresh every message points to
+    drafts, as long as the constitution is still exactly the template."""
+    repository(tmp_path, FILES)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    reads_the_tests(fake_provider)
+    assert run(tmp_path, "init", "--refresh") == 0
+    assert "\n## Drafted from the code\n" in read_text(tmp_path / RULES)
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_refresh_with_no_explore_is_refused(tmp_path, capsys) -> None:
+    repository(tmp_path, FILES)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 2
+    assert "--refresh" in capsys.readouterr().err

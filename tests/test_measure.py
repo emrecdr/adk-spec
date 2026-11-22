@@ -217,11 +217,12 @@ def test_the_profile_case_is_caught_where_a_drafted_rule_names_the_convention(tm
     reads it; the case is caught where a rule it drafted rests on one of the two planted files."""
     scout = {"files": ["src/errors.py"], "folders": [], "searches": [], "reason": "How errors are raised."}
     fake_provider.answers_when("You choose what to read", scout)
-    planted = {"kind": "convention", "file": "src/errors.py", "quote": "class AppError(Exception):"}
+    errors = {"kind": "convention", "file": "src/store.py", "quote": 'raise AppError("an empty row is not saved")'}
     more = {"more_files": [], "more_folders": [], "more_searches": []}
     fake_provider.answers_when(
         "You read parts of a repository's code",
-        {"statements": [{**planted, "note": "Every error is an AppError."}], **more},
+        {"statements": [{**errors, "note": "Every error is an AppError."}], **more},
     )
+    scout["files"] = ["src/errors.py", "src/store.py"]
     found = measure.measured(case("profile"), runs=1, folder=tmp_path / "found")
-    assert (found.caught, found.failed) == ([1], 0)
+    assert (found.caught, found.failed) == ([1, 0], 0), "each convention on its own; one raising it counts"

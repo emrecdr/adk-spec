@@ -8,6 +8,7 @@ as it stands. It is supporting material, like a report: no part of an approval.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 
 from .model import Statement, StatementKind
@@ -16,6 +17,14 @@ from .model import Statement, StatementKind
 PARTIAL = "This reading is partial: "
 #: The heading of a repository's profile, which `init` writes from a reading of the whole repository.
 PROFILE_HEADING = "This repository"
+#: The kinds of statement, each with the heading it stands under in a repository's profile: there is no change for
+#: a statement to plug into, and a stage that reads the profile beside a change's `context.md` reads no change in it.
+PROFILE_SECTIONS = (
+    ("exists", "What is here"),
+    ("touches", "Where things live"),
+    ("convention", "How this repository does things"),
+    ("risk", "Risks and what is unclear"),
+)
 #: The heading of the rules `init` drafts into a template constitution.
 DRAFTED_HEADING = "## Drafted from the code"
 #: The heading what a review named as still unknown stands under.
@@ -42,6 +51,7 @@ def render_context(
     others: Mapping[str, str | None] | None = None,
     unknown: Sequence[tuple[str, str]] = (),
     disputed: int = 0,
+    sections: Sequence[tuple[str, str]] = SECTIONS,
 ) -> str:
     """The file, under `title`: when and of what commit each repository was read, the statements under a heading a
     kind, what is still unknown, what was read, and what was left out. `partial` says why a reading ended early,
@@ -49,7 +59,7 @@ def render_context(
     lines = [f"# {title}", "", _read_from(at, commit, others or {}), ""]
     if partial:
         lines += [f"{PARTIAL}{partial}.", ""]
-    for kind, section in SECTIONS:
+    for kind, section in sections:
         held = [one for one in statements if one.kind == kind]
         if held:
             lines += [f"## {section}", ""]
@@ -105,8 +115,17 @@ def drafted_rules(statements: Sequence[Statement]) -> str:
     """The rules a reading of a repository found already true of its code, as a constitution's section: each kept
     `convention` statement, its note the rule and its quote the evidence. Nothing where none is a convention. Drafted
     by code from statements whose quotes were found, and the person's to keep, edit or delete."""
-    rules = [f"- {one.note} (`{one.path}:{one.line}`: {one.quote})" for one in statements if one.kind == "convention"]
+    rules = [
+        f"- {one.note} (`{one.path}:{one.line}`: {_code(one.quote)})" for one in statements if one.kind == "convention"
+    ]
     if not rules:
         return ""
     said = "Drafted by `adk-spec init` from the code as it stands: each is yours to keep, edit or delete."
     return "\n".join([DRAFTED_HEADING, "", said, "", *rules, ""])
+
+
+def _code(text: str) -> str:
+    """`text` as a code span that holds it whole: fenced by more backticks than its longest run of them."""
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence, pad = "`" * (longest + 1), " " if longest else ""
+    return f"{fence}{pad}{text}{pad}{fence}"

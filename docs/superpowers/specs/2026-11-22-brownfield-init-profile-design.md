@@ -47,7 +47,8 @@ is already true.
    read it later.
 5. Each change's reading starts from the profile: the scout is shown it, so it goes to the right folders with fewer
    rounds; the design and tasks stages are shown it beside `context.md`.
-6. `init --refresh` reads the code again in a workspace that has one, and rewrites the profile.
+6. `init --refresh` reads the code again in a workspace that has one, and rewrites the profile. It drafts rules
+   only while the constitution is still exactly the template, as a first `init` does.
 
 ## Non-goals
 
@@ -94,7 +95,8 @@ commit it was read at. It is the person's to edit. `init --refresh` rewrites it.
 Code turns each kept `convention` statement into one drafted rule: the note as the rule, the quote and its place as
 its evidence. They go at the end of `constitution.md`, under `## Drafted from the code`, with one line saying they
 are drafted by `init` and are the person's to keep, edit or delete. Only while `constitution.md` is still exactly
-the template; never on `--refresh`.
+the template, on a first `init` or a `--refresh`, and never from a reading that ended early: a rule rests on what
+the review let stand.
 
 ### Where the profile is used
 
@@ -128,7 +130,9 @@ should need fewer rounds for it.
 1. The profile is `.spec/profile.md`, beside the constitution, and is no part of an approval.
 2. Drafted rules come from `convention` statements only, by code, with no model call of their own.
 3. No capability-to-folder map with an accept step; the profile names where things live.
-4. `init --refresh` rewrites the profile and never touches the constitution.
+4. `init --refresh` rewrites the profile, and drafts rules only while the constitution is still exactly the
+   template. Changed after the code review: a first `init` with no model, or with `--no-explore`, drafted nothing,
+   and every message points to `--refresh`. The template check is what keeps a person's constitution theirs.
 5. The scout, the design stage and the tasks stage are shown the profile; `check` and `verify` are not.
 6. The profile describes the workspace's own repository only.
 

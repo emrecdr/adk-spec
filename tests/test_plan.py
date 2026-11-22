@@ -570,3 +570,13 @@ def test_with_no_profile_no_stage_is_shown_one(tmp_path, fake_provider) -> None:
     repository(tmp_path)
     assert run(tmp_path, "plan", "passkeys", "--replace") == 0
     assert between(sent_to(fake_provider, SCOUT), "profile") == "" == between(sent_to(fake_provider, TASKS), "profile")
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_profile_that_is_no_text_is_said_and_the_plan_goes_on(tmp_path, capsys) -> None:
+    """Re-saved by Windows PowerShell 5.1, the profile is UTF-16: optional material, it stops no plan."""
+    seeded(tmp_path)
+    (tmp_path / ".spec/profile.md").write_bytes("# This repository\n".encode("utf-16"))
+    capsys.readouterr()
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    assert "left out  .spec/profile.md is not UTF-8: no stage reads it" in capsys.readouterr().out

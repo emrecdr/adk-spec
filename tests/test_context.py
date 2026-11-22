@@ -88,3 +88,29 @@ def test_the_profile_is_read_as_it_stands_and_cut_past_its_cap(tmp_path, monkeyp
     assert profile_text(ws) == "# This repository\n\nA profile a person edited."
     monkeypatch.setattr(context, "PROFILE_MAX_CHARS", 10)
     assert profile_text(ws).startswith("# This rep\n(cut here: profile.md is longer than a stage is given)")
+
+
+def test_a_full_profile_reaches_a_stage_with_its_risks_and_unknowns(tmp_path) -> None:
+    """A reading keeps at most 40 statements. Rendered, such a profile ran past the cap a stage was given, and the
+    risks and unknowns, which come last, were cut."""
+    from adk_spec.domain.context_md import PROFILE_HEADING, PROFILE_SECTIONS, render_context
+    from adk_spec.domain.model import Statement
+
+    kinds = ["exists"] * 14 + ["touches"] * 10 + ["convention"] * 10 + ["risk"] * 6
+    held = [
+        Statement(kind=kind, path=f"src/m{n}.py", line=n + 1, quote="q" * 120, note="n" * 160, within="def f():")
+        for n, kind in enumerate(kinds)
+    ]
+    text = render_context(
+        PROFILE_HEADING,
+        at="2026-11-22T10:00:00+00:00",
+        commit=None,
+        statements=held,
+        read=[f"src/m{n}.py (whole)" for n in range(40)],
+        unknown=[("Who owns sessions?", "")],
+        sections=PROFILE_SECTIONS,
+    )
+    ws = Workspace.init(tmp_path)
+    write_text(ws.home / PROFILE, text)
+    shown = profile_text(ws)
+    assert "## Risks and what is unclear" in shown and "- Who owns sessions?" in shown

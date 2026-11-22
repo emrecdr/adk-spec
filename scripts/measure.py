@@ -25,7 +25,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from adk_spec.domain.context_md import SECTIONS
+from adk_spec.domain.context_md import PROFILE_SECTIONS, SECTIONS
 from adk_spec.domain.convert import pointed_at
 from adk_spec.domain.drafts import FindingDraft, FindingsDraft
 from adk_spec.domain.text import lines_of, plain
@@ -126,7 +126,7 @@ _STATEMENT = re.compile(r"- `(?P<path>[^`]+):\d+` (?P<note>.*)")
 def _stated(context: Path) -> list[Seen]:
     """Each statement a reading kept, read back from the `context.md` it wrote: its kind from the heading it
     stands under. None where no file was written."""
-    kinds = {heading: kind for kind, heading in SECTIONS}
+    kinds = {heading: kind for kind, heading in (*SECTIONS, *PROFILE_SECTIONS)}
     seen: list[Seen] = []
     kind = None
     for line in lines_of(read_text(context)) if context.is_file() else ():

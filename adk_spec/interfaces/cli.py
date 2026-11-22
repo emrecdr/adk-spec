@@ -23,7 +23,15 @@ from typing import Any, NoReturn
 
 from ..domain.brief_md import render_brief
 from ..domain.check import nameable, owed, removed
-from ..domain.context_md import PARTIAL, PROFILE_HEADING, drafted_rules, render_context, unknown_count
+from ..domain.context_md import (
+    PARTIAL,
+    PROFILE_HEADING,
+    PROFILE_SECTIONS,
+    SECTIONS,
+    drafted_rules,
+    render_context,
+    unknown_count,
+)
 from ..domain.convert import render_design, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
@@ -286,31 +294,47 @@ def _workspace(args: argparse.Namespace) -> Workspace:
 
 def _init(args: argparse.Namespace) -> int:
     """The `.spec` tree made, or found with `--refresh`; then the code read where it can be, a profile of the
-    repository written, and the rules already true of the code drafted into the template constitution, never on
-    `--refresh`. The tree is made first: no model, and no failure of one, ever leaves the person without it."""
+    repository written, and the rules already true of the code drafted into the constitution while it is still the
+    template. The tree is made first: no model, and no failure of one, ever leaves the person without it, and a
+    first `init` ends well whatever the reading came to. A refresh owes the profile, and says where it wrote none."""
+    if args.refresh and args.no_explore:
+        raise UsageError("--refresh reads the code again, and --no-explore reads none: give one of them")
     if args.refresh:
         workspace = _workspace(args)
     else:
-        workspace = Workspace.init(Path(args.root).absolute())
+        workspace = Workspace.init(_unheld(Path(args.root).absolute()))
         print(f"made      {workspace.shown(workspace.home)}")
+    code = EXIT_OK
     if not args.no_explore:
         _load_env()
         with lock_held(workspace):
-            kept = _described(workspace)
-            if not args.refresh:
-                _drafted(workspace, kept)
+            kept, code = _described(workspace)
+            _drafted(workspace, kept)
     later = f"; `{PROG} init --refresh` reads the code" if args.no_explore else ""
     print(f'next      keep what is true in constitution.md, then run `{PROG} propose "<what you want>"`{later}')
-    return EXIT_OK
+    return code if args.refresh else EXIT_OK
 
 
-def _described(workspace: Workspace) -> list[Any]:
-    """The repository's code read, and `profile.md` written from what was kept: the statements kept. Each way it
-    cannot be read is one line. The engine is not loaded where there is nothing to read."""
+def _unheld(root: Path) -> Path:
+    """`root`, where no folder above it holds a workspace already: `init` there would make a second one, read only
+    this folder, and every command run from here would find it instead of the real one."""
+    try:
+        above = Workspace.find(root)
+    except WorkspaceError:
+        return root
+    if above.root == root:
+        return root  # `Workspace.init` says it is there
+    raise UsageError(f"{above.home} is already there, above this folder. `{PROG} init --refresh` reads the code again")
+
+
+def _described(workspace: Workspace) -> tuple[list[Any], int]:
+    """The repository's code read, and `profile.md` written from what was kept: the statements a rule may be
+    drafted from, which are none where the reading ended early, and how a refresh ends. Each way the code cannot be
+    read is one line. The engine is not loaded where there is nothing to read."""
     source = _source(workspace, {})
     if source is None or not source.paths:
-        print(f"not read  no git repository here, or no file in it, to describe. `{PROG} init --refresh` reads it")
-        return []
+        print("not read  no git repository here, or no file in it, to describe")
+        return [], EXIT_USAGE
     from ..orchestration.explore import DESCRIBE, MAX_CALLS, ROLES
     from ..orchestration.models import require_ready
     from ..orchestration.stages import BRIEF_TEXT, TREE
@@ -318,17 +342,18 @@ def _described(workspace: Workspace) -> list[Any]:
 
     if why := require_ready(roles=ROLES):
         print(f"not read  {why}. Once a model is set up, `{PROG} init --refresh` reads the code")
-        return []
+        return [], EXIT_USAGE
     print(f"reading   the code, to describe this repository: up to {MAX_CALLS} model calls. --no-explore skips it")
     # No profile and no deltas: a refresh reads the code afresh, not the profile it is about to replace.
     seed = {RULES: constitution_text(workspace), BRIEF_TEXT: DESCRIBE, TREE: source.tree()}
     found, failure = _reading(workspace, "init", None, seed, None, source)
     print(f"explored  {_explored_said(found, 0, failure)}")
     if not found.statements:
-        return []
-    text = _found_text(workspace, PROFILE_HEADING, found, partial=failure)
+        return [], EXIT_ENGINE
+    text = _found_text(workspace, PROFILE_HEADING, found, partial=failure, sections=PROFILE_SECTIONS)
     print(f"wrote     {workspace.shown(workspace.write_home(PROFILE, text))}")
-    return found.statements
+    # A rule rests on what the review let stand: a reading it did not finish drafts none.
+    return ([] if failure else found.statements), EXIT_OK
 
 
 def _drafted(workspace: Workspace, statements: Sequence[Any]) -> None:
@@ -885,6 +910,16 @@ def _source(workspace: Workspace, repositories: Mapping[str, str]) -> Source | N
         return None
 
 
+def _profile(workspace: Workspace) -> str:
+    """The repository's profile as a stage reads it, or nothing: one that is no text is said, and stops no plan.
+    It is optional material, which a person may have re-saved in another encoding."""
+    try:
+        return profile_text(workspace)
+    except NotTextError:
+        print(f"left out  {workspace.shown(workspace.home / PROFILE)} is not UTF-8: no stage reads it")
+        return ""
+
+
 def _with_checked(workspace: Workspace, given: Sequence[str], held: Mapping[str, str], here: Path) -> dict[str, str]:
     """A change's repositories, `held`, with each one `--with` names now: its path read from `here`, the folder the
     command was told to work from, as a shell reads one, and recorded from the workspace's root. Each named now is
@@ -998,7 +1033,7 @@ def _plan_made(
         DELTAS_TEXT: _deltas_text(change),
         LIVING: living_text(specs, sorted(change.deltas)),
         TREE: source.tree() if source else "",
-        PROFILE_TEXT: profile_text(workspace),
+        PROFILE_TEXT: _profile(workspace),
     }
     if change.design and not state.needs_design:  # a design a person wrote, where the brief owed none
         seed[DESIGN_TEXT] = change.design.strip()
@@ -1089,7 +1124,13 @@ def _explored_said(found: Any, others: int, failure: str | None) -> str:
 
 
 def _found_text(
-    workspace: Workspace, title: str, found: Any, *, partial: str | None, others: Mapping[str, str | None] | None = None
+    workspace: Workspace,
+    title: str,
+    found: Any,
+    *,
+    partial: str | None,
+    others: Mapping[str, str | None] | None = None,
+    sections: Sequence[tuple[str, str]] = SECTIONS,
 ) -> str:
     """What a reading kept, as the file a stage reads it from: a change's `context.md`, or the profile."""
     return render_context(
@@ -1104,6 +1145,7 @@ def _found_text(
         others=others,
         unknown=found.unknown,
         disputed=found.disputed,
+        sections=sections,
     )
 
 
