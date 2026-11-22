@@ -2,7 +2,7 @@
 
 Read from the source only, at commit `3631c98` on branch `main` (clean working tree). Nothing was run: no
 `adk-spec` command, no measurement script, and not the test suite. "A test pins X" means the assertion was read,
-not that the suite was run. Every path below is relative to `/Users/emrec/Projects/playground/adk_spec/`.
+not that the suite was run. Every path below is relative to the repository root.
 All seven key questions were reached; what each could not settle is under its own Gaps heading.
 Short names used in citations: `cli.py` = `adk_spec/interfaces/cli.py`; `lifecycle.py` =
 `adk_spec/domain/lifecycle.py`; `graph.py` = `adk_spec/orchestration/graph.py`; `layout.py` =

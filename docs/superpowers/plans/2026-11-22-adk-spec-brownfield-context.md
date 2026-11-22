@@ -8,7 +8,7 @@
 
 **Tech Stack:** As plans 1 to 5. No new dependency.
 
-**Spec:** `docs/superpowers/specs/2026-11-22-brownfield-feature-context-design.md`. Reference for Task 1: `/Users/emrec/Projects/playground/adk_review/adk_review/core/secrets.py` and `judge/plugins.py` (`RedactSecretsPlugin`), read-only.
+**Spec:** `docs/superpowers/specs/2026-11-22-brownfield-feature-context-design.md`. Reference for Task 1: `adk_review/adk_review/core/secrets.py` and `judge/plugins.py` (`RedactSecretsPlugin`), read-only.
 
 ## Global Constraints
 
@@ -18,7 +18,7 @@ Plans 1 to 5's Global Constraints hold unchanged. In addition:
 - Only `adk_spec/workspace/git.py` runs a subprocess. A search is `git grep` with a fixed string, as an argument list.
 - A path a model names is used only after it is found, to the letter, in the list git gives. No path is joined to the repository's root before that.
 - `adk_spec/domain/` imports nothing of ADK. The graph is handed a reader and touches no path itself.
-- Nothing in `/Users/emrec/Projects/playground/adk_review` is run or changed. No `.env` is read.
+- Nothing in `adk_review` is run or changed. No `.env` is read.
 - No task makes a live model call. Task 8 holds the live steps, marked **owner**.
 
 ## Review Focus

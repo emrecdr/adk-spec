@@ -267,7 +267,7 @@ From `docs/guides/telemetry/telemetry_config/index.md`:
 
 ## 11. Dual-Arm Provider Support (GitHub Copilot + Gemini) & Windows/macOS Engineering
 
-Verified directly from `google-adk` `2.15.0` (`lite_llm.py`, `built_in_planner.py`, `_local_environment.py`) and `/Users/emrec/Projects/playground/adk_review/` (`judge/config.py`, `judge/settings.py`, `login.py`):
+Verified directly from `google-adk` `2.15.0` (`lite_llm.py`, `built_in_planner.py`, `_local_environment.py`) and `adk_review/` (`judge/config.py`, `judge/settings.py`, `login.py`):
 
 ### 11.1 GitHub Copilot (`LiteLlm`) vs. Gemini Feature Compatibility
 

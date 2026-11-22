@@ -186,7 +186,7 @@ AI coding agents frequently write shallow, example-only unit tests that mirror i
 
 ## 9. Cross-Platform Engineering (Windows & macOS First-Class Parity)
 
-Grounded in `/Users/emrec/Projects/playground/adk_review/` production practices and Python 3.14 / `google-adk 2.15.0` internals:
+Grounded in `adk_review/` production practices and Python 3.14 / `google-adk 2.15.0` internals:
 
 1. **CRLF / Line-Ending & Git Determinism:**
    - Ship `.gitattributes` containing `* text=auto eol=lf` so Windows checkouts never rewrite spec or code line endings.

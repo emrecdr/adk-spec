@@ -1,7 +1,7 @@
-/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/q04b_default_filter.py:2: DeprecationWarning: SequentialAgent is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.
+<scratch>/adk-spike/q04b_default_filter.py:2: DeprecationWarning: SequentialAgent is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.
   SequentialAgent(name="a", sub_agents=[])
-/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/q04b_default_filter.py:3: DeprecationWarning: LoopAgent is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.
+<scratch>/adk-spike/q04b_default_filter.py:3: DeprecationWarning: LoopAgent is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.
   LoopAgent(name="b", sub_agents=[])
-/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/q04b_default_filter.py:4: DeprecationWarning: ParallelAgent is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.
+<scratch>/adk-spike/q04b_default_filter.py:4: DeprecationWarning: ParallelAgent is deprecated in favor of Workflow and will be removed in a future version. Workflow cannot yet be used as an LlmAgent sub-agent.
   ParallelAgent(name="c", sub_agents=[])
 constructed all three under the default warning filter

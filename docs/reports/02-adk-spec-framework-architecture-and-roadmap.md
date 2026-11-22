@@ -1,7 +1,7 @@
 # `adk-spec`: Unified Hybrid Spec-Driven Framework on Google ADK 2.0 — Architecture & Implementation Plan
 
-- **Companion reports:** [01-spec-frameworks-comparative-analysis.md](file:///Users/emrec/Projects/playground/adk_spec/reports/01-spec-frameworks-comparative-analysis.md) · [03-ui-ux-workbench-and-engineering-standards.md](file:///Users/emrec/Projects/playground/adk_spec/reports/03-ui-ux-workbench-and-engineering-standards.md)
-- **Research basis:** [OpenSpec notes](file:///Users/emrec/Projects/playground/adk_spec/research_notes/Spec%20driven%20framework%20on%20Google%20ADK/01-openspec-research-notes.md) · [Spec Kit notes](file:///Users/emrec/Projects/playground/adk_spec/research_notes/Spec%20driven%20framework%20on%20Google%20ADK/02-speckit-research-notes.md) · [ADK 2.0 notes](file:///Users/emrec/Projects/playground/adk_spec/research_notes/Spec%20driven%20framework%20on%20Google%20ADK/03-google-adk-v2-best-practices.md) · [Audit & Improvements](file:///Users/emrec/Projects/playground/adk_spec/research_notes/Spec%20driven%20framework%20on%20Google%20ADK/04-validation-audit-and-improvement-options.md) · [Modern SDD & Architecture](file:///Users/emrec/Projects/playground/adk_spec/research_notes/Spec%20driven%20framework%20on%20Google%20ADK/05-modern-sdd-standards-and-architecture-patterns.md) · [UI/UX Spec](file:///Users/emrec/Projects/playground/adk_spec/research_notes/Spec%20driven%20framework%20on%20Google%20ADK/06-ui-ux-and-page-design-spec.md)
+- **Companion reports:** [01-spec-frameworks-comparative-analysis.md](01-spec-frameworks-comparative-analysis.md) · [03-ui-ux-workbench-and-engineering-standards.md](03-ui-ux-workbench-and-engineering-standards.md)
+- **Research basis:** [OpenSpec notes](../research_notes/Spec%20driven%20framework%20on%20Google%20ADK/01-openspec-research-notes.md) · [Spec Kit notes](../research_notes/Spec%20driven%20framework%20on%20Google%20ADK/02-speckit-research-notes.md) · [ADK 2.0 notes](../research_notes/Spec%20driven%20framework%20on%20Google%20ADK/03-google-adk-v2-best-practices.md) · [Audit & Improvements](../research_notes/Spec%20driven%20framework%20on%20Google%20ADK/04-validation-audit-and-improvement-options.md) · [Modern SDD & Architecture](../research_notes/Spec%20driven%20framework%20on%20Google%20ADK/05-modern-sdd-standards-and-architecture-patterns.md) · [UI/UX Spec](../research_notes/Spec%20driven%20framework%20on%20Google%20ADK/06-ui-ux-and-page-design-spec.md)
 
 ---
 
@@ -483,7 +483,7 @@ adk_spec/
 
 ### 3.1 Verified Python 3.14 & Latest Library Version Baseline (2026-11-20)
 
-All target versions below were verified against PyPI, npm, `google/adk-python`'s `constraints-3.14.txt`, and `/Users/emrec/Projects/playground/adk_review/pyproject.toml`:
+All target versions below were verified against PyPI, npm, `google/adk-python`'s `constraints-3.14.txt`, and `adk_review/pyproject.toml`:
 
 | Layer | Package | Verified Latest | Target Spec / Constraint Rule |
 | --- | --- | --- | --- |
@@ -500,7 +500,7 @@ All target versions below were verified against PyPI, npm, `google/adk-python`'s
 
 ### 3.2 Reference `pyproject.toml`, `tui/pyproject.toml` & `Makefile` (+ Windows PowerShell) Blueprint
 
-Modeled directly on `/Users/emrec/Projects/playground/adk_review/pyproject.toml` and `Makefile`, upgraded to latest `2026-11-20` verified versions with first-class Copilot & Windows/macOS support:
+Modeled directly on `adk_review/pyproject.toml` and `Makefile`, upgraded to latest `2026-11-20` verified versions with first-class Copilot & Windows/macOS support:
 
 ```toml
 # pyproject.toml (root)

@@ -14,17 +14,17 @@
   [01] author='two_out' | node_path='two_out@1/two_outputs@1' | output='first'
 Node execution failed with exception
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
     await self._execute_node(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
     await self._run_node_loop(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 439, in _run_node_loop
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 439, in _run_node_loop
     self._track_event_in_context(event, ctx)
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 463, in _track_event_in_context
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 463, in _track_event_in_context
     ctx.output = event.output
     ^^^^^^^^^^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 374, in output
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 374, in output
     raise ValueError(
         'Output already set. A node can produce at most one output.'
     )
@@ -32,17 +32,17 @@ ValueError: Output already set. A node can produce at most one output.
   [02] author='two_out' | node_path='two_out@1/two_outputs@1' | error='ValueError':'Output already set. A node can produce at most one output.'
 Root node two_out failed.
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 267, in _drive_root_node
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 267, in _drive_root_node
     await root_ctx._run_node_internal(  # pylint: disable=protected-access
     ...<3 lines>...
     )
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 521, in _run_node_internal
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 521, in _run_node_internal
     return await _dynamic_node_scheduler.run_node_internal(
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ...<12 lines>...
     )
     ^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_dynamic_node_scheduler.py", line 859, in run_node_internal
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_dynamic_node_scheduler.py", line 859, in run_node_internal
     raise DynamicNodeFailError(
     ...<3 lines>...
     )
@@ -51,21 +51,21 @@ google.adk.workflow._errors.DynamicNodeFailError: Dynamic node two_out failed
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/runners.py", line 873, in _cleanup_root_task
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/runners.py", line 873, in _cleanup_root_task
     await task
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 276, in _drive_root_node
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 276, in _drive_root_node
     raise e.error
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
     await self._execute_node(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
     await self._run_node_loop(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 439, in _run_node_loop
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 439, in _run_node_loop
     self._track_event_in_context(event, ctx)
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 463, in _track_event_in_context
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 463, in _track_event_in_context
     ctx.output = event.output
     ^^^^^^^^^^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 374, in output
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 374, in output
     raise ValueError(
         'Output already set. A node can produce at most one output.'
     )
@@ -80,23 +80,23 @@ ValueError: Output already set. A node can produce at most one output.
 === C. function parameter bound from state, key missing, no default
 Node execution failed with exception
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
     await self._execute_node(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
     await self._run_node_loop(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 435, in _run_node_loop
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 435, in _run_node_loop
     async for event in agen:
     ...<8 lines>...
         break
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_base_node.py", line 213, in run
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_base_node.py", line 213, in run
     item = await anext(agen, _sentinel)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 816, in _run_impl
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 816, in _run_impl
     kwargs = self._bind_parameters(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 597, in _bind_parameters
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 597, in _bind_parameters
     kwargs = dict(self._resolve_parameters(node_input, state=ctx.state))
                   ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 570, in _resolve_parameters
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 570, in _resolve_parameters
     raise WorkflowDataError(
     ...<3 lines>...
     )
@@ -104,17 +104,17 @@ google.adk.workflow._errors.WorkflowDataError: Missing value for parameter "not_
   [01] author='missing' | node_path='missing@1/needs_missing_key@1' | error='WorkflowDataError':'Missing value for parameter "not_in_state" of function "needs_missing_key". It was not found in state and has no default value.'
 Root node missing failed.
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 267, in _drive_root_node
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 267, in _drive_root_node
     await root_ctx._run_node_internal(  # pylint: disable=protected-access
     ...<3 lines>...
     )
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 521, in _run_node_internal
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/agents/context.py", line 521, in _run_node_internal
     return await _dynamic_node_scheduler.run_node_internal(
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ...<12 lines>...
     )
     ^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_dynamic_node_scheduler.py", line 859, in run_node_internal
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_dynamic_node_scheduler.py", line 859, in run_node_internal
     raise DynamicNodeFailError(
     ...<3 lines>...
     )
@@ -123,27 +123,27 @@ google.adk.workflow._errors.DynamicNodeFailError: Dynamic node missing failed
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/runners.py", line 873, in _cleanup_root_task
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/runners.py", line 873, in _cleanup_root_task
     await task
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 276, in _drive_root_node
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner_utils.py", line 276, in _drive_root_node
     raise e.error
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 176, in run
     await self._execute_node(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 423, in _execute_node
     await self._run_node_loop(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 435, in _run_node_loop
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_node_runner.py", line 435, in _run_node_loop
     async for event in agen:
     ...<8 lines>...
         break
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_base_node.py", line 213, in run
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_base_node.py", line 213, in run
     item = await anext(agen, _sentinel)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 816, in _run_impl
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 816, in _run_impl
     kwargs = self._bind_parameters(ctx, node_input)
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 597, in _bind_parameters
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 597, in _bind_parameters
     kwargs = dict(self._resolve_parameters(node_input, state=ctx.state))
                   ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 570, in _resolve_parameters
+  File "<scratch>/adk-spike/.venv/lib/python3.14/site-packages/google/adk/workflow/_function_node.py", line 570, in _resolve_parameters
     raise WorkflowDataError(
     ...<3 lines>...
     )

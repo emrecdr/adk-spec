@@ -3,10 +3,10 @@
 What `adk_review` actually does, read from its source on 2026-11-20, so the new project can copy what works. This is
 a description, not a review of its quality.
 
-- Source read: `/Users/emrec/Projects/playground/adk_review` (read only; nothing was run, `.env` and `.venv` were not
+- Source read: `adk_review` (read only; nothing was run, `.env` and `.venv` were not
   read).
 - Evidence is cited as `path:line`, relative to that folder. `02:L<n>` means line `n` of
-  `/Users/emrec/Projects/playground/adk_spec/reports/02-adk-spec-framework-architecture-and-roadmap.md`.
+  `docs/reports/02-adk-spec-framework-architecture-and-roadmap.md`.
 - "Stated reason" means the reason the project itself gives in a comment, a docstring or a guide. Those reasons,
   and the measurements they quote, were not re-verified here.
 - Not verifiable from this project: anything about `google-adk` 2.15.0, or about what the pinned ADK's own package

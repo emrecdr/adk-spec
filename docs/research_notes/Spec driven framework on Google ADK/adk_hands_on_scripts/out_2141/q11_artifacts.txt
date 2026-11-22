@@ -9,7 +9,7 @@
         v0: '# Spec: Login\n\nv0 body\n'
         v7: None
         nested_part: {'text': '# Plan\n', 'inline': False}
-        version_info: {'version': 1, 'canonical_uri': 'file:///private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/data_2141/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md', 'custom_metadata': {'stage': 'review'}, 'create_time': 1795231649.3637938, 'mime_type': 'text/markdown'}
+        version_info: {'version': 1, 'canonical_uri': 'file://<scratch>/adk-spike/data_2141/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md', 'custom_metadata': {'stage': 'review'}, 'create_time': 1795231649.3637938, 'mime_type': 'text/markdown'}
   -- direct service API (outside any agent run) --
   list_artifact_keys : ['spec.md', 'specs/001-login/plan.md', 'user:glossary.md']
   list_versions      : [0, 1]
@@ -17,8 +17,8 @@
 
 v0 body
 
-  artifact version   : {'version': 0, 'canonical_uri': 'file:///private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/data_2141/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/0/spec.md', 'custom_metadata': {}, 'create_time': 1795231649.3535092, 'mime_type': 'text/markdown'}
-  artifact version   : {'version': 1, 'canonical_uri': 'file:///private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/data_2141/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md', 'custom_metadata': {'stage': 'review'}, 'create_time': 1795231649.3637938, 'mime_type': 'text/markdown'}
+  artifact version   : {'version': 0, 'canonical_uri': 'file://<scratch>/adk-spike/data_2141/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/0/spec.md', 'custom_metadata': {}, 'create_time': 1795231649.3535092, 'mime_type': 'text/markdown'}
+  artifact version   : {'version': 1, 'canonical_uri': 'file://<scratch>/adk-spike/data_2141/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md', 'custom_metadata': {'stage': 'review'}, 'create_time': 1795231649.3637938, 'mime_type': 'text/markdown'}
   keys visible from ANOTHER session of the same user: ['user:glossary.md']
 
   -- on-disk layout --
@@ -52,7 +52,7 @@ v0 body
                           plan.md   (7 bytes)
 
   -- apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/metadata.json --
-  {"version":1,"canonicalUri":"file:///private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/data_2141/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md","customMetadata":{"stage":"review"},"createTime":1795231649.3637938,"mimeType":"text/markdown","fileName":"spec.md"}
+  {"version":1,"canonicalUri":"file://<scratch>/adk-spike/data_2141/q11_artifacts/apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md","customMetadata":{"stage":"review"},"createTime":1795231649.3637938,"mimeType":"text/markdown","fileName":"spec.md"}
   -- apps/arts/users/u1/sessions/sess-1/artifacts/spec.md/versions/1/spec.md (plain file on disk) --
   '# Spec\n\nv1 body (revised)\n'
 

@@ -49,7 +49,7 @@ Not installed by the core package, and therefore not exercised: `sqlalchemy`, `l
 
 All scripts, both virtual environments and the recorded outputs are in:
 
-`/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike`
+`<scratch>/adk-spike`
 
 This is a temporary directory that a reboot or routine cleanup can clear. Copy it somewhere durable if the scripts need to be kept as evidence.
 

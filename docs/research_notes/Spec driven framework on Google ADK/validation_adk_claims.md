@@ -15,7 +15,7 @@ Validator output. The three documents were checked against primary sources only;
 | Other packages | PyPI JSON for 34 packages in `<scratchpad>/val2_fetch_pypi/`; `ag-ui-adk` 0.13.0 and `litellm` 1.110.2 wheels read (not installed) for symbol names; uv settings reference for `exclude-newer` |
 | Documents | Frozen snapshot of 2026-11-20 23:16 CET under `<scratchpad>/secondary-snapshot/` (all nine SHA-256 sums verified) |
 
-`<scratchpad>` is `/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad`.
+`<scratchpad>` is `<scratch>`.
 
 Not checked: runtime behaviour (nothing was run), the local `adk_review` project the documents cite, and the frontend (npm) versions.
 

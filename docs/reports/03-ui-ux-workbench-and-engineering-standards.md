@@ -1,7 +1,7 @@
 # UI / UX Workbench & Engineering Standards Summary (`adk-spec`)
 
-- **Detailed Specifications:** [06-ui-ux-and-page-design-spec.md](file:///Users/emrec/Projects/playground/adk_spec/research_notes/Spec%20driven%20framework%20on%20Google%20ADK/06-ui-ux-and-page-design-spec.md) · [05-modern-sdd-standards-and-architecture-patterns.md](file:///Users/emrec/Projects/playground/adk_spec/research_notes/Spec%20driven%20framework%20on%20Google%20ADK/05-modern-sdd-standards-and-architecture-patterns.md)
-- **Companion Reports:** [01-spec-frameworks-comparative-analysis.md](file:///Users/emrec/Projects/playground/adk_spec/reports/01-spec-frameworks-comparative-analysis.md) · [02-adk-spec-framework-architecture-and-roadmap.md](file:///Users/emrec/Projects/playground/adk_spec/reports/02-adk-spec-framework-architecture-and-roadmap.md)
+- **Detailed Specifications:** [06-ui-ux-and-page-design-spec.md](../research_notes/Spec%20driven%20framework%20on%20Google%20ADK/06-ui-ux-and-page-design-spec.md) · [05-modern-sdd-standards-and-architecture-patterns.md](../research_notes/Spec%20driven%20framework%20on%20Google%20ADK/05-modern-sdd-standards-and-architecture-patterns.md)
+- **Companion Reports:** [01-spec-frameworks-comparative-analysis.md](01-spec-frameworks-comparative-analysis.md) · [02-adk-spec-framework-architecture-and-roadmap.md](02-adk-spec-framework-architecture-and-roadmap.md)
 
 ---
 

@@ -1,5 +1,5 @@
 Traceback (most recent call last):
-  File "/private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/q04b_default_filter.py", line 2, in <module>
+  File "<scratch>/adk-spike/q04b_default_filter.py", line 2, in <module>
     SequentialAgent(name="a", sub_agents=[])
     ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/opt/homebrew/Cellar/python@3.14/3.14.10/Frameworks/Python.framework/Versions/3.14/lib/python3.14/_py_warnings.py", line 757, in __new__

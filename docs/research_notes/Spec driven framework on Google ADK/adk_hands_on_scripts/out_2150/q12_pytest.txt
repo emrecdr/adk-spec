@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
-platform darwin -- Python 3.14.10, pytest-9.2.0, pluggy-1.7.0 -- /private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike/.venv/bin/python
-rootdir: /private/tmp/claude-501/-Users-emrec-Projects-playground-adk-spec/7de6117d-4e2c-404c-9eeb-58fb288bc041/scratchpad/adk-spike
+platform darwin -- Python 3.14.10, pytest-9.2.0, pluggy-1.7.0 -- <scratch>/adk-spike/.venv/bin/python
+rootdir: <scratch>/adk-spike
 plugins: anyio-4.16.0, asyncio-1.5.0
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
 collecting ... collected 5 items

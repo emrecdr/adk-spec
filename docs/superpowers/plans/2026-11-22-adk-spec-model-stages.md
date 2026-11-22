@@ -158,7 +158,7 @@ def test_a_refusal_from_copilot_is_said_in_its_own_words(monkeypatch, tmp_path, 
 **Interfaces:**
 - Produces: `class SchemaMismatch(BasePlugin)`: an answer that does not validate against its request's `response_schema` becomes `LlmResponse(error_code="SCHEMA_MISMATCH", error_message=<the first validation message>, usage_metadata=<kept>)`; a partial response is passed by. `class UsageLedger(BasePlugin)` with `ceiling: int | None`, `spent: dict[str, Usage]` by agent name and `total: Usage`: past the ceiling a call is answered `LlmResponse(error_code="CEILING", ...)` before it is sent. `def roster(ceiling: int | None) -> list[BasePlugin]`: both, in that order, for every `App` this plan builds. `STAGE_ERROR = "stage_error"`: each plugin also writes its reason there through `callback_context.state`, as `"the answer did not fit its schema: <message>"` or `"CEILING: the run's token ceiling of <n> is spent"`, so the gate after the stage can say why there is no answer.
 
-Port both from `/Users/emrec/Projects/playground/adk_review/adk_review/judge/plugins.py` (`ReportProviderErrors`' two schema hooks at lines 195-230, and `UsageLedger` at 440-565 without its per-turn and reserve logic). Validate with ADK's own `google.adk.utils._schema_utils.validate_schema`, imported at the top so an upgrade that moves it fails at import.
+Port both from `adk_review/adk_review/judge/plugins.py` (`ReportProviderErrors`' two schema hooks at lines 195-230, and `UsageLedger` at 440-565 without its per-turn and reserve logic). Validate with ADK's own `google.adk.utils._schema_utils.validate_schema`, imported at the top so an upgrade that moves it fails at import.
 
 - [ ] **Step 1: Write the failing tests**
 
