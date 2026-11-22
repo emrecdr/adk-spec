@@ -38,8 +38,8 @@ adk-spec archive <id>
 | `verify` | Is it built? | Judges what changed in the repository against each requirement. Run it as often as you like while implementing |
 | `archive` | Make it the record? | Folds the change into the living specs, all of it or none |
 
-Once for a repository: `adk-spec init`. At any time: `adk-spec status`, which says what to do next. Every command
-ends on a `next` line that says the same.
+Once for a repository: `adk-spec init`. At any time: `adk-spec status`, which says what to do next. `propose`,
+`approve` and `verify` end on a `next` line that says the same.
 
 Between `propose` and `approve` you read what was drafted and edit it: the files are yours. `propose` names what
 to read first. Between `approve` and `verify` you implement the tasks, with the coding agent you use, ticking each

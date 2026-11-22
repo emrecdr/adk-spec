@@ -207,6 +207,62 @@ Each step calls a model with the owner's account, on the owner's go-ahead in so 
 
 ---
 
+## What changed while this plan was executed
+
+Tasks 1 to 5 were built on 22 November 2026, test first, with no model called. No stage's instruction changed:
+`scripts/dump_instructions.py` gives the same text before and after.
+
+**Where the code departs from the plan, each a ruling in the ledger.**
+
+- **Progress is a listener on the recorder**, `Recorder(heard=...)`, not a plugin of its own. The recorder already
+  hears every call first, and a second plugin would have been threaded through five builders.
+- **A `propose` leaves two recordings**, its own and its plan's, as the two commands did.
+- **`archive` keeps its one line** and gains no `next` line: after it nothing is next.
+- **The suite's fake model fits its default task list to the request**, naming the requirements the request's
+  deltas add or modify. A change `propose` drafts owes IDs of its own, and a list that serves others fails its gate.
+
+### After the cleanup review
+
+`/simplify`, four reviewers, on 22 November 2026.
+
+- **`propose` drafts no plan while the brief leaves a point open.** The design first said it would. The review
+  showed the largest call of the command spent on a brief the tool itself marked unsettled, with tasks resting on
+  a guess. In that one case the flow is `propose`, settle the point, `plan`, `approve`.
+- **The approval's rules are stated once**, in the lifecycle: `approval_checks_first`, which the command asks and
+  the next step follows, and `check_stops`, apart from what the files themselves block.
+- **`approve` reads in one line of thought**; the results of a check and of a plan hold only what is read.
+- **Stale words are gone**: the sentence that sent a person to `rebase`, a field of the drafts nobody read, a
+  heading that said `approve` calls no model. `init` and an empty `status` name `propose`.
+- **The suite's default setup reaches an approval as a person now does**, with no `rebase` before it.
+
+### After the code review
+
+`/code-review` at high effort, on 22 November 2026: two findings it called important, two older than this plan,
+six nits. The five points of the Review Focus held. Each fix below was written test first.
+
+**Fixed.**
+
+- **A check goes stale with what it read.** A blocking finding said "fix them and approve again", and the approval
+  makes a check again only where the check is stale. A fix made in the repository's rules or in a living spec left
+  the check current and blocking for ever. A check now records the fingerprint of the rules and of each living spec
+  it read, beside the change's own files.
+- **A base not yet recorded is no warning.** `validate --strict` failed a change written by hand on something
+  `approve` settles by itself. The finding is `INFO` now.
+- **An approval waits for living specs that read.** With one unread, the code's check of coverage stepped aside in
+  silence and an approval, with its model call, went through. `approve` and `check` refuse, as `plan` and `propose`
+  did already.
+- **An approval records the files as they were assessed**, not as a second read finds them a moment later.
+- **A change approved, edited and then found blocking** is sent to the report, not to "approve again".
+- **A base recorded by an approval is said**, with its requirement.
+- **A change too large for the model's check** is told the way without a model, as one with no provider is.
+- **The README** no longer says every command ends on a `next` line.
+
+**Left as they are.**
+
+- The brief stage is still asked why a design is owed, and nothing shows the answer. Asking for it is what makes a
+  model justify the flag, and the design it leads to is written in the same command.
+- On a terminal, `working   <stage>` is said for a call the token ceiling then refuses.
+
 ## What this plan leaves
 
 Brownfield reading inside `propose` (the next phase). A length limit on what a stage writes. `archive` saying anything more than its one line.

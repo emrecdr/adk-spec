@@ -39,7 +39,7 @@ SEVERITY: dict[str, Severity] = {
     "delta.purpose-missing": "ERROR",
     "delta.purpose-on-existing": "ERROR",
     "delta.base-stale": "ERROR",
-    "delta.base-missing": "WARNING",
+    "delta.base-missing": "INFO",
     "delta.drops-scenario": "WARNING",
     "delta.modified-unchanged": "WARNING",
     "delta.removed-no-reason": "WARNING",

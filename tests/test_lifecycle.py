@@ -266,3 +266,15 @@ def test_a_check_code_no_rule_knows_is_never_sent_to_an_approval_that_would_refu
     odd = Finding(severity="ERROR", code="check.some-new-code", message="m")
     never = ChangeState(id="passkeys", tier="standard")
     assert next_action(never, [], ["approval"], check=[odd]) == "fix what `adk-spec validate passkeys` lists"
+
+
+def test_an_approved_change_edited_and_found_blocking_is_sent_to_the_report_not_to_approve_again() -> None:
+    """Found by the code review: after an approval made its check again and refused on what it found, the step
+    still said "approve again", which was refused again."""
+    from adk_spec.domain.lifecycle import check_blockers
+    from adk_spec.domain.model import Checked
+
+    edited = {**FILES, "tasks.md": "sha256:edited"}
+    state = approved("standard").model_copy(update={"check": Checked(at="t", files=edited, blocking=2)})
+    said = next_action(state, [], ["tasks.md"], check=check_blockers(state, edited))
+    assert said == "fix what reports/check.md lists, then run `adk-spec approve passkeys`"

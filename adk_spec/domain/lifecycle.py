@@ -226,6 +226,8 @@ class Step:
 
 #: What stands for "a finding of the change is an ERROR" among the codes below.
 _ERROR = "an ERROR"
+#: What a person does about a check that found something blocking, in which `{cid}` is the change.
+_FIX_THE_CHECK = "fix what reports/check.md lists, then run `adk-spec approve {cid}`"
 #: What holds a draft, the first that applies first: the code of what holds it, who acts on it, and the phrase, in
 #: which `{cid}` is the change. An ERROR comes before everything, since the files it is in will change; an open
 #: point before the plan, since its answer shapes the tasks; and the plan before the check, which reads it. A
@@ -234,8 +236,29 @@ _HOLDS: tuple[tuple[str, Actor, str], ...] = (
     (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
     ("brief.marker-unresolved", "you", "settle the open point in brief.md"),
     ("change.missing-tasks", "run", "run `adk-spec plan {cid}`"),
-    ("check.blocking", "you", "fix what reports/check.md lists, then run `adk-spec approve {cid}`"),
+    ("check.blocking", "you", _FIX_THE_CHECK),
 )
+
+
+def _after_approval(
+    state: ChangeState, errors: bool, stale: Sequence[str], check: Sequence[Finding], drifted: bool
+) -> Step:
+    """The next step of a change that was approved: approved again where its files changed since, and then the
+    work, its verification and its archive."""
+    cid = state.id
+    if stale and any(owed.code == "check.blocking" for owed in check):
+        # The approval was asked again, made the check of the edited files, and was stopped by what it found.
+        return Step("you", _FIX_THE_CHECK.format(cid=cid))
+    if stale:  # the edit that voided the approval made a check stale as well, which the approval makes again
+        return Step("you", f"approve again: {', '.join(stale)} changed since the approval")
+    if errors:  # a base that moved, a spec that no longer reads
+        return Step("you", f"fix what `adk-spec validate {cid}` lists")
+    if state.status == "verified" and drifted and state.tier != "lean":
+        return Step("run", f"run `adk-spec verify {cid}` again: the work changed since it was verified")
+    if state.status == "verified":
+        return Step("run", f"run `adk-spec archive {cid}`")
+    last = "archive" if state.tier == "lean" else "verify"
+    return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
 
 
 def next_step(
@@ -253,16 +276,7 @@ def next_step(
         return Step("done", "nothing: archived")
     errors = any(found.severity == "ERROR" for found in findings)
     if state.status in ("approved", "verified"):
-        if stale:  # the edit that voided the approval made a check stale as well, which the approval makes again
-            return Step("you", f"approve again: {', '.join(stale)} changed since the approval")
-        if errors:  # a base that moved, a spec that no longer reads
-            return Step("you", f"fix what `adk-spec validate {cid}` lists")
-        if state.status == "verified" and drifted and state.tier != "lean":
-            return Step("run", f"run `adk-spec verify {cid}` again: the work changed since it was verified")
-        if state.status == "verified":
-            return Step("run", f"run `adk-spec archive {cid}`")
-        last = "archive" if state.tier == "lean" else "verify"
-        return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
+        return _after_approval(state, errors, stale, check, drifted)
     held = {found.code for found in (*findings, *check)} | ({_ERROR} if errors else set())
     for code, actor, phrase in _HOLDS:
         if code in held:

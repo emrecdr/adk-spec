@@ -46,6 +46,7 @@ from ..domain.lifecycle import (
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import Brief, ChangeState, Finding, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_verify
+from ..domain.spec_md import render_spec
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import failed, finding, validate_spec
@@ -53,6 +54,7 @@ from ..domain.verify import Verdict, grounded
 from ..workspace.config import ConfigError
 from ..workspace.context import (
     CONSTITUTION_MAX_CHARS,
+    ContextTooLargeError,
     capability_index,
     constitution_text,
     files_text,
@@ -308,6 +310,10 @@ class Assessed:
     unchecked: list[Finding]
     #: Whether the work changed since the change was verified.
     drifted: bool = False
+    #: The fingerprint of each file of the change, as it was read for this assessment: what an approval records.
+    files: dict[str, str] = field(default_factory=dict)
+    #: Those, and the fingerprint of what a check reads beside them: what a check is current against.
+    seen: dict[str, str] = field(default_factory=dict)
 
     @property
     def state(self) -> ChangeState:
@@ -324,9 +330,22 @@ def _assessed(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> 
     unreadable = set(workspace.capabilities()) - set(living)  # a spec that is there and does not read
     found = _from_root(change_id, findings_of(loaded, living, unreadable))
     files = approval_files(workspace.approval_texts(change_id))
+    seen = {**files, **_beside(workspace, loaded.change, living)}
     state = loaded.change.state
-    unchecked = _from_root(change_id, check_blockers(state, files))
-    return Assessed(loaded, found, approval_stale(state, files), unchecked, _drifted(workspace, state))
+    unchecked = _from_root(change_id, check_blockers(state, seen))
+    stale, drifted = approval_stale(state, files), _drifted(workspace, state)
+    return Assessed(loaded, found, stale, unchecked, drifted, files, seen)
+
+
+def _beside(workspace: Workspace, change: Any, living: dict[str, Spec]) -> dict[str, str]:
+    """The fingerprint of what a check reads beside a change's own files, by its path from the root: the rules of
+    the repository, and the living spec of each capability the change touches. A check is of all of it: one that
+    found something in the rules is stale once the rules change, as it is once a file of the change does."""
+    seen = {f"{ROOT_NAME}/{CONSTITUTION}": sha256_of(constitution_text(workspace))}
+    for capability in sorted(change.deltas):
+        if capability in living:
+            seen[f"{ROOT_NAME}/{SPECS}/{capability}/{SPEC_FILE}"] = sha256_of(render_spec(living[capability]))
+    return seen
 
 
 def _drifted(workspace: Workspace, state: ChangeState) -> bool:
@@ -448,11 +467,14 @@ def _rebase(args: argparse.Namespace) -> int:
 def _based(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> None:
     """A base recorded for each requirement the change modifies or removes that has none: what `rebase` records
     for a change that was never based, so that an approval needs no command before it. A recorded base is left as
-    it is."""
+    it is. Each one recorded is said: it is what the requirement says now, which a delta written some time ago may
+    not have been written against."""
     loaded = workspace.load_change(change_id)
     state = loaded.change.state
     if state.status != "archived" and (missing := missing_bases(state, loaded.change.deltas, living)):
         workspace.save_state(state.model_copy(update={"bases": {**state.bases, **missing}}))
+        them = "it" if len(missing) == 1 else "them"
+        print(f"based     {', '.join(sorted(missing))} as the living spec holds {them} now")
 
 
 def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec], assessed: Assessed) -> _Checked:
@@ -461,9 +483,9 @@ def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec]
     _load_env()
     try:
         return _check_made(workspace, change_id, living, assessed, no_model=False)
-    except UsageError as exc:
+    except (UsageError, ContextTooLargeError) as exc:  # no provider, or more than a model is given to read
         raise UsageError(
-            f"{exc}. `approve` checks a {assessed.state.tier} change first: set the provider up, or run "
+            f"{exc}. `approve` checks a {assessed.state.tier} change first: put that right, or run "
             f"`{PROG} check {change_id} --no-model` and approve again"
         ) from exc
 
@@ -478,7 +500,10 @@ def _approve(args: argparse.Namespace) -> int:
     """An approval, with what it needs done first: a base recorded where one is missing, and the check made where
     none is current. A person decides once; the tool's own work is no step of theirs."""
     workspace = _workspace(args)
-    living, _found = workspace.specs()
+    living, of_specs = workspace.specs()
+    if of_specs:  # the code's check of coverage steps aside while a living spec is unread: nothing is approved so
+        _printed(of_specs)
+        raise NotYetError(f"`{args.id}` is not approved: a living spec does not read. Fix it first")
     _based(workspace, args.id, living)
     assessed = _assessed(workspace, args.id, living)
     # What the files themselves block comes first: no model is asked about files that are going to change.
@@ -504,7 +529,7 @@ def _approve(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
         return _refused(args.id, blockers)
-    files = approval_files(workspace.approval_texts(args.id))
+    files = assessed.files  # as they were read for the assessment that found the check current: no later read
     try:
         by = args.by or getpass.getuser()
     except OSError as exc:  # an account with no name, as in a container run under a bare user id
@@ -904,19 +929,22 @@ def _check_made(
     every = [*assessed.findings, *_from_root(change_id, judged)]
     report = render_check(change_id, at, _inside(change_id, every), model=model, dropped=dropped)
     path = workspace.write_report(change_id, "check.md", report)
-    workspace.save_state(checked(assessed.state, every, files=approval_files(texts), at=at, model=model))
+    read = {**approval_files(texts), **_beside(workspace, assessed.loaded.change, specs)}
+    workspace.save_state(checked(assessed.state, every, files=read, at=at, model=model))
     return _Checked(every, workspace.shown(path), dropped, ledger)
 
 
 def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
     """The `check` command: the check made, and what it found said."""
-    specs, _of_living = workspace.specs()
+    specs, of_specs = workspace.specs()
+    if of_specs:  # which requirements exist is unknown while a living spec is unread: coverage cannot be checked
+        _printed(of_specs)
+        raise NotYetError(f"`{args.id}` is not checked: a living spec does not read. Fix it first")
     assessed = _assessed(workspace, args.id, specs)
     if assessed.state.status == "archived":
         raise NotYetError(f"`{args.id}` is archived: there is nothing left to check")
     held = assessed.state.check
-    files = approval_files(workspace.approval_texts(args.id))
-    if args.no_model and held is not None and check_stands(assessed.state, files):
+    if args.no_model and held is not None and check_stands(assessed.state, assessed.seen):
         print(
             f"{PROG}: the check of `{args.id}` by {held.model} stands, with {held.blocking} blocking: its files have "
             "not changed since, and a check by code alone does not replace it",

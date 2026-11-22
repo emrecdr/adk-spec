@@ -129,7 +129,8 @@ def test_check_writes_a_report_and_records_what_it_read(tmp_path, capsys, fake_p
     assert run(tmp_path, "check", "passkeys") == 0
     held = state(ws).check
     assert (held.blocking, held.model) == (0, "fake on gemini")
-    assert held.files == approval_files(ws.approval_texts("passkeys"))
+    files = approval_files(ws.approval_texts("passkeys"))
+    assert files.items() <= held.files.items(), "the change's own files, and beside them what else the check read"
     report = read_text(tmp_path / REPORT)
     assert "check.ambiguity" in report and "brief.md:25" in report and "Which browsers are in scope" in report
     out = capsys.readouterr().out
@@ -163,7 +164,7 @@ def test_approve_checks_again_after_an_edit(tmp_path, capsys, fake_provider) -> 
     assert run(tmp_path, "status") == 0 and "run `adk-spec approve passkeys`" in capsys.readouterr().out
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
     assert len(fake_provider.requests) == 2 and state(ws).status == "approved"
-    assert state(ws).check.files == state(ws).approval.files, "what was checked is what was approved"
+    assert state(ws).approval.files.items() <= state(ws).check.files.items(), "what was approved is what was checked"
 
 
 def test_approve_makes_the_check_a_standard_change_owes(tmp_path, capsys, fake_provider) -> None:
@@ -367,3 +368,69 @@ def test_the_check_is_told_to_report_every_fault_it_finds(tmp_path, fake_provide
     assert sent.startswith(CHECK)
     assert "Report every fault you find. One finding does not excuse the next." in sent
     assert "An empty list is a good answer." in sent, "and still none where there is none"
+
+
+# Found by the code review of the simple flow.
+
+
+def test_a_check_goes_stale_when_a_rule_it_read_changes(tmp_path, capsys, fake_provider) -> None:
+    """A blocking finding said "fix them and approve again", and the approval makes a check again only where the
+    check is stale. A fix made in the repository's rules, which the check read and which is no file of the change,
+    left the check current and blocking: every further `approve` refused with the same sentence."""
+    ws = standard(tmp_path)
+    fake_provider.answers_each_time(CHECK, iter([{"findings": [REAL]}, None]))
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1 and state(ws).check.blocking == 1
+    assert ".spec/constitution.md" in state(ws).check.files, "what the check read beside the change's own files"
+    rules = tmp_path / ".spec/constitution.md"
+    write_text(rules, read_text(rules) + "\nPassword sign-in stays until passkeys are proven.\n")
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0 and "run `adk-spec approve passkeys`" in capsys.readouterr().out
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert len(fake_provider.requests) == 2 and state(ws).status == "approved"
+
+
+def test_a_check_goes_stale_when_a_living_spec_it_read_changes(tmp_path, fake_provider) -> None:
+    ws = standard(tmp_path)
+    assert run(tmp_path, "check", "passkeys") == 0
+    assert ".spec/specs/auth/spec.md" in state(ws).check.files
+    living = tmp_path / ".spec/specs/auth/spec.md"
+    assert "after five failed attempts" in read_text(living)
+    write_text(living, read_text(living).replace("after five failed attempts", "after six failed attempts"))
+    assert run(tmp_path, "check", "passkeys", "--no-model") in (0, 1)
+    assert len(fake_provider.requests) == 1 and state(ws).check.model is None, "the model's check no longer stands"
+
+
+def test_an_approval_waits_for_living_specs_that_read(tmp_path, capsys, fake_provider) -> None:
+    """A living spec that does not read makes the code's check of coverage step aside in silence. An approval, and
+    the model call it now makes, went through with a requirement no task served."""
+    ws = standard(tmp_path)
+    write_text(tmp_path / ".spec/specs/billing/spec.md", "not a spec\n")
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    said = capsys.readouterr()
+    assert "a living spec does not read" in said.err and ".spec/specs/billing/spec.md" in said.out
+    assert fake_provider.requests == [] and state(ws).check is None and state(ws).approval is None
+    assert run(tmp_path, "check", "passkeys") == 1 and fake_provider.requests == []
+    assert "a living spec does not read" in capsys.readouterr().err
+
+
+def test_approve_says_which_bases_it_recorded(tmp_path, capsys) -> None:
+    """A base recorded in silence at approval time is whatever the requirement says then, not what the delta was
+    written against: a person is told which requirements to read again."""
+    seeded(tmp_path)
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert "based     REQ-AUTH-001, REQ-AUTH-002 as the living spec holds them now" in capsys.readouterr().out
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert "based     " not in capsys.readouterr().out, "nothing is said where nothing was recorded"
+
+
+def test_a_change_too_large_for_the_models_check_is_told_the_way_without_one(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    from adk_spec.workspace import context
+
+    ws = standard(tmp_path)
+    monkeypatch.setattr(context, "CONTEXT_MAX_CHARS", 10)
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 2
+    assert "adk-spec check passkeys --no-model" in capsys.readouterr().err
+    assert fake_provider.requests == [] and state(ws).approval is None

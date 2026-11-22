@@ -401,3 +401,16 @@ def test_every_command_stands_in_exactly_one_group() -> None:
     grouped = [name for _heading, names in cli.COMMAND_GROUPS for name in names]
     assert sorted(grouped) == sorted(cli._parser().commands.choices), "a command registered and left out of the help"
     assert len(grouped) == len(set(grouped))
+
+
+def test_a_base_not_yet_recorded_fails_no_strict_validation(tmp_path, capsys) -> None:
+    """Found by the code review: `validate --strict` failed a change written by hand on a base that an approval
+    records by itself, while `status` said the change was ready to approve."""
+    seeded(tmp_path)
+    assert run(tmp_path, "validate", "passkeys", "--strict", "--json") in (0, 1)
+    said = json.loads(capsys.readouterr().out)
+    missing = [f for f in said["findings"] if f["code"] == "delta.base-missing"]
+    assert missing and all(f["severity"] == "INFO" for f in missing)
+    assert not any(
+        f["severity"] in ("ERROR", "WARNING") and f["code"].startswith("delta.base") for f in said["findings"]
+    )
