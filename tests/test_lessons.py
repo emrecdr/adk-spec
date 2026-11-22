@@ -16,7 +16,7 @@ from conftest import (
     state_of,
 )
 
-from adk_spec.domain.lessons_md import GATE_HEADING, TEMPLATE, learned
+from adk_spec.domain.lessons_md import GATE_HEADING, TEMPLATE, as_read, learned
 from adk_spec.workspace.context import lessons_text
 from adk_spec.workspace.files import read_text, write_text
 from adk_spec.workspace.layout import LESSONS, Workspace
@@ -182,3 +182,34 @@ def test_a_revised_change_counts_its_revision_as_drafted(tmp_path, monkeypatch, 
     capsys.readouterr()
     approved(tmp_path, "drafted")
     assert NUDGE not in capsys.readouterr().out
+
+
+def test_a_persons_line_with_an_odd_break_in_it_is_kept_whole() -> None:
+    """Found by the cleanup review: `splitlines` broke a person's line at U+2028 the first time a lesson was added."""
+    mine = "# Lessons\n\n- one line\u2028still the same line\n"
+    assert learned(mine, [("deltas", MISSING)]).startswith(mine)
+
+
+def test_an_example_holds_no_terminal_control_character() -> None:
+    (line,) = gate_lines(learned(TEMPLATE, [("deltas", "delta.round-trip: a\x1b[31mb")]))
+    assert "\x1b" not in line
+
+
+def test_a_stage_is_given_the_lessons_without_what_is_written_for_a_person() -> None:
+    """Found by the cleanup review: the template's opening and the counts cost every drafting call, for nothing."""
+    assert as_read(TEMPLATE) == ""
+    text = as_read(learned(TEMPLATE.replace("## From people\n", f"## From people\n\n{MINE}\n"), [("deltas", MISSING)]))
+    assert text.startswith("## From people") and MINE in text and "What every draft" not in text
+    assert "- deltas, `delta.target-missing`: REQ-AUTH-099" in text and "(1)" not in text
+    assert "## From people" not in as_read(learned(TEMPLATE, [("deltas", MISSING)])), "an empty section is left out"
+
+
+def test_the_drafts_a_person_edited_are_named_by_the_lifecycle() -> None:
+    from adk_spec.domain.lifecycle import approve, edited_drafts
+    from adk_spec.domain.model import ChangeState
+
+    state = ChangeState(id="c", tier="lean", drafted={"brief.md": "a", "tasks.md": "b"})
+    files = {"brief.md": "edited", "tasks.md": "b", "specs/auth/spec.md": "by hand"}
+    assert edited_drafts(state, files) == ["brief.md"]
+    after = approve(state, files=files, by="me", at="now")
+    assert after.drafted == {"brief.md": "edited", "tasks.md": "b"} and edited_drafts(after, files) == []

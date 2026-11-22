@@ -57,6 +57,12 @@ def approval_files(texts: Mapping[str, str]) -> dict[str, str]:
     return {path: sha256_of(_as_approved(path, text)) for path, text in texts.items()}
 
 
+def edited_drafts(state: ChangeState, files: Mapping[str, str]) -> list[str]:
+    """Each file of `files`, fingerprints by path, that adk-spec drafted and a person changed since: a correction
+    later drafts could follow. Ticking a box is no change, as an approval takes it."""
+    return sorted(name for name, mark in files.items() if state.drafted.get(name, mark) != mark)
+
+
 def reopened(state: ChangeState, **update: Any) -> ChangeState:
     """`state` a draft again, with `update`, and its approval void: a command wrote its files anew, a rebase or a
     revision, and what was approved is no longer what it says. It is approved again."""
@@ -78,9 +84,12 @@ def approve(
     and `others` what is checked out in each other repository of the change: each is kept as where the work began
     only where none is kept yet, so approving again does not move it."""
     approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override)
+    # A draft a person corrected is named once: the approved fingerprint then stands for what was drafted.
+    drafted = {name: files.get(name, mark) for name, mark in state.drafted.items()}
     began = state.base_commit or commit
     commits = {**(others or {}), **state.base_commits}
     update = {"status": "approved", "approval": approval, "base_commit": began, "base_commits": commits}
+    update["drafted"] = drafted
     return state.model_copy(update=update)
 
 

@@ -19,8 +19,8 @@ from pathlib import Path
 
 from .orchestration.graph import Known, build_chat_app
 from .orchestration.plugins import UsageLedger
-from .orchestration.stages import CAPABILITIES, CONSTITUTION
-from .workspace.context import capability_index, constitution_text
+from .orchestration.stages import CAPABILITIES, CONSTITUTION, LESSONS_TEXT
+from .workspace.context import capability_index, constitution_text, lessons_text
 from .workspace.layout import Workspace, WorkspaceError
 
 
@@ -30,9 +30,13 @@ def _known() -> tuple[Known, dict[str, str]]:
     try:
         workspace = Workspace.find(Path.cwd())
     except WorkspaceError:
-        return Known(living={}, taken=frozenset()), {CAPABILITIES: "", CONSTITUTION: ""}
+        return Known(living={}, taken=frozenset()), {CAPABILITIES: "", CONSTITUTION: "", LESSONS_TEXT: ""}
     specs, _problems = workspace.specs()
-    told = {CAPABILITIES: capability_index(specs), CONSTITUTION: constitution_text(workspace)}
+    told = {
+        CAPABILITIES: capability_index(specs),
+        CONSTITUTION: constitution_text(workspace),
+        LESSONS_TEXT: lessons_text(workspace),
+    }
     return Known(living=specs, taken=frozenset(workspace.taken(specs))), told
 
 

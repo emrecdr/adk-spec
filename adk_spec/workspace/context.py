@@ -11,7 +11,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
-from ..domain.lessons_md import TEMPLATE as LESSONS_TEMPLATE
+from ..domain.lessons_md import as_read
 from ..domain.model import Spec
 from ..domain.spec_md import render_spec
 from ..domain.text import lines_of
@@ -90,16 +90,19 @@ LESSONS_MAX_CHARS = 6_000
 
 
 def lessons_text(workspace: Workspace) -> str:
-    """The lessons file as a drafting stage reads it: as the file stands, cut past the cap, or nothing where there is
-    none or it holds no lesson yet."""
-    text = _capped(workspace.home / LESSONS, LESSONS_MAX_CHARS)
-    return "" if text == LESSONS_TEMPLATE.strip() else text
+    """The lessons file as a drafting stage reads it: its lessons, without what is written for a person, cut past
+    the cap; nothing where there is none, or it holds no lesson yet."""
+    path = workspace.home / LESSONS
+    return _cut(as_read(read_text(path)) if path.is_file() else "", LESSONS, LESSONS_MAX_CHARS)
 
 
 def _capped(path: Path, cap: int) -> str:
     """A file a stage reads as it stands, stripped, or nothing where there is none: cut past `cap`, saying so."""
-    text = read_text(path).strip() if path.is_file() else ""
-    return text if len(text) <= cap else text[:cap] + f"\n(cut here: {path.name} is longer than a stage is given)"
+    return _cut(read_text(path).strip() if path.is_file() else "", path.name, cap)
+
+
+def _cut(text: str, name: str, cap: int) -> str:
+    return text if len(text) <= cap else text[:cap] + f"\n(cut here: {name} is longer than a stage is given)"
 
 
 def constitution_text(workspace: Workspace) -> str:

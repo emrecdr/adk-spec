@@ -33,15 +33,13 @@ ECHO = "the answer repeats a marker line of your instructions. Write no marker l
 #: Where a learning gate hands on what it sent back, once the next try passed: each as `[stage, problem]`, what the
 #: command notes in the lessons file. What a stage given up was sent back teaches nothing, and is not handed on.
 SENT_BACK = "sent_back"
+#: Where a learning gate keeps what it sent its stage back, until a try passes or the stage is given up: one stage at
+#: a time is ever sent back, since a retry goes from the stage to its gate and back.
+PENDING = "sent_back_pending"
 
 
 def tries_key(stage: str) -> str:
     return f"tries_{stage}"
-
-
-def pending_key(stage: str) -> str:
-    """Where a learning gate keeps what it sent `stage` back, until a try passes or the stage is given up."""
-    return f"sent_back_{stage}"
 
 
 def checked(stage: str, check: Callable[[Mapping[str, Any]], list[str]], *, learns: bool = False) -> FunctionNode:
@@ -59,8 +57,8 @@ def checked(stage: str, check: Callable[[Mapping[str, Any]], list[str]], *, lear
         else:
             problems = check(ctx.state.to_dict())
         # The findings are a stage's own: cleared wherever the run leaves it, so no later stage is told them.
-        counted = {tries_key(stage): tries, STAGE_ERROR: None, FINDINGS: None, pending_key(stage): None}
-        pending = ctx.state.get(pending_key(stage)) or []
+        counted = {tries_key(stage): tries, STAGE_ERROR: None, FINDINGS: None, **({PENDING: None} if learns else {})}
+        pending = (ctx.state.get(PENDING) or []) if learns else []
         if not problems:
             learned = {SENT_BACK: [*(ctx.state.get(SENT_BACK) or []), *pending]} if pending else {}
             return Event(route=OK, state={**counted, **learned})
@@ -70,7 +68,7 @@ def checked(stage: str, check: Callable[[Mapping[str, Any]], list[str]], *, lear
         # checked a second time.
         again = {**counted, FINDINGS: "\n".join(problems), stage: None}
         if learns:
-            again[pending_key(stage)] = [*pending, *([stage, problem] for problem in problems)]
+            again[PENDING] = [*pending, *([stage, problem] for problem in problems)]
         return Event(route=AGAIN, state=again)
 
     return FunctionNode(func=gate, name=f"{stage}_gate")

@@ -28,6 +28,7 @@ from ..domain.delta_md import parse_delta
 from ..domain.ids import REQ_ID, slug_problem
 from ..domain.lessons_md import TEMPLATE as LESSONS_TEMPLATE
 from ..domain.lessons_md import learned
+from ..domain.lifecycle import approval_files
 from ..domain.model import Change, ChangeState, Finding, GrammarError, Spec, Tier
 from ..domain.spec_md import parse_spec, render_spec
 from ..domain.tasks_md import parse_tasks
@@ -252,10 +253,12 @@ class Workspace:
 
     def write_change(self, state: ChangeState, files: Mapping[str, str]) -> Path:
         """A new change made whole: its folder, each of `files` by its path in the folder, and its state, written
-        as one set. Where the write fails the folder is removed again, so no half-made change is left."""
+        as one set, each file recorded as drafted. Where the write fails the folder is removed again, so no half-made
+        change is left."""
         folder = self.free(state.id)
         texts = self._placed(folder, files)
-        texts[folder / STATE] = state.model_dump_json(indent=2)
+        drafted = state.model_copy(update={"drafted": approval_files(files)})
+        texts[folder / STATE] = drafted.model_dump_json(indent=2)
         try:
             write_all(texts)
         except BaseException:
@@ -266,10 +269,13 @@ class Workspace:
     def rewrite_change(self, state: ChangeState, files: Mapping[str, str], gone: Iterable[str] = ()) -> Path:
         """An existing change written anew: each of `files` by its path in its folder, and its state, as one set;
         then each of `gone` taken out, and its folder with it where nothing else is left in it, a delta of a
-        capability a revision no longer touches. Its folder."""
+        capability a revision no longer touches. Each file of `files` is recorded as drafted. Its folder."""
         folder = self._folder(state.id)
         texts = self._placed(folder, files)
-        texts[folder / STATE] = state.model_dump_json(indent=2)
+        gone = list(gone)
+        held = {name: mark for name, mark in state.drafted.items() if name not in gone}
+        drafted = {**held, **approval_files(files)}
+        texts[folder / STATE] = state.model_copy(update={"drafted": drafted}).model_dump_json(indent=2)
         write_all(texts)
         for path in self._placed(folder, dict.fromkeys(gone, "")):
             path.unlink(missing_ok=True)
@@ -293,7 +299,7 @@ class Workspace:
         path = self.home / LESSONS
         held = read_text(path) if path.is_file() else LESSONS_TEMPLATE
         if (after := learned(held, sent_back)) != held:
-            write_text(path, after)
+            self.write_home(LESSONS, after)
 
     def drafted(self, section: str) -> bool:
         """`section` added at the end of the constitution, only while it is exactly the template `init` wrote:

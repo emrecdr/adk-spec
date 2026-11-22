@@ -42,7 +42,7 @@ Where it lists something as still unknown, do not plan on it as if it were known
 def build_tasks() -> LlmAgent:
     design = section("## The design", "design", DESIGN_TEXT, optional=True)
     text = instruction(
-        OPENING, GUIDE, THE_LESSONS, RULES, LIVING_SPECS, THE_PROFILE, FILES, THE_CONTEXT, THE_BRIEF, THE_DELTAS, design
+        OPENING, GUIDE, RULES, THE_LESSONS, LIVING_SPECS, THE_PROFILE, FILES, THE_CONTEXT, THE_BRIEF, THE_DELTAS, design
     )
     return stage(KEY, "Breaks a change into tasks.", text, TasksDraft)
 

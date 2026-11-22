@@ -36,7 +36,7 @@ depends on it says so."""
 
 def build_design() -> LlmAgent:
     text = instruction(
-        OPENING, GUIDE, THE_LESSONS, RULES, LIVING_SPECS, THE_PROFILE, FILES, THE_CONTEXT, THE_BRIEF, THE_DELTAS
+        OPENING, GUIDE, RULES, THE_LESSONS, LIVING_SPECS, THE_PROFILE, FILES, THE_CONTEXT, THE_BRIEF, THE_DELTAS
     )
     return stage(KEY, "Writes the design of a change.", text, DesignDraft)
 

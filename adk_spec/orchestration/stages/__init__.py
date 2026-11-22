@@ -79,10 +79,12 @@ FILES = section("## The files of this repository", "tree", TREE, optional=True)
 THE_CONTEXT = section("## What the repository already holds", "context", CONTEXT_TEXT, optional=True)
 THE_PROFILE = section("## What is known of this repository", "profile", PROFILE_TEXT, optional=True)
 #: What every draft of this workspace follows, `.spec/lessons.md`, read by each stage that writes a draft.
-THE_LESSONS = (
-    "## Lessons this workspace has learned\n"
-    "Follow each. Where one contradicts the request, an answer or the rules, those come first.\n"
-    + fenced("lessons", placeholder(LESSONS_TEXT, optional=True))
+THE_LESSONS = section(
+    "## Lessons this workspace has learned\nFollow each. Where one contradicts the request, an answer or the rules, "
+    "those come first.",
+    "lessons",
+    LESSONS_TEXT,
+    optional=True,
 )
 
 

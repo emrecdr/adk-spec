@@ -31,6 +31,7 @@ from ..domain.convert import DESIGN_SECTIONS, questions_of, render_design, to_br
 from ..domain.delta_md import parse_delta, render_delta
 from ..domain.drafts import BriefDraft, DeltasDraft, DesignDraft, TasksDraft, Triage, VerdictsDraft
 from ..domain.ids import slug_problem
+from ..domain.lessons_md import coded
 from ..domain.lifecycle import capture_bases
 from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.tasks_md import parse_tasks, render_tasks
@@ -38,7 +39,7 @@ from ..domain.validate import validate_brief, validate_delta, validate_tasks
 from ..workspace.context import ContextTooLargeError, living_text
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import SPEC_FILE, SPECS
-from .gate import AGAIN, FAILURE, GIVE_UP, OK, SENT_BACK, checked, pending_key, tries_key
+from .gate import AGAIN, FAILURE, GIVE_UP, OK, PENDING, SENT_BACK, checked, tries_key
 from .plugins import STAGE_ERROR, Scrub, UsageLedger, roster
 from .stages import BRIEF_TEXT, FINDINGS, LIVING, REQUEST, TIER
 from .stages import brief as brief_stage
@@ -87,7 +88,7 @@ class Drafted:
 
 def _errors(findings: list[Finding]) -> list[str]:
     """Each ERROR as the validator words it, for a stage to put right."""
-    return [f"{found.code}: {found.message}" for found in findings if found.severity == "ERROR"]
+    return [coded(found.code, found.message) for found in findings if found.severity == "ERROR"]
 
 
 def _brief(state: Mapping[str, Any]) -> Brief:
@@ -156,19 +157,23 @@ def build_smoke_app() -> App:
 def _check_brief(state: Mapping[str, Any]) -> list[str]:
     brief = _brief(state)
     if not brief.title:
-        return ["brief.no-title: the brief has no title. Give it one, on one line."]
+        return [coded("brief.no-title", "the brief has no title. Give it one, on one line.")]
     text = render_brief(brief)
     try:
         same = parse_brief(text) == brief
     except GrammarError as exc:
         return [
-            f"brief.unwritable: the brief cannot be written as its file: {exc.message}. Write no heading and no open "
-            "code fence."
+            coded(
+                "brief.unwritable",
+                f"the brief cannot be written as its file: {exc.message}. Write no heading and no open code fence.",
+            )
         ]
     if not same:
         return [
-            "brief.round-trip: a section of the brief does not read back as written. Write no line that starts `## ` "
-            "in one."
+            coded(
+                "brief.round-trip",
+                "a section of the brief does not read back as written. Write no line that starts `## ` in one.",
+            )
         ]
     found = validate_brief(brief, text)
     over = any(one.code == _OVER_BUDGET for one in found)
@@ -185,9 +190,10 @@ def _over_budget(state: Mapping[str, Any], text: str) -> str:
     held = len(markers(text))
     by_hand = len(markers(render_brief(to_brief(draft.model_copy(update={"open_points": []})))))
     copied = f", {by_hand} of them written as a marker in a section. Write no marker there" if by_hand else ""
-    return (
-        f"{_OVER_BUDGET}: the brief leaves {held} points open, past the {MARKER_BUDGET} it may{copied}. Name in "
-        "open_points the three that matter most, and state what you assume for the rest."
+    return coded(
+        _OVER_BUDGET,
+        f"the brief leaves {held} points open, past the {MARKER_BUDGET} it may{copied}. Name in "
+        "open_points the three that matter most, and state what you assume for the rest.",
     )
 
 
@@ -196,13 +202,18 @@ def _deltas_check(known: Known) -> Callable[[Mapping[str, Any]], list[str]]:
         made = drafted(state, known)
         listed = set(made.brief.capabilities)
         problems = [
-            f"delta.capability-unlisted: the delta names `{capability}`, which the brief does not list. Change only a "
-            "capability the brief lists."
+            coded(
+                "delta.capability-unlisted",
+                f"the delta names `{capability}`, which the brief does not list. Change only a "
+                "capability the brief lists.",
+            )
             for capability in made.deltas
             if capability not in listed
         ]
         problems += [
-            f"delta.capability-missing: the brief lists `{capability}` and no delta changes it. Write its delta."
+            coded(
+                "delta.capability-missing", f"the brief lists `{capability}` and no delta changes it. Write its delta."
+            )
             for capability in sorted(listed - set(made.deltas))
         ]
         for capability, delta in made.deltas.items():
@@ -217,26 +228,31 @@ def _of_delta(capability: str, delta: Delta, known: Known) -> list[str]:
     living spec, or text that does not survive being written as its file. The validator speaks first: it names the
     ID that is wrong, where a failed round trip could only name a shape."""
     if why := slug_problem(capability):
-        return [f"delta.capability-bad-name: the delta names a capability that cannot be one: {why}."]
+        return [coded("delta.capability-bad-name", f"the delta names a capability that cannot be one: {why}.")]
     bases = capture_bases({capability: delta}, known.living)
     if wrong := _errors(validate_delta(delta, known.living.get(capability), bases)):
         return wrong
     try:
         read = parse_delta(render_delta(delta))
     except GrammarError as exc:
-        return [f"delta.unwritable: the delta of `{capability}` cannot be written as its file: {exc.message}."]
+        return [coded("delta.unwritable", f"the delta of `{capability}` cannot be written as its file: {exc.message}.")]
     before, after = (*delta.added, *delta.modified), (*read.added, *read.modified)
     for wrote, back in zip(before, after, strict=False):
         if wrote != back:
             return [
-                f"delta.round-trip: {wrote.id} `{wrote.name}` does not read back as written. Keep its name and each "
-                "step on one line, "
-                "and write no heading and no open code fence in its statement."
+                coded(
+                    "delta.round-trip",
+                    f"{wrote.id} `{wrote.name}` does not read back as written. Keep its name and each "
+                    "step on one line, "
+                    "and write no heading and no open code fence in its statement.",
+                )
             ]
     if read != delta:
         return [
-            f"delta.reason-round-trip: the delta of `{capability}` does not read back as written: keep each reason "
-            "on one line."
+            coded(
+                "delta.reason-round-trip",
+                f"the delta of `{capability}` does not read back as written: keep each reason on one line.",
+            )
         ]
     return []
 
@@ -244,7 +260,7 @@ def _of_delta(capability: str, delta: Delta, known: Known) -> list[str]:
 def _check_design(state: Mapping[str, Any]) -> list[str]:
     draft = DesignDraft.model_validate(state[design_stage.KEY])
     return [
-        f"design.section-empty: the design's {name} section is empty. Write it."
+        coded("design.section-empty", f"the design's {name} section is empty. Write it.")
         for name in DESIGN_SECTIONS
         if not getattr(draft, name).strip()
     ]
@@ -258,22 +274,21 @@ def _tasks_check(owed: frozenset[str], nameable: frozenset[str]) -> Callable[[Ma
         groups = to_tasks(TasksDraft.model_validate(state[tasks_stage.KEY]))
         if not any(group.tasks for group in groups):
             return [
-                "tasks.empty: the plan holds no task. Write one task at least for each requirement the deltas add or "
-                "change."
+                coded(
+                    "tasks.empty",
+                    "the plan holds no task. Write one task at least for each requirement the deltas add or change.",
+                )
             ]
         if wrong := _errors([*validate_tasks(groups), *coverage(groups, owed=owed, nameable=nameable)]):
             return wrong
         try:
             same = parse_tasks(render_tasks(groups)) == groups
         except GrammarError as exc:
-            return [f"tasks.unwritable: the tasks cannot be written as their file: {exc.message}."]
-        return (
-            []
-            if same
-            else [
-                "tasks.round-trip: the tasks do not read back as written: keep each description and check on one line."
-            ]
-        )
+            return [coded("tasks.unwritable", f"the tasks cannot be written as their file: {exc.message}.")]
+        if same:
+            return []
+        sentence = "the tasks do not read back as written: keep each description and check on one line."
+        return [coded("tasks.round-trip", sentence)]
 
     return check_tasks
 
@@ -383,8 +398,7 @@ _NOTHING_YET: dict[str, None] = dict.fromkeys(
     (
         *_DRAFTING,
         *(tries_key(stage) for stage in _DRAFTING),
-        *(pending_key(stage) for stage in _DRAFTING),
-        SENT_BACK,
+        *(PENDING, SENT_BACK),
         *(FAILURE, FINDINGS, STAGE_ERROR, TIER, ASKING, ROUNDS, BRIEF_TEXT, LIVING),
         *(brief_stage.ANSWERS, brief_stage.REPLACES),
     )

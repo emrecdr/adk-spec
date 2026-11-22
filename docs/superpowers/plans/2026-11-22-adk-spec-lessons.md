@@ -68,3 +68,14 @@ seeds the file into the drafting stages, and records drafted fingerprints in the
   of the stable start of the instruction.
 - **Task 4.** `plan` and a revision record what they drafted, as `propose` does; `new` records nothing, so a change
   written by hand is never named.
+- **After the cleanup review.**
+  - A stage is given the lessons alone: no template opening, no empty section and no count, which change on most
+    runs and would keep the instruction from being cached. The section sits after the rules.
+  - The file is read by lines as the other Markdown files are, so a person's line with an odd break stays whole,
+    and an example is plain text, no terminal control character in it.
+  - One helper writes a gate's "code: sentence" and the file's reader parses that shape alone; a gate keeps what it
+    sent back under one key; the workspace records drafted fingerprints wherever it writes a draft, and `plan`
+    writes its tasks and the state as one set; `lifecycle` names the edited drafts and moves them on at approval.
+  - ADK's web chat drafts with the lessons too.
+  - Not done: each stage given only its own gate lines (medium; the design's first builder call), and gate checks
+    returning findings rather than sentences (large; the shared helper covers the drift).

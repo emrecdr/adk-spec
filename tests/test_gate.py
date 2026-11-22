@@ -106,28 +106,14 @@ async def test_a_stage_given_up_or_a_gate_that_does_not_learn_hands_on_nothing()
     assert not given_up.state.get(SENT_BACK) and not unlearned.state.get(SENT_BACK)
 
 
-def test_every_sentence_a_drafting_gate_says_opens_with_its_code() -> None:
-    """A lesson is the same lesson in the next change only where its problem has a code, as the validator's have."""
+def test_a_brief_and_a_design_sent_back_are_sent_back_with_a_code() -> None:
+    """A lesson is the same lesson in the next change only where its problem has a code, as the validator's have:
+    each gate sentence is made by `coded`, and these two stand for the rest."""
+    from conftest import CANNED_BRIEF
+
     from adk_spec.domain.lessons_md import learned
     from adk_spec.orchestration import graph
 
-    said = [
-        *graph._check_brief(
-            {
-                "brief": {
-                    "title": "",
-                    "why": "",
-                    "what_changes": "",
-                    "non_goals": "",
-                    "capabilities": [],
-                    "impact": "",
-                    "assumptions": "",
-                    "open_points": [],
-                    "design_needed": False,
-                    "design_reason": "",
-                }
-            }
-        ),
-        *graph._check_design({"design": dict.fromkeys(graph.DESIGN_SECTIONS, "")}),
-    ]
-    assert said and all(learned("", [("x", sentence)]) for sentence in said)
+    brief = graph._check_brief({"brief": {**CANNED_BRIEF, "title": ""}})
+    design = graph._check_design({"design": dict.fromkeys(graph.DESIGN_SECTIONS, "")})
+    assert brief and design and all(learned("", [("x", sentence)]) for sentence in (*brief, *design))

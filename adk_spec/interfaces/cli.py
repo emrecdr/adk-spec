@@ -47,6 +47,7 @@ from ..domain.lifecycle import (
     check_stands,
     check_stops,
     checked,
+    edited_drafts,
     missing_bases,
     next_step,
     reopened,
@@ -634,10 +635,8 @@ def _approve(args: argparse.Namespace) -> int:
     reason = args.override if any(held.code == "check.blocking" for held in assessed.unchecked) else None
     began = _began(workspace, assessed.state)
     held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=_commit(workspace), others=began)
-    # A draft a person corrected is named once: the approved fingerprint then stands for what was drafted.
-    drafted = assessed.state.drafted
-    edited = sorted(name for name, mark in files.items() if drafted.get(name, mark) != mark)
-    workspace.save_state(held.model_copy(update={"drafted": {**drafted, **{name: files[name] for name in edited}}}))
+    edited = edited_drafts(assessed.state, files)
+    workspace.save_state(held)
     print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
     if edited:
         print(
@@ -893,8 +892,9 @@ def _learned(workspace: Workspace, state: Mapping[str, Any]) -> None:
     read or written costs the command nothing."""
     from ..orchestration.gate import SENT_BACK
 
-    with contextlib.suppress(OSError, NotTextError):
-        workspace.learn([(stage, problem) for stage, problem in state.get(SENT_BACK) or ()])
+    if sent_back := state.get(SENT_BACK):
+        with contextlib.suppress(OSError, NotTextError):
+            workspace.learn(sent_back)
 
 
 def _unfinished(sentence: str, ledger: Any) -> int:
@@ -1088,10 +1088,9 @@ def _plan_made(
         files = {DESIGN_FILE: render_design(design), **files}  # the design first: it is what a person reads first
     folder = workspace.home / CHANGES / change_id
     there = {name for name in files if (folder / name).is_file()}
-    paths = workspace.write_into(change_id, files)
-    workspace.save_state(state.model_copy(update={"drafted": {**state.drafted, **approval_files(files)}}))
-    drafted = [(path, name in there) for name, path in zip(files, paths, strict=True)]
-    return _Planned([*read, *drafted], ledger, explored=said)
+    workspace.rewrite_change(state, files)  # the plan and the state as one set, the plan recorded as drafted
+    written = [(folder / name, name in there) for name in files]
+    return _Planned([*read, *written], ledger, explored=said)
 
 
 def _read_code(
@@ -1672,8 +1671,6 @@ def _rewritten(
     One the revision wrote as it stood keeps its approval."""
     texts = workspace.approval_texts(change.state.id)  # as they stand on disk: a delta off its grammar too
     gone = sorted(name for name in texts if name.startswith(f"{SPECS}/") and name not in files)
-    kept = {name: mark for name, mark in change.state.drafted.items() if name not in gone}
-    fields = {**fields, "drafted": {**kept, **fields["drafted"]}}
     same = not gone and all(texts.get(name) == text for name, text in files.items())
     same = same and fields["repositories"] == change.state.repositories
     folder = workspace.rewrite_change(
@@ -1753,7 +1750,6 @@ def _written(
         "bases": capture_bases(made.deltas, known.living),
         "needs_design": made.needs_design,
         "repositories": dict(repositories),
-        "drafted": approval_files(files),
     }
     if change is not None:
         return change.state.id, _rewritten(workspace, change, made.deltas, files, fields)

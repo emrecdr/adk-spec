@@ -102,3 +102,16 @@ async def test_a_second_message_starts_from_nothing_of_the_first(tmp_path, monke
         r for r in fake_provider.requests[asked_before:] if "You write the brief" in str(r.config.system_instruction)
     ]
     assert len(briefs) == 3, "the second message has its own three tries"
+
+
+@pytest.mark.asyncio
+async def test_the_chat_drafts_with_the_lessons_as_propose_does(tmp_path, monkeypatch, fake_provider) -> None:
+    from adk_spec.domain.lessons_md import TEMPLATE
+
+    ws = seeded(tmp_path)
+    (ws.home / "lessons.md").write_text(TEMPLATE.replace("## From people\n", "## From people\n\n- Mine.\n"))
+    await said(loaded(tmp_path, monkeypatch), REQUEST)
+    deltas = next(
+        str(r.config.system_instruction) for r in fake_provider.requests if DELTAS in str(r.config.system_instruction)
+    )
+    assert "- Mine." in deltas
