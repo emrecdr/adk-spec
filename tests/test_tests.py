@@ -141,7 +141,7 @@ def test_a_batch_file_is_never_run(tmp_path, monkeypatch) -> None:
     """Windows runs a .cmd or .bat through cmd.exe, which reads its words again: `&` and `%VAR%` would act."""
     batch = tmp_path / "npm.cmd"
     batch.write_text("@echo ran\n", encoding="utf-8")
-    monkeypatch.setattr(tests, "on_path", lambda _name: str(batch))
+    monkeypatch.setattr(tests, "on_path", lambda _name, _path=None: str(batch))
     run = run_tests(tmp_path, ["npm", "test"], timeout=5)
     assert run.outcome.startswith("not run: npm") and "cmd.exe" in run.outcome and run.seconds is None
 
@@ -164,3 +164,17 @@ def test_a_value_cut_off_by_the_stop_is_scrubbed(tmp_path) -> None:
 def test_a_cut_window_starts_at_a_whole_line() -> None:
     assert tests._from_a_line("half-token\nwhole\n", cut=True) == "whole\n"
     assert tests._from_a_line("whole\n", cut=False) == "whole\n"
+
+
+def test_a_run_is_given_the_persons_environment_not_adk_specs_own(tmp_path, monkeypatch) -> None:
+    """Measured live: run from its checkout by `uv run`, adk-spec's own virtual environment stood first on PATH and in
+    VIRTUAL_ENV, and a plain `pytest` would have been adk-spec's, not the project's."""
+    own = tmp_path / "adk-spec-venv"
+    (own / "bin").mkdir(parents=True)
+    monkeypatch.setattr(sys, "prefix", str(own))
+    monkeypatch.setattr(sys, "base_prefix", "/usr")
+    monkeypatch.setenv("VIRTUAL_ENV", str(own))
+    monkeypatch.setenv("PATH", os.pathsep.join([str(own / "bin"), os.environ["PATH"]]))
+    code = "import os\nprint('venv', os.environ.get('VIRTUAL_ENV'))\nprint('path', os.environ['PATH'])"
+    run = run_tests(tmp_path, program(tmp_path, code), timeout=60)
+    assert "venv None" in run.tail and str(own / "bin") not in run.tail

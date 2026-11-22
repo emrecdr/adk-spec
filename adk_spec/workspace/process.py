@@ -29,9 +29,10 @@ Completed = subprocess.CompletedProcess
 TimedOut = subprocess.TimeoutExpired
 
 
-def on_path(name: str) -> str | None:
-    """`name` by its full path, as PATH's absolute entries find it, or nothing: never from the current folder."""
-    return _found(name, os.environ.get("PATH", ""))
+def on_path(name: str, path: str | None = None) -> str | None:
+    """`name` by its full path, as the absolute entries of `path`, PATH where none is given, find it, or nothing:
+    never from the current folder."""
+    return _found(name, os.environ.get("PATH", "") if path is None else path)
 
 
 @functools.cache

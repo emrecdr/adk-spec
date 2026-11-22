@@ -10,6 +10,7 @@ shows it.
 from __future__ import annotations
 
 import os
+import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -37,12 +38,13 @@ def run_tests(root: Path, argv: Sequence[str], *, timeout: int, name: str = "") 
     """The tests run in `root` by `argv`, judged by their own exit and stopped past `timeout` seconds. Never an
     error: a program that cannot be found or started is a run that did not pass, and says why."""
     words = tuple(argv)
-    program, why = _program(words[0])
+    env = _environment()
+    program, why = _program(words[0], env.get("PATH", ""))
     if program is None:
         return TestRun(name, words, f"not run: {words[0]}: {why}", "", None)
     began = time.monotonic()
     try:
-        kept = run_kept([program, *words[1:]], env=os.environ, timeout=timeout, keep=WINDOW_BYTES, cwd=root)
+        kept = run_kept([program, *words[1:]], env=env, timeout=timeout, keep=WINDOW_BYTES, cwd=root)
     except OSError as exc:
         return TestRun(name, words, f"not run: {words[0]} could not start: {exc.strerror or exc}", "", None)
     if kept.code is None:
@@ -52,7 +54,22 @@ def run_tests(root: Path, argv: Sequence[str], *, timeout: int, name: str = "") 
     return TestRun(name, words, outcome, _tail(kept.output, cut=kept.cut), time.monotonic() - began)
 
 
-def _program(word: str) -> tuple[str | None, str]:
+def _environment() -> dict[str, str]:
+    """The person's environment, less adk-spec's own virtual environment. Run from its checkout by `uv run`, or as an
+    installed tool, adk-spec's interpreter stands first on PATH and in VIRTUAL_ENV, and a plain `pytest` in a test
+    command would be adk-spec's own, not the project's."""
+    env = dict(os.environ)
+    if sys.prefix == sys.base_prefix:  # not in a virtual environment of its own
+        return env
+    own = Path(sys.prefix).resolve()
+    if env.get("VIRTUAL_ENV") and Path(env["VIRTUAL_ENV"]).resolve() == own:
+        del env["VIRTUAL_ENV"]
+    entries = env.get("PATH", "").split(os.pathsep)
+    env["PATH"] = os.pathsep.join(entry for entry in entries if Path(entry).resolve().parent != own)
+    return env
+
+
+def _program(word: str, path: str) -> tuple[str | None, str]:
     """A program by its absolute path, or found on PATH, and why where it is none: a relative path names nothing,
     and a batch file is read again by cmd.exe."""
     if os.path.isabs(word):
@@ -60,7 +77,7 @@ def _program(word: str) -> tuple[str | None, str]:
     elif "/" in word or "\\" in word:
         found = None
     else:
-        found = on_path(word)
+        found = on_path(word, path)
     if found is None:
         return None, "a program is named by its name on PATH or by its absolute path, and this one is neither found"
     if Path(found).suffix.lower() in _BATCH:
