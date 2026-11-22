@@ -234,11 +234,13 @@ def test_an_archive_that_cannot_write_one_file_changes_none_and_says_so(tmp_path
     write_text(tmp_path / ".spec/changes/passkeys/tasks.md", tasks_for(*served))
     approved(tmp_path)
     before = (living_bytes(tmp_path), living_bytes(tmp_path, "billing"), state_of(tmp_path))
-    real, asked = os.replace, []
+    real, asked, held = os.replace, [], []
 
     def second_fails(source, target):
         asked.append(target)
         if len(asked) == 2:
+            held.append(target)
+        if target in held:  # held open, as Windows holds a file: every try at it fails, the retries too
             raise PermissionError("another process holds the file")
         return real(source, target)
 
@@ -434,3 +436,14 @@ def test_status_reads_no_archived_change_and_validate_computes_no_drift(tmp_path
     ws.save_state(ws.state("passkeys").model_copy(update={"status": "verified", "verification": held}))
     monkeypatch.setattr(cli, "_drifted", lambda *_args: (_ for _ in ()).throw(AssertionError("drift computed")))
     assert run(tmp_path, "validate") in (0, 1)
+
+
+def test_validate_checks_no_archived_change(tmp_path, monkeypatch) -> None:
+    """Found by an outside audit: `validate` read and checked every archived change in full, and set what it found
+    aside."""
+    from adk_spec.interfaces import cli
+
+    ws = seeded(tmp_path)
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"status": "archived"}))
+    monkeypatch.setattr(cli, "_assessed", lambda *_args, **_kw: (_ for _ in ()).throw(AssertionError("assessed")))
+    assert run(tmp_path, "validate") == 0

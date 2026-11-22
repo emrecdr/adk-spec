@@ -133,5 +133,5 @@ def test_a_recording_replays_to_the_same_files(tmp_path, fake_provider) -> None:
         assert [(c.stage, c.answer) for c in again.calls] == [(c.stage, c.answer) for c in was.calls]
 
 
-def test_init_ignores_the_lock(tmp_path) -> None:
-    assert read_text(Workspace.init(tmp_path).home / ".gitignore") == ".lock\n"
+def test_init_ignores_the_lock_and_a_takeovers_marker(tmp_path) -> None:
+    assert read_text(Workspace.init(tmp_path).home / ".gitignore") == ".lock\n.lock.taking\n"

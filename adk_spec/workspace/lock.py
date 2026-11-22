@@ -32,21 +32,39 @@ def held(workspace: Workspace) -> Generator[None]:
     lock is left alone. A lock a process on this machine left when it ended is taken over."""
     path = workspace.home / LOCK
     if not _taken(path) and not _taken_over(path):
-        raise WorkspaceError(
-            f"{workspace.shown(path)} is held by another adk-spec run. Wait for it; or, where none is running, remove "
-            "the file"
-        )
+        raise WorkspaceError(_refusal(workspace, path))
     try:
         yield
     finally:
-        path.unlink(missing_ok=True)
+        if _ours(path):  # a lock a person removed, and another run then took, is that run's
+            path.unlink(missing_ok=True)
+
+
+def _mark() -> str:
+    """What a lock, or a takeover's marker, says of the run that made it: its process and its machine."""
+    return f"{os.getpid()} {platform.node()}"
+
+
+def _ours(path: Path) -> bool:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace") == _mark()
+    except OSError:
+        return False
+
+
+def _refusal(workspace: Workspace, path: Path) -> str:
+    said = f"{workspace.shown(path)} is held by another adk-spec run. Wait for it; or, where none is running, remove "
+    marker = path.with_name(TAKING)
+    if marker.exists():  # a run stopped part way through a takeover left it
+        return said + f"the file, and {workspace.shown(marker)}, which a takeover stopped part way left"
+    return said + "the file"
 
 
 def _taken(path: Path) -> bool:
     """Whether the lock was made, naming this process and this machine. Where another run made it first, it is not."""
     try:
         with path.open("xb") as lock:  # made exclusively: it fails where the file is there
-            lock.write(f"{os.getpid()} {platform.node()}".encode())
+            lock.write(_mark().encode())
     except FileExistsError:
         return False
     return True
@@ -59,7 +77,7 @@ def _taken_over(path: Path) -> bool:
     marker = path.with_name(TAKING)
     try:
         with marker.open("xb") as taking:
-            taking.write(f"{os.getpid()} {platform.node()}".encode())
+            taking.write(_mark().encode())
     except FileExistsError:  # another run is taking it over
         return False
     try:
@@ -100,14 +118,22 @@ def _alive(pid: int) -> bool:
 def _alive_on_windows(pid: int) -> bool:
     """On Windows `os.kill` would end the process: the system is asked for its exit code instead."""
     import ctypes
+    from ctypes import wintypes
 
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)  # pyrefly: ignore[missing-attribute]
+    # Each call's types declared: ctypes takes a result for a C int by default, and a handle is a pointer's width.
+    kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    kernel.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
     handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     if not handle:
         # ERROR_INVALID_PARAMETER: no such process; anything else, it runs
         return ctypes.get_last_error() != 87  # pyrefly: ignore[missing-attribute]
     try:
-        code = ctypes.c_ulong()
+        code = wintypes.DWORD()
         return not kernel.GetExitCodeProcess(handle, ctypes.byref(code)) or code.value == _STILL_ACTIVE
     finally:
         kernel.CloseHandle(handle)

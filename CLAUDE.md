@@ -25,8 +25,9 @@ uv run python scripts/dump_instructions.py                   # every stage's ins
 **No live model call without the owner's explicit go-ahead, in so many words.** A Copilot token may be cached on the
 machine, so these send real requests: `propose`, `plan`, `check` (without `--no-model`), `verify`, `approve` on a
 standard or strict change whose check is missing or stale, `init` (without `--no-explore`), `smoke`, `models`,
-`login`, and `python -m scripts.measure`. `--help`, `status`, `validate`, `new`, `rebase`, `archive` and the test suite
-call none. The tests' fake model exists only inside pytest; a command run from a shell has no offline model.
+`login`, `adk-spec-mcp` with a tool that runs one of these, and `python -m scripts.measure`. `--help`, `status`,
+`validate`, `new`, `rebase`, `archive` and the test suite call none. The tests' fake model exists only inside pytest; a
+command run from a shell has no offline model.
 
 Pins: uv resolves with `exclude-newer = "P3D"` (a three-day cooldown on every release). `litellm` is held at 1.106.2
 because `google-adk` 2.14.1 caps it; `login.py` also uses LiteLLM's private Copilot names.
@@ -50,7 +51,7 @@ import except `adk_spec/agent.py`, the shape `adk web` loads.
   mismatch, token ledger, scrub), the two provider arms (`models.py`, `settings.py`).
 - **interfaces**: `cli.py` (argparse, the commands and their printing), `login.py` (Copilot device flow),
   `mcp_server.py` (`adk-spec-mcp`: six commands as MCP tools, each running `python -P -m adk_spec` in its own process;
-  no tool approves, archives or overrides, which stay the person's).
+  no tool approves, archives, overrides or names another repository, which stay the person's).
 
 Rules that span files and are easy to break:
 
@@ -63,7 +64,7 @@ Rules that span files and are easy to break:
   stop before the plan, approvers, warnings, override). Read it rather than testing `tier == ...`.
 - **An approval is the fingerprints of the change's files** (`lifecycle.approval_files`); any edit voids it, ticking
   a task box does not. `change.json` also records what adk-spec drafted, so `approve` can name a draft a person
-  edited.
+  edited. An older adk-spec refuses a `change.json` with a field it does not know.
 - **Secrets never reach a model or a recording**: `secrets.scrub`/`scrub_lines` on everything sent, the `Scrub`
   plugin on every app (fail closed), and files or test output holding a private key withheld whole.
 - **What a stage is told goes through `workspace/context.py`**, each input capped; stage instructions are built in

@@ -197,7 +197,8 @@ adk-spec plan sign-in-with-a-passkey --with ../mobile
 `adk-spec-mcp` serves six of the commands as MCP tools to a coding assistant: `propose` (revising an open change
 too), `plan`, `check`, `verify`, `status` and `validate`. Each runs as it does in the terminal, on adk-spec's own
 models and settings, and asks no question: points a brief leaves open come back in its output, for the assistant to
-put to you. `approve` and `archive` stay yours, in a terminal: approving records your decision.
+put to you. `approve` and `archive` stay yours, in a terminal: approving records your decision. So does a change
+that spans other repositories: start it with `adk-spec propose --with` in a terminal, and the tools keep them.
 
 VS Code with GitHub Copilot, in `.vscode/mcp.json`:
 

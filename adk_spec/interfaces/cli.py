@@ -497,9 +497,9 @@ def _validate(args: argparse.Namespace) -> int:
             )
         )
     for change_id in [args.id] if args.id else workspace.changes():
-        assessed = _assessed(workspace, change_id, living, drift=False)
-        if assessed.state.status != "archived":  # an archived change is folded in: its delta has no base now
-            found += assessed.findings
+        if workspace.state(change_id).status == "archived":  # folded in, its delta has no base now: nothing to check
+            continue
+        found += _assessed(workspace, change_id, living, drift=False).findings
     stops = failed(found, strict=args.strict)
     if args.json:
         print(json.dumps({"findings": [held.model_dump() for held in found], "failed": stops}, indent=2))

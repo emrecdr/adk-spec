@@ -2,7 +2,10 @@
 
 The owner's choices, 22 November 2026: a thin server, each tool running the command as the terminal runs it, asking
 no question, and returning what it printed; every command but `approve` and `archive`, which record a person's
-decision and stay a command the person runs; and the stages on adk-spec's own provider, as from the terminal.
+decision and stay a command the person runs; and the stages on adk-spec's own provider, as from the terminal. After
+an outside audit, no tool names another repository: an assistant misled by text it read could have pointed adk-spec
+at any repository of the person's and sent its code to a model. A change spanning repositories starts in a terminal,
+and the tools keep the repositories it names.
 
 Each tool runs `python -P -m adk_spec` in a process of its own, through `workspace/process.py`, so the workspace's
 lock, its recordings, its token ceiling and its next line are the terminal's, nothing a command prints reaches the
@@ -23,6 +26,7 @@ from pathlib import Path
 import anyio
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import ToolAnnotations
 
 from ..domain.model import Tier
 from ..workspace.process import Started, TimedOut, started, stop, waited
@@ -32,12 +36,18 @@ TOOL_TIMEOUT_S = 3600.0
 #: The commands running now. Each runs in a session of its own, which hears no signal sent to the server: where the
 #: server is stopped, it stops them.
 RUNNING: set[Started] = set()
+#: What each tool does, for the editor to weigh: `status` and `validate` only read; `check` calls a model and writes
+#: its report alone; the drafting tools call a model and write a change's files.
+READS = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+REPORTS = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=True)
+WRITES = ToolAnnotations(read_only_hint=False, open_world_hint=True)
 INSTRUCTIONS = """\
 adk-spec drafts and checks spec-driven changes in the repository this server was started in, on adk-spec's own
 models. propose drafts a change from a request, or, given the id of an open change, revises it; it asks no question:
 points the brief leaves open come back in its output, so ask the person, then revise with propose and the change's
 id. plan drafts a change's tasks again; check checks its files; verify judges the work against each requirement;
-status lists the open changes and what comes next; validate checks the files' structure.
+status lists the open changes and what comes next; validate checks the files' structure. A change that spans other
+repositories is started by the person in a terminal, with `adk-spec propose --with`; the tools then keep them.
 
 Approving and archiving are the person's decisions: when a change is ready, tell them to run `adk-spec approve <id>`
 in a terminal, and once it is verified `adk-spec archive <id>`. Never approve, archive or set a finding aside for
@@ -102,42 +112,39 @@ def build_server(root: Path) -> MCPServer:
     """The server for the workspace at `root`, with its six tools."""
     server = MCPServer(name="adk-spec", instructions=INSTRUCTIONS)
 
-    @server.tool(description="Draft a change from a request, or revise the open change `id` names. Asks nothing.")
-    async def propose(
-        request: str,
-        id: str | None = None,
-        tier: Tier | None = None,
-        with_repositories: list[str] | None = None,
-        no_explore: bool = False,
-    ) -> str:
+    @server.tool(
+        description="Draft a change from a request, or revise the open change `id` names. Asks nothing.",
+        annotations=WRITES,
+    )
+    async def propose(request: str, id: str | None = None, tier: Tier | None = None, no_explore: bool = False) -> str:
         named = [*_flag(bool(id), f"--id={id}"), *_flag(bool(tier), f"--tier={tier}")]
-        widened = [f"--with={path}" for path in with_repositories or ()]
-        return await ran(
-            root, ["propose", "--no-input", *named, *widened, *_flag(no_explore, "--no-explore"), "--", request]
-        )
+        return await ran(root, ["propose", "--no-input", *named, *_flag(no_explore, "--no-explore"), "--", request])
 
-    @server.tool(description="Draft a change's tasks again, and its design where one is owed.")
-    async def plan(
-        id: str, replace: bool = False, no_explore: bool = False, with_repositories: list[str] | None = None
-    ) -> str:
-        widened = [f"--with={path}" for path in with_repositories or ()]
-        return await ran(
-            root, ["plan", *_flag(replace, "--replace"), *_flag(no_explore, "--no-explore"), *widened, "--", id]
-        )
+    @server.tool(description="Draft a change's tasks again, and its design where one is owed.", annotations=WRITES)
+    async def plan(id: str, replace: bool = False, no_explore: bool = False) -> str:
+        return await ran(root, ["plan", *_flag(replace, "--replace"), *_flag(no_explore, "--no-explore"), "--", id])
 
-    @server.tool(description="Check a change's files against each other and against the repository's rules.")
+    @server.tool(
+        description="Check a change's files against each other and against the repository's rules.",
+        annotations=REPORTS,
+    )
     async def check(id: str, no_model: bool = False) -> str:
         return await ran(root, ["check", *_flag(no_model, "--no-model"), "--", id])
 
-    @server.tool(description="Run the project's tests and judge the work against each requirement of a change.")
+    @server.tool(
+        description="Run the project's tests and judge the work against each requirement of a change.",
+        annotations=WRITES,
+    )
     async def verify(id: str, bases: list[str] | None = None) -> str:
         return await ran(root, ["verify", *(f"--base={base}" for base in bases or ()), "--", id])
 
-    @server.tool(description="List each open change and what comes next with it.")
+    @server.tool(description="List each open change and what comes next with it.", annotations=READS)
     async def status(include_archived: bool = False) -> str:
         return await ran(root, ["status", *_flag(include_archived, "--all")])
 
-    @server.tool(description="Check the structure of the living specs and of the open changes, or of one.")
+    @server.tool(
+        description="Check the structure of the living specs and of the open changes, or of one.", annotations=READS
+    )
     async def validate(id: str | None = None, strict: bool = False) -> str:
         return await ran(root, ["validate", *_flag(strict, "--strict"), *_flag(bool(id), "--", id or "")])
 

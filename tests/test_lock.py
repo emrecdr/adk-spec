@@ -20,7 +20,6 @@ def ended_pid() -> int:
     return done.pid
 
 
-@pytest.mark.skipif(os.name == "nt", reason="the ended process is told apart by the system's own means on Windows")
 def test_a_lock_a_run_left_when_it_ended_is_taken_over(tmp_path) -> None:
     """Found by an outside audit: a run killed by the system left its lock, and every command after it was refused
     until a person removed the file by hand."""
@@ -41,7 +40,6 @@ def test_a_lock_a_running_process_or_another_machine_holds_is_refused(tmp_path, 
     assert (ws.home / LOCK).read_text(encoding="ascii") == line, "another run's lock is left alone"
 
 
-@pytest.mark.skipif(os.name == "nt", reason="the ended process is told apart by the system's own means on Windows")
 def test_a_takeover_another_run_is_making_is_not_made_twice(tmp_path) -> None:
     """Found by review: two runs that found the same stale lock could each remove it and both hold the lock."""
     ws = Workspace.init(tmp_path)
@@ -57,4 +55,26 @@ def test_a_lock_an_older_adk_spec_wrote_is_left_alone(tmp_path) -> None:
     ws = Workspace.init(tmp_path)
     (ws.home / LOCK).write_text(str(ended_pid()), encoding="ascii")
     with pytest.raises(WorkspaceError, match="held by another adk-spec run"), held(ws):
+        pass
+
+
+def test_a_run_leaves_the_lock_another_run_now_holds(tmp_path) -> None:
+    """Found by an outside audit: where a person removed a running run's lock and another run took it, the first run
+    removed the second's lock as it ended."""
+    ws = Workspace.init(tmp_path)
+    with held(ws):
+        (ws.home / LOCK).write_text(f"1 {platform.node()}-another", encoding="ascii")
+    assert (ws.home / LOCK).read_text(encoding="ascii") == f"1 {platform.node()}-another"
+
+
+def test_a_takeover_marker_is_ignored_by_git_and_named_where_it_blocks(tmp_path) -> None:
+    """Found by an outside audit: a run stopped in a takeover left its marker, which git listed as new work and the
+    refusal never named."""
+    from adk_spec.workspace.lock import TAKING
+
+    ws = Workspace.init(tmp_path)
+    assert TAKING in (ws.home / ".gitignore").read_text(encoding="utf-8").split()
+    (ws.home / LOCK).write_text(f"{ended_pid()} {platform.node()}", encoding="ascii")
+    (ws.home / TAKING).write_text("1 elsewhere", encoding="ascii")
+    with pytest.raises(WorkspaceError, match=r"\.lock\.taking"), held(ws):
         pass

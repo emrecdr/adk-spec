@@ -73,7 +73,7 @@ async def test_each_tool_hands_the_command_what_the_terminal_would(tmp_path, mon
     server = build_server(tmp_path)
     request = '-starts with a dash, and "quotes"'
     calls = {
-        "propose": {"request": request, "id": "pk", "tier": "strict", "with_repositories": ["web=../web"]},
+        "propose": {"request": request, "id": "pk", "tier": "strict"},
         "plan": {"id": "pk", "replace": True, "no_explore": True},
         "check": {"id": "pk", "no_model": True},
         "verify": {"id": "pk", "bases": ["api=abc"]},
@@ -84,11 +84,7 @@ async def test_each_tool_hands_the_command_what_the_terminal_would(tmp_path, mon
         await server.call_tool(name, arguments)
     read = {argv[0]: vars(cli._parser().parse_args(argv)) for argv in asked}
     assert read["propose"]["request"] == request and read["propose"]["no_input"]
-    assert (read["propose"]["id"], read["propose"]["tier"], read["propose"]["with_"]) == (
-        "pk",
-        "strict",
-        ["web=../web"],
-    )
+    assert (read["propose"]["id"], read["propose"]["tier"], read["propose"]["with_"]) == ("pk", "strict", [])
     assert (read["plan"]["replace"], read["plan"]["no_explore"]) == (True, True)
     assert read["check"]["no_model"] and read["verify"]["base"] == ["api=abc"] and read["verify"]["override"] is None
     assert read["status"]["all"] and read["validate"]["strict"] and read["validate"]["id"] == "pk"
@@ -202,3 +198,24 @@ def test_importing_the_packages_main_runs_no_command(monkeypatch) -> None:
     monkeypatch.setattr(sys, "argv", ["adk-spec", "--help"])
     monkeypatch.delitem(sys.modules, "adk_spec.__main__", raising=False)
     importlib.import_module("adk_spec.__main__")
+
+
+@pytest.mark.asyncio
+async def test_no_tool_lets_the_assistant_name_another_repository(tmp_path) -> None:
+    """The owner's choice, after an outside audit: an assistant misled by text it read could have pointed adk-spec at
+    another repository of the person's and sent its code to a model. A change spanning repositories starts in a
+    terminal; the tools keep the repositories a change already names."""
+    tools = {tool.name: tool for tool in await build_server(tmp_path).list_tools()}
+    for name in ("propose", "plan"):
+        assert "with_repositories" not in tools[name].input_schema["properties"]
+    assert "--with" in INSTRUCTIONS
+
+
+@pytest.mark.asyncio
+async def test_the_tools_say_which_only_read_and_which_call_a_model(tmp_path) -> None:
+    """Found by an outside audit: with no annotations, an editor took every tool to change files and call out."""
+    tools = {tool.name: tool.annotations for tool in await build_server(tmp_path).list_tools()}
+    for name in ("status", "validate"):
+        assert tools[name].read_only_hint and not tools[name].open_world_hint
+    for name in ("propose", "plan", "check", "verify"):
+        assert not tools[name].read_only_hint and tools[name].open_world_hint

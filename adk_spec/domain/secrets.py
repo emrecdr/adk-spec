@@ -31,17 +31,21 @@ _STAND_IN = r"(?![$%{<]|\[REDACTED)"
 #: and no deadline stops a rule. A key block's body holds key-like lines only — a diff's marker, then base64, an armour
 #: header, or nothing — so a header where no rule reads, a file's name or an unchanged line, cannot reach a footer
 #: further on: measured with any text allowed between them, the change in between was hidden from every model call.
+#: What may open a key's line: a diff's marker, then a quote's `>` as Markdown nests them, as a pasted issue or review
+#: holds a key. Found by an outside audit: a quoted key had its header hidden and its body sent.
+_LEAD = r"[+\- ]?(?:[ \t]*+>)*+[ \t]*+"
+#: An armour header a key's block may hold: PEM's, and PGP's, GnuPG writing `Version:` before the body. Found by an
+#: outside audit: with no footer, `Version:` ended the key's lines, and the body after it reached the model.
+_ARMOUR = r"(?:Proc-Type|DEK-Info|Version|Comment|Hash|Charset): [^\n]*+"
 _KEY_HEADER = r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
 _KEY_FOOTER = r"-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
 #: A line of a key's body where no footer follows: base64 of sixteen characters or more, an armour header, or a blank
 #: line. Found by review: a header only named in code, and every short line after it taken for a key line, hid the
 #: code from the model. With a footer, the block between is the key's whatever its lines.
-_KEY_BODY = r"[+\- ]?[ \t]*+(?:[A-Za-z0-9+/]{16,}={0,2}|(?:Proc-Type|DEK-Info): [^\n]*+)?[ \t]*+\r?"
+_KEY_BODY = _LEAD + r"(?:[A-Za-z0-9+/]{16,}={0,2}|" + _ARMOUR + r")?[ \t]*+\r?"
 #: Each run read once and kept: measured by review, a line's blanks split every way between the two runs, a header and
 #: 8,000 spaces took 0.6 s to scrub, four times as long for each doubling, and every request of a review is scrubbed.
-_KEY_LINE = (
-    r"[+\- ]?[ \t]*+(?:[A-Za-z0-9+/=]++|(?:Proc-Type|DEK-Info|Version|Comment|Hash|Charset): [^\n]*+)?[ \t]*+\r?"
-)
+_KEY_LINE = _LEAD + r"(?:[A-Za-z0-9+/=]++|" + _ARMOUR + r")?[ \t]*+\r?"
 #: A URL's scheme and user, and its password: up to the last `@` before the host, since a password may hold one,
 #: `P@ssw0rd`. Measured before, the password ended at its first `@`: the rule read `P` as a placeholder, and redaction
 #: sent the rest of the password to the model. The user may be none, as Redis takes a password, `redis://:secret@host`:
@@ -56,19 +60,21 @@ _BEDROCK = r"\b(?:ABSK[A-Za-z0-9+/]{109,269}={0,2}|bedrock-api-key-YmVkcm9jay5hb
 #: A PuTTY key file: its header, then its own lines alone — a diff's marker, then a field PuTTY writes or base64 —
 #: to its MAC, so a header where no rule reads cannot reach a MAC further on, as a private key's block cannot.
 _PUTTY_LINE = (
-    r"[+\- ]?[ \t]*+(?:[A-Za-z0-9+/=]++|(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation"
+    _LEAD + r"(?:[A-Za-z0-9+/=]++|(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation"
     r"|Argon2-Memory|Argon2-Passes|Argon2-Parallelism|Argon2-Salt): [^\n]*+)?[ \t]*+\r?"
 )
 #: The key's lines are taken whether or not its MAC line follows: a key pasted in part is a key all the same.
 #: A PuTTY key's line where no MAC line follows: one of its headers, base64 of sixteen characters or more, or nothing.
 _PUTTY_BODY = (
-    r"[+\- ]?[ \t]*+(?:[A-Za-z0-9+/]{16,}={0,2}|(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation"
+    _LEAD + r"(?:[A-Za-z0-9+/]{16,}={0,2}|(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation"
     r"|Argon2-Memory|Argon2-Passes|Argon2-Parallelism|Argon2-Salt): [^\n]*+)?[ \t]*+\r?"
 )
 _PUTTY = (
     r"\bPuTTY-User-Key-File-[23]: [^\n]*(?:(?:\n(?>"
     + _PUTTY_LINE
-    + r"(?=\n|\Z)))*+\n[+\- ]?[ \t]*+Private-MAC: [0-9a-fA-F]+|(?:\n(?>"
+    + r"(?=\n|\Z)))*+\n"
+    + _LEAD
+    + r"Private-MAC: [0-9a-fA-F]+|(?:\n(?>"
     + _PUTTY_BODY
     + r"(?=\n|\Z)))*)"
 )

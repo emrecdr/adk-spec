@@ -165,3 +165,24 @@ def test_a_header_only_mentioned_hides_no_code_after_it() -> None:
     assert "+    return\n+    pass\n+print(done)" in scrubbed
     held, _count = scrub_lines(diff)
     assert "+    return" in held
+
+
+def test_a_pgp_key_with_no_footer_hides_its_body_past_its_version_line() -> None:
+    """Found by an outside audit: with no footer, an armour header other than Proc-Type or DEK-Info ended the key's
+    lines, and the body after GnuPG's `Version:` line reached the model."""
+    key = "-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG v2\n\nlQOYBGVvZXN0AQgAxyz0123456789abcdefABCDEF\n"
+    for scrubbed, _count in (scrub(key), scrub_lines(key)):
+        assert "lQOYBGVvZXN0" not in scrubbed
+
+
+def test_a_key_quoted_in_markdown_hides_its_body() -> None:
+    """Found by an outside audit: a key quoted with `>`, as a pasted issue or review holds it, had its header hidden
+    and its body sent, with a footer or without."""
+    body = "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ"
+    for key in (
+        f"> -----BEGIN OPENSSH PRIVATE KEY-----\n> {body}\n> {body}\n",
+        f"> -----BEGIN OPENSSH PRIVATE KEY-----\n> {body}\n> -----END OPENSSH PRIVATE KEY-----\n",
+        f"+> -----BEGIN OPENSSH PRIVATE KEY-----\n+> {body}\n+> > {body}\n",
+    ):
+        for scrubbed, _count in (scrub(key), scrub_lines(key)):
+            assert body not in scrubbed, key

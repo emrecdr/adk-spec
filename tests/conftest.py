@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import stat
 from collections.abc import AsyncGenerator, Iterator
 from pathlib import Path
 
@@ -538,3 +540,14 @@ def sent_to(fake_provider, opening: str) -> str:
         if str(r.config.system_instruction).startswith(opening)
     ]
     return instruction
+
+
+def removed(path: Path) -> None:
+    """A folder deleted whole, a repository's with it: git makes its objects read-only, which Windows will not delete
+    until they are made writable again."""
+
+    def writable_then_again(remove, name, _exc) -> None:
+        os.chmod(name, stat.S_IWRITE)
+        remove(name)
+
+    shutil.rmtree(path, onexc=writable_then_again)

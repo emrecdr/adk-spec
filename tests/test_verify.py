@@ -3,10 +3,18 @@ line the diff really holds makes one `met`."""
 
 from __future__ import annotations
 
-import shutil
-
 import pytest
-from conftest import CANNED_VERDICTS, between, on_the_fake, repository, repository_commit, run, seeded, state_of
+from conftest import (
+    CANNED_VERDICTS,
+    between,
+    on_the_fake,
+    removed,
+    repository,
+    repository_commit,
+    run,
+    seeded,
+    state_of,
+)
 
 from adk_spec.domain.drafts import VerdictsDraft
 from adk_spec.domain.verify import grounded, lines_of_diff, parts_of_diff
@@ -492,7 +500,7 @@ def test_verify_judges_the_work_in_every_repository_of_the_change(tmp_path, fake
 def test_a_repository_missing_at_verify_is_refused_by_name(tmp_path, capsys, fake_provider) -> None:
     _ws, root, api = across(tmp_path)
     implemented(root)
-    shutil.rmtree(api)
+    removed(api)
     capsys.readouterr()
     assert run(root, "verify", "passkeys") == 2
     assert "api: no git repository at ../api" in capsys.readouterr().err and fake_provider.requests == []
@@ -526,7 +534,7 @@ def test_a_verified_change_whose_other_repository_is_gone_reads_as_drifted(tmp_p
     _ws, root, api = across(tmp_path, tier="standard")
     implemented(root)
     assert run(root, "verify", "passkeys") == 0
-    shutil.rmtree(api)
+    removed(api)
     capsys.readouterr()
     assert run(root, "status") == 0
     assert "verify passkeys` again: the work changed since it was verified" in capsys.readouterr().out

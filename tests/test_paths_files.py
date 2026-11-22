@@ -107,11 +107,13 @@ def test_write_all_puts_back_what_it_replaced_when_a_later_replace_fails(tmp_pat
     """Found by review: the second of three replaces failed, as on a file Windows holds open, and the first stayed."""
     write_text(tmp_path / "a.md", "old a")
     write_text(tmp_path / "b.md", "old b")
-    real, asked = os.replace, []
+    real, asked, held = os.replace, [], []
 
     def second_fails(source, target):
         asked.append(target)
         if len(asked) == 2:
+            held.append(target)
+        if target in held:  # held open, as Windows holds a file: every try at it fails, the retries too
             raise PermissionError("another process holds the file")
         return real(source, target)
 

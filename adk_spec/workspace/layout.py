@@ -143,7 +143,7 @@ class Workspace:
         if workspace.home.exists():
             raise WorkspaceError(f"{workspace.home} is already there. Nothing was changed")
         made = {CONFIG: DEFAULT, CONSTITUTION: CONSTITUTION_TEXT, LESSONS: LESSONS_TEMPLATE}
-        made[".gitignore"] = ".lock\n"  # the lock is a run's own
+        made[".gitignore"] = ".lock\n.lock.taking\n"  # the lock, and a takeover's marker, are a run's own
         write_all({workspace.home / name: text for name, text in made.items()})
         for folder in (SPECS, CHANGES):
             (workspace.home / folder).mkdir()
