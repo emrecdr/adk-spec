@@ -199,3 +199,29 @@ def test_the_systems_certificates_are_taken_up_when_a_model_is_built_not_on_impo
     assert done.returncode == 0, done.stderr
     before, after = done.stdout.split()
     assert before == "ssl" and after.startswith("truststore")
+
+
+def test_the_systems_certificates_are_taken_up_before_litellm_is_first_imported() -> None:
+    """Found by review: LiteLLM keeps the certificate context it makes on import, and the readiness check imported it
+    before any model was built; behind a company proxy every Copilot call then failed."""
+    body = (
+        "import ssl, sys\nfrom adk_spec.orchestration import models\n"
+        "assert 'litellm' not in sys.modules\nmodels._litellm()\nprint(ssl.SSLContext.__module__)\n"
+    )
+    done = subprocess.run([sys.executable, "-c", body], cwd=ROOT, capture_output=True, encoding="utf-8", check=False)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip().startswith("truststore")
+
+
+def test_login_takes_up_the_systems_certificates_before_it_asks_github_anything() -> None:
+    """Found by review: the login took them up only after its first request to GitHub."""
+    import ast
+    import inspect
+
+    from adk_spec.interfaces import login
+
+    tree = ast.parse(inspect.getsource(login.main))
+    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and "inject_into_ssl" in ast.unparse(node)]
+    first = tree.body[0].body
+    assert calls and any("inject_into_ssl" in ast.unparse(statement) for statement in first[:3])
+    assert "inject_into_ssl" not in inspect.getsource(login._seconds)

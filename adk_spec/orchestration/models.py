@@ -136,6 +136,7 @@ def _litellm():  # unannotated: a checker then knows the module and its typed fl
     os.environ.setdefault("LITELLM_MODE", "PRODUCTION")
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")  # the pinned version's own model map
     pin_copilot_dir()
+    trust_the_system()  # before LiteLLM's import, which keeps the certificate context it makes then
     import litellm
 
     return litellm

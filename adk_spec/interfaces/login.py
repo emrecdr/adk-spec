@@ -73,6 +73,9 @@ def _polled(client: Any, url: str, headers: Mapping[str, str], body: Mapping[str
 
 
 def main(argv: list[str]) -> int:
+    # Certificates through the system's store, as the model factory verifies them: first, before LiteLLM is imported,
+    # which keeps the context it makes then, and before GitHub is asked anything.
+    truststore.inject_into_ssl()
     # Every file this process makes is its owner's alone from its first byte: LiteLLM writes the token with the
     # default umask.
     os.umask(0o077)
@@ -135,7 +138,6 @@ def main(argv: list[str]) -> int:
 
 def _seconds(info: Mapping[str, object], key: str, default: int) -> int:
     """A count of seconds GitHub's device-code reply names, or `default` where it names none."""
-    truststore.inject_into_ssl()  # certificates through the system's store, as the model factory verifies them
     value = info.get(key)
     return value if type(value) is int else default
 

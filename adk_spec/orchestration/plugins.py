@@ -23,7 +23,9 @@ from google.adk.models.llm_response import LlmResponse
 from google.adk.plugins.base_plugin import BasePlugin
 
 # ADK's own two functions, the ones its agent and its workflow node validate an answer with. `_schema_utils` is
-# private: the pinned ADK holds it, and an upgrade that moved it fails this import, and the suite, at once.
+# private: the pinned ADK holds it, and an upgrade that moved it fails this import, and the suite, at once. Kept, where
+# an outside audit asked for Pydantic's own check: ADK's strips a ```json fence first, which Pydantic's does not.
+from google.adk.utils._schema_utils import validate_schema
 from google.adk.utils.content_utils import extract_text_from_content
 from pydantic import BaseModel, ValidationError
 
@@ -80,7 +82,7 @@ class SchemaMismatch(BasePlugin):
                 error_code="EMPTY_ANSWER", error_message=EMPTY, usage_metadata=llm_response.usage_metadata
             )
         try:
-            schema.model_validate_json(text)
+            validate_schema(schema, text)
         except ValidationError as exc:
             why = f"{MISMATCH}: {exc.errors()[0]['msg']}"
             callback_context.state[STAGE_ERROR] = why

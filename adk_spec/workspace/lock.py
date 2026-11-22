@@ -20,6 +20,8 @@ from pathlib import Path
 from .layout import Workspace, WorkspaceError
 
 LOCK = ".lock"
+#: Made exclusively while a run takes over a lock left behind: one takeover at a time, the lock read again inside it.
+TAKING = ".lock.taking"
 #: What Windows says of a process that has not ended, asked for its exit code.
 _STILL_ACTIVE = 259
 
@@ -29,7 +31,7 @@ def held(workspace: Workspace) -> Generator[None]:
     """The workspace's lock, for the block. `WorkspaceError` names the file where another run holds it; that run's
     lock is left alone. A lock a process on this machine left when it ended is taken over."""
     path = workspace.home / LOCK
-    if not _taken(path) and not (_left(path) and _taken(path)):
+    if not _taken(path) and not _taken_over(path):
         raise WorkspaceError(
             f"{workspace.shown(path)} is held by another adk-spec run. Wait for it; or, where none is running, remove "
             "the file"
@@ -50,20 +52,36 @@ def _taken(path: Path) -> bool:
     return True
 
 
+def _taken_over(path: Path) -> bool:
+    """Whether a lock left by an ended process of this machine was removed and the lock made anew. One run at a time
+    takes over, under a marker it makes exclusively, and reads the lock again inside it: two runs that found the same
+    lock left behind cannot both remove it, nor remove the one a run made after it."""
+    marker = path.with_name(TAKING)
+    try:
+        with marker.open("xb") as taking:
+            taking.write(f"{os.getpid()} {platform.node()}".encode())
+    except FileExistsError:  # another run is taking it over
+        return False
+    try:
+        if not _left(path):
+            return False
+        path.unlink(missing_ok=True)
+        return _taken(path)
+    finally:
+        marker.unlink(missing_ok=True)
+
+
 def _left(path: Path) -> bool:
-    """Whether a lock was left by a process of this machine that has ended, and has been removed. A lock that names
-    no process, or another machine, or a running process, is not."""
+    """Whether the lock was left by a process of this machine that has ended. A lock that names no machine, as an
+    older adk-spec's, or names another machine, or a running process, is not: on a shared drive its run may be on
+    another machine."""
     try:
         words = path.read_text(encoding="utf-8", errors="replace").split()
     except OSError:
         return False
-    if not words or not words[0].isdigit():
+    if len(words) < 2 or not words[0].isdigit():
         return False
-    machine = words[1] if len(words) > 1 else platform.node()  # an older adk-spec's lock named no machine
-    if machine != platform.node() or _alive(int(words[0])):
-        return False
-    path.unlink(missing_ok=True)
-    return True
+    return words[1] == platform.node() and not _alive(int(words[0]))
 
 
 def _alive(pid: int) -> bool:

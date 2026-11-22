@@ -33,6 +33,10 @@ _STAND_IN = r"(?![$%{<]|\[REDACTED)"
 #: further on: measured with any text allowed between them, the change in between was hidden from every model call.
 _KEY_HEADER = r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
 _KEY_FOOTER = r"-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
+#: A line of a key's body where no footer follows: base64 of sixteen characters or more, an armour header, or a blank
+#: line. Found by review: a header only named in code, and every short line after it taken for a key line, hid the
+#: code from the model. With a footer, the block between is the key's whatever its lines.
+_KEY_BODY = r"[+\- ]?[ \t]*+(?:[A-Za-z0-9+/]{16,}={0,2}|(?:Proc-Type|DEK-Info): [^\n]*+)?[ \t]*+\r?"
 #: Each run read once and kept: measured by review, a line's blanks split every way between the two runs, a header and
 #: 8,000 spaces took 0.6 s to scrub, four times as long for each doubling, and every request of a review is scrubbed.
 _KEY_LINE = (
@@ -56,10 +60,17 @@ _PUTTY_LINE = (
     r"|Argon2-Memory|Argon2-Passes|Argon2-Parallelism|Argon2-Salt): [^\n]*+)?[ \t]*+\r?"
 )
 #: The key's lines are taken whether or not its MAC line follows: a key pasted in part is a key all the same.
+#: A PuTTY key's line where no MAC line follows: one of its headers, base64 of sixteen characters or more, or nothing.
+_PUTTY_BODY = (
+    r"[+\- ]?[ \t]*+(?:[A-Za-z0-9+/]{16,}={0,2}|(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation"
+    r"|Argon2-Memory|Argon2-Passes|Argon2-Parallelism|Argon2-Salt): [^\n]*+)?[ \t]*+\r?"
+)
 _PUTTY = (
-    r"\bPuTTY-User-Key-File-[23]: [^\n]*(?:\n(?>"
+    r"\bPuTTY-User-Key-File-[23]: [^\n]*(?:(?:\n(?>"
     + _PUTTY_LINE
-    + r"(?=\n|\Z)))*(?:\n[+\- ]?[ \t]*+Private-MAC: [0-9a-fA-F]+)?"
+    + r"(?=\n|\Z)))*+\n[+\- ]?[ \t]*+Private-MAC: [0-9a-fA-F]+|(?:\n(?>"
+    + _PUTTY_BODY
+    + r"(?=\n|\Z)))*)"
 )
 #: The shapes a vendor's credential takes, or a URL's or a key file's: what the secrets rule finds.
 _VENDOR = (
@@ -225,9 +236,11 @@ _VENDOR = (
             + _KEY_FOOTER
             + r"|(?:(?!-----BEGIN )[^\n])*(?:\n(?>"
             + _KEY_LINE
-            + r"(?=\n|\Z)))*(?:\n[^\n]*?"
+            + r"(?=\n|\Z)))*+\n[^\n]*?"
             + _KEY_FOOTER
-            + r")?)"
+            + r"|(?:(?!-----BEGIN )[^\n])*(?:\n(?>"
+            + _KEY_BODY
+            + r"(?=\n|\Z)))*)"
         ),
         "[REDACTED:private_key]",
     ),

@@ -155,3 +155,13 @@ def test_a_footerless_key_of_many_lines_is_scrubbed_at_once() -> None:
     started = time.perf_counter()
     scrubbed, _count = scrub(text)
     assert time.perf_counter() - started < 1.0 and KEY_BODY[0] not in scrubbed and "the prose after it." in scrubbed
+
+
+def test_a_header_only_mentioned_hides_no_code_after_it() -> None:
+    """Found by review: with no footer, every short line after a header was taken for a key line, and a diff of
+    code that only names a header lost its lines from the model."""
+    diff = '+KEY = "-----BEGIN RSA PRIVATE KEY-----"\n+    return\n+    pass\n+print(done)\n'
+    scrubbed, _count = scrub(diff)
+    assert "+    return\n+    pass\n+print(done)" in scrubbed
+    held, _count = scrub_lines(diff)
+    assert "+    return" in held

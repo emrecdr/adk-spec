@@ -107,3 +107,17 @@ async def test_an_empty_answer_is_named_as_such(fake_provider) -> None:
     app = App(name="t", root_agent=Workflow(name="t", edges=[("START", build_triage())]), plugins=roster(UsageLedger()))
     run = await run_seeded(app, state=dict(STATE), prompt="go")
     assert run.state[STAGE_ERROR].startswith("the answer was empty")
+
+
+@pytest.mark.asyncio
+async def test_an_answer_in_a_json_fence_is_taken_as_adk_takes_it(fake_provider) -> None:
+    """Found by review: Pydantic's own check, put in place of ADK's, refused an answer in a ```json fence that ADK
+    itself reads."""
+    import json
+
+    from conftest import CANNED_TRIAGE
+
+    fake_provider.answers_when("You size a change request", "```json\n" + json.dumps(CANNED_TRIAGE) + "\n```")
+    app = App(name="t", root_agent=Workflow(name="t", edges=[("START", build_triage())]), plugins=roster(UsageLedger()))
+    run = await run_seeded(app, state=dict(STATE), prompt="go")
+    assert STAGE_ERROR not in run.state or not run.state[STAGE_ERROR]
