@@ -67,6 +67,16 @@ DELTAS_ON_A_MISSING_ID = {
         }
     ]
 }
+#: What a scout asks to see of the repository `repository()` makes by default, and what a survey states of it.
+CANNED_SCOUT = {"files": ["src/app.py"], "folders": [], "searches": [], "reason": "Sign-in is decided there."}
+CANNED_SURVEY = {
+    "statements": [
+        {"kind": "touches", "file": "src/app.py", "quote": "return password()", "note": "Sign-in is decided here."}
+    ],
+    "more_files": [],
+    "more_folders": [],
+    "more_searches": [],
+}
 #: The answers the fake gives by default, one a schema: the first one a request's schema accepts.
 #: A brief draft that says a design is owed.
 BRIEF_OWING_A_DESIGN = {**CANNED_BRIEF, "design_needed": True, "design_reason": "It adds a dependency."}
@@ -146,6 +156,8 @@ CANNED: tuple[dict, ...] = (
     CANNED_DESIGN,
     CANNED_FINDINGS,
     CANNED_VERDICTS,
+    CANNED_SCOUT,
+    CANNED_SURVEY,
 )
 
 
