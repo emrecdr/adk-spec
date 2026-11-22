@@ -108,7 +108,8 @@ the template; never on `--refresh`.
 - Not in a git repository, or no file beside `.spec/`: nothing to read, nothing said beyond `made`.
 - `--no-explore`: said in the `next` line as how to read it later.
 - No model ready (no token, no key): one line with the reason, and `init --refresh` once it is set up.
-- A reading that fails or keeps nothing: one line, and no profile written.
+- A reading that keeps nothing: one line, and no profile written. One that ends early having kept statements
+  writes them, marked partial, as a change's `context.md` is.
 
 ## Constraints
 

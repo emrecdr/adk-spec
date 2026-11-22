@@ -38,7 +38,8 @@ How it is applied in every phase below:
 
 ## The plan being followed now
 
-None: phase 7 is done. Phase 8, `init` describing an existing repository, starts with its design.
+**`2026-11-22-adk-spec-init-profile.md`**, phase 8: `init` describes the repository. Design
+`../specs/2026-11-22-brownfield-init-profile-design.md`, with the owner's two decisions.
 
 ## How a change flows
 
