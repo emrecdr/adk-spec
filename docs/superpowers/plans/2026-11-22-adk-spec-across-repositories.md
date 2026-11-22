@@ -58,7 +58,10 @@ each from its own recorded commit, in one function that `_drifted` uses too.
   - `Source.tree() -> str`: with no other repository, exactly `tree_text(paths)` as today; otherwise the workspace's
     tree, then for each `=== name (N files)` and `tree_text` of its prefixed paths, each folded on its own.
   - `Source.commits() -> dict[str, str | None]`: each present repository's HEAD.
-  - `Source.gathered` and `Source.without_keys` keep their signatures and accept prefixed paths.
+  - `Source.gathered` and `Source.without_keys` keep their signatures and accept prefixed paths. A round makes its
+    searches first, then its folders, then its files.
+  - `Source.within(path: str, line: int) -> str`: the nearest line above `line`, in the scrubbed file, indented less
+    than it, stripped and cut at 120 characters; `""` where there is none or the file is not read.
   - `git.top(root: Path) -> Path`: the repository's top folder (today's `_top`, made public).
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_source.py`, with a workspace repository and a sibling
@@ -75,6 +78,11 @@ each from its own recorded commit, in one function that `_drifted` uses too.
     `pytest.raises(SourceError)` for `.`, `./`, the absolute path, a link to it, and the name `src`.
   - `test_each_repository_folds_its_own_files_and_one_repository_reads_as_before`: `tree()` with no other repository
     equals `tree_text(paths)`.
+  - `test_a_round_makes_its_searches_before_it_reads_its_files`: with `ROUND_MAX_CHARS` patched small, a search and a
+    large file asked together: the search is shown and the file is deferred (measured live: files first left every
+    search out for room).
+  - `test_the_line_that_opens_a_quoted_lines_block_is_found_in_the_file_as_it_stands`: `within("src/app.py", 2) ==
+    "def login(user):"`, `""` for a line at the top level, and the opener found above a range that was not shown.
 - [ ] **Step 2: Run them.** `uv run pytest tests/test_source.py -q`. Expected: the new tests fail
   (`TypeError: ... unexpected keyword argument 'others'`).
 - [ ] **Step 3: Implement.** Move the per-repository state and methods of `Source` (`_listed`, `_exclude`,
@@ -140,11 +148,14 @@ each from its own recorded commit, in one function that `_drifted` uses too.
     what was not read; the brief; the deltas.
   - `explore.REVIEW_BUDGET = 2`, `explore.UNKNOWN_BUDGET = 8`; `Explored.unknown: tuple[tuple[str, str], ...]`,
     `Explored.disputed: int`.
+  - `Statement.within: str = ""`, set by `_grounded` from `Source.within`, shown in the survey's statements, in the
+    review's numbered list, and in `context.md` as `in: …` under the note.
   - `conftest.CANNED_REVIEW = {"disputed": [], "unknown": [], "more_files": [], "more_folders": [], "more_searches": []}`.
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_explore.py`:
-  - `test_the_review_reads_the_statements_and_no_file`: its instruction holds `1. touches src/app.py:2` and the quote,
-    and no `=== src/app.py`.
+  - `test_the_review_reads_the_statements_and_no_file`: its instruction holds `1. touches src/app.py:2`, the quote
+    and `in: def login():`, and no `=== src/app.py`.
+  - `test_a_kept_statement_carries_the_line_that_opens_its_block`.
   - `test_a_disputed_statement_is_left_out_and_counted_and_a_number_naming_nothing_is_ignored`.
   - `test_unknowns_are_kept_plain_and_at_most_eight`.
   - `test_the_review_may_send_the_reading_one_round_further_and_runs_twice_at_most`: a review asking for

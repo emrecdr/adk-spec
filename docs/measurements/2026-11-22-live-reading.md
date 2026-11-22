@@ -1,0 +1,52 @@
+# The first live reading of a repository's code
+
+Measured on 22 November 2026, on the owner's go-ahead, on gpt-4.1 on Copilot, at commit `ad434cc` (phase 6 with
+the fixes of an outside review). Two runs: the labelled `integration` case five times, and one `propose` on a copy
+of adk-spec's own repository.
+
+## The labelled case
+
+| Case | Command | Caught | Blocking on nothing planted | Left out, no such quote | Tokens a run | Seconds a run | Failed |
+|---|---|---|---|---|---|---|---|
+| `integration` | plan | 5/5 | 0 | 0 | 6,333 | 20.2 | 0 |
+
+In every run a kept statement named the file where sign-in starts a session. No statement quoted text that is not in
+its file. 15 model calls, as estimated.
+
+## One `propose` on a real repository
+
+A copy of adk-spec at commit `16784d5` (268 tracked files, `cli.py` 1,424 lines), with a short constitution of rules
+already true of it. The request:
+
+> Add a --quiet flag to the propose command. With --quiet, propose prints no progress lines while it works and no
+> tokens line at the end; it still prints each file it wrote, any refusal, and the next line. Without --quiet
+> nothing changes.
+
+9 model calls (triage 1, brief 1, deltas 2 with one retry, scout 1, survey 3, tasks 1), 42,523 tokens, of which the
+reading took 30,463. A lean change: brief, one delta, `context.md` with 7 statements, three tasks.
+
+**What was right.** The brief and the delta say what was asked, with the right non-goals and two scenarios. The tasks
+put the test first and name real files. Every statement's quote is in its file. The statements found the parser's
+definition of `propose`, `_propose`, and how options are added.
+
+**What was wrong, checked against the code by hand.**
+
+1. **A true quote under a wrong note.** "`cli.py:527` The propose command currently outputs progress and token count
+   lines", quoting `print(f"tokens    {_spent(made.ledger)}")`. The line is real, and it is in `_approve`. A quote
+   found in the file cannot catch this, and neither can a reviewer that reads the statement alone: nothing in it
+   says which function the line is in.
+2. **The searches never ran.** The scout asked for eleven files and four searches. A round takes files first, and
+   five of the files were stage prompts the change does not touch: the searches for `progress`, `token`, `quiet` and
+   `propose` were all "past what a round reads". So the reading never reached where `propose` prints its progress
+   (`_working`, line 670, which was shown but not stated) and its tokens line (lines 1209 to 1252, never shown).
+3. **The test file was missed.** `tests/test_propose.py`, 39 tests, was left out for room; the tasks name
+   `tests/test_cli.py`.
+
+## What this changes in phase 7
+
+- **A round makes its searches first**, then lists its folders, then reads its files. A search is small and aimed; a
+  whole file is large and often a guess.
+- **A statement carries the line that opens the block it stands in**, found by code in the file as it stands:
+  `in: def _approve(args: argparse.Namespace) -> int:`. The review is shown it, and can then dispute a note that
+  names the wrong function. The design and tasks stages read it in `context.md`.
+- The review's extra round is the room the reading needs where it ran short, as here.

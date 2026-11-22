@@ -122,11 +122,17 @@ The same loop as phase 6, with one reader per repository behind one lookup.
   repositories do not make a model's window larger. Each repository's list of files is folded to its folders on its
   own, past 300 paths, so a large repository does not crowd a small one out of the scout's view.
 - **Grounding** looks for a statement's quote in the text of the file it names, in the repository it names.
+- **A round makes its searches first**, then lists its folders, then reads its files. Measured live on 22 November
+  2026 (`docs/measurements/2026-11-22-live-reading.md`): with files first, five whole files the change did not touch
+  filled a round and all four searches were left out for room.
+- **A statement carries the line that opens the block it stands in**, found by code in the file as it stands, such
+  as `def _approve(args: argparse.Namespace) -> int:`. The same live run kept a real quote from `_approve` under a
+  note about `propose`: no check of the quote can catch that, and a reviewer can only where it sees the block.
 
 ### The review
 
 A new stage, after the last round of reading. It reads the brief, the deltas, and the statements kept, each with its
-number, its quote and its note. It reads no file, so it is cheap: statements, not code. It answers:
+number, its quote, the line that opens its block, and its note. It reads no file, so it is cheap: statements, not code. It answers:
 
 - `disputed`: each a statement's number and a reason, where the quoted code does not support the note. Code drops
   a disputed statement that names a kept number, and counts it. A number that names nothing is ignored.
