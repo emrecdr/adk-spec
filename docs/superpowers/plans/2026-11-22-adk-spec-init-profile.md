@@ -143,3 +143,23 @@ the repository first needs to know. `cli._read_code`'s run and write split into 
 
 Describing a change's other repositories at `init`, a capability-to-folder map with an accept step, living specs
 drafted from code.
+
+## What changed while this plan was executed
+
+Tasks 1 to 4 were built as written. Task 5, the live steps, waits for the owner's go-ahead. The cleanup review and
+the code review changed these things:
+
+- **One writer of a reading's file and one sentence of what it came to**, shared by `init` and a change's plan.
+  `render_context` takes one title and the headings of the file it writes: the profile has its own (`What is
+  here`, `Where things live`, `How this repository does things`), since it describes no change.
+- **The most a reading costs** (`explore.MAX_CALLS`) and **the brief `init` reads with** (`explore.DESCRIBE`) live
+  beside the reading; the rule "only while the constitution is the template" is `Workspace.drafted`'s.
+- **A stage is given 20,000 characters of the profile**, as of a `context.md`: cut at 10,000, it lost the risks and
+  the unknowns.
+- **A refresh says in its exit code where it wrote no profile**; a first `init` still always ends well. `init` in a
+  subfolder of a workspace is refused, and `--refresh --no-explore` is refused.
+- **A refresh drafts rules while the constitution is still exactly the template**, where the design had said it
+  never would: a first `init` with no model drafted nothing, and every message points to `--refresh`. A reading
+  that ended early drafts none.
+- A quote is held whole in a drafted rule whatever backticks it holds; a profile that is no text stops no plan; the
+  `profile` case scores each planted convention apart.

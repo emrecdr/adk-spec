@@ -35,11 +35,11 @@ How it is applied in every phase below:
 | 5 | The simple flow | `2026-11-22-adk-spec-simple-flow.md` | A standard change in four commands, a lean one in three: `propose` writes the whole change, `approve` records bases and makes the check. Help in three groups, progress lines, a `next` line. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 | 6 | Brownfield, part 1 | `2026-11-22-adk-spec-brownfield-context.md` | `propose` reads the code that matters before it plans, and writes `context.md`, every statement with a quote code found. Secrets scrubbed from every request; `[repository] exclude`. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 | 7 | Brownfield, part 2 | `2026-11-22-adk-spec-across-repositories.md` | A change names the repositories it spans (`--with`); one reading covers them, a model reviews it, `context.md` says what is unknown; `verify` judges the work in all of them. | Built, cleaned up, reviewed and merged. Measured live: `across` caught 5/5 |
+| 8 | Brownfield, part 3 | `2026-11-22-adk-spec-init-profile.md` | `init` reads the code, writes `.spec/profile.md`, drafts rules already true of the code into the template constitution; every change's reading starts from the profile. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 
 ## The plan being followed now
 
-**`2026-11-22-adk-spec-init-profile.md`**, phase 8: `init` describes the repository. Design
-`../specs/2026-11-22-brownfield-init-profile-design.md`, with the owner's two decisions.
+None: phase 8 is done. Phase 9, tests as evidence inside `verify`, starts with its design.
 
 ## How a change flows
 
@@ -219,6 +219,14 @@ guide and the CI configuration: those are what `init` reads first. OpenSpec's po
 what you're about to change", so this phase writes a profile and rules, and no spec of the existing system.
 
 **Depends on.** Phase 7. **Size.** Medium to large.
+
+**Decided by the owner, 22 November 2026.** `init` reads the code with a model and says so first, `--no-explore`
+skipping it; rules already true of the code are drafted into `constitution.md` while it is the empty template, each
+with its evidence and marked as drafted.
+
+**State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged. A capability-to-folder map with an
+accept step was left out: the profile names where things live, and is the person's to edit. Its live proof, `init`
+on a copy of adk-spec and the `profile` case, waits for the owner's go-ahead.
 
 **To decide then.** Whether living specs are ever drafted from existing code. It is an open request in both
 projects' trackers and the part most likely to be wrong; it stays out until the owner asks for it.
