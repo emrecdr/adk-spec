@@ -166,3 +166,19 @@ def test_refresh_with_no_explore_is_refused(tmp_path, capsys) -> None:
     assert run(tmp_path, "init", "--no-explore") == 0
     assert run(tmp_path, "init", "--refresh", "--no-explore") == 2
     assert "--refresh" in capsys.readouterr().err
+
+
+def test_init_asks_for_the_whole_repository_and_for_conventions_as_rules(tmp_path, fake_provider) -> None:
+    """Measured live: the profile leaned on the newest feature, and most drafted rules were descriptions."""
+    from conftest import between
+
+    repository(tmp_path, FILES)
+    assert run(tmp_path, "init") == 0
+    (scout,) = [
+        str(r.config.system_instruction)
+        for r in fake_provider.requests
+        if str(r.config.system_instruction).startswith(SCOUT)
+    ]
+    brief = " ".join(between(scout, "brief").split())
+    assert "the whole repository, not one feature of it" in brief
+    assert "as a rule new code must follow" in brief and "one sentence" in brief

@@ -186,3 +186,15 @@ def test_a_profile_says_where_things_live_and_not_where_a_change_plugs_in() -> N
         sections=PROFILE_SECTIONS,
     )
     assert "## Where things live\n" in text and "Where the change plugs in" not in text
+
+
+def test_a_drafted_rule_is_the_first_sentence_of_its_note() -> None:
+    """Measured live: notes ran to a paragraph, and a constitution's rule is one sentence."""
+    held = Statement(
+        kind="convention",
+        path="src/errors.py",
+        line=4,
+        quote="class AppError(Exception):",
+        note="Every error is raised as an AppError. It is defined in errors.py, e.g. for the store.",
+    )
+    assert "- Every error is raised as an AppError. (`src/errors.py:4`" in drafted_rules([held])

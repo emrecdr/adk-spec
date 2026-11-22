@@ -64,3 +64,26 @@ the API, and the web app holds an old file of a similar name that nothing uses.
 In every run a kept statement named the planted file in the other repository, under its name. No statement quoted
 text that is not in its file. About 20 model calls, as estimated; a run costs some twice the `integration` case's,
 which reads one repository and has no review.
+
+## Phase 8: `init` on a copy of adk-spec, and the `profile` case
+
+Measured the same day, on the owner's go-ahead, at commit `cd7ce74` (phase 8 merged).
+
+**`init` on a copy of adk-spec.** Up to 7 calls: 11 files read, 14 statements kept, 2 left out, 3 unknown, 6 rules
+drafted. Every quote is in its file, and the facts are right: Python 3.14, the pinned versions, the entry point, and
+a rule that matters, that no module loads the engine at import time. Two faults, read by hand:
+
+1. **It leaned on the newest feature.** Most statements, and all three unknowns, are about `init` itself rather
+   than the repository as a whole.
+2. **Most drafted rules were descriptions.** "The command `adk-spec init` creates the `.spec/` folder ..." is what
+   is there, not a rule new code follows; some two of the six read as rules, and the notes ran to a paragraph.
+
+| Case | Command | Caught | Blocking on nothing planted | Left out, no such quote | Tokens a run | Seconds a run | Failed |
+|---|---|---|---|---|---|---|---|
+| `profile` | init | 3/5, 5/5 | 0 | 0 | 7,443 | 41.6 | 0 |
+
+Tests beside the code were found as a convention every time; errors raised as one class three times in five, the
+model filing `AppError` under what exists in the other two. The same fault as the second above.
+
+**What it changed.** `init`'s brief asks for the whole repository, not one feature of it, and for each convention
+as a rule new code must follow, in one sentence; a drafted rule is its note's first sentence.

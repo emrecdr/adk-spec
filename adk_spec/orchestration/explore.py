@@ -52,9 +52,12 @@ A person is about to change this repository, and needs to know it first.
 
 ## What changes
 
-Nothing. Read the code to state what a person changing it first needs to know: the stack and its versions; the
-layout, and where each part lives; how it is built, run and tested; how errors, logging and configuration are
-handled; the conventions new code should follow; and what is risky to change.
+Nothing. Read the code to state what a person changing it first needs to know about the whole repository, not one
+feature of it: the stack and its versions; the layout, and where each part lives; how it is built, run and tested;
+how errors, logging and configuration are handled; and what is risky to change.
+
+Phrase each convention as a rule new code must follow, in one sentence, such as "Every error is raised as an
+AppError." or "Each module has its test beside it, named after it.": what is merely there is not a convention.
 """
 UNKNOWN_BUDGET = 8
 QUESTION_MAX_CHARS = 200
