@@ -100,3 +100,63 @@ def test_a_strict_revision_stops_before_the_plan_as_a_new_one_does(tmp_path, fak
     assert strict_proposed(tmp_path) == 0
     assert run(tmp_path, "propose", "Also keep the old invoice numbers.", "--id", "ledger", "--no-input") == 0
     assert drafted_by(fake_provider, TASKS) == 0
+
+
+def planned(root) -> None:
+    """A strict change, `ledger`, proposed and planned: ready to be approved."""
+    seeded(root)
+    assert strict_proposed(root) == 0
+    assert run(root, "plan", "ledger", "--no-explore") == 0
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_two_different_names_approve_a_strict_change(tmp_path, capsys) -> None:
+    planned(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
+    held = state_of(tmp_path, "ledger")
+    assert (held["status"], held["approval"]["by"]) == ("draft", "ana")
+    out = capsys.readouterr().out
+    assert "approved  once, by ana" in out and "have someone other than ana run `adk-spec approve ledger`" in out
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") != 0
+    assert "another name" in capsys.readouterr().err
+    assert run(tmp_path, "approve", "ledger", "--by", "ben") == 0
+    held = state_of(tmp_path, "ledger")
+    assert (held["status"], held["approval"]["by"], held["approval"]["second"]["by"]) == ("approved", "ana", "ben")
+    assert "by ben, after ana" in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_an_edit_between_the_two_approvals_voids_the_first(tmp_path) -> None:
+    planned(tmp_path)
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
+    brief = tmp_path / FOLDER / "brief.md"
+    write_text(brief, read_text(brief).rstrip("\n") + "\n\nAn edit after the first approval.\n")
+    assert run(tmp_path, "approve", "ledger", "--by", "ben") == 0
+    held = state_of(tmp_path, "ledger")
+    assert (held["status"], held["approval"]["by"], held["approval"]["second"]) == ("draft", "ben", None)
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_strict_change_approved_once_is_not_verified(tmp_path, capsys) -> None:
+    from conftest import repository
+
+    planned(tmp_path)
+    repository(tmp_path)
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "ledger") != 0
+    assert "owes a second approval" in capsys.readouterr().err
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_warning_blocks_a_strict_approval_and_no_override_sets_it_aside(tmp_path, capsys) -> None:
+    planned(tmp_path)
+    tasks = tmp_path / FOLDER / "tasks.md"
+    write_text(tasks, "\n".join(line for line in read_text(tasks).splitlines() if "verify:" not in line) + "\n")
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") != 0
+    assert "tasks.no-verify" in capsys.readouterr().out
+    assert run(tmp_path, "approve", "ledger", "--by", "ana", "--override", "it is fine") != 0
+    assert "a strict change sets no blocking finding aside" in capsys.readouterr().err
+    assert state_of(tmp_path, "ledger")["approval"] is None

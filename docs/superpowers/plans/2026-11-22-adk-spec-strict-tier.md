@@ -45,3 +45,13 @@ approvers, and warnings that block with no override.
 `cli.py` (`_approve`), `README.md`. Test: `tests/test_strict.py`.
 
 - [ ] Failing tests; implement; gate; commit.
+
+---
+
+## What changed in the build
+
+- **Task 1.** A strict brief's open points are asked as a standard one's are: the question gate knew only the
+  standard tier. A change of any tier that owes a design and has none cannot be approved, with `plan` as its next
+  step, and `plan` counts that finding as its own to settle.
+- **Task 3.** The first of the two approvals is recorded in the change's approval and leaves it a draft; the second
+  is kept beside the first, as `second`. Where the work began is recorded at the second.

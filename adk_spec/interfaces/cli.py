@@ -42,6 +42,7 @@ from ..domain.lifecycle import (
     approve,
     approve_blockers,
     archive_blockers,
+    awaiting_second,
     capture_bases,
     check_blockers,
     check_stands,
@@ -603,8 +604,11 @@ def _approve(args: argparse.Namespace) -> int:
         raise NotYetError(f"`{args.id}` is not approved: a living spec does not read. Fix it first")
     _based(workspace, args.id, living)
     assessed = _assessed(workspace, args.id, living)
+    strict = assessed.state.tier == "strict"
+    if strict and args.override:
+        raise UsageError("a strict change sets no blocking finding aside: fix it, then approve again")
     # What the files themselves block comes first: no model is asked about files that are going to change.
-    if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
+    if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict or strict):
         return _refused(args.id, blockers)
     first = approval_checks_first(assessed.unchecked)
     if first:
@@ -631,6 +635,7 @@ def _approve(args: argparse.Namespace) -> int:
         by = args.by or getpass.getuser()
     except OSError as exc:  # an account with no name, as in a container run under a bare user id
         raise UsageError("this account has no name: name the approver with --by") from exc
+    _not_twice(assessed.state, files, by)
     at = datetime.now(UTC).isoformat(timespec="seconds")
     # A reason is recorded only where it set something aside: a blocking finding of the check.
     reason = args.override if any(held.code == "check.blocking" for held in assessed.unchecked) else None
@@ -638,7 +643,7 @@ def _approve(args: argparse.Namespace) -> int:
     held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=_commit(workspace), others=began)
     edited = edited_drafts(assessed.state, files)
     workspace.save_state(held)
-    print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
+    _said_approved(held, by, len(files))
     if edited:
         print(
             f"lessons   {', '.join(edited)} edited since drafted: say what you corrected in one line in "
@@ -646,6 +651,25 @@ def _approve(args: argparse.Namespace) -> int:
         )
     _say_next(workspace, args.id, living)
     return EXIT_OK
+
+
+def _not_twice(state: ChangeState, files: Mapping[str, str], by: str) -> None:
+    """`NotYetError` where the name that gave a strict change its first approval would give the second too."""
+    if awaiting_second(state, files) and state.approval and state.approval.by == by:
+        raise NotYetError(
+            f"`{state.id}` is approved once already, by {by}: a strict change is approved by two names, and another "
+            "name approves it next"
+        )
+
+
+def _said_approved(held: ChangeState, by: str, count: int) -> None:
+    """What an approval says: the first of a strict change's two, or the approval itself, with its first name where
+    it is the second."""
+    if held.status != "approved":
+        print(f"approved  once, by {by}: a strict change is approved by two names, and another name approves it next")
+        return
+    after = f", after {held.approval.by}" if held.approval and held.approval.second else ""
+    print(f"approved `{held.id}` by {by}{after}: {count} files recorded")
 
 
 def _began(workspace: Workspace, state: ChangeState) -> dict[str, str]:

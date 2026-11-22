@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from .model import PASSED, Approval, ChangeState, Checked, Delta, Finding, GrammarError, Spec, Verification
+from .model import PASSED, Approval, ChangeState, Checked, Delta, Finding, GrammarError, Seconded, Spec, Verification
 from .spec_md import fingerprint
 from .tasks_md import parse_tasks, render_tasks
 from .text import sha256_of
@@ -57,6 +57,12 @@ def approval_files(texts: Mapping[str, str]) -> dict[str, str]:
     return {path: sha256_of(_as_approved(path, text)) for path, text in texts.items()}
 
 
+def awaiting_second(state: ChangeState, files: Mapping[str, str]) -> bool:
+    """Whether a strict change holds the first of its two approvals, and it still covers `files` and the bases: the
+    next approval, by another name, approves the change. An edit since voids it, as any approval."""
+    return state.tier == "strict" and state.status == "draft" and not approval_stale(state, files)
+
+
 def owes_design(tier: str, said: bool = False) -> bool:
     """Whether a change owes a design before its tasks: where its brief `said` so, and always on the strict tier."""
     return said or tier == "strict"
@@ -91,6 +97,11 @@ def approve(
     approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override)
     # A draft a person corrected is named once: the approved fingerprint then stands for what was drafted.
     drafted = {name: files.get(name, mark) for name, mark in state.drafted.items()}
+    if state.tier == "strict":  # two names approve it: the first is recorded, and the change stays a draft
+        first = state.approval if awaiting_second(state, files) else None
+        if first is None:
+            return state.model_copy(update={"approval": approval, "drafted": drafted})
+        approval = first.model_copy(update={"second": Seconded(by=by, at=at)})
     began = state.base_commit or commit
     commits = {**(others or {}), **state.base_commits}
     update = {"status": "approved", "approval": approval, "base_commit": began, "base_commits": commits}
@@ -221,6 +232,9 @@ def _unready(state: ChangeState, stale: Sequence[str]) -> list[str]:
     cid = state.id
     if state.status == "archived":
         return [f"`{cid}` is archived already"]
+    if state.status == "draft" and state.tier == "strict" and state.approval is not None and not stale:
+        by = state.approval.by
+        return [f"`{cid}` is approved once, by {by}: a strict change owes a second approval, by another name"]
     if state.approval is None or state.status == "draft":
         return [f"`{cid}` is not approved: run `adk-spec approve {cid}`"]
     if stale:
@@ -325,6 +339,8 @@ def next_step(
     left = [owed for owed in check if owed.code not in _MADE_BY_APPROVAL]
     if approve_blockers(state, findings) or check_stops(left):
         return Step("you", f"fix what `adk-spec validate {cid}` lists")
+    if state.tier == "strict" and state.approval is not None and not stale:  # the first of two approvals is given
+        return Step("you", f"have someone other than {state.approval.by} run `adk-spec approve {cid}`")
     return Step("you", f"run `adk-spec approve {cid}`")
 
 

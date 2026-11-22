@@ -129,6 +129,13 @@ class Finding(_Held):
     line: int | None = None
 
 
+class Seconded(_Held):
+    """The second approval a strict change owes: by another name than the first, and when."""
+
+    by: str
+    at: str
+
+
 class Approval(_Held):
     """Who approved a change, when, and exactly what: each file's fingerprint and the bases it was approved against.
     The name is a recorded claim, not an authentication."""
@@ -139,6 +146,8 @@ class Approval(_Held):
     bases: dict[str, str]
     #: Why the approver set a blocking finding of the check aside, in their words. None where nothing was.
     override: str | None = None
+    #: A strict change's second approval, by another name; until it is given, the change stays a draft.
+    second: Seconded | None = None
 
 
 class Checked(_Held):
