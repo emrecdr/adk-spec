@@ -101,3 +101,5 @@ Measured live in phase 9: the run inherited adk-spec's virtual environment first
   - A person's `--tier` beside an `--id` of an open change is said to be unused.
   - The kept-tasks line is said beside a point left open.
   - A virtual environment whose folder holds the project, a monorepo's top `.venv` too, stays on a test run's PATH.
+- **Removed, on the owner's decision.** After an outside review and two reviews of the follow-up each found risk words
+  the sizing rule missed, the owner chose to delete it: `propose` asks the model for the tier unless `--tier` names one.

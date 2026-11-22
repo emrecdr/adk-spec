@@ -2,7 +2,7 @@
 
 **Status Legend:**
 - **`[Built: Phases 1–13]`** — Implemented, reviewed and merged; every phase on the roadmap in [plans/README.md](superpowers/plans/README.md) is built. Brought up to date with the code on 22 November 2026.
-- **`[Open Decision]`** — Future second interface surface (embedding inside an IDE coding assistant vs. a Web Workbench / TUI), pending owner confirmation.
+- **`[Next: Phase 14]`** — The second interface, decided by the owner on 22 November 2026: adk-spec as an MCP server inside coding assistants.
 
 > **Core Thesis:** **Models draft, explore, clarify, and judge; Python owns the files, requirement IDs, structural checks, SHA-256 approvals, secret/key guards, and atomic spec merge.** Every capability—whether you run `adk-spec` today or after Phase 13—keeps human decisions cleanly separated from deterministic guardrails.
 
@@ -416,6 +416,6 @@ What `strict` adds on top of `standard` `[Built: P13]`:
 | | `adk-spec models [--json]` | Query active arm's live model catalog with zero model tokens spent |
 | | `adk-spec smoke [--check]` | Offline config check (`--check`) or single schema-bound smoke call |
 
-### Open Future Direction (`[Open Decision]` in `plans/README.md`)
+### Next: Phase 14 (decided in `plans/README.md`)
 
-One architectural question intentionally remains open now that phases 1–13 are built: **how you want to invoke `adk-spec` alongside the terminal**—either directly inside coding assistants (such as exposing `.spec/` tools and workflows to VS Code GitHub Copilot / Claude Code via MCP + skills so you stay inside your editor's model lineup) or via a standalone Web Workbench / Rich TUI ([02-adk-spec-framework-architecture-and-roadmap.md](../reports/02-adk-spec-framework-architecture-and-roadmap.md)).
+The owner decided on 22 November 2026 how `adk-spec` is used alongside the terminal: **inside coding assistants, as an MCP server**, exposing the everyday commands as tools to VS Code GitHub Copilot and Claude Code so you stay inside your editor's model lineup, with the same files, checks and approvals as the terminal. A standalone Web Workbench or TUI ([02-adk-spec-framework-architecture-and-roadmap.md](../reports/02-adk-spec-framework-architecture-and-roadmap.md)) was not chosen.

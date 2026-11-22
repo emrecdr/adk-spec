@@ -324,9 +324,17 @@ class Workspace:
         try:
             state = ChangeState.model_validate_json(read_text(folder / STATE))
         except ValidationError as exc:
+            shown = self.shown(folder / STATE)
+            # A field it does not know is a newer adk-spec's: ignored, it would be dropped by the next save.
+            if unknown := [error for error in exc.errors() if error["type"] == "extra_forbidden"]:
+                held = ".".join(str(part) for part in unknown[0]["loc"])
+                raise WorkspaceError(
+                    f"{shown} was written by a newer adk-spec: it holds `{held}`, which this one does not know. "
+                    "upgrade adk-spec to read it"
+                ) from exc
             first = exc.errors()[0]
             where = ".".join(str(part) for part in first["loc"]) or "the file"
-            raise WorkspaceError(f"{self.shown(folder / STATE)} does not read: `{where}`: {first['msg']}") from exc
+            raise WorkspaceError(f"{shown} does not read: `{where}`: {first['msg']}") from exc
         if state.id != change_id:  # a renamed or copied folder: each save would go to the other change's file
             raise WorkspaceError(
                 f"{self.shown(folder / STATE)} names the change `{state.id}`, and its folder is `{change_id}`. "

@@ -273,3 +273,14 @@ def test_a_test_command_that_is_no_list_of_words_is_refused(tmp_path, line, said
     write_text(tmp_path / ".spec/config.toml", f'[project]\ndefault_tier = "lean"\n\n[verify]\n{line}\n')
     with pytest.raises(ConfigError, match=said):
         ws.config()
+
+
+def test_a_change_file_a_newer_adk_spec_wrote_is_refused_saying_why(tmp_path) -> None:
+    """The owner's choice: refused still, since ignoring a field it does not know would drop it on the next save, a
+    second approval say, but saying why, where it said only that the file did not read."""
+    ws = seeded(tmp_path)
+    path = ws.home / "changes/passkeys/change.json"
+    write_text(path, path.read_text(encoding="utf-8").replace('"id":', '"reviewers": ["ana"], "id":', 1))
+    with pytest.raises(WorkspaceError, match="was written by a newer adk-spec: it holds `reviewers`") as raised:
+        ws.load_change("passkeys")
+    assert "upgrade adk-spec" in str(raised.value)

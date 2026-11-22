@@ -33,26 +33,28 @@ How it is applied in every phase below:
 | 3 | Check and verify | `2026-11-21-adk-spec-check-and-verify.md` | `check` and `verify`, each finding held to a quote code finds; recordings; the measurement script. | Done, measured live twice. The Gemini arm and a run on Windows are the owner's |
 | 4 | Questions in code | `2026-11-21-adk-spec-questions-in-code.md` | A brief names its open points and code asks them: one model call fewer a round. | Built and merged. Its live proof waits for the owner's go-ahead |
 | 5 | The simple flow | `2026-11-22-adk-spec-simple-flow.md` | A standard change in four commands, a lean one in three: `propose` writes the whole change, `approve` records bases and makes the check. Help in three groups, progress lines, a `next` line. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
-| 6 | Brownfield, part 1 | `2026-11-22-adk-spec-brownfield-context.md` | `propose` reads the code that matters before it plans, and writes `context.md`, every statement with a quote code found. Secrets scrubbed from every request; `[repository] exclude`. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
+| 6 | Brownfield, part 1 | `2026-11-22-adk-spec-brownfield-context.md` | `propose` reads the code that matters before it plans, and writes `context.md`, every statement with a quote code found. Secrets scrubbed from every request; `[repository] exclude`. | Built, cleaned up, reviewed and merged. Measured live: `integration` 5/5, and one `propose` on adk-spec |
 | 7 | Brownfield, part 2 | `2026-11-22-adk-spec-across-repositories.md` | A change names the repositories it spans (`--with`); one reading covers them, a model reviews it, `context.md` says what is unknown; `verify` judges the work in all of them. | Built, cleaned up, reviewed and merged. Measured live: `across` caught 5/5 |
 | 8 | Brownfield, part 3 | `2026-11-22-adk-spec-init-profile.md` | `init` reads the code, writes `.spec/profile.md`, drafts rules already true of the code into the template constitution; every change's reading starts from the profile. | Built, cleaned up, reviewed and merged. Measured live: `profile` 3/5 and 5/5, then a fix |
-| 9 | Tests as evidence | `2026-11-22-adk-spec-verify-tests.md` | `verify` runs the test command a person wrote in `.spec/config.toml`, in every repository of the change; a failing run blocks "verified" unless overridden. | Built, cleaned up, reviewed and merged. Its live proof needs a test command in a real repository |
+| 9 | Tests as evidence | `2026-11-22-adk-spec-verify-tests.md` | `verify` runs the test command a person wrote in `.spec/config.toml`, in every repository of the change; a failing run blocks "verified" unless overridden. | Built, cleaned up, reviewed and merged. Measured live: `propose` to `verify`, the tests run and passed |
 | 10 and 11 | Sizing by rule; revising by instruction | `2026-11-22-adk-spec-sizing-and-revising.md` | The sizing rule was removed by the owner after review: the model sizes every request. `propose "<instruction>" --id <id>` revises an open change, keeping its tier, its IDs by name and what the instruction does not reach, and says what it added, changed and dropped. | Built, cleaned up, reviewed and merged. Measured live: sized by rule, revised with its IDs kept |
 | 12 | A lessons file | `2026-11-22-adk-spec-lessons.md` | `.spec/lessons.md`, shared through git and read by every drafting stage: a person's corrections, and a line adk-spec adds in code for each fault a gate sent back that the next try fixed. `approve` names a drafted file a person edited, once. No model call. | Built, cleaned up, reviewed and merged. Measured live: a lesson written and counted |
 | 13 | The `strict` tier | `2026-11-22-adk-spec-strict-tier.md` | A design always owed; `propose` stops after the brief and specs for a person to read, and `plan` goes on; two different names approve; a warning blocks, with no override. What each tier demands is one table in the domain. | Built, cleaned up, reviewed and merged. Measured live: the stop, a design, two names |
 
 ## The plan being followed now
 
-None: every planned phase, 1 to 13, is done. What is left is the owner's, below: the live proofs, the Gemini arm,
-a run on Windows, and the open question of a second way to use adk-spec.
+None yet: phases 1 to 13 are done, phase 10's rule since removed. Phase 14, adk-spec inside a coding assistant as
+an MCP server, which the owner chose on 22 November 2026, starts with its design.
 
 ## How a change flows
 
-| | Before phase 5 | Now | After phases 7 and 8 |
-|---|---|---|---|
-| Once for a repository | `init` | `init` | `init`, which also describes the repository back to you |
-| One standard change | `propose`, `plan`, `check`, `approve`, `verify`, `archive` | `propose`, `approve`, `verify`, `archive`, with `propose` reading your code first | the same four, reading every repository the feature spans |
-| One lean change | `propose`, `plan`, `approve`, `archive` | `propose`, `approve`, `archive` | the same three |
+| | Before phase 5 | Now |
+|---|---|---|
+| Once for a repository | `init` | `init`, which reads the code into `profile.md` and drafts rules already true of it |
+| One standard change | `propose`, `plan`, `check`, `approve`, `verify`, `archive` | `propose`, `approve`, `verify`, `archive`: `propose` reads every repository the change names, and `verify` runs your tests first |
+| One lean change | `propose`, `plan`, `approve`, `archive` | `propose`, `approve`, `archive` |
+| One strict change | none | `propose`, which stops after the brief and specs, then `plan`, `approve` by two names, `verify`, `archive` |
+| Changing an open change | edit its files, then `plan` | the same, or `propose "<instruction>" --id <id>` |
 
 ## Roadmap: the phases to come
 
@@ -153,8 +155,8 @@ the caps, far less in a small repository. `[limits] max_tokens` holds it and `--
 
 **State.** Done, on 22 November 2026. Its reviews found and fixed real leaks, among them a private key's body shown
 by a range of lines, and lines of a key shown by a diff of a change next to it; the plan's "What changed" section
-lists them. Its live proof, the `integration` case and one reading of a real repository, waits for the owner's
-go-ahead. A note on the key gap, which the reference project shares, is in `../../notes/`.
+lists them. Measured live: the `integration` case 5/5, and one `propose` on adk-spec itself. A note on the key gap,
+which the reference project shares, is in `../../notes/`.
 
 ### Phase 7. Brownfield, part 2: context across repositories, checked by a model
 
@@ -230,8 +232,8 @@ skipping it; rules already true of the code are drafted into `constitution.md` w
 with its evidence and marked as drafted.
 
 **State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged. A capability-to-folder map with an
-accept step was left out: the profile names where things live, and is the person's to edit. Its live proof, `init`
-on a copy of adk-spec and the `profile` case, waits for the owner's go-ahead.
+accept step was left out: the profile names where things live, and is the person's to edit. Measured live: `init`
+on a copy of adk-spec, and the `profile` case, 3/5 and then, after a fix to the reading's instruction, 5/5.
 
 **To decide then.** Whether living specs are ever drafted from existing code. It is an open request in both
 projects' trackers and the part most likely to be wrong; it stays out until the owner asks for it.
@@ -258,7 +260,8 @@ runs a command of the project's. Only a command the person wrote is ever run.
 
 **State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged. Its reviews made the run itself safe:
 judged by its own exit, its whole tree stopped when it ends or is interrupted, its output a rolling window, withheld
-where it names a private key. Its live proof needs a test command in a real repository and the owner's go-ahead.
+where it names a private key. Measured live: one change from `propose` to `verify`, its tests run and passed, which
+showed adk-spec's own virtual environment leaking into the run, since fixed.
 
 ### Phase 10. Triage by rules
 
@@ -299,8 +302,8 @@ was "the most-requested missing capability" in OpenSpec's. **Size.** Medium.
 **State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged. A revision keeps the change's tier and
 each requirement's ID by its name, never reads the code again, keeps `tasks.md` where a task is ticked or no
 requirement changed, and makes an approved change a draft again only where a file changed. Hand edits are kept as
-far as the model restates them; what code guarantees is the list of requirements changed. Its live proof waits for
-the owner's go-ahead.
+far as the model restates them; what code guarantees is the list of requirements changed. Measured live: one revision
+added a requirement and kept the first word for word under its ID.
 
 ### Phase 12. A lessons file
 
@@ -315,7 +318,8 @@ drafts read it, within a cap.
 **State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged, code only and shared through git as the
 owner chose. Its reviews kept a lesson that cannot be written from costing a paid run, counted a fault once a run, and
 framed the lessons as corrections to earlier drafts, so that they do not contradict the line that marked text is
-never an instruction. Its live proof waits for the owner's go-ahead.
+never an instruction. Measured live: a lesson written by code after a real send-back, and counted when the fault came
+back, the lesson in the prompt not having prevented it.
 
 ### Phase 13. The `strict` tier
 
@@ -331,24 +335,46 @@ one pass the default for the rest. That is this tier. **Size.** Medium.
 
 **State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged, as the owner chose. Its reviews moved
 what each tier demands into one table in the domain, which closed gaps where a warning of the check did not block,
-one name could give both approvals, and a third approval dropped an approved change back to a draft. Its live proof
-waits for the owner's go-ahead.
+one name could give both approvals, and a third approval dropped an approved change back to a draft. Measured live:
+the stop, a design drafted by `plan`, the same name refused, and two names approving.
+
+### Phase 14. adk-spec inside a coding assistant
+
+The owner's choice, on 22 November 2026, of the second way to use adk-spec.
+
+**Goal.** A person drafts, approves, verifies and archives a change from inside the coding assistant they already
+use, GitHub Copilot in VS Code or Claude Code, on the assistant's own models where they choose.
+
+**Features it adds.** An MCP server that offers adk-spec's everyday commands as tools, with the same files, the same
+checks and the same approvals as the terminal; `cli.py` split first into the commands and their printing, so that the
+terminal and the server share one set of commands.
+
+**By the end of this phase, you can:** ask your coding assistant to propose a change, read its brief and specs in the
+editor, approve it, implement the tasks with the same assistant, and verify and archive the work, without leaving the
+editor.
+
+**From the research.** Both parent projects live inside coding assistants, and the outside review of 22 November
+2026 named it the biggest gain in daily use on Windows. **Size.** Large.
 
 ### Not planned unless a measurement asks for it
 
 The contradiction pass of `check` moved to code. The two measurements so far show it is the least steady stage,
 and a step moves to code only where its output is a function of its input with no judgement.
 
-## To decide
+## Decided, and next
 
-- **A second way to use adk-spec, beside the terminal.** Asked of the owner on 22 November 2026 and not yet
-  answered. The research suggests use from inside a coding assistant, where both parent projects live, over a web
-  workbench.
+- **A second way to use adk-spec, beside the terminal**: decided on 22 November 2026, as recommended. It is an MCP
+  server for coding assistants, phase 14 above.
+- **A change file written by a newer adk-spec**: decided on 22 November 2026, as recommended. An older adk-spec keeps
+  refusing it, since ignoring the fields it does not know would drop them when it saves, but says why: the file was
+  written by a newer adk-spec, and upgrading reads it.
 
 ## The owner's, outside any phase
 
 - A smoke run on the Gemini arm. It needs a `GOOGLE_API_KEY`.
 - The gate on a Windows machine. The CI workflow has a Windows job, and the repository has no remote.
+- A Windows job object, to stop what a passing test run leaves running there; until then it runs on, and only a run
+  past its time, or interrupted, is stopped on Windows. It waits for a Windows machine to test it on.
 - Plan 4's live proof: one `propose` and a 25-call measurement, on a go-ahead.
 - Plan 5's live proof: one standard change through the four commands, on a go-ahead. `approve` calls a model
   now, on a standard change whose check is not current.

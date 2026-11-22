@@ -13,6 +13,9 @@ Everything else is the builder's call, listed at the end.
 
 ## Part 1: sizing by rules
 
+**Removed** on 22 November 2026, on the owner's decision: the rule was built, narrowed by three reviews, and taken out,
+since its list of risk words missed some in each and a miss sized a risky fix lean. See the roadmap's phase 10.
+
 `propose` asks a model for the tier of every request unless `--tier` names one. With a tier known the sizing call is
 skipped, and the capabilities come from the brief, so a rule need decide only the tier.
 

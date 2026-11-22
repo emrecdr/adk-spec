@@ -1,6 +1,7 @@
 # Measurements
 
-Each file here is one run of `uv run python -m scripts.measure`, on one model, at one commit of this package.
+Each file here is a run of `uv run python -m scripts.measure`, on one model, at one commit of this package, or a
+record of live runs of the commands themselves.
 
 The labelled set is `scripts/cases.py`: seven small changes, each well formed. Five have one fault planted, one
 has none, and one has nothing wrong and a place in the code to be found.
@@ -35,6 +36,7 @@ counts.
 |---|---|---|
 | `2026-11-copilot-gpt-4.1.md` | gpt-4.1 on Copilot | The first measurement. |
 | `2026-11-copilot-gpt-4.1-second.md` | gpt-4.1 on Copilot | The script keeps the wording of what it cannot place. It found a fault of the set itself. |
+| `2026-11-22-live-reading.md` | gpt-4.1 on Copilot | Phases 6 to 13, one section each: the `integration`, `across` and `profile` cases, and live runs of `propose`, `plan`, `init`, `approve` and `verify`, with what each run found and what was fixed. |
 
 Not yet measured: the set as corrected after the second measurement, and the check's instruction with "Report every
 fault you find. One finding does not excuse the next." (plan 4, Task 4).
