@@ -14,7 +14,7 @@ import json
 import os
 import re
 import sys
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from importlib import metadata
@@ -62,7 +62,6 @@ from ..workspace.context import (
     context_text,
     files_text,
     living_text,
-    tree_text,
 )
 from ..workspace.files import NotTextError
 from ..workspace.git import DIFF_MAX_CHARS, GitError, diff, head, is_repository, resolves
@@ -85,7 +84,7 @@ from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
-from ..workspace.source import Source, SourceError
+from ..workspace.source import NAME, Source, SourceError
 
 EXIT_OK = 0
 #: A gate refused, or findings at the bar.
@@ -197,12 +196,14 @@ def _parser() -> _Top:
     propose.add_argument("--tier", choices=("lean", "standard"), help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
     propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
+    propose.add_argument("--with", dest="with_", action="append", default=[], metavar="PATH", help=WITH_HELP)
     propose.set_defaults(handler=_propose)
 
     plan = commands.add_parser("plan", help="draft a change's tasks again, and its design where one is owed")
     plan.add_argument("id", help="the change")
     plan.add_argument("--replace", action="store_true", help="draft anew although a task of the list is ticked")
     plan.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
+    plan.add_argument("--with", dest="with_", action="append", default=[], metavar="PATH", help=WITH_HELP)
     plan.set_defaults(handler=_drafting(_planned))
 
     check = commands.add_parser("check", help="check a change's files against each other, as `approve` does")
@@ -786,14 +787,52 @@ def _of_tasks(found: Finding) -> bool:
     return found.code.startswith("tasks.") or (found.path or "").rsplit("/", 1)[-1] == TASKS_FILE
 
 
-def _source(workspace: Workspace) -> Source | None:
-    """The repository's files, as git lists them once for a command, less what a person excluded: what a stage is
-    shown the names of, and what a reading of the code is made through. None where there is no repository here, or
-    no git to ask."""
+#: What `--with` says in the help.
+WITH_HELP = "another repository the change spans, read with it: PATH, or NAME=PATH (as often as needed)"
+
+
+def _source(workspace: Workspace, repositories: Mapping[str, str] | None = None) -> Source | None:
+    """The repository's files, as git lists them once for a command, less what a person excluded, and those of the
+    other repositories a change names: what a stage is shown the names of, and what a reading of the code is made
+    through. None where there is no repository here, or no git to ask. `SourceError` for a repository that can
+    never be read beside this one."""
+    others = list((repositories or {}).items())
     try:
-        return Source.of(workspace.root, exclude=workspace.config().exclude)
+        return Source.of(workspace.root, exclude=workspace.config().exclude, others=others)
     except GitError:
         return None
+
+
+def _named(given: Sequence[str], held: Mapping[str, str]) -> dict[str, str]:
+    """A change's repositories, `held`, with each `--with` added: `PATH`, named after its folder, or `NAME=PATH`. A
+    name given again takes its new path. `UsageError` for a name that cannot be made, or one named twice at once."""
+    named = dict(held)
+    this_time: set[str] = set()
+    for one in given:
+        name, sep, path = one.partition("=")
+        if not sep or "/" in name or "\\" in name:  # a path alone, which may hold an `=` of its own
+            name, path = "", one
+        path = path.strip().replace("\\", "/")
+        name = name.strip() or re.sub(r"[^a-z0-9-]+", "-", path.rstrip("/").rpartition("/")[2].lower()).strip("-")
+        if not path or not NAME.fullmatch(name):
+            raise UsageError(
+                f"`--with {one}` names no repository adk-spec can name: a to z, digits and `-`, from a letter on. "
+                "Name it as --with NAME=PATH"
+            )
+        if name in this_time:
+            raise UsageError(f"`{name}` is named twice: name each repository once")
+        this_time.add(name)
+        named[name] = path
+    return named
+
+
+def _with_checked(workspace: Workspace, given: Sequence[str], held: Mapping[str, str]) -> dict[str, str]:
+    """`_named`, and each repository named now checked before anything is spent: `SourceError` for one that can
+    never be read beside this one."""
+    named = _named(given, held)
+    if given:
+        _source(workspace, named)
+    return named
 
 
 #: A ticked box of a task list, wherever its line stands: read in the text of a list that no longer parses.
@@ -869,13 +908,15 @@ def _plan_made(
     from ..orchestration.stages.design import read_design
     from ..orchestration.stages.tasks import DESIGN_TEXT, read_tasks
 
-    source = _source(workspace)
+    source = _source(workspace, state.repositories)
+    for missing in source.missing if source else ():
+        print(f"left out  {missing}")
     seed = {
         RULES: constitution_text(workspace),
         BRIEF_TEXT: render_brief(brief),
         DELTAS_TEXT: _deltas_text(change),
         LIVING: living_text(specs, sorted(change.deltas)),
-        TREE: tree_text(source.paths) if source else "",
+        TREE: source.tree() if source else "",
     }
     if change.design and not state.needs_design:  # a design a person wrote, where the brief owed none
         seed[DESIGN_TEXT] = change.design.strip()
@@ -958,7 +999,14 @@ def _read_code(
 
 
 def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
-    """The `plan` command: the plan drafted, and what was written said."""
+    """The `plan` command: the plan drafted, and what was written said. A repository named with `--with` is added to
+    the change first, and checked before anything is spent."""
+    if args.with_:
+        state = workspace.load_change(args.id).change.state
+        named = _with_checked(workspace, args.with_, state.repositories)
+        workspace.save_state(state.model_copy(update={"repositories": named}))
+        if (workspace.home / CHANGES / args.id / CONTEXT_FILE).is_file():
+            print(f"kept      {CONTEXT_FILE} was read before: delete it to read again with what --with named")
     specs, of_specs = workspace.specs()
     made = _plan_made(workspace, args.id, specs, of_specs, replace=args.replace, explore=not args.no_explore)
     if made.explored:
@@ -1196,6 +1244,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     from ..orchestration.stages.deltas import KEY as DELTAS_KEY
     from ..orchestration.stages.triage import read_triage
 
+    _with_checked(workspace, args.with_, {})  # refused before any call, where it can never be read
     specs, of_specs = workspace.specs()
     if of_specs:  # a spec that does not read would pass for a capability not yet there
         _printed(of_specs)
@@ -1302,7 +1351,11 @@ def _written(args: argparse.Namespace, workspace: Workspace, known: Any, state: 
     made = drafted(state, known)
     change_id = args.id or slug_of(made.brief.title, workspace.names_held())
     held = ChangeState(
-        id=change_id, tier=tier, bases=capture_bases(made.deltas, known.living), needs_design=made.needs_design
+        id=change_id,
+        tier=tier,
+        bases=capture_bases(made.deltas, known.living),
+        needs_design=made.needs_design,
+        repositories=_named(args.with_, {}),
     )
     files = files_of(made)
     folder = workspace.write_change(held, files)

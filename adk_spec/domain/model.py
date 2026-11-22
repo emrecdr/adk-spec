@@ -178,6 +178,9 @@ class ChangeState(_Held):
     #: began, and what `verify` compares it with. It is the change's, not one approval's: approving again after an
     #: edit, or after a rebase, does not move it past work already done.
     base_commit: str | None = None
+    #: The other repositories the change spans, each a name and a path from the folder that holds `.spec/`, with
+    #: forward slashes: read, approved and verified with this change alone. Named with `--with`.
+    repositories: dict[str, str] = {}
 
 
 class Change(_Held):

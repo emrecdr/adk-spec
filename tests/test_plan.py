@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import pytest
-from conftest import CANNED_TASKS, approved, between, on_the_fake, repository, run, seeded
+from conftest import CANNED_TASKS, approved, between, on_the_fake, repository, run, seeded, state_of
 from samples import DELTA, SPEC, tasks_for
 
 from adk_spec.domain.spec_md import parse_spec
+from adk_spec.interfaces import cli
 from adk_spec.workspace.files import read_text, write_text
 
 DESIGN, TASKS = "You write the design of a change", "You break a change into tasks"
@@ -356,3 +357,78 @@ def test_a_context_that_is_no_text_is_said_and_not_read_as_none(tmp_path, capsys
     (tmp_path / CONTEXT).write_bytes(bytes([0xFF, 0xFE, 0x43, 0x00]))
     assert run(tmp_path, "plan", "passkeys", "--replace") == 2
     assert "context.md is not UTF-8" in capsys.readouterr().err and fake_provider.requests == []
+
+
+# The other repositories a change spans: phase 7.
+
+API = {"src/routes.py": "def sign_in(request):\n    return start_session(request.user)\n"}
+ROUTES = {
+    "kind": "touches",
+    "file": "api/src/routes.py",
+    "quote": "return start_session(request.user)",
+    "note": "Here.",
+}
+
+
+def beside(tmp_path):
+    """A workspace and its change in a repository, and an API repository beside it: the workspace's root."""
+    root = tmp_path / "app"
+    seeded(root)
+    repository(root)
+    repository(tmp_path / "api", API)
+    return root
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_plan_with_adds_a_repository_and_a_name_given_again_takes_its_new_path(tmp_path) -> None:
+    root = beside(tmp_path)
+    repository(tmp_path / "api-2", API)
+    assert run(root, "plan", "passkeys", "--replace", "--no-explore", "--with", "../api") == 0
+    assert state_of(root, "passkeys")["repositories"] == {"api": "../api"}
+    assert run(root, "plan", "passkeys", "--replace", "--no-explore", "--with", "api=../api-2", "--with", "../web") == 0
+    assert state_of(root, "passkeys")["repositories"] == {"api": "../api-2", "web": "../web"}
+
+
+def test_the_scout_is_shown_each_repository_and_a_statement_may_name_one(tmp_path, fake_provider) -> None:
+    root = beside(tmp_path)
+    fake_provider.answers_when(SCOUT, {"files": ["api/src/routes.py"], "folders": [], "searches": [], "reason": "API."})
+    fake_provider.answers_when(
+        SURVEY, {"statements": [ROUTES], "more_files": [], "more_folders": [], "more_searches": []}
+    )
+    assert run(root, "plan", "passkeys", "--replace", "--with", "../api") == 0
+    assert "=== api (1 file)\napi/src/routes.py" in between(
+        str(fake_provider.requests[0].config.system_instruction), "tree"
+    )
+    assert "- `api/src/routes.py:2` Here.\n  > return start_session(request.user)" in read_text(root / CONTEXT)
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_missing_repository_is_said_and_the_plan_goes_on(tmp_path, capsys) -> None:
+    root = beside(tmp_path)
+    capsys.readouterr()
+    assert run(root, "plan", "passkeys", "--replace", "--with", "../web") == 0
+    out = capsys.readouterr().out
+    assert "left out  web: no git repository at ../web\n" in out and ".spec/changes/passkeys/tasks.md" in out
+
+
+@pytest.mark.parametrize(
+    "given", [["--with", ".."], ["--with", "9x=../a"], ["--with", "api=../a", "--with", "api=../b"]]
+)
+def test_a_with_whose_name_cannot_be_made_is_refused(tmp_path, fake_provider, given) -> None:
+    root = beside(tmp_path)
+    assert run(root, "plan", "passkeys", "--replace", *given) == 2
+    assert fake_provider.requests == [] and not state_of(root, "passkeys").get("repositories")
+
+
+def test_a_path_typed_with_backslashes_is_recorded_with_slashes() -> None:
+    assert cli._named(["..\\api"], {}) == {"api": "../api"}
+
+
+def test_plan_with_on_a_change_that_has_a_context_keeps_it_and_says_how_to_read_again(
+    tmp_path, capsys, fake_provider
+) -> None:
+    root = beside(tmp_path)
+    write_text(root / CONTEXT, "# Context: passkeys\n\nRead by hand.\n")
+    capsys.readouterr()
+    assert run(root, "plan", "passkeys", "--replace", "--with", "../api") == 0
+    assert "delete it to read again" in capsys.readouterr().out and stages(fake_provider) == ["tasks"]

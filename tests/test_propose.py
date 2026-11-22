@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from conftest import CANNED_TRIAGE, DELTAS_ON_A_MISSING_ID, approved, on_the_fake, run, seeded, state_of
+from conftest import CANNED_TRIAGE, DELTAS_ON_A_MISSING_ID, approved, on_the_fake, repository, run, seeded, state_of
 
 from adk_spec.interfaces import cli
 from adk_spec.orchestration.stages import BOUNDARY
@@ -479,3 +479,28 @@ def test_propose_reads_the_code_once_the_change_is_written(tmp_path, capsys, fak
     assert "explored  1 file: 1 statement kept" in out and ".spec/changes/read/context.md" in out
     assert proposed(tmp_path, "--tier", "lean", "--id", "unread", "--no-explore") == 0
     assert not (tmp_path / ".spec/changes/unread/context.md").exists()
+
+
+# The other repositories a change spans, named with it.
+
+API = {"src/routes.py": "def sign_in(request):\n    return start_session(request.user)\n"}
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_propose_records_the_repositories_named_with_the_change(tmp_path) -> None:
+    root = tmp_path / "app"
+    seeded(root)
+    repository(root)
+    repository(tmp_path / "api", API)
+    repository(tmp_path / "web-app", {"index.js": "export const x = 1;\n"})
+    assert proposed(root, "--id", "passkey-sign-in", "--with", "../api", "--with", "web=../web-app") == 0
+    assert state_of(root, "passkey-sign-in")["repositories"] == {"api": "../api", "web": "../web-app"}
+
+
+def test_a_repository_that_cannot_stand_beside_this_one_is_refused_before_any_call(
+    tmp_path, capsys, fake_provider
+) -> None:
+    seeded(tmp_path)
+    repository(tmp_path)
+    assert proposed(tmp_path, "--with", "api=.") == 2
+    assert "this repository itself" in capsys.readouterr().err and fake_provider.requests == []
