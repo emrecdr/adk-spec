@@ -59,7 +59,7 @@ an MCP server, which the owner chose on 22 November 2026, starts with its design
 ## Roadmap: the phases to come
 
 The order is a recommendation, changed on 22 November 2026 after the golden rule and the research on it
-(`research_notes/Simple command flows in spec tools/`): the simple flow now comes first, so that reading the code
+(`docs/research_notes/Simple command flows in spec tools/`): the simple flow now comes first, so that reading the code
 is built once, in its final place inside `propose`.
 
 Each phase says what features it adds and what a person can do once it is finished.

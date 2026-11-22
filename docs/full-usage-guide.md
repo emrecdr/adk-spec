@@ -6,7 +6,7 @@
 
 > **Core Thesis:** **Models draft, explore, clarify, and judge; Python owns the files, requirement IDs, structural checks, SHA-256 approvals, secret/key guards, and atomic spec merge.** Every capability—whether you run `adk-spec` today or after Phase 13—keeps human decisions cleanly separated from deterministic guardrails.
 
-For installation and current command syntax, see [README.md](../README.md). For research foundations and the roadmap, see [Spec driven framework on Google ADK.md](../reports/Spec%20driven%20framework%20on%20Google%20ADK.md) and [plans/README.md](superpowers/plans/README.md).
+For installation and current command syntax, see [README.md](../README.md). For research foundations and the roadmap, see [Spec driven framework on Google ADK.md](reports/Spec%20driven%20framework%20on%20Google%20ADK.md) and [plans/README.md](superpowers/plans/README.md).
 
 ---
 
@@ -418,4 +418,4 @@ What `strict` adds on top of `standard` `[Built: P13]`:
 
 ### Next: Phase 14 (decided in `plans/README.md`)
 
-The owner decided on 22 November 2026 how `adk-spec` is used alongside the terminal: **inside coding assistants, as an MCP server**, exposing the everyday commands as tools to VS Code GitHub Copilot and Claude Code so you stay inside your editor's model lineup, with the same files, checks and approvals as the terminal. A standalone Web Workbench or TUI ([02-adk-spec-framework-architecture-and-roadmap.md](../reports/02-adk-spec-framework-architecture-and-roadmap.md)) was not chosen.
+The owner decided on 22 November 2026 how `adk-spec` is used alongside the terminal: **inside coding assistants, as an MCP server**, exposing the everyday commands as tools to VS Code GitHub Copilot and Claude Code so you stay inside your editor's model lineup, with the same files, checks and approvals as the terminal. A standalone Web Workbench or TUI ([02-adk-spec-framework-architecture-and-roadmap.md](reports/02-adk-spec-framework-architecture-and-roadmap.md)) was not chosen.

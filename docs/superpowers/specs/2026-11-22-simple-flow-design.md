@@ -33,7 +33,7 @@ A lean change needs three of the four: it owes no verification, as today.
 
 ## What the research found
 
-Four sets of notes are in `research_notes/Simple command flows in spec tools/`.
+Four sets of notes are in `docs/research_notes/Simple command flows in spec tools/`.
 
 | Finding | Where it comes from | What it decides here |
 |---|---|---|

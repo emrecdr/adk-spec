@@ -51,7 +51,7 @@ required-version = ">=0.12"
 [tool.ruff]
 line-length = 120
 target-version = "py314"
-extend-exclude = ["research_notes", "reports"]
+extend-exclude = ["docs/research_notes", "docs/reports"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "ARG", "ASYNC", "RUF", "BLE001", "S607", "SIM", "RET", "C4", "PIE", "PT", "C90", "PERF", "FURB"]
@@ -64,7 +64,7 @@ max-complexity = 10
 "tests/*" = ["S607"]
 
 [tool.pyrefly]
-project-excludes = ["tests/**", "research_notes/**"]
+project-excludes = ["tests/**", "docs/research_notes/**"]
 
 [tool.pyrefly.errors]
 # ADK declares LlmAgent(BaseAgent, abc.ABC) with no abstract method.

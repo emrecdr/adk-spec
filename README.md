@@ -282,5 +282,6 @@ to one.
 
 ## Where things are
 
-- `reports/Spec driven framework on Google ADK.md`: the research this project rests on.
+- `docs/reports/Spec driven framework on Google ADK.md`: the research this project rests on; `docs/research_notes/`
+  holds the notes behind it, and `docs/reports/` the owner's own reports.
 - `docs/superpowers/plans/`: the implementation plans.

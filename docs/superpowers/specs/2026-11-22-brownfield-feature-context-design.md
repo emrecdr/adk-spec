@@ -37,8 +37,8 @@ the design and the tasks are drafted from that.
 - **The reference project has solved the dangerous parts.** `adk_review` scrubs known secret shapes from every
   request a model is sent, by a plugin that fails closed, and treats every argument a model chooses as untrusted.
 
-Sources: `research_notes/Simple command flows in spec tools/openspec_command_flow.md`, and in
-`research_notes/Spec driven framework on Google ADK/`: `speckit_internals.md`, `sdd_comparison_and_critique.md`.
+Sources: `docs/research_notes/Simple command flows in spec tools/openspec_command_flow.md`, and in
+`docs/research_notes/Spec driven framework on Google ADK/`: `speckit_internals.md`, `sdd_comparison_and_critique.md`.
 
 ## Goals
 

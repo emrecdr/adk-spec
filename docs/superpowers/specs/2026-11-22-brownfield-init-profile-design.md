@@ -32,7 +32,7 @@ is already true.
   "You write specs only for what you're about to change."
 - **So this phase writes no spec of the existing system**: a profile and drafted rules, each statement resting on a
   quote code found, which is what adk-spec adds over both.
-- Source: `research_notes/Spec driven framework on Google ADK/speckit_internals.md`, sections on the constitution
+- Source: `docs/research_notes/Spec driven framework on Google ADK/speckit_internals.md`, sections on the constitution
   and on brownfield.
 
 ## Goals

@@ -8,7 +8,7 @@
 
 **Tech Stack:** As plans 1 and 2: Python 3.14, uv, google-adk 2.14.1, LiteLLM 1.106.2, Pydantic 2, pytest. No new dependency. Git is run as a program, through this package's own layer.
 
-**Spec:** `reports/Spec driven framework on Google ADK.md` (the sections "Lifecycle, gates and keeping specs alive", "Version 1", "Migration" and "Testing and evaluation"); plans 1 and 2, whose sections "What changed while this plan was executed" are binding here; and `docs/confirmation/2026-11-propose.md`, whose seven findings and five decisions this plan answers.
+**Spec:** `docs/reports/Spec driven framework on Google ADK.md` (the sections "Lifecycle, gates and keeping specs alive", "Version 1", "Migration" and "Testing and evaluation"); plans 1 and 2, whose sections "What changed while this plan was executed" are binding here; and `docs/confirmation/2026-11-propose.md`, whose seven findings and five decisions this plan answers.
 
 Written on 21 November 2026. Plan 2's file name runs a day ahead of the day it was written.
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** As plans 1 to 3. No new dependency.
 
-**Spec:** `reports/Spec driven framework on Google ADK.md`, the section "Migration: one stage per release, chosen by the ledger, proven by replay"; plan 3 (`docs/superpowers/plans/2026-11-21-adk-spec-check-and-verify.md`) with what changed in it; `docs/confirmation/2026-11-propose.md`; and `docs/measurements/2026-11-copilot-gpt-4.1-second.md`, whose decisions Task 3 carries out.
+**Spec:** `docs/reports/Spec driven framework on Google ADK.md`, the section "Migration: one stage per release, chosen by the ledger, proven by replay"; plan 3 (`docs/superpowers/plans/2026-11-21-adk-spec-check-and-verify.md`) with what changed in it; `docs/confirmation/2026-11-propose.md`; and `docs/measurements/2026-11-copilot-gpt-4.1-second.md`, whose decisions Task 3 carries out.
 
 Written on 21 November 2026, on the owner's choice of this piece over tests as evidence for `verify`.
 

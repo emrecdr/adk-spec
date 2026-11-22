@@ -8,7 +8,7 @@
 
 **Tech Stack:** As plan 1: Python 3.14, uv, google-adk 2.14.1, LiteLLM 1.106.2, Pydantic 2, pytest. No new dependency.
 
-**Spec:** `reports/Spec driven framework on Google ADK.md`; plan 1 (`docs/superpowers/plans/2026-11-21-adk-spec-foundation.md`), whose sections "What changed while this plan was executed" and "Design inputs recorded for plan 2" are binding here; and `docs/confirmation/2026-11-smoke.md`.
+**Spec:** `docs/reports/Spec driven framework on Google ADK.md`; plan 1 (`docs/superpowers/plans/2026-11-21-adk-spec-foundation.md`), whose sections "What changed while this plan was executed" and "Design inputs recorded for plan 2" are binding here; and `docs/confirmation/2026-11-smoke.md`.
 
 ## Where this plan starts from
 
@@ -19,7 +19,7 @@ That choice is safe for what the plan builds, and unsafe for one thing:
 - **Safe.** Every task is built and tested against the fake model, through the real engine. The stages name no provider: the arm is isolated in `orchestration/models.py`. Whatever model ends up answering, these stages do not change.
 - **Unsafe.** Nothing here shows that a real model fills these schemas well. Task 9 is the first evidence, and it needs Task 1 to find a model that answers.
 
-Two engine behaviours this design rests on were run offline on the pinned pair (`research_notes/Spec driven framework on Google ADK/adk_hands_on_scripts/q16_plan2_mismatch_retry_pause_probe.py`):
+Two engine behaviours this design rests on were run offline on the pinned pair (`docs/research_notes/Spec driven framework on Google ADK/adk_hands_on_scripts/q16_plan2_mismatch_retry_pause_probe.py`):
 
 - With a plugin that turns an answer off its schema into an error response, the workflow goes on to the next node with `node_input=None` and the stage's key unwritten. A gate node can then route back. Without the plugin the run raises and ends.
 - A `RequestInput` pause inside an `App` with plugins is answered in the same process by a function response named `adk_request_input`, and the answer arrives as the next node's `node_input`.

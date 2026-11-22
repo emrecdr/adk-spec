@@ -8,7 +8,7 @@
 
 **Tech Stack:** As plans 1 to 4. No new dependency.
 
-**Spec:** `docs/superpowers/specs/2026-11-22-simple-flow-design.md` (approved 22 November 2026). Evidence for every merge, with file and line: `research_notes/Simple command flows in spec tools/adk_spec_current_flow.md`, section 5.
+**Spec:** `docs/superpowers/specs/2026-11-22-simple-flow-design.md` (approved 22 November 2026). Evidence for every merge, with file and line: `docs/research_notes/Simple command flows in spec tools/adk_spec_current_flow.md`, section 5.
 
 ## Global Constraints
 

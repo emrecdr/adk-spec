@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.14, uv, google-adk 2.14.1 (graph `Workflow`), LiteLLM 1.106.2 (Copilot arm), google-genai (Gemini arm), Pydantic 2, pytest with pytest-asyncio, Ruff, Pyrefly, GitHub Actions on three operating systems.
 
-**Spec:** `reports/Spec driven framework on Google ADK.md`. The evidence it rests on is in `research_notes/Spec driven framework on Google ADK/`, chiefly `adk_hands_on_verification.md` (executed runs) and `adk_review_reference_setup.md`. The reference project is `/Users/emrec/Projects/playground/adk_review` (read-only; never read its `.env` or `.venv`).
+**Spec:** `docs/reports/Spec driven framework on Google ADK.md`. The evidence it rests on is in `docs/research_notes/Spec driven framework on Google ADK/`, chiefly `adk_hands_on_verification.md` (executed runs) and `adk_review_reference_setup.md`. The reference project is `/Users/emrec/Projects/playground/adk_review` (read-only; never read its `.env` or `.venv`).
 
 ## Plan series
 
@@ -62,7 +62,7 @@ One decision is open for the owner, and Task 5 measures it: **whether to add `mc
 - The test suite calls no model and no network, and reads neither the developer's `.env` nor a real Copilot token.
 - `.env` is read at the adk-spec checkout's root only, never from the repository being worked on. The shell wins over the file. No credential is committed.
 - Exit codes: 0 done, 1 a gate refused or findings at the bar, 2 a usage or configuration error, 3 the engine or the provider failed, 130 interrupted. No traceback reaches the person.
-- Do not edit `reports/01-…` to `03-…` or `research_notes/**/01-…` to `06-…`. They are the owner's.
+- Do not edit `docs/reports/01-…` to `03-…` or `docs/research_notes/**/01-…` to `06-…`. They are the owner's.
 - The gate, run before every commit: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyrefly check`, `uv run pytest -q`. All four pass.
 - A test is named as the sentence it proves. A helper several tests need goes into `tests/conftest.py` or `tests/samples.py`.
 
@@ -2439,7 +2439,7 @@ Sources and their weight: `code.claude.com/docs/en/claude-projects` (current; it
 
 ## Evidence behind the ADK details in this plan
 
-The assertions about the pinned pair were run on 2026-11-21 with `google-adk` 2.14.1 and `litellm` 1.106.2 on Python 3.14.10 (macOS, no provider contacted). Script and output: `research_notes/Spec driven framework on Google ADK/adk_hands_on_scripts/q14_pinned_pair_probe.py` and `out_q14_pinned_pair_2141_litellm_1106_2.txt`. Confirmed there: `LiteLlm` keeps `max_retries` and `_skip_mcp_handler` in `_additional_args`; no `temperature` is passed when the request sets none, and the deadline arrives as `timeout=180.0`; `litellm.model_cost` holds `gpt-5.3-codex`, `gpt-6-luna` (both `mode: responses`) and `claude-sonnet-5.5` (`mode: chat`) and lacks `gpt-6.1-terra`; `FallbackModel.DEFAULT_STATUS_CODES` is 429 and the 5xx codes; a schema-bound `LlmAgent` in a one-node `Workflow` reads seeded state through `{request}` without expanding braces inside the value; an answer off the schema raises `pydantic.ValidationError` with the workflow as the error event's author; `ntpath.isreserved` refuses `con`, `nul.md`, `auth.` and `auth ` on macOS and does not refuse `a:b`; `LLMRegistry` resolves `gpt-5.3-codex` to `OpenAILlm`.
+The assertions about the pinned pair were run on 2026-11-21 with `google-adk` 2.14.1 and `litellm` 1.106.2 on Python 3.14.10 (macOS, no provider contacted). Script and output: `docs/research_notes/Spec driven framework on Google ADK/adk_hands_on_scripts/q14_pinned_pair_probe.py` and `out_q14_pinned_pair_2141_litellm_1106_2.txt`. Confirmed there: `LiteLlm` keeps `max_retries` and `_skip_mcp_handler` in `_additional_args`; no `temperature` is passed when the request sets none, and the deadline arrives as `timeout=180.0`; `litellm.model_cost` holds `gpt-5.3-codex`, `gpt-6-luna` (both `mode: responses`) and `claude-sonnet-5.5` (`mode: chat`) and lacks `gpt-6.1-terra`; `FallbackModel.DEFAULT_STATUS_CODES` is 429 and the 5xx codes; a schema-bound `LlmAgent` in a one-node `Workflow` reads seeded state through `{request}` without expanding braces inside the value; an answer off the schema raises `pydantic.ValidationError` with the workflow as the error event's author; `ntpath.isreserved` refuses `con`, `nul.md`, `auth.` and `auth ` on macOS and does not refuse `a:b`; `LLMRegistry` resolves `gpt-5.3-codex` to `OpenAILlm`.
 
 A second probe replaced only the network, below LiteLLM (`q15_copilot_below_litellm_probe.py`, `out_q15_copilot_below_litellm.txt`). Confirmed there: `github_copilot/claude-sonnet-5.5` goes to `/chat/completions` with a strict `json_schema` response format, and its instruction is a `system` turn only while `disable_copilot_system_to_assistant` is true (an `assistant` turn otherwise); `gpt-5.3-codex` and `gpt-6-luna` fail with `No module named 'mcp'`, because `litellm/responses/main.py` imports the MCP handler before it reads `skip_mcp_handler`; with `mcp` 2.3.0 installed both go to `/responses` with the instruction as `instructions` and the schema under `text.format`, and a Responses-shaped answer is read back. The answer's shape in that probe is an assumption, not Copilot's own.
 
