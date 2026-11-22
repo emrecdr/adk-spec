@@ -53,8 +53,8 @@ def test_an_open_point_becomes_a_question_with_no_model_asked_to_word_it(
     out = capsys.readouterr().out
     assert f"1. {ASKED}" in out and "suggested: Evergreen browsers only" in out
     assert "The brief leaves 1 point open." in out
-    assert "triage 120 in 1 call, brief 240 in 2 calls, deltas 120 in 1 call: 480 total" in out
-    assert len(fake_provider.requests) == 4, "triage, two briefs and the deltas: no call words a question"
+    assert "triage 120 in 1 call, brief 240 in 2 calls, deltas 120 in 1 call, tasks 120 in 1 call: 600 total" in out
+    assert len(fake_provider.requests) == 5, "triage, two briefs, the deltas and the tasks: no call words a question"
 
 
 def test_the_suggestion_is_taken_with_an_equals_sign(tmp_path, monkeypatch, fake_provider) -> None:
@@ -104,7 +104,8 @@ def test_no_input_asks_nothing_and_the_lean_tier_asks_nothing(tmp_path, capsys, 
     fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
     assert proposed(tmp_path, "--tier", "standard", "--no-input", "--id", "quiet") == 0
     assert proposed(tmp_path, "--tier", "lean", "--id", "lean-one") == 0
-    assert "A line answers" not in capsys.readouterr().out and len(fake_provider.requests) == 4
+    assert "A line answers" not in capsys.readouterr().out
+    assert len(fake_provider.requests) == 6, "a brief, the deltas and the tasks, twice"
     for change in ("quiet", "lean-one"):
         assert len(markers(brief_md(tmp_path, change))) == 1, "the point stands in the file, for a person to settle"
 

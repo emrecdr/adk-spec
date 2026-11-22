@@ -25,11 +25,18 @@ def kept(root) -> list:
     return [read(path) for path in listed(Workspace.find(root))]
 
 
+def of(root, command: str):
+    """The one recording of `command` under `root`. A `propose` leaves two: its own, and its plan's."""
+    (held,) = [one for one in kept(root) if one.command == command]
+    return held
+
+
 def test_each_call_is_recorded_with_what_was_sent_and_what_came_back(tmp_path, fake_provider) -> None:
     seeded(tmp_path)
     fake_provider.answers_each_time(DELTAS, iter(["not json", None]))
     assert run(tmp_path, "propose", REQUEST, "--id", "kept") == 0
-    (held,) = kept(tmp_path)
+    held, plan = of(tmp_path, "propose"), of(tmp_path, "plan")
+    assert (plan.change, plan.outcome, [call.stage for call in plan.calls]) == ("kept", "answered", ["tasks"])
     assert (held.command, held.change, held.outcome, held.model) == ("propose", "kept", "written", "fake on gemini")
     assert [call.stage for call in held.calls] == ["triage", "brief", "deltas", "deltas"]
     assert held.calls[2].answer == "not json" and held.calls[2].findings is None
@@ -70,9 +77,10 @@ def test_a_recording_is_ignored_by_git_and_holds_no_key(tmp_path, monkeypatch, f
     monkeypatch.setenv("GOOGLE_API_KEY", "a-secret-key-value")
     seeded(tmp_path)
     assert run(tmp_path, "propose", REQUEST, "--tier", "lean", "--id", "kept") == 0
-    (path,) = listed(Workspace.find(tmp_path))
+    paths = listed(Workspace.find(tmp_path))
     assert read_text(tmp_path / ".spec/runs/.gitignore") == "*\n"
-    assert "a-secret-key-value" not in read_text(path) and len(fake_provider.requests) == 2
+    assert len(paths) == 2 and len(fake_provider.requests) == 3
+    assert all("a-secret-key-value" not in read_text(path) for path in paths)
 
 
 def test_only_the_newest_runs_are_kept(tmp_path, fake_provider) -> None:
@@ -80,15 +88,15 @@ def test_only_the_newest_runs_are_kept(tmp_path, fake_provider) -> None:
     write_text(tmp_path / ".spec/config.toml", LIMITS + "keep_runs = 2\n")
     for name in ("one", "two", "three"):
         assert run(tmp_path, "propose", REQUEST, "--tier", "lean", "--id", name) == 0
-    assert [held.change for held in kept(tmp_path)] == ["three", "two"]
-    assert len(fake_provider.requests) == 6
+    assert [held.change for held in kept(tmp_path)] == ["three", "three"], "a propose leaves two: its own, its plan's"
+    assert len(fake_provider.requests) == 9
 
 
 def test_keeping_no_runs_writes_none(tmp_path, fake_provider) -> None:
     seeded(tmp_path)
     write_text(tmp_path / ".spec/config.toml", LIMITS + "keep_runs = 0\n")
     assert run(tmp_path, "propose", REQUEST, "--tier", "lean", "--id", "unkept") == 0
-    assert not (tmp_path / ".spec/runs").exists() and len(fake_provider.requests) == 2
+    assert not (tmp_path / ".spec/runs").exists() and len(fake_provider.requests) == 3
 
 
 @pytest.mark.parametrize("value", ["-1", '"many"', "1.5", "true"])
@@ -112,15 +120,17 @@ def test_a_recording_replays_to_the_same_files(tmp_path, fake_provider) -> None:
     seeded(first)
     fake_provider.answers_each_time(DELTAS, iter(["not json", None]))
     assert run(first, "propose", REQUEST, "--id", "kept") == 0
-    (recorded,) = kept(first)
+    recorded = kept(first)
     fake_provider.clear()
-    fake_provider.answers_from(recorded)
+    for held in recorded:
+        fake_provider.answers_from(held)
     seeded(second)
     assert run(second, "propose", REQUEST, "--id", "kept") == 0
-    for file in ("brief.md", "specs/auth/spec.md"):
+    for file in ("brief.md", "specs/auth/spec.md", "tasks.md"):
         assert read_text(second / ".spec/changes/kept" / file) == read_text(first / ".spec/changes/kept" / file)
-    (again,) = kept(second)
-    assert [(c.stage, c.answer) for c in again.calls] == [(c.stage, c.answer) for c in recorded.calls]
+    for command in ("propose", "plan"):
+        was, again = of(first, command), of(second, command)
+        assert [(c.stage, c.answer) for c in again.calls] == [(c.stage, c.answer) for c in was.calls]
 
 
 def test_init_ignores_the_lock(tmp_path) -> None:

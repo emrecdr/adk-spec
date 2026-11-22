@@ -652,7 +652,8 @@ def _propose(args: argparse.Namespace) -> int:
         workspace.free(args.id)  # a name that cannot be taken is refused before anything is spent
     from ..orchestration.models import require_ready
 
-    drafting = ("brief", "deltas")  # a tier given by hand is not asked of triage
+    # Every role of the whole command, asked before anything is spent. A tier given by hand is not asked of triage.
+    drafting = ("brief", "deltas", "design", "tasks")
     if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
         raise UsageError(why)
     with lock_held(workspace):
@@ -679,13 +680,17 @@ def _asked(
     build: Callable[[Any, Any], Any],
     seed: dict[str, Any],
     read: Callable[[dict[str, Any]], Any],
+    *,
+    ledger: Any = None,
 ) -> tuple[Any, Any, Any, str | None]:
     """One recorded run of an app that `build` makes from the command's ledger and its recorder: the run, the
-    answer `read` finds in its state, the ledger, and the failure where there is no answer to use."""
+    answer `read` finds in its state, the ledger, and the failure where there is no answer to use. A command that
+    makes more than one pass hands its own `ledger` on, so the ceiling is the command's and not a pass's."""
     from ..orchestration.gate import FAILURE
     from ..orchestration.plugins import UsageLedger
 
-    ledger = UsageLedger(workspace.config().max_tokens or None)
+    if ledger is None:
+        ledger = UsageLedger(workspace.config().max_tokens or None)
     with _recording(workspace, command, change_id) as kept:
         run = _ran(build(ledger, kept.recorder), seed, command)
         answer = read(run.state)
@@ -724,36 +729,50 @@ def _tree(workspace: Workspace) -> str:
 _TICKED = re.compile(r"(?m)^\s*-\s*\[[xX]\]")
 
 
-def _plannable(args: argparse.Namespace, workspace: Workspace, assessed: Assessed, of_specs: list[Finding]) -> Brief:
+def _plannable(
+    change_id: str, replace: bool, workspace: Workspace, assessed: Assessed, of_specs: list[Finding]
+) -> Brief:
     """The brief of a change that is to be planned now. `NotYetError` where it is not: it is no draft, work on its
     task list has begun and replacing it was not asked for, or what the tasks are drafted from does not read."""
     change, state = assessed.loaded.change, assessed.state
     if state.status != "draft":  # new tasks would void what was approved
-        raise NotYetError(f"`{args.id}` is {state.status}: a plan is drafted while a change is a draft")
+        raise NotYetError(f"`{change_id}` is {state.status}: a plan is drafted while a change is a draft")
     started = sum(task.done for group in change.tasks or () for task in group.tasks)
     if change.tasks is None:  # a list off its grammar reads as none: its boxes are counted in its text
-        started = len(_TICKED.findall(workspace.approval_texts(args.id).get(TASKS_FILE, "")))
-    if started and not args.replace:  # work has begun on this list: it is not thrown away unasked
+        started = len(_TICKED.findall(workspace.approval_texts(change_id).get(TASKS_FILE, "")))
+    if started and not replace:  # work has begun on this list: it is not thrown away unasked
         raise NotYetError(
-            f"`{args.id}` has {started} of its tasks ticked. A new plan would replace the list: run "
-            f"`{PROG} plan {args.id} --replace` if that is meant"
+            f"`{change_id}` has {started} of its tasks ticked. A new plan would replace the list: run "
+            f"`{PROG} plan {change_id} --replace` if that is meant"
         )
     if of_specs:  # a task may serve a requirement of any living spec: which exist is unknown while one is unread
         _printed(of_specs)
-        raise NotYetError(f"`{args.id}` is not planned: a living spec does not read. Fix it first")
+        raise NotYetError(f"`{change_id}` is not planned: a living spec does not read. Fix it first")
     # What must be right before tasks are worth drafting: everything but the tasks themselves.
     blocking = [held for held in assessed.findings if held.severity == "ERROR" and not _of_tasks(held)]
     if blocking or change.brief is None:
         _printed(blocking)
-        raise NotYetError(f"`{args.id}` is not planned: its brief and deltas have errors. Fix them first")
+        raise NotYetError(f"`{change_id}` is not planned: its brief and deltas have errors. Fix them first")
     return change.brief
 
 
-def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
+@dataclass
+class _Planned:
+    """A plan as it was drafted: each file written, with its path and whether it replaced one; the ledger of the
+    model's pass; and why the pass did not end well, where it did not, in which case nothing was written."""
+
+    written: list[tuple[str, Path, bool]] = field(default_factory=list)
+    ledger: Any = None
+    failure: str | None = None
+
+
+def _plan_made(workspace: Workspace, change_id: str, *, replace: bool, ledger: Any = None) -> _Planned:
+    """A draft change's tasks drafted, and first its design where the brief owes one, with nothing printed. What
+    `plan` does, and what `propose` does once its change is written, on the ledger of the whole command."""
     specs, of_specs = workspace.specs()
-    assessed = _assessed(workspace, args.id, specs)
+    assessed = _assessed(workspace, change_id, specs)
     change, state = assessed.loaded.change, assessed.state
-    brief = _plannable(args, workspace, assessed, of_specs)
+    brief = _plannable(change_id, replace, workspace, assessed, of_specs)
     from ..orchestration.models import require_ready
 
     roles = ("design", "tasks") if state.needs_design else ("tasks",)
@@ -779,19 +798,28 @@ def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     def build(ledger: Any, recorder: Any) -> Any:
         return build_plan_app(design=state.needs_design, ledger=ledger, recorder=recorder, **serves)
 
-    run, tasks, ledger, failure = _asked(workspace, "plan", args.id, build, seed, read_tasks)
+    run, tasks, ledger, failure = _asked(workspace, "plan", change_id, build, seed, read_tasks, ledger=ledger)
     if failure:
-        return _unfinished(f"no plan was written: {failure}", ledger)
+        return _Planned(ledger=ledger, failure=failure)
     files = {TASKS_FILE: render_tasks(to_tasks(tasks))}
     design = read_design(run.state) if state.needs_design else None
     if design is not None and not isinstance(design, str):
-        files[DESIGN_FILE] = render_design(design)
-    folder = workspace.home / CHANGES / args.id
+        files = {DESIGN_FILE: render_design(design), **files}  # the design first: it is what a person reads first
+    folder = workspace.home / CHANGES / change_id
     there = {name for name in files if (folder / name).is_file()}
-    for name, path in zip(files, workspace.write_into(args.id, files), strict=True):
-        print(f"{'replaced' if name in there else 'wrote':<10}{workspace.shown(path)}")
-    print(f"tokens    {_spent(ledger)}")
-    _say_next(workspace, args.id, specs)
+    paths = workspace.write_into(change_id, files)
+    return _Planned([(name, path, name in there) for name, path in zip(files, paths, strict=True)], ledger)
+
+
+def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
+    """The `plan` command: the plan drafted, and what was written said."""
+    made = _plan_made(workspace, args.id, replace=args.replace)
+    if made.failure:
+        return _unfinished(f"no plan was written: {made.failure}", made.ledger)
+    for _name, path, replaced in made.written:
+        print(f"{'replaced' if replaced else 'wrote':<10}{workspace.shown(path)}")
+    print(f"tokens    {_spent(made.ledger)}")
+    _say_next(workspace, args.id, workspace.specs()[0])
     return EXIT_OK
 
 
@@ -1025,8 +1053,22 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
             print(f"tokens    {_spent(ledger)}")
             return EXIT_USAGE
         kept.outcome = "written"
+    # The plan, in the same command and under the same ceiling. The change is written by now: a plan that does not
+    # end well leaves it a draft, and `plan` finishes it.
+    change_id = kept.change or ""
+    made = _plan_made(workspace, change_id, replace=False, ledger=ledger)
+    if made.failure:
+        print(
+            f"{PROG}: the brief and the specs are written, and the plan is not: {made.failure}. Run "
+            f"`{PROG} plan {change_id}` to finish it",
+            file=sys.stderr,
+        )
+        print(f"tokens    {_spent(ledger)}")
+        return EXIT_ENGINE
+    for _name, path, _replaced in made.written:
+        print(f"          {workspace.shown(path)}")
     print(f"tokens    {_spent(ledger)}")
-    _say_next(workspace, kept.change or "", specs)
+    _say_next(workspace, change_id, specs)
     return EXIT_OK
 
 
@@ -1064,8 +1106,6 @@ def _written(args: argparse.Namespace, workspace: Workspace, known: Any, state: 
     print(f"wrote     {workspace.shown(folder)}, a {tier} draft")
     for path in files:
         print(f"          {workspace.shown(folder)}/{path}")
-    if made.needs_design:
-        print(f"design    owed: {plain(made.design_reason) or 'the brief gives no reason'}")
     return change_id
 
 

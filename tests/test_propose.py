@@ -33,17 +33,17 @@ def _fake_arm(monkeypatch) -> None:
     on_the_fake(monkeypatch)
 
 
-def test_propose_writes_a_lean_change_a_person_can_plan_and_approve(tmp_path, capsys, fake_provider) -> None:
+def test_propose_writes_a_lean_change_a_person_can_approve(tmp_path, capsys, fake_provider) -> None:
     ws = seeded(tmp_path)
     assert proposed(tmp_path, "--id", "passkey-sign-in") == 0  # no tier given: the model's call, `lean`
     loaded = ws.load_change("passkey-sign-in")
     state = loaded.change.state
     assert loaded.problems == [] and (state.tier, state.status, state.needs_design) == ("lean", "draft", False)
     assert [r.id for r in loaded.change.deltas["auth"].added] == ["REQ-AUTH-005"], "004 is taken by `passkeys`"
-    assert {f.code for f in findings_of(loaded, ws.specs()[0])} == {"change.missing-tasks"}
+    assert findings_of(loaded, ws.specs()[0]) == [], "nothing is missing: the tasks are written too"
     assert [asked(fake_provider, opening) for opening in (TRIAGE, BRIEF, DELTAS)] == [1, 1, 1]
     out = capsys.readouterr().out
-    assert "passkey-sign-in" in out and "360 total" in out and ".spec/changes/passkey-sign-in/brief.md" in out
+    assert "passkey-sign-in" in out and "480 total" in out and ".spec/changes/passkey-sign-in/brief.md" in out
     assert not (tmp_path / ".spec/.lock").exists()
 
 
@@ -252,7 +252,7 @@ def test_the_tokens_line_counts_each_stages_calls(tmp_path, capsys, fake_provide
     fake_provider.answers_each_time(DELTAS, iter(["not json", None]))
     assert proposed(tmp_path, "--id", "counted") == 0
     out = capsys.readouterr().out
-    assert "triage 120 in 1 call" in out and "deltas 240 in 2 calls" in out and "480 total" in out
+    assert "triage 120 in 1 call" in out and "deltas 240 in 2 calls" in out and "600 total" in out
 
 
 def test_an_answer_that_repeats_a_marker_is_sent_back(tmp_path, capsys, fake_provider) -> None:
@@ -387,12 +387,86 @@ def test_the_brief_is_told_its_tier(tmp_path, fake_provider) -> None:
     assert "On the lean tier no question is asked" in next(text for text in briefs if text.startswith(BRIEF))
 
 
-def test_propose_says_why_a_design_is_owed(tmp_path, capsys, fake_provider) -> None:
-    """Left by the first review: the reason was drafted, and shown to nobody."""
+def test_a_design_is_written_only_for_the_change_whose_brief_owes_one(tmp_path, fake_provider) -> None:
+    """The first review found the reason a design is owed drafted and shown to nobody. The design itself is written
+    now, in the same command, so there is nothing left to announce."""
     from conftest import CANNED_BRIEF
 
     seeded(tmp_path)
-    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "design_needed": True, "design_reason": "It adds a dependency."})
+    fake_provider.answers_each_time(
+        BRIEF, iter([{**CANNED_BRIEF, "design_needed": True, "design_reason": "It adds a dependency."}])
+    )
     assert proposed(tmp_path, "--tier", "lean", "--id", "designed") == 0
-    assert "design    owed: It adds a dependency." in capsys.readouterr().out
     assert proposed(tmp_path, "--tier", "lean", "--id", "plain", request="Fix a typo in the sign-in page.") == 0
+    assert (tmp_path / ".spec/changes/designed/design.md").is_file()
+    assert not (tmp_path / ".spec/changes/plain/design.md").exists()
+
+
+# The simple flow: `propose` writes the whole change, its plan included.
+
+TASKS = "You break a change into tasks"
+LIMITS = '[project]\ndefault_tier = "lean"\n\n[limits]\n'
+
+
+def test_propose_writes_the_whole_change_tasks_included(tmp_path, capsys, fake_provider) -> None:
+    """`plan` was a command a person ran with nothing to decide before it."""
+    ws = seeded(tmp_path)
+    assert proposed(tmp_path, "--tier", "lean", "--id", "whole") == 0
+    loaded = ws.load_change("whole")
+    assert loaded.problems == [] and loaded.change.tasks, "the plan stands beside the brief and the specs"
+    assert "change.missing-tasks" not in {f.code for f in findings_of(loaded, ws.specs()[0])}
+    assert [asked(fake_provider, opening) for opening in (BRIEF, DELTAS, TASKS)] == [1, 1, 1]
+    out = capsys.readouterr().out
+    assert ".spec/changes/whole/brief.md" in out and ".spec/changes/whole/tasks.md" in out
+    assert "tokens    brief 120 in 1 call, deltas 120 in 1 call, tasks 120 in 1 call: 360 total" in out
+    assert "next      run `adk-spec approve whole`" in out
+    assert (out.count("tokens    "), out.count("next      ")) == (1, 1), "one command says each once"
+    assert run(tmp_path, "approve", "whole", "--by", "reviewer") == 0, "a lean change: three commands with archive"
+
+
+def test_propose_writes_the_design_where_the_brief_owes_one(tmp_path, capsys, fake_provider) -> None:
+    from conftest import CANNED_BRIEF
+
+    ws = seeded(tmp_path)
+    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "design_needed": True, "design_reason": "A new dependency."})
+    assert proposed(tmp_path, "--tier", "lean", "--id", "designed") == 0
+    assert ws.load_change("designed").change.design is not None
+    out = capsys.readouterr().out
+    assert ".spec/changes/designed/design.md" in out and "design 120 in 1 call" in out and "design    owed" not in out
+
+
+def test_one_ceiling_holds_the_drafting_and_the_plan_and_a_failed_plan_leaves_the_draft(
+    tmp_path, capsys, fake_provider
+) -> None:
+    """The ceiling is the command's: the brief and the deltas spend it, and the tasks call is not sent. The change
+    stands as a draft, and the command says how to finish it."""
+    ws = seeded(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", LIMITS + "max_tokens = 240\n")
+    assert proposed(tmp_path, "--tier", "lean", "--id", "capped") == 3
+    said = capsys.readouterr()
+    assert "the brief and the specs are written, and the plan is not" in said.err and "CEILING" in said.err
+    assert "Run `adk-spec plan capped` to finish it" in said.err
+    assert "tokens    brief 120 in 1 call, deltas 120 in 1 call: 240 total" in said.out
+    loaded = ws.load_change("capped")
+    assert loaded.change.brief is not None and loaded.change.tasks is None, "what was written stands"
+    assert asked(fake_provider, TASKS) == 0 and not (tmp_path / ".spec/.lock").exists()
+    write_text(tmp_path / ".spec/config.toml", LIMITS)
+    assert run(tmp_path, "plan", "capped") == 0 and ws.load_change("capped").change.tasks
+
+
+def test_propose_refuses_before_spending_where_the_tasks_role_has_no_model(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    seeded(tmp_path)
+    monkeypatch.setenv("SPEC_TASKS_MODEL", "claude-3-opus")  # no Gemini model: the arm cannot serve the role
+    assert proposed(tmp_path, "--tier", "lean", "--id", "unready") == 2
+    assert "tasks" in capsys.readouterr().err.lower() and fake_provider.requests == []
+
+
+def test_plan_alone_still_redrafts_a_change(tmp_path, fake_provider) -> None:
+    ws = seeded(tmp_path)
+    assert proposed(tmp_path, "--tier", "lean", "--id", "again") == 0
+    brief = tmp_path / ".spec/changes/again/brief.md"
+    write_text(brief, read_text(brief).replace("Passwords are the top source", "Passwords are a source"))
+    assert run(tmp_path, "plan", "again") == 0, "nothing is ticked: no --replace is needed"
+    assert asked(fake_provider, TASKS) == 2 and ws.load_change("again").change.tasks

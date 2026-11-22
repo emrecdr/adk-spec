@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import AsyncGenerator, Iterator
 from pathlib import Path
 
@@ -154,6 +155,32 @@ def canned_for(schema: type[BaseModel]) -> dict:
     raise AssertionError(f"no canned answer fits {schema.__name__}")
 
 
+_OWED = re.compile(r"^## (ADDED|MODIFIED|REMOVED) Requirements\s*$|^### (REQ-[A-Z0-9]+-\d+):", re.MULTILINE)
+
+
+def tasks_serving(instruction: str) -> dict:
+    """The canned tasks, naming the requirements the deltas of `instruction` add or modify where those are not the
+    canned ones: a task list must serve what its change owes, and a change `propose` drafts owes IDs of its own."""
+    try:
+        deltas = between(instruction, "deltas")
+    except ValueError:
+        return CANNED_TASKS
+    section, owed = "", []
+    for found in _OWED.finditer(deltas):
+        if found[1]:
+            section = found[1]
+        elif section != "REMOVED" and found[2] not in owed:
+            owed.append(found[2])
+    named = {req for group in CANNED_TASKS["groups"] for task in group["tasks"] for req in task["requirements"]}
+    if not owed or set(owed) == named:
+        return CANNED_TASKS
+    groups = [
+        {**group, "tasks": [{**task, "requirements": owed} for task in group["tasks"]]}
+        for group in CANNED_TASKS["groups"]
+    ]
+    return {"groups": groups}
+
+
 class FakeProvider:
     """What the fake does for a request whose instruction contains a text, per test, and every request it was sent."""
 
@@ -224,6 +251,8 @@ class FakeModel(Gemini):
         schema = llm_request.config.response_schema
         if payload is None and schema is not None:
             payload = canned_for(schema)
+            if payload is CANNED_TASKS:
+                payload = tasks_serving(str(llm_request.config.system_instruction or ""))
         if isinstance(payload, str):
             text = payload
         else:
