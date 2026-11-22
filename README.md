@@ -192,6 +192,36 @@ adk-spec plan sign-in-with-a-passkey --with ../mobile
 - `approve` records where the work begins in each, and `verify` judges the work in all of them. Name a repository's
   starting point by hand with `verify <id> --base api=<commit>`, for one named after the change was approved.
 
+### Inside a coding assistant
+
+`adk-spec-mcp` serves six of the commands as MCP tools to a coding assistant: `propose` (revising an open change
+too), `plan`, `check`, `verify`, `status` and `validate`. Each runs as it does in the terminal, on adk-spec's own
+models and settings, and asks no question: points a brief leaves open come back in its output, for the assistant to
+put to you. `approve` and `archive` stay yours, in a terminal: approving records your decision.
+
+VS Code with GitHub Copilot, in `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "adk-spec": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "--project", "/path/to/adk_spec", "adk-spec-mcp", "--root", "${workspaceFolder}"]
+    }
+  }
+}
+```
+
+Claude Code, from the repository's folder:
+
+```
+claude mcp add adk-spec -- uv run --project /path/to/adk_spec adk-spec-mcp --root "$PWD"
+```
+
+A `propose` that reads the code takes minutes; an editor that gives up on a tool sooner needs its tool timeout
+raised.
+
 ### To redo one step
 
 You never need these in a normal change. Each does one step of the flow again, by itself.
