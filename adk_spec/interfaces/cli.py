@@ -1593,7 +1593,10 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     keep = _tasks_kept(workspace, change, changed) if change else None
     # A revision does not read the code again: its `context.md`, or the lack of one, is kept.
     explore = not args.no_explore and change is None
-    return _then_planned(workspace, kept.change or "", specs, of_specs, ledger, explore=explore, keep=keep)
+    review = tier == "strict"  # a strict change is read by a person before its plan is drafted
+    return _then_planned(
+        workspace, kept.change or "", specs, of_specs, ledger, explore=explore, keep=keep, review=review
+    )
 
 
 def _tasks_kept(workspace: Workspace, change: Change, changed: bool) -> str | None:
@@ -1616,16 +1619,20 @@ def _then_planned(
     *,
     explore: bool,
     keep: str | None,
+    review: bool = False,
 ) -> int:
     """What `propose` does once its change is written: the plan, in the same command and under the same ceiling.
     An open point comes before it, since its answer shapes the tasks: none is drafted on a guess. A revised change
-    keeps its task list where `keep` says why."""
+    keeps its task list where `keep` says why. A strict change, under `review`, stops here for a person to read its
+    brief and specs: `plan` goes on."""
     waiting = [held for held in _assessed(workspace, change_id, specs).findings if held.code == _OPEN_POINT]
-    if waiting or keep:
+    if waiting or keep or review:
         count = len(waiting)
         print(f"tokens    {_spent(ledger)}")
         if waiting:
             print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
+        elif review:
+            print(f"plan      waits: a strict change is read first. Read brief.md and the specs, then `{PROG} plan`")
         if keep:
             print(f"kept      tasks.md: {keep}")
         _say_next(workspace, change_id, specs)

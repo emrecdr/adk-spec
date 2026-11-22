@@ -13,6 +13,8 @@ from adk_spec.workspace.layout import Workspace
 
 REQUEST = "Move billing to the new ledger, with every invoice kept as it was."
 TRIAGE, BRIEF = "You size a change request", "You write the brief of a change"
+DESIGN, TASKS = "You write the design of a change", "You break a change into tasks"
+FOLDER = ".spec/changes/ledger"
 
 
 @pytest.fixture(autouse=True)
@@ -62,3 +64,39 @@ def test_a_change_that_owes_a_design_and_has_none_is_not_approved_and_plan_is_ne
     change = ws.load_change("passkeys").change
     found = validate_change(change, ws.specs()[0])
     assert next_step(change.state, found, []).phrase == "run `adk-spec plan passkeys`"
+
+
+def strict_proposed(root, *argv: str, request: str = REQUEST) -> int:
+    return run(root, "propose", request, "--tier", "strict", "--id", "ledger", "--no-input", "--no-explore", *argv)
+
+
+def drafted_by(fake_provider, opening: str) -> int:
+    return sum(str(r.config.system_instruction).startswith(opening) for r in fake_provider.requests)
+
+
+def test_a_strict_propose_stops_after_the_brief_and_the_specs(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)
+    capsys.readouterr()
+    assert strict_proposed(tmp_path) == 0
+    folder = tmp_path / FOLDER
+    assert (folder / "brief.md").is_file() and (folder / "specs/auth/spec.md").is_file()
+    assert not (folder / "tasks.md").exists() and not (folder / "design.md").exists()
+    assert drafted_by(fake_provider, TASKS) == 0 and drafted_by(fake_provider, DESIGN) == 0
+    out = capsys.readouterr().out
+    assert "plan      waits: a strict change is read first" in out and "run `adk-spec plan ledger`" in out
+
+
+def test_plan_goes_on_after_the_stop_and_drafts_a_design(tmp_path, fake_provider) -> None:
+    seeded(tmp_path)
+    assert strict_proposed(tmp_path) == 0
+    assert run(tmp_path, "plan", "ledger", "--no-explore") == 0
+    folder = tmp_path / FOLDER
+    assert (folder / "design.md").is_file() and (folder / "tasks.md").is_file()
+    assert drafted_by(fake_provider, DESIGN) == 1
+
+
+def test_a_strict_revision_stops_before_the_plan_as_a_new_one_does(tmp_path, fake_provider) -> None:
+    seeded(tmp_path)
+    assert strict_proposed(tmp_path) == 0
+    assert run(tmp_path, "propose", "Also keep the old invoice numbers.", "--id", "ledger", "--no-input") == 0
+    assert drafted_by(fake_provider, TASKS) == 0
