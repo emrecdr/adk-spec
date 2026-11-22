@@ -32,10 +32,18 @@ _STAND_IN = r"(?![$%{<]|\[REDACTED)"
 #: header, or nothing — so a header where no rule reads, a file's name or an unchanged line, cannot reach a footer
 #: further on: measured with any text allowed between them, the change in between was hidden from every model call.
 #: What may open a key's line: a diff's marker, then a quote's `>` as Markdown nests them, as a pasted issue or review
-#: holds a key, or a comment's mark, `#`, `//`, `;` or a block comment's `*`, as a fixture or a config keeps one
-#: commented out. Found by an outside audit and by review: a quoted key, then a commented one, had its header hidden
-#: and its body sent.
-_LEAD = r"[+\- ]?(?:[ \t]*+(?:>|#|//|;|\*))*+[ \t]*+"
+#: holds a key. Found by an outside audit: a quoted key had its header hidden and its body sent.
+_LEAD = r"[+\- ]?(?:[ \t]*+>)*+[ \t]*+"
+#: A comment's marks, as a fixture or a config keeps a key commented out: found by review, such a key had its header
+#: hidden and its body sent. SQL's `--` is no mark before a third `-`, which opens a header's own five.
+_MARKS = r"#|//|/\*|\*|;|--(?!-)|%"
+#: A line opened with a comment's mark, after any quote's. A comment is mostly code's, not a key's: found by review, a
+#: mark taken as a quote's is, `#endif`, `// TODO` or a bare `#` after a header only named were hidden from the model.
+#: So such a line is a key's only where it holds base64 of sixteen characters or more or an armour field, or is the bare
+#: mark before a line that does, as a commented PGP key's blank line.
+_MARKED = _LEAD + r"(?:" + _MARKS + r")(?:[ \t]*+(?:>|" + _MARKS + r"))*+[ \t]*+"
+#: Any opening at all, for a line that must open with a key's header to begin one.
+_ANY_LEAD = r"[+\- ]?(?:[ \t]*+(?:>|" + _MARKS + r"))*+[ \t]*+"
 #: An armour header a key's block may hold: PEM's, and PGP's, GnuPG writing `Version:` before the body. Found by an
 #: outside audit: with no footer, `Version:` ended the key's lines, and the body after it reached the model.
 _ARMOUR = r"(?:Proc-Type|DEK-Info|Version|Comment|Hash|Charset): [^\n]*+"
@@ -53,10 +61,14 @@ _ANY_BASE64, _LONG_BASE64 = r"[A-Za-z0-9+/=]++", r"[A-Za-z0-9+/]{16,}={0,2}"
 
 
 def _key_line(base64: str, fields: str) -> str:
-    """A line of a key's block: what may open it, then base64 as `base64` takes it, one of its `fields`, or nothing.
-    Every key shape builds its lines here, so that none takes a field or an opening another does not: found by an
-    outside audit, a PGP key's `Version:` line ended one shape's lines and not its twin's."""
-    return _LEAD + r"(?:" + base64 + r"|" + fields + r")?[ \t]*+\r?"
+    """A line of a key's block: opened as a quote is, then base64 as `base64` takes it, one of its `fields`, or nothing;
+    or opened with a comment's mark, then long base64 or a field, or nothing before a line of long base64. Every key
+    shape builds its lines here, so that none takes a field or an opening another does not: found by an outside audit,
+    a PGP key's `Version:` line ended one shape's lines and not its twin's."""
+    after = r"(?=\r?\n" + _MARKED + _LONG_BASE64 + r")"
+    quoted = _LEAD + r"(?:" + base64 + r"|" + fields + r")?"
+    marked = _MARKED + r"(?:" + _LONG_BASE64 + r"|" + fields + r"|" + after + r")"
+    return r"(?:" + quoted + r"|" + marked + r")[ \t]*+\r?"
 
 
 _KEY_HEADER = r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
@@ -91,7 +103,7 @@ _PUTTY = (
     r"\bPuTTY-User-Key-File-[23]: [^\n]*(?:(?:\n(?>"
     + _PUTTY_LINE
     + r"(?=\n|\Z)))*+\n"
-    + _LEAD
+    + _ANY_LEAD
     + r"Private-MAC: [0-9a-fA-F]+|(?:\n(?>"
     + _PUTTY_BODY
     + r"(?=\n|\Z)))*)"
@@ -410,9 +422,10 @@ def scrub_lines(text: str, *, cut: bool = False) -> tuple[str, int]:
 #: A private key's first line where a line begins with it, a diff's sign or a block's indent before it: how a key's
 #: own file has it, and how code that only names the line in a string does not. A PEM block's header, or a PuTTY key
 #: file's, whose private lines a diff shows without the header as a PEM block's are.
-#: Opened as a key's line in a block is: a diff's marker, a quote's `>`. Found by review: still the opening from before
-#: quotes, a file quoting a key was not withheld, and a hunk from the middle of its key, with no header, was sent.
-_KEY_BEGINS_A_LINE = re.compile(r"(?m)^" + _LEAD + r"(?:" + _KEY_HEADER + r"|PuTTY-User-Key-File-[23]:)")
+#: Opened as a key's line in a block may be: a diff's marker, a quote's `>`, a comment's mark. Found by review: with
+#: fewer openings than the scrub takes, a file quoting or commenting out a key was not withheld, and a hunk from the
+#: middle of its key, with no header, was sent.
+_KEY_BEGINS_A_LINE = re.compile(r"(?m)^" + _ANY_LEAD + r"(?:" + _KEY_HEADER + r"|PuTTY-User-Key-File-[23]:)")
 
 
 def holds_a_key(text: str) -> bool:

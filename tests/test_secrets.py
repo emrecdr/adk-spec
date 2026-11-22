@@ -206,7 +206,7 @@ def test_a_comment_line_after_a_header_named_in_code_is_not_taken_for_the_key() 
             assert kept in scrubbed
 
 
-@pytest.mark.parametrize("mark", ["# ", "// ", " * ", "; ", "+# ", "+    // "])
+@pytest.mark.parametrize("mark", ["# ", "// ", " * ", "; ", "-- ", "% ", "+# ", "+    // ", "+-- "])
 def test_a_key_behind_a_comment_mark_hides_its_body_and_its_file(mark) -> None:
     """Found by review: a key commented out in code, as a fixture or a config keeps one, had its header hidden and its
     body sent, and the file holding it was not withheld."""
@@ -216,3 +216,34 @@ def test_a_key_behind_a_comment_mark_hides_its_body_and_its_file(mark) -> None:
         for scrubbed, _count in (scrub(key), scrub_lines(key)):
             assert body not in scrubbed, key
         assert holds_a_key(key)
+
+
+def test_a_key_opened_on_a_block_comments_first_line_is_known_and_hidden() -> None:
+    """Found by review: a header after `/*`, its body behind ` * `, was not known to the whole-file check, and a hunk of
+    its body alone reached the model."""
+    body = "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ"
+    key = f"/* -----BEGIN OPENSSH PRIVATE KEY-----\n * {body}\n * {body}\n */\n"
+    assert holds_a_key(key)
+    for scrubbed, _count in (scrub(key), scrub_lines(key)):
+        assert body not in scrubbed
+
+
+def test_a_commented_pgp_key_hides_its_body_past_its_blank_line() -> None:
+    """A PGP key's armour ends at a blank line, a bare `#` where the key is commented out."""
+    body = "lQOYBGVvZXN0AQgAxyz0123456789abcdefABCDEF"
+    key = f"# -----BEGIN PGP PRIVATE KEY BLOCK-----\n# Version: GnuPG v2\n#\n# {body}\n# {body}\n"
+    for scrubbed, _count in (scrub(key), scrub_lines(key)):
+        assert body not in scrubbed
+
+
+def test_code_after_a_header_only_named_keeps_its_comment_lines() -> None:
+    """Found by review: a comment's mark taken as a quote's is, `#endif`, `// TODO`, ` */` or a bare `#` after a header
+    named in a string were taken for the key's lines, and hidden from every stage."""
+    named = (
+        'BEGIN = "-----BEGIN RSA PRIVATE KEY-----"\n#endif\n// TODO\n */\n# noqa\n'
+        'END = "-----END RSA PRIVATE KEY-----"\n'
+    )
+    bare = '+KEY = "-----BEGIN RSA PRIVATE KEY-----"\n+#\n+// \n+ *\n+x = 1\n'
+    for text, kept in ((named, ("#endif", "// TODO", " */", "# noqa")), (bare, ("+#\n", "+// ", "+ *", "+x = 1"))):
+        for scrubbed, _count in (scrub(text), scrub_lines(text)):
+            assert all(line in scrubbed for line in kept), scrubbed
