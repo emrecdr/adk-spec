@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from conftest import CANNED_TASKS, approved, between, on_the_fake, repository, run, seeded
-from samples import SPEC, tasks_for
+from samples import DELTA, SPEC, tasks_for
 
 from adk_spec.domain.spec_md import parse_spec
 from adk_spec.workspace.files import read_text, write_text
@@ -196,3 +196,23 @@ def test_plan_waits_for_every_living_spec_to_read(tmp_path, capsys, fake_provide
     write_text(spec, read_text(spec).replace("## Requirements", "## Requirments"))
     assert run(tmp_path, "plan", "passkeys", "--replace") == 1
     assert "living spec does not read" in capsys.readouterr().err and fake_provider.requests == []
+
+
+def test_the_fakes_default_tasks_serve_what_the_requests_deltas_owe() -> None:
+    """The fake's one answer that is fitted to its request. Unpinned, a change to a delta's headings or to what is
+    owed would show as some fifty failed plans, far from the cause."""
+    from conftest import CANNED_TASKS, tasks_serving
+
+    from adk_spec.orchestration.stages import BOUNDARY
+
+    def shown(deltas: str) -> str:
+        return f"## The requirement deltas\n<<< deltas {BOUNDARY}\n{deltas}\n>>> deltas {BOUNDARY}\n"
+
+    def named(tasks: dict) -> set[str]:
+        return {req for group in tasks["groups"] for task in group["tasks"] for req in task["requirements"]}
+
+    assert tasks_serving(shown(DELTA)) is CANNED_TASKS, "the sample change owes what the canned tasks name"
+    other = "# Delta: billing-export\n\n## ADDED Requirements\n\n### REQ-BILLING-EXPORT-007: Export\n\n"
+    other += "## MODIFIED Requirements\n\n### REQ-AUTH-002: Lock\n\n## REMOVED Requirements\n\n### REQ-AUTH-001: Old\n"
+    assert named(tasks_serving(shown(other))) == {"REQ-BILLING-EXPORT-007", "REQ-AUTH-002"}, "what is removed owes none"
+    assert tasks_serving("no deltas are shown here") is CANNED_TASKS

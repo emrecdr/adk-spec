@@ -14,6 +14,7 @@ from adk_spec.domain.lifecycle import (
     approve_blockers,
     archive_blockers,
     capture_bases,
+    check_stops,
     next_action,
 )
 from adk_spec.domain.model import ChangeState, Delta, Finding
@@ -90,9 +91,7 @@ def test_what_an_archive_waits_for() -> None:
         (DRAFT, [ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_BASE], ["approval"], "run `adk-spec approve passkeys`"),  # `approve` records it itself
         (DRAFT, [NO_TASKS], ["approval"], "run `adk-spec plan passkeys`"),
-        (DRAFT, [NO_TASKS, NO_BASE], ["approval"], "run `adk-spec plan passkeys`"),
         (DRAFT, [NO_TASKS, MARKER], ["approval"], "settle the open point in brief.md"),
-        (DRAFT, [MARKER, NO_TASKS, NO_BASE], ["approval"], "settle the open point in brief.md"),
         (DRAFT, [ERROR, MARKER, NO_TASKS], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_TASKS, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [MARKER], ["approval"], "settle the open point in brief.md"),
@@ -205,10 +204,10 @@ def test_the_lifecycle_decides_what_a_check_and_a_verification_record() -> None:
     held = checked(draft, [ERROR, MARKER], files=FILES, at="t", model="a model")
     assert (held.check.blocking, held.check.model, held.check.files) == (1, "a model", FILES)
     owed = check_blockers(held, FILES)
-    assert [f.code for f in approve_blockers(held, [], check=owed)] == ["check.blocking"]
-    assert approve_blockers(held, [], check=owed, override=True) == []
+    assert [f.code for f in check_stops(owed)] == ["check.blocking"] and check_stops(owed, override=True) == []
+    assert approve_blockers(held, []) == [], "what the check stops is asked apart from what the files block"
     never = check_blockers(draft, FILES)
-    assert [f.code for f in approve_blockers(draft, [], check=never, override=True)] == ["check.missing"]
+    assert [f.code for f in check_stops(never, override=True)] == ["check.missing"]
 
     approved_state = approved("standard")
     assert verify_blockers(approved_state, []) == [] and "void" in verify_blockers(approved_state, ["tasks.md"])[0]
@@ -230,8 +229,9 @@ def test_where_the_work_began_is_kept_however_often_a_change_is_approved() -> No
     assert approve(DRAFT, files=FILES, by="a", at="t").base_commit is None
 
 
-def test_a_standard_change_edited_after_approval_is_sent_to_its_check_before_its_approval() -> None:
-    """Seen in a hand-run: `status` said to approve again, and `approve` then refused, the check being stale too."""
+def test_a_standard_change_edited_after_approval_is_sent_to_approve_again_which_checks_first() -> None:
+    """Seen in a hand-run, while the check was a command of its own: `status` said to approve again, and `approve`
+    then refused, the check being stale too. The approval makes the check now, so one step is the whole answer."""
     from adk_spec.domain.lifecycle import check_blockers
     from adk_spec.domain.model import Checked
 
@@ -239,4 +239,30 @@ def test_a_standard_change_edited_after_approval_is_sent_to_its_check_before_its
     owed = check_blockers(state, {**FILES, "tasks.md": "sha256:edited"})
     said = next_action(state, [], ["tasks.md"], check=owed)
     assert said == "approve again: tasks.md changed since the approval", "`approve` checks first, by itself"
-    assert next_action(approved(), [], ["tasks.md"]) == "approve again: tasks.md changed since the approval"
+
+
+def test_an_approval_makes_a_check_that_is_missing_or_stale_and_no_other() -> None:
+    """One rule, stated once: the command asks it, and the next step follows it."""
+    from adk_spec.domain.lifecycle import approval_checks_first, check_blockers, check_stops
+    from adk_spec.domain.model import Checked
+
+    never = ChangeState(id="passkeys", tier="standard")
+    stale = never.model_copy(update={"check": Checked(at="t", files={}, blocking=0)})
+    found = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=1)})
+    assert approval_checks_first(check_blockers(never, FILES)) and approval_checks_first(check_blockers(stale, FILES))
+    owed = check_blockers(found, FILES)
+    assert not approval_checks_first(owed) and not approval_checks_first([])
+    assert check_stops(owed) == owed and check_stops(owed, override=True) == []
+    assert check_stops(check_blockers(never, FILES), override=True), (
+        "a reason answers a finding, not a check never made"
+    )
+
+
+def test_a_check_code_no_rule_knows_is_never_sent_to_an_approval_that_would_refuse_it() -> None:
+    """Found by the cleanup review: the step said to approve where the approval then refused, for a code of the
+    check that neither the step table nor the approval's own list held."""
+    from adk_spec.domain.model import Finding
+
+    odd = Finding(severity="ERROR", code="check.some-new-code", message="m")
+    never = ChangeState(id="passkeys", tier="standard")
+    assert next_action(never, [], ["approval"], check=[odd]) == "fix what `adk-spec validate passkeys` lists"

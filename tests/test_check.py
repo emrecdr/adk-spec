@@ -95,10 +95,9 @@ def _fake_arm(monkeypatch) -> None:
 
 
 def standard(root) -> Workspace:
-    """The seeded change as a standard one with its bases recorded: what owes a check before approval."""
+    """The seeded change as a standard one: what owes a check before approval."""
     ws = seeded(root)
     ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"tier": "standard"}))
-    assert run(root, "rebase", "passkeys") == 0
     return ws
 
 

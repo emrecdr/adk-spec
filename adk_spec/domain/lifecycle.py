@@ -114,12 +114,29 @@ def verified(
 
 
 #: What a change's check can owe that an approval settles by itself: it makes the check where none is current.
-MADE_BY_APPROVAL = frozenset({"check.missing", "check.stale"})
+_MADE_BY_APPROVAL = frozenset({"check.missing", "check.stale"})
+
+
+def approval_checks_first(check: Sequence[Finding]) -> bool:
+    """Whether an approval makes a change's check before it decides: `check` is what `check_blockers` gives, and
+    the check is missing or stale. The one statement of that rule: the command asks it, and the next step follows
+    it. A reason given with `--override` answers only a check a person was shown, so it is not applied where this
+    is true: the check it would answer is made in the same run."""
+    return any(owed.code in _MADE_BY_APPROVAL for owed in check)
+
+
+def check_stops(check: Sequence[Finding], *, override: bool = False) -> list[Finding]:
+    """What of a change's check stops its approval: all that `check_blockers` gives, less a blocking finding where
+    a person set it aside with `override`. A check never made, or made of other files, is not a finding to set
+    aside: an approval makes it first, as `approval_checks_first` says."""
+    return [owed for owed in check if not (override and owed.code == "check.blocking")]
 
 
 def check_blockers(state: ChangeState, files: Mapping[str, str]) -> list[Finding]:
     """What a change's check still owes its approval, as one finding or none. A lean change owes no check. Any
-    other owes one of its files as they stand now (`files`, their fingerprints), with nothing blocking in it."""
+    other owes one of its files as they stand now (`files`, their fingerprints), with nothing blocking in it. A
+    check that is missing or stale is a signal to the approval, which makes it and is read by its code: no command
+    prints those two sentences. A blocking one is printed."""
     cid = state.id
     if state.tier == "lean":
         return []
@@ -148,26 +165,17 @@ def approval_stale(state: ChangeState, files: Mapping[str, str]) -> list[str]:
     return moved + (["bases"] if state.bases != state.approval.bases else [])
 
 
-def approve_blockers(
-    state: ChangeState,
-    findings: Sequence[Finding],
-    *,
-    strict: bool = False,
-    check: Sequence[Finding] = (),
-    override: bool = False,
-) -> list[Finding]:
-    """What blocks an approval: every ERROR, every finding of `BLOCKS_APPROVAL`, under `strict` every WARNING, and
-    what the change's check still owes, which is `check`, as `check_blockers` gives it. With `override`, a blocking
-    finding of a current check is set aside, and nothing else: a check never run, or run on other files, is still
-    owed. An archived change is approved no more."""
+def approve_blockers(state: ChangeState, findings: Sequence[Finding], *, strict: bool = False) -> list[Finding]:
+    """What of a change's own files blocks its approval: every ERROR, every finding of `BLOCKS_APPROVAL`, and under
+    `strict` every WARNING. An archived change is approved no more. What its check stops is `check_stops`: the two
+    are asked apart, since an approval settles the first before it spends a model call on the second."""
     if state.status == "archived":
         return [Finding(severity="ERROR", code="change.archived", message=f"`{state.id}` is archived already.")]
-    held = [
+    return [
         found
         for found in findings
         if found.severity == "ERROR" or found.code in BLOCKS_APPROVAL or (strict and found.severity == "WARNING")
     ]
-    return held + [owed for owed in check if not (override and owed.code == "check.blocking")]
 
 
 def _unready(state: ChangeState, stale: Sequence[str]) -> list[str]:
@@ -259,7 +267,9 @@ def next_step(
     for code, actor, phrase in _HOLDS:
         if code in held:
             return Step(actor, phrase.format(cid=cid))
-    if approve_blockers(state, findings):  # what blocks an approval and has no step of its own
+    # What blocks an approval and has no step of its own. A check the approval makes itself is no such thing.
+    left = [owed for owed in check if owed.code not in _MADE_BY_APPROVAL]
+    if approve_blockers(state, findings) or check_stops(left):
         return Step("you", f"fix what `adk-spec validate {cid}` lists")
     return Step("you", f"run `adk-spec approve {cid}`")
 

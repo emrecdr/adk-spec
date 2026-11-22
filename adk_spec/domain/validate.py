@@ -228,8 +228,7 @@ def _of_target(
         return [
             finding(
                 "delta.base-missing",
-                f"No base is recorded for {req_id}. Run `adk-spec rebase` to record what the delta was written "
-                "against.",
+                f"No base is recorded for {req_id}: `adk-spec approve` records what the delta was written against.",
             )
         ]
     if bases[req_id] != fingerprint(held[req_id]):

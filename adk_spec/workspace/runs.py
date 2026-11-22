@@ -1,4 +1,7 @@
-"""What a command sent to a model and what came back, kept one file a command under `.spec/runs/`.
+"""What a command sent to a model and what came back, kept one file a model pass under `.spec/runs/`.
+
+A command that makes more than one pass leaves one file for each, under the name of the step it did: `propose`
+leaves `propose` and `plan`, and an approval that makes a check leaves `check`.
 
 A recording is what a stage is measured on afterwards, what a fake model replays in a test, and where a person
 reads why a gate sent an answer back. It holds the texts that were sent and received and nothing of how the
@@ -38,7 +41,8 @@ class Call(BaseModel):
 
 
 class Recording(BaseModel):
-    """One command's model calls, in order, and how the command ended."""
+    """The model calls of one pass of a command, in order, and how the pass ended. `command` names the step that
+    was done, which is the command a person typed or a step it did inside itself."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

@@ -116,5 +116,5 @@ class UsageLedger(BasePlugin):
 def roster(ledger: UsageLedger, recorder: BasePlugin | None = None) -> list[BasePlugin]:
     """The plugins of every app: the recorder where the command keeps one, then the ledger, then the mismatch. Each
     must read an answer before the mismatch replaces it, and the recorder a request before the ledger refuses it.
-    The ledger and the recorder are the command's own, one for all its runs."""
+    The ledger is the command's own, one for everything it spends; the recorder is one pass's."""
     return [*([recorder] if recorder is not None else []), ledger, SchemaMismatch()]

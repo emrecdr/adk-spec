@@ -59,8 +59,9 @@ Four sets of notes are in `research_notes/Simple command flows in spec tools/`.
 
 - **`propose`** goes on, once the specs pass their gate, to the design where one is owed and to the tasks, in the
   same command, under one token ceiling. If that second part fails, the change stands as a draft and the command
-  says that `adk-spec plan <id>` finishes it. A point the person left open does not stop it: the point is listed
-  under what needs them, and holds the approval, as today.
+  says that `adk-spec plan <id>` finishes it. Where the person left a question unanswered, `propose` writes the
+  brief and the specs and drafts no plan: an open point comes before the plan, since its answer shapes the tasks.
+  The person settles it in the brief and runs `adk-spec plan <id>`.
 - **`approve`** records the base of each requirement the change touches where none is recorded, so `rebase` is
   needed only after a living spec has moved. On a standard change it runs the check where none is current. Anything
   blocking stops it, with the findings shown. `--override` works only on a check a person has already been shown,
@@ -100,7 +101,9 @@ The most-voted requests in both parent projects are for changing a spec after th
 
 ## Decided by the builder, for the owner to check
 
-1. An open point a person left unanswered does not stop `propose` from writing the plan.
+1. An open point a person left unanswered stops `propose` before the plan. This was first decided the other way;
+   the cleanup review showed that it spent the largest call of the command on a brief the tool itself marked
+   unsettled, and left tasks resting on a guess. In that one case the flow has a fifth command, `plan`.
 2. No flag is added to stop `propose` early. `--no-input` stays.
 3. Progress lines go to the error stream, so a command's output stays what a script can read.
 4. No length limit is put on what a stage writes in this phase. The lengths are shown and measured first.

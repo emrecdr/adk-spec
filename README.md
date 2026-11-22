@@ -55,8 +55,9 @@ A small change is `lean`: it owes no check and no verification, so it takes thre
   most three a round and three rounds, each with a suggested answer: a line answers, `=` takes the suggestion, and
   an empty line leaves the point open, in which case approval waits until you settle it in the brief.
   `--no-input` asks nothing, and `--id` names the change. In a git repository the plan is shown the repository's
-  file names, so a task names real paths. If the plan does not end well, the brief and the specs are kept, and
-  `adk-spec plan <id>` finishes it.
+  file names, so a task names real paths. Where you leave a question unanswered, `propose` writes the brief and
+  the specs and drafts no plan on a guess: settle the point in the brief, then `adk-spec plan <id>`. The same
+  command finishes a plan that did not end well.
 
 - **`approve`** records who approved, when, and the fingerprint of each file. A later edit voids it; ticking a
   task does not. The name is a recorded claim, not an authentication. On a standard change it first makes the
@@ -130,8 +131,8 @@ max_tokens = 30000
 ```
 
 On a terminal a command says which stage it is on while it works. Every command that calls a model keeps what it
-sent and what came back under `.spec/runs/`, which ignores itself for git; the newest 20 are kept, and
-`[limits] keep_runs` changes that.
+sent and what came back under `.spec/runs/`, which ignores itself for git: one file a model pass, so a `propose`
+leaves two, its own and its plan's. The newest 20 are kept, and `[limits] keep_runs` changes that.
 
 What a model is sent is what the command reads: your request, your specs and the change's files, the names of the
 repository's files, and for `verify` the diff of your working tree. No key or token of the provider is ever part of

@@ -4,7 +4,8 @@ The fake goes through ADK's own resolution path: `LLMRegistry` maps a model name
 `FakeModel` for `fake.*` and setting `SPEC_MODEL=fake` on the Gemini arm makes the real `build_model()` hand its
 agents the fake. Nothing in the package is patched: the real runner, workflow and agents all run. The fake answers
 the canned answer the request's schema accepts, a sentence where there is no schema, and what a test told it for a
-request whose instruction contains a text.
+request whose instruction contains a text. One canned answer is fitted to its request: a task list names the
+requirements the request's deltas add or modify (`tasks_serving`), since a list that serves others fails its gate.
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ from google.adk.models.llm_response import LlmResponse
 from google.adk.models.registry import LLMRegistry
 from google.genai import types
 from pydantic import BaseModel, ValidationError
+
+from adk_spec.domain.ids import REQ_ID
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "adk_spec"
@@ -65,6 +68,8 @@ DELTAS_ON_A_MISSING_ID = {
     ]
 }
 #: The answers the fake gives by default, one a schema: the first one a request's schema accepts.
+#: A brief draft that says a design is owed.
+BRIEF_OWING_A_DESIGN = {**CANNED_BRIEF, "design_needed": True, "design_reason": "It adds a dependency."}
 #: A brief draft that leaves one point open: its question, and the answer the brief stage would suggest.
 OPEN_POINT = {"question": "Which browsers are in scope?", "suggested": "Evergreen browsers only"}
 BRIEF_WITH_A_MARKER = {**CANNED_BRIEF, "open_points": [OPEN_POINT]}
@@ -155,7 +160,10 @@ def canned_for(schema: type[BaseModel]) -> dict:
     raise AssertionError(f"no canned answer fits {schema.__name__}")
 
 
-_OWED = re.compile(r"^## (ADDED|MODIFIED|REMOVED) Requirements\s*$|^### (REQ-[A-Z0-9]+-\d+):", re.MULTILINE)
+#: A delta's section headings and requirement headings, the ID as the domain's own grammar spells one.
+_OWED = re.compile(
+    rf"^## (?P<section>ADDED|MODIFIED|REMOVED) Requirements\s*$|^### (?P<req>{REQ_ID.pattern}):", re.MULTILINE
+)
 
 
 def tasks_serving(instruction: str) -> dict:
@@ -167,10 +175,10 @@ def tasks_serving(instruction: str) -> dict:
         return CANNED_TASKS
     section, owed = "", []
     for found in _OWED.finditer(deltas):
-        if found[1]:
-            section = found[1]
-        elif section != "REMOVED" and found[2] not in owed:
-            owed.append(found[2])
+        if found["section"]:
+            section = found["section"]
+        elif section != "REMOVED" and found["req"] not in owed:
+            owed.append(found["req"])
     named = {req for group in CANNED_TASKS["groups"] for task in group["tasks"] for req in task["requirements"]}
     if not owed or set(owed) == named:
         return CANNED_TASKS
@@ -394,8 +402,9 @@ def run(root: Path, *argv: str) -> int:
 
 
 def approved(root: Path, change: str = "passkeys") -> None:
-    """The change rebased and approved, as a person does before the work starts."""
-    assert run(root, "rebase", change) == 0 and run(root, "approve", change, "--by", "reviewer") == 0
+    """The change approved, as a person does before the work starts. No `rebase` first: an approval records the
+    bases that are missing."""
+    assert run(root, "approve", change, "--by", "reviewer") == 0
 
 
 def state_of(root: Path, change: str = "passkeys") -> dict:

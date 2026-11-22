@@ -26,8 +26,8 @@ from ..domain.check import nameable, owed, removed
 from ..domain.convert import render_design, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
-    MADE_BY_APPROVAL,
     Step,
+    approval_checks_first,
     approval_files,
     approval_stale,
     approve,
@@ -36,6 +36,7 @@ from ..domain.lifecycle import (
     capture_bases,
     check_blockers,
     check_stands,
+    check_stops,
     checked,
     missing_bases,
     next_step,
@@ -46,7 +47,7 @@ from ..domain.merge import MergeError, apply_delta
 from ..domain.model import Brief, ChangeState, Finding, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_verify
 from ..domain.tasks_md import render_tasks
-from ..domain.text import plain, sha256_of
+from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import failed, finding, validate_spec
 from ..domain.verify import Verdict, grounded
 from ..workspace.config import ConfigError
@@ -58,7 +59,7 @@ from ..workspace.context import (
     living_text,
     tree_text,
 )
-from ..workspace.files import NotTextError, read_text
+from ..workspace.files import NotTextError
 from ..workspace.git import DIFF_MAX_CHARS, GitError, diff, head, is_repository, resolves
 from ..workspace.git import files as tracked_files
 from ..workspace.layout import BRIEF as BRIEF_FILE
@@ -247,7 +248,7 @@ def main(argv: list[str]) -> int:
         return EXIT_ENGINE
 
 
-# The commands that call no model.
+# The commands that call no model, and `approve`, which calls one only for a check a change still owes.
 
 
 def _locked(handler: Callable[[argparse.Namespace], int]) -> Callable[[argparse.Namespace], int]:
@@ -266,7 +267,8 @@ def _workspace(args: argparse.Namespace) -> Workspace:
 
 def _init(args: argparse.Namespace) -> int:
     workspace = Workspace.init(Path(args.root).absolute())
-    print(f"made {workspace.shown(workspace.home)}: write its constitution.md, then run `{PROG} new <id>`")
+    made = workspace.shown(workspace.home)
+    print(f'made {made}: write its constitution.md, then run `{PROG} propose "<what you want>"`')
     return EXIT_OK
 
 
@@ -402,7 +404,7 @@ def _status(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps({"changes": rows}, indent=2))
     elif not rows:
-        print(f"no open changes: run {PROG} new <id>")
+        print(f'no open changes: run {PROG} propose "<what you want>"')
     else:
         width = max(len(row["id"]) for row in rows)
         groups = [(heading, [row for row in rows if row["actor"] == actor]) for actor, heading in GROUPS]
@@ -453,7 +455,7 @@ def _based(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> Non
         workspace.save_state(state.model_copy(update={"bases": {**state.bases, **missing}}))
 
 
-def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec], assessed: Assessed) -> Any:
+def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec], assessed: Assessed) -> _Checked:
     """The check an approval makes of a change whose check is missing or stale, as `check` makes it. Where no
     provider is ready, the refusal names the way that needs none."""
     _load_env()
@@ -479,30 +481,23 @@ def _approve(args: argparse.Namespace) -> int:
     living, _found = workspace.specs()
     _based(workspace, args.id, living)
     assessed = _assessed(workspace, args.id, living)
-    # What blocks beside the check comes first: no model is asked about files that are going to change.
-    if others := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
-        return _refused(args.id, others)
-    made = None
-    if {held.code for held in assessed.unchecked} & MADE_BY_APPROVAL:
+    # What the files themselves block comes first: no model is asked about files that are going to change.
+    if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
+        return _refused(args.id, blockers)
+    first = approval_checks_first(assessed.unchecked)
+    if first:
         made = _checked_first(workspace, args.id, living, assessed)
-        if made.failure or made.report is None:
+        if made.failure:
             return _unfinished(f"the check did not finish, and nothing was approved: {made.failure}", made.ledger)
+        blocking = [held for held in made.findings if held.severity == "ERROR"]
+        _printed(blocking)
+        count = len(made.findings)
+        print(f"checked   {made.report}: {count} finding{'' if count == 1 else 's'}, {len(blocking)} blocking")
+        print(f"tokens    {_spent(made.ledger)}")
         assessed = _assessed(workspace, args.id, living)
-    state, unchecked = assessed.state, assessed.unchecked
     # A reason sets aside only what a person was shown: a check recorded before this run, never one it made.
-    override = bool(args.override) and made is None
-    blockers = approve_blockers(state, assessed.findings, strict=args.strict, check=unchecked, override=override)
-    if made is not None and made.report is not None:
-        count, blocking = len(made.findings), state.check.blocking if state.check else 0
-        if blockers:
-            _printed([held for held in made.findings if held.severity == "ERROR"])
-        print(
-            f"checked   {workspace.shown(made.report)}: {count} finding{'' if count == 1 else 's'}, {blocking} blocking"
-        )
-        if made.ledger is not None:
-            print(f"tokens    {_spent(made.ledger)}")
-    if blockers:
-        if args.override and made is not None:
+    if blockers := check_stops(assessed.unchecked, override=bool(args.override) and not first):
+        if args.override and first:
             print(
                 f"{PROG}: --override was not applied: this run made the check, so read what it found first, then "
                 "approve again with --override",
@@ -516,8 +511,8 @@ def _approve(args: argparse.Namespace) -> int:
         raise UsageError("this account has no name: name the approver with --by") from exc
     at = datetime.now(UTC).isoformat(timespec="seconds")
     # A reason is recorded only where it set something aside: a blocking finding of the check.
-    reason = args.override if override and any(held.code == "check.blocking" for held in unchecked) else None
-    workspace.save_state(approve(state, files=files, by=by, at=at, override=reason, commit=_commit(workspace)))
+    reason = args.override if any(held.code == "check.blocking" for held in assessed.unchecked) else None
+    workspace.save_state(approve(assessed.state, files=files, by=by, at=at, override=reason, commit=_commit(workspace)))
     print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
     _say_next(workspace, args.id, living)
     return EXIT_OK
@@ -801,18 +796,26 @@ def _plannable(
 
 @dataclass
 class _Planned:
-    """A plan as it was drafted: each file written, with its path and whether it replaced one; the ledger of the
-    model's pass; and why the pass did not end well, where it did not, in which case nothing was written."""
+    """A plan as it was drafted: each file written, and whether it replaced one; the ledger of the model's pass;
+    and why the pass did not end well, where it did not, in which case nothing was written."""
 
-    written: list[tuple[str, Path, bool]] = field(default_factory=list)
+    written: list[tuple[Path, bool]] = field(default_factory=list)
     ledger: Any = None
     failure: str | None = None
 
 
-def _plan_made(workspace: Workspace, change_id: str, *, replace: bool, ledger: Any = None) -> _Planned:
-    """A draft change's tasks drafted, and first its design where the brief owes one, with nothing printed. What
-    `plan` does, and what `propose` does once its change is written, on the ledger of the whole command."""
-    specs, of_specs = workspace.specs()
+def _plan_made(
+    workspace: Workspace,
+    change_id: str,
+    specs: dict[str, Spec],
+    of_specs: list[Finding],
+    *,
+    replace: bool,
+    ledger: Any = None,
+) -> _Planned:
+    """A draft change's tasks drafted, and first its design where the brief owes one. What `plan` does, and what
+    `propose` does once its change is written, on the ledger of the whole command. It prints only what stops it:
+    `NotYetError` where the change cannot be planned now, with the findings that say why."""
     assessed = _assessed(workspace, change_id, specs)
     change, state = assessed.loaded.change, assessed.state
     brief = _plannable(change_id, replace, workspace, assessed, of_specs)
@@ -851,29 +854,30 @@ def _plan_made(workspace: Workspace, change_id: str, *, replace: bool, ledger: A
     folder = workspace.home / CHANGES / change_id
     there = {name for name in files if (folder / name).is_file()}
     paths = workspace.write_into(change_id, files)
-    return _Planned([(name, path, name in there) for name, path in zip(files, paths, strict=True)], ledger)
+    return _Planned([(path, name in there) for name, path in zip(files, paths, strict=True)], ledger)
 
 
 def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     """The `plan` command: the plan drafted, and what was written said."""
-    made = _plan_made(workspace, args.id, replace=args.replace)
+    specs, of_specs = workspace.specs()
+    made = _plan_made(workspace, args.id, specs, of_specs, replace=args.replace)
     if made.failure:
         return _unfinished(f"no plan was written: {made.failure}", made.ledger)
-    for _name, path, replaced in made.written:
+    for path, replaced in made.written:
         print(f"{'replaced' if replaced else 'wrote':<10}{workspace.shown(path)}")
     print(f"tokens    {_spent(made.ledger)}")
-    _say_next(workspace, args.id, workspace.specs()[0])
+    _say_next(workspace, args.id, specs)
     return EXIT_OK
 
 
 @dataclass
 class _Checked:
-    """A check as it was made: every finding, with its path from the root; where its report stands; how many of the
-    model's findings pointed at nothing; the ledger of the model's pass, where there was one; and why the pass did
-    not end well, where it did not, in which case nothing was written or recorded."""
+    """A check as it was made: every finding, with its path from the root; where its report stands, as a person is
+    shown it; how many of the model's findings pointed at nothing; the ledger of the model's pass, where there was
+    one; and why the pass did not end well, where it did not, in which case nothing was written or recorded."""
 
     findings: list[Finding] = field(default_factory=list)
-    report: Path | None = None
+    report: str = ""
     dropped: int = 0
     ledger: Any = None
     failure: str | None = None
@@ -901,7 +905,7 @@ def _check_made(
     report = render_check(change_id, at, _inside(change_id, every), model=model, dropped=dropped)
     path = workspace.write_report(change_id, "check.md", report)
     workspace.save_state(checked(assessed.state, every, files=approval_files(texts), at=at, model=model))
-    return _Checked(every, path, dropped, ledger)
+    return _Checked(every, workspace.shown(path), dropped, ledger)
 
 
 def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
@@ -922,10 +926,10 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
     if any(held.severity == "ERROR" for held in assessed.findings):
         print(f"{PROG}: fix what the check lists first: the model's pass waits for files that read", file=sys.stderr)
     made = _check_made(workspace, args.id, specs, assessed, no_model=args.no_model)
-    if made.failure or made.report is None:
+    if made.failure:
         return _unfinished(f"the check did not finish, and nothing was recorded: {made.failure}", made.ledger)
     _printed(made.findings)
-    print(f"wrote     {workspace.shown(made.report)}")
+    print(f"wrote     {made.report}")
     if made.dropped:
         print(f"note      {left_out(made.dropped)}")
     if made.ledger is not None:
@@ -1096,19 +1100,28 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
             print(f"tokens    {_spent(ledger)}")
             return EXIT_USAGE
         kept.outcome = "written"
+    change_id = kept.change or ""
+    # An open point comes before the plan, since its answer shapes the tasks: none is drafted on a guess.
+    waiting = [held for held in _assessed(workspace, change_id, specs).findings if held.code == _OPEN_POINT]
+    if waiting:
+        count = len(waiting)
+        print(f"tokens    {_spent(ledger)}")
+        print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
+        _say_next(workspace, change_id, specs)
+        return EXIT_OK
     # The plan, in the same command and under the same ceiling. The change is written by now: a plan that does not
     # end well leaves it a draft, and `plan` finishes it.
-    change_id = kept.change or ""
-    made = _plan_made(workspace, change_id, replace=False, ledger=ledger)
+    try:
+        made = _plan_made(workspace, change_id, specs, of_specs, replace=False, ledger=ledger)
+    except NotYetError as exc:  # the calls so far are paid for: what stopped the plan is said as any other failure
+        made = _Planned(ledger=ledger, failure=str(exc))
     if made.failure:
-        print(
-            f"{PROG}: the brief and the specs are written, and the plan is not: {made.failure}. Run "
+        return _unfinished(
+            f"the brief and the specs are written, and the plan is not: {made.failure}. Run "
             f"`{PROG} plan {change_id}` to finish it",
-            file=sys.stderr,
+            ledger,
         )
-        print(f"tokens    {_spent(ledger)}")
-        return EXIT_ENGINE
-    for _name, path, _replaced in made.written:
+    for path, _replaced in made.written:
         print(f"          {workspace.shown(path)}")
     print(f"tokens    {_spent(ledger)}")
     print(f"read      {_first_reads(workspace, change_id)} first")
@@ -1116,12 +1129,17 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     return EXIT_OK
 
 
+#: The finding of a point a brief leaves open, which holds a plan back.
+_OPEN_POINT = "brief.marker-unresolved"
+
+
 def _first_reads(workspace: Workspace, change_id: str) -> str:
     """What a person reads first of a change, each with its length: the brief, and the design where there is one.
     Review counts most there, early and short; the task list follows from the two."""
-    folder = workspace.home / CHANGES / change_id
-    named = [name for name in (BRIEF_FILE, DESIGN_FILE) if (folder / name).is_file()]
-    return " and ".join(f"{name} ({len(read_text(folder / name).splitlines())} lines)" for name in named)
+    texts = workspace.approval_texts(change_id)
+    return " and ".join(
+        f"{name} ({len(lines_of(texts[name]))} lines)" for name in (BRIEF_FILE, DESIGN_FILE) if name in texts
+    )
 
 
 def _rounds(args: argparse.Namespace, known: Any, ledger: Any, recorder: Any, seed: dict[str, Any]) -> dict[str, Any]:

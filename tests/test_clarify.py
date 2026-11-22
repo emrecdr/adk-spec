@@ -105,7 +105,7 @@ def test_no_input_asks_nothing_and_the_lean_tier_asks_nothing(tmp_path, capsys, 
     assert proposed(tmp_path, "--tier", "standard", "--no-input", "--id", "quiet") == 0
     assert proposed(tmp_path, "--tier", "lean", "--id", "lean-one") == 0
     assert "A line answers" not in capsys.readouterr().out
-    assert len(fake_provider.requests) == 6, "a brief, the deltas and the tasks, twice"
+    assert len(fake_provider.requests) == 4, "a brief and the deltas, twice: no plan is drafted on a point left open"
     for change in ("quiet", "lean-one"):
         assert len(markers(brief_md(tmp_path, change))) == 1, "the point stands in the file, for a person to settle"
 
@@ -297,3 +297,20 @@ def test_a_brief_over_its_budget_is_told_what_its_stage_can_do_about_it(tmp_path
     assert "brief.markers-over-budget: the brief leaves 4 points open, past the 3 it may" in again
     assert "1 of them written as a marker in a section. Write no marker there" in again
     assert "settle some with its author" not in again
+
+
+def test_propose_drafts_no_plan_while_a_point_is_left_open(tmp_path, capsys, fake_provider) -> None:
+    """Found by the cleanup review: the plan was drafted from a brief the tool itself marked unsettled, which is
+    the largest call of the command spent on a guess. An open point comes before the plan, since its answer
+    shapes the tasks: `propose` writes the brief and the specs, and says what it waits for."""
+    seeded(tmp_path)
+    fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
+    assert proposed(tmp_path, "--tier", "standard", "--no-input", "--id", "open") == 0
+    out = capsys.readouterr().out
+    assert not (tmp_path / ".spec/changes/open/tasks.md").exists() and len(fake_provider.requests) == 2
+    assert "plan      waits: the brief leaves 1 point open" in out
+    assert "next      settle the open point in brief.md" in out
+    brief = tmp_path / ".spec/changes/open/brief.md"
+    write_text(brief, read_text(brief).replace(f"[NEEDS CLARIFICATION: {ASKED}]", "Evergreen browsers only."))
+    assert run(tmp_path, "status") == 0 and "run `adk-spec plan open`" in capsys.readouterr().out
+    assert run(tmp_path, "plan", "open") == 0 and (tmp_path / ".spec/changes/open/tasks.md").is_file()

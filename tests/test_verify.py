@@ -57,7 +57,6 @@ def approved_in_a_repository(root, tier: str = "standard"):
     ws = seeded(root)
     ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"tier": tier}))
     commit = repository(root, {"src/auth.py": BEFORE})
-    assert run(root, "rebase", "passkeys") == 0
     assert tier == "lean" or run(root, "check", "passkeys", "--no-model") == 0
     assert run(root, "approve", "passkeys", "--by", "reviewer") == 0
     return ws, commit
@@ -208,7 +207,7 @@ def test_what_cannot_be_verified_is_a_sentence_and_writes_nothing(
     argv, code, said = ["verify", "passkeys"], 2, ""
     if case == "no repository":
         ws = seeded(tmp_path)
-        assert run(tmp_path, "rebase", "passkeys") == 0 and run(tmp_path, "approve", "passkeys", "--by", "r") == 0
+        assert run(tmp_path, "approve", "passkeys", "--by", "r") == 0
         said = "git repository"
     elif case == "a draft":
         ws = seeded(tmp_path)
@@ -261,7 +260,7 @@ def test_a_lean_change_may_be_verified_and_a_change_with_no_delta_has_nothing_to
 
 def test_approve_records_no_commit_outside_a_repository(tmp_path) -> None:
     seeded(tmp_path)
-    assert run(tmp_path, "rebase", "passkeys") == 0 and run(tmp_path, "approve", "passkeys", "--by", "r") == 0
+    assert run(tmp_path, "approve", "passkeys", "--by", "r") == 0
     assert state_of(tmp_path)["base_commit"] is None and head(tmp_path) is None
 
 
@@ -322,17 +321,15 @@ def test_work_that_changed_after_it_was_verified_is_verified_again_before_it_is_
 
 def test_a_standard_change_takes_four_commands_from_request_to_record(tmp_path, fake_provider) -> None:
     """`propose`, `approve`, `verify`, `archive`: one command a decision. Nobody runs `plan`, `rebase` or `check`."""
-    from conftest import state_of
-
-    seeded(tmp_path)
+    ws = seeded(tmp_path)
     repository(tmp_path, {"src/auth.py": BEFORE})
     request = "Let users sign in with a passkey."
     assert run(tmp_path, "propose", request, "--tier", "standard", "--no-input", "--id", "four") == 0
     assert run(tmp_path, "approve", "four", "--by", "reviewer") == 0
     implemented(tmp_path)
-    met = {"id": "REQ-AUTH-005", "verdict": "met", "reason": "Sign-in goes through the passkey."}
-    met["evidence"] = [{"path": "src/auth.py", "quote": "return passkey(user)"}]
-    fake_provider.answers_when("You judge whether", {"verdicts": [met]})
+    served = {req for group in ws.load_change("four").change.tasks for task in group.tasks for req in task.requirements}
+    assert served == {"REQ-AUTH-005"}, "the plan serves the requirement the change adds, 004 being another's"
+    fake_provider.answers_when(VERIFY, {"verdicts": [{**CANNED_VERDICTS["verdicts"][0], "id": "REQ-AUTH-005"}]})
     assert run(tmp_path, "verify", "four") == 0
     assert run(tmp_path, "archive", "four") == 0
     assert state_of(tmp_path, "four")["status"] == "archived"
@@ -340,8 +337,6 @@ def test_a_standard_change_takes_four_commands_from_request_to_record(tmp_path, 
 
 
 def test_a_lean_change_takes_three(tmp_path, fake_provider) -> None:
-    from conftest import state_of
-
     seeded(tmp_path)
     assert run(tmp_path, "propose", "Let users sign in with a passkey.", "--tier", "lean", "--id", "three") == 0
     assert run(tmp_path, "approve", "three", "--by", "reviewer") == 0

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 from conftest import CANNED_TRIAGE, DELTAS_ON_A_MISSING_ID, approved, on_the_fake, run, seeded, state_of
-from samples import tasks_for
 
 from adk_spec.interfaces import cli
 from adk_spec.orchestration.stages import BOUNDARY
@@ -64,7 +63,6 @@ def test_a_modified_requirement_has_its_base_recorded_so_it_can_be_approved(tmp_
     fake_provider.answers_when(DELTAS, draft)
     assert proposed(tmp_path, "--id", "lock-sooner") == 0
     assert list(state_of(tmp_path, "lock-sooner")["bases"]) == ["REQ-AUTH-002"]
-    write_text(tmp_path / ".spec/changes/lock-sooner/tasks.md", tasks_for("REQ-AUTH-002"))
     assert run(tmp_path, "approve", "lock-sooner", "--by", "reviewer") == 0, "no rebase needed after propose"
     assert ws.load_change("lock-sooner").change.state.status == "approved"
 
@@ -387,21 +385,6 @@ def test_the_brief_is_told_its_tier(tmp_path, fake_provider) -> None:
     assert "On the lean tier no question is asked" in next(text for text in briefs if text.startswith(BRIEF))
 
 
-def test_a_design_is_written_only_for_the_change_whose_brief_owes_one(tmp_path, fake_provider) -> None:
-    """The first review found the reason a design is owed drafted and shown to nobody. The design itself is written
-    now, in the same command, so there is nothing left to announce."""
-    from conftest import CANNED_BRIEF
-
-    seeded(tmp_path)
-    fake_provider.answers_each_time(
-        BRIEF, iter([{**CANNED_BRIEF, "design_needed": True, "design_reason": "It adds a dependency."}])
-    )
-    assert proposed(tmp_path, "--tier", "lean", "--id", "designed") == 0
-    assert proposed(tmp_path, "--tier", "lean", "--id", "plain", request="Fix a typo in the sign-in page.") == 0
-    assert (tmp_path / ".spec/changes/designed/design.md").is_file()
-    assert not (tmp_path / ".spec/changes/plain/design.md").exists()
-
-
 # The simple flow: `propose` writes the whole change, its plan included.
 
 TASKS = "You break a change into tasks"
@@ -424,15 +407,21 @@ def test_propose_writes_the_whole_change_tasks_included(tmp_path, capsys, fake_p
     assert run(tmp_path, "approve", "whole", "--by", "reviewer") == 0, "a lean change: three commands with archive"
 
 
-def test_propose_writes_the_design_where_the_brief_owes_one(tmp_path, capsys, fake_provider) -> None:
-    from conftest import CANNED_BRIEF
+def test_propose_writes_the_design_where_the_brief_owes_one_and_none_where_it_owes_none(
+    tmp_path, capsys, fake_provider
+) -> None:
+    """The first review found the reason a design is owed drafted and shown to nobody. The design itself is written
+    now, in the same command, so there is nothing left to announce."""
+    from conftest import BRIEF_OWING_A_DESIGN
 
     ws = seeded(tmp_path)
-    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "design_needed": True, "design_reason": "A new dependency."})
+    fake_provider.answers_each_time(BRIEF, iter([BRIEF_OWING_A_DESIGN]))
     assert proposed(tmp_path, "--tier", "lean", "--id", "designed") == 0
     assert ws.load_change("designed").change.design is not None
     out = capsys.readouterr().out
     assert ".spec/changes/designed/design.md" in out and "design 120 in 1 call" in out and "design    owed" not in out
+    assert proposed(tmp_path, "--tier", "lean", "--id", "plain", request="Fix a typo in the sign-in page.") == 0
+    assert not (tmp_path / ".spec/changes/plain/design.md").exists()
 
 
 def test_one_ceiling_holds_the_drafting_and_the_plan_and_a_failed_plan_leaves_the_draft(

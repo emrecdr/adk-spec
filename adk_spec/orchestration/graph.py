@@ -34,7 +34,6 @@ from ..domain.ids import slug_problem
 from ..domain.lifecycle import capture_bases
 from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.tasks_md import parse_tasks, render_tasks
-from ..domain.text import plain
 from ..domain.validate import validate_brief, validate_delta, validate_tasks
 from ..workspace.context import ContextTooLargeError, living_text
 from ..workspace.layout import BRIEF as BRIEF_FILE
@@ -81,8 +80,6 @@ class Drafted:
     brief: Brief
     deltas: dict[str, Delta]
     needs_design: bool
-    #: Why the brief says a design is owed, in a sentence. Shown to the person; nothing is decided by it.
-    design_reason: str
 
 
 def _errors(findings: list[Finding]) -> list[str]:
@@ -99,7 +96,7 @@ def drafted(state: Mapping[str, Any], known: Known) -> Drafted:
     checked is what the command writes."""
     draft = BriefDraft.model_validate(state[brief_stage.KEY])
     deltas = to_deltas(DeltasDraft.model_validate(state[deltas_stage.KEY]), known.living, known.taken)
-    return Drafted(to_brief(draft), deltas, draft.design_needed, plain(draft.design_reason))
+    return Drafted(to_brief(draft), deltas, draft.design_needed)
 
 
 def files_of(made: Drafted) -> dict[str, str]:

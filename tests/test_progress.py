@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 
 import pytest
-from conftest import CANNED_BRIEF, on_the_fake, run, seeded
+from conftest import BRIEF_OWING_A_DESIGN, on_the_fake, run, seeded
 
 from adk_spec.interfaces import cli
 
@@ -47,7 +47,7 @@ def test_propose_names_what_to_read_first_with_its_length(tmp_path, capsys, fake
     out = capsys.readouterr().out
     assert re.search(r"^read      brief\.md \(\d+ lines\) first$", out, re.MULTILINE)
     assert out.index("read      ") < out.index("next      "), "what to read, then what to run"
-    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "design_needed": True, "design_reason": "A new dependency."})
+    fake_provider.answers_when(BRIEF, BRIEF_OWING_A_DESIGN)
     assert run(tmp_path, "propose", REQUEST, "--tier", "lean", "--id", "designed") == 0
     out = capsys.readouterr().out
     assert re.search(r"^read      brief\.md \(\d+ lines\) and design\.md \(\d+ lines\) first$", out, re.MULTILINE)
