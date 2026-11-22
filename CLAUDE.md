@@ -49,7 +49,7 @@ import except `adk_spec/agent.py`, the shape `adk web` loads.
   after each stage (`gate.py`), the code reading (`explore.py`), plugins every app carries (`plugins.py`: schema
   mismatch, token ledger, scrub), the two provider arms (`models.py`, `settings.py`).
 - **interfaces**: `cli.py` (argparse, the commands and their printing), `login.py` (Copilot device flow),
-  `mcp_server.py` (`adk-spec-mcp`: six commands as MCP tools, each running `python -m adk_spec` in its own process;
+  `mcp_server.py` (`adk-spec-mcp`: six commands as MCP tools, each running `python -P -m adk_spec` in its own process;
   no tool approves, archives or overrides, which stay the person's).
 
 Rules that span files and are easy to break:
@@ -80,6 +80,9 @@ deltas, `design.md`, `tasks.md`, `context.md`, `reports/`, `change.json`), `runs
 - Tests: the `fake_provider` fixture (`tests/conftest.py`) answers each stage by the opening of its instruction
   (`answers_when`, `answers_each_time`); `seeded(tmp_path)` makes a workspace with a living spec and one change. Test
   names are sentences of the behaviour; do not name a helper `test*`. Ruff keeps complexity at 10 and lines at 120.
+- `.github/copilot-instructions.md` gives GitHub Copilot the same guidance as this file, with folder rules in
+  `.github/instructions/`, and `.github/workflows/copilot-setup-steps.yml` readies Copilot's cloud agent: change them
+  together with this file.
 - Docs: designs in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`, the roadmap and every phase's state
   in `docs/superpowers/plans/README.md`, live measurements in `docs/measurements/`. A phase is designed with the
   owner's decisions recorded, built test first, cleaned up and code-reviewed, then merged locally.
