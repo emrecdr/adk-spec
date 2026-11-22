@@ -15,7 +15,7 @@ import os
 import re
 import sys
 from collections.abc import Callable, Generator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
@@ -26,6 +26,7 @@ from ..domain.check import nameable, owed, removed
 from ..domain.convert import render_design, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
+    MADE_BY_APPROVAL,
     Step,
     approval_files,
     approval_stale,
@@ -421,19 +422,62 @@ def _based(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> Non
         workspace.save_state(state.model_copy(update={"bases": {**state.bases, **missing}}))
 
 
+def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec], assessed: Assessed) -> Any:
+    """The check an approval makes of a change whose check is missing or stale, as `check` makes it. Where no
+    provider is ready, the refusal names the way that needs none."""
+    _load_env()
+    try:
+        return _check_made(workspace, change_id, living, assessed, no_model=False)
+    except UsageError as exc:
+        raise UsageError(
+            f"{exc}. `approve` checks a {assessed.state.tier} change first: set the provider up, or run "
+            f"`{PROG} check {change_id} --no-model` and approve again"
+        ) from exc
+
+
+def _refused(change_id: str, blockers: list[Finding]) -> int:
+    _printed(blockers)
+    print(f"{PROG}: `{change_id}` is not approved: {len(blockers)} findings block it", file=sys.stderr)
+    return EXIT_FINDINGS
+
+
 def _approve(args: argparse.Namespace) -> int:
+    """An approval, with what it needs done first: a base recorded where one is missing, and the check made where
+    none is current. A person decides once; the tool's own work is no step of theirs."""
     workspace = _workspace(args)
     living, _found = workspace.specs()
     _based(workspace, args.id, living)
     assessed = _assessed(workspace, args.id, living)
+    # What blocks beside the check comes first: no model is asked about files that are going to change.
+    if others := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
+        return _refused(args.id, others)
+    made = None
+    if {held.code for held in assessed.unchecked} & MADE_BY_APPROVAL:
+        made = _checked_first(workspace, args.id, living, assessed)
+        if made.failure or made.report is None:
+            return _unfinished(f"the check did not finish, and nothing was approved: {made.failure}", made.ledger)
+        assessed = _assessed(workspace, args.id, living)
     state, unchecked = assessed.state, assessed.unchecked
-    blockers = approve_blockers(
-        state, assessed.findings, strict=args.strict, check=unchecked, override=bool(args.override)
-    )
+    # A reason sets aside only what a person was shown: a check recorded before this run, never one it made.
+    override = bool(args.override) and made is None
+    blockers = approve_blockers(state, assessed.findings, strict=args.strict, check=unchecked, override=override)
+    if made is not None and made.report is not None:
+        count, blocking = len(made.findings), state.check.blocking if state.check else 0
+        if blockers:
+            _printed([held for held in made.findings if held.severity == "ERROR"])
+        print(
+            f"checked   {workspace.shown(made.report)}: {count} finding{'' if count == 1 else 's'}, {blocking} blocking"
+        )
+        if made.ledger is not None:
+            print(f"tokens    {_spent(made.ledger)}")
     if blockers:
-        _printed(blockers)
-        print(f"{PROG}: `{args.id}` is not approved: {len(blockers)} findings block it", file=sys.stderr)
-        return EXIT_FINDINGS
+        if args.override and made is not None:
+            print(
+                f"{PROG}: --override was not applied: this run made the check, so read what it found first, then "
+                "approve again with --override",
+                file=sys.stderr,
+            )
+        return _refused(args.id, blockers)
     files = approval_files(workspace.approval_texts(args.id))
     try:
         by = args.by or getpass.getuser()
@@ -441,9 +485,10 @@ def _approve(args: argparse.Namespace) -> int:
         raise UsageError("this account has no name: name the approver with --by") from exc
     at = datetime.now(UTC).isoformat(timespec="seconds")
     # A reason is recorded only where it set something aside: a blocking finding of the check.
-    override = args.override if any(held.code == "check.blocking" for held in unchecked) else None
-    workspace.save_state(approve(state, files=files, by=by, at=at, override=override, commit=_commit(workspace)))
+    reason = args.override if override and any(held.code == "check.blocking" for held in unchecked) else None
+    workspace.save_state(approve(state, files=files, by=by, at=at, override=reason, commit=_commit(workspace)))
     print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
+    _say_next(workspace, args.id, living)
     return EXIT_OK
 
 
@@ -750,47 +795,72 @@ def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     return EXIT_OK
 
 
+@dataclass
+class _Checked:
+    """A check as it was made: every finding, with its path from the root; where its report stands; how many of the
+    model's findings pointed at nothing; the ledger of the model's pass, where there was one; and why the pass did
+    not end well, where it did not, in which case nothing was written or recorded."""
+
+    findings: list[Finding] = field(default_factory=list)
+    report: Path | None = None
+    dropped: int = 0
+    ledger: Any = None
+    failure: str | None = None
+
+
+def _check_made(
+    workspace: Workspace, change_id: str, specs: dict[str, Spec], assessed: Assessed, *, no_model: bool
+) -> _Checked:
+    """A change's files checked against each other, with nothing printed: by code always, and by a model where the
+    files read and it was not ruled out. The report is written and the check recorded with the fingerprints of what
+    was read; where the model's pass does not end well, neither is. What `check` does, and what `approve` does for
+    a change whose check is not current."""
+    texts = workspace.approval_texts(change_id)
+    judged: list[Finding] = []
+    dropped, ledger, model = 0, None, None
+    if not no_model and not any(held.severity == "ERROR" for held in assessed.findings):
+        from ..orchestration.models import serving
+
+        judged, dropped, ledger, failure = _judged(workspace, assessed.loaded.change, specs, texts)
+        if failure:
+            return _Checked(ledger=ledger, failure=failure)
+        model = serving("check")
+    at = datetime.now(UTC).isoformat(timespec="seconds")
+    every = [*assessed.findings, *_from_root(change_id, judged)]
+    report = render_check(change_id, at, _inside(change_id, every), model=model, dropped=dropped)
+    path = workspace.write_report(change_id, "check.md", report)
+    workspace.save_state(checked(assessed.state, every, files=approval_files(texts), at=at, model=model))
+    return _Checked(every, path, dropped, ledger)
+
+
 def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
-    """A change's files checked against each other: by code always, and by a model where the files read and the
-    person did not say otherwise. The report is written and the check recorded with the fingerprints of what was
-    read; where the model's pass does not end well, neither is."""
+    """The `check` command: the check made, and what it found said."""
     specs, _of_living = workspace.specs()
     assessed = _assessed(workspace, args.id, specs)
     if assessed.state.status == "archived":
         raise NotYetError(f"`{args.id}` is archived: there is nothing left to check")
-    texts = workspace.approval_texts(args.id)
     held = assessed.state.check
-    if args.no_model and held is not None and check_stands(assessed.state, approval_files(texts)):
+    files = approval_files(workspace.approval_texts(args.id))
+    if args.no_model and held is not None and check_stands(assessed.state, files):
         print(
             f"{PROG}: the check of `{args.id}` by {held.model} stands, with {held.blocking} blocking: its files have "
             "not changed since, and a check by code alone does not replace it",
             file=sys.stderr,
         )
         return EXIT_FINDINGS if held.blocking else EXIT_OK
-    judged: list[Finding] = []
-    dropped, ledger, model = 0, None, None
     if any(held.severity == "ERROR" for held in assessed.findings):
         print(f"{PROG}: fix what the check lists first: the model's pass waits for files that read", file=sys.stderr)
-    elif not args.no_model:
-        from ..orchestration.models import serving
-
-        judged, dropped, ledger, failure = _judged(workspace, assessed.loaded.change, specs, texts)
-        if failure:
-            return _unfinished(f"the check did not finish, and nothing was recorded: {failure}", ledger)
-        model = serving("check")
-    at = datetime.now(UTC).isoformat(timespec="seconds")
-    every = [*assessed.findings, *_from_root(args.id, judged)]
-    report = render_check(args.id, at, _inside(args.id, every), model=model, dropped=dropped)
-    path = workspace.write_report(args.id, "check.md", report)
-    workspace.save_state(checked(assessed.state, every, files=approval_files(texts), at=at, model=model))
-    _printed(every)
-    print(f"wrote     {workspace.shown(path)}")
-    if dropped:
-        print(f"note      {left_out(dropped)}")
-    if ledger is not None:
-        print(f"tokens    {_spent(ledger)}")
+    made = _check_made(workspace, args.id, specs, assessed, no_model=args.no_model)
+    if made.failure or made.report is None:
+        return _unfinished(f"the check did not finish, and nothing was recorded: {made.failure}", made.ledger)
+    _printed(made.findings)
+    print(f"wrote     {workspace.shown(made.report)}")
+    if made.dropped:
+        print(f"note      {left_out(made.dropped)}")
+    if made.ledger is not None:
+        print(f"tokens    {_spent(made.ledger)}")
     _say_next(workspace, args.id, specs)
-    return EXIT_FINDINGS if any(held.severity == "ERROR" for held in every) else EXIT_OK
+    return EXIT_FINDINGS if any(held.severity == "ERROR" for held in made.findings) else EXIT_OK
 
 
 def _judged(

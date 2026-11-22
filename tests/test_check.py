@@ -4,7 +4,7 @@ which task names a requirement nothing holds."""
 from __future__ import annotations
 
 import pytest
-from conftest import CANNED_FINDINGS, approved, on_the_fake, run, seeded
+from conftest import CANNED_FINDINGS, on_the_fake, run, seeded
 from samples import BRIEF, DELTA, SPEC, TASKS
 
 from adk_spec.domain.check import coverage, coverage_of, nameable, owed
@@ -153,32 +153,104 @@ def test_a_critical_finding_blocks_approval_until_it_is_fixed_or_overridden(tmp_
     assert approval.override == "the delta is right" and state(ws).status == "approved"
 
 
-def test_an_edit_after_the_check_makes_it_stale(tmp_path, capsys, fake_provider) -> None:
-    standard(tmp_path)
+def test_approve_checks_again_after_an_edit(tmp_path, capsys, fake_provider) -> None:
+    """An edit makes a check stale. A person no longer has to run `check` again before `approve`: the approval
+    makes the check it needs, of the files as they now stand."""
+    ws = standard(tmp_path)
     assert run(tmp_path, "check", "passkeys") == 0
     brief = tmp_path / ".spec/changes/passkeys/brief.md"
     write_text(brief, read_text(brief).replace("No change to session length.", "No change to sessions."))
     capsys.readouterr()
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
-    assert "check.stale" in capsys.readouterr().out
-    assert run(tmp_path, "status") == 0 and "run `adk-spec check passkeys`" in capsys.readouterr().out
-    assert len(fake_provider.requests) == 1
+    assert run(tmp_path, "status") == 0 and "run `adk-spec approve passkeys`" in capsys.readouterr().out
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert len(fake_provider.requests) == 2 and state(ws).status == "approved"
+    assert state(ws).check.files == state(ws).approval.files, "what was checked is what was approved"
 
 
-def test_a_standard_change_never_checked_cannot_be_approved_and_a_lean_one_can(tmp_path, capsys) -> None:
-    standard(tmp_path / "standard")
+def test_approve_makes_the_check_a_standard_change_owes(tmp_path, capsys, fake_provider) -> None:
+    """The simple flow: `check` was a command a person ran only because `approve` asked for it."""
+    import re
+
+    ws = standard(tmp_path)
     capsys.readouterr()
-    assert run(tmp_path / "standard", "approve", "passkeys", "--by", "reviewer") == 1
-    assert "check.missing" in capsys.readouterr().out
-    seeded(tmp_path / "lean")
-    approved(tmp_path / "lean")
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    out = capsys.readouterr().out
+    assert len(fake_provider.requests) == 1 and state(ws).status == "approved" and state(ws).check.blocking == 0
+    assert re.search(rf"checked   {re.escape(REPORT)}: \d+ findings?, 0 blocking", out)
+    assert "approved `passkeys` by reviewer" in out and "tokens    check 120 in 1 call: 120 total" in out
+    assert "next      implement tasks.md, then run `adk-spec verify passkeys`" in out
+    assert "check.ambiguity" in read_text(tmp_path / REPORT), "the report is written as `check` writes it"
 
 
-def test_an_override_does_not_stand_in_for_a_check_never_run(tmp_path, capsys) -> None:
+def test_a_current_check_is_not_made_again(tmp_path, capsys, fake_provider) -> None:
     standard(tmp_path)
+    assert run(tmp_path, "check", "passkeys") == 0
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    out = capsys.readouterr().out
+    assert len(fake_provider.requests) == 1 and "checked   " not in out and "tokens" not in out
+
+
+def test_a_lean_change_is_approved_with_no_check_and_no_model(tmp_path, fake_provider) -> None:
+    ws = seeded(tmp_path)
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert fake_provider.requests == [] and state(ws).check is None
+
+
+def test_a_blocking_finding_of_its_own_check_stops_the_approval(tmp_path, capsys, fake_provider) -> None:
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    said = capsys.readouterr()
+    assert "check.contradiction" in said.out and "The delta keeps password sign-in." in said.out
+    assert "1 blocking" in said.out and "is not approved" in said.err and REPORT in said.out
+    assert state(ws).approval is None and state(ws).check.blocking == 1, "the check is recorded, the approval is not"
+
+
+def test_an_override_does_not_reach_a_check_made_in_the_same_run(tmp_path, capsys, fake_provider) -> None:
+    """A person cannot set aside a finding they have not been shown: `--override` typed on the run that makes the
+    check is not applied. Typed again, once the finding has been printed, it is."""
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
     capsys.readouterr()
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer", "--override", "no time") == 1
-    assert "check.missing" in capsys.readouterr().out
+    said = capsys.readouterr()
+    assert "check.contradiction" in said.out and state(ws).approval is None
+    assert "--override was not applied" in said.err and "read what it found" in said.err
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer", "--override", "the delta is right") == 0
+    assert state(ws).approval.override == "the delta is right" and len(fake_provider.requests) == 1
+
+
+def test_approve_with_no_provider_says_so_and_names_the_way_without_one(tmp_path, monkeypatch, capsys) -> None:
+    ws = standard(tmp_path)
+    monkeypatch.delenv("GOOGLE_API_KEY")
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 2
+    err = capsys.readouterr().err
+    assert "GOOGLE_API_KEY" in err and "adk-spec check passkeys --no-model" in err
+    assert state(ws).check is None and state(ws).approval is None
+
+
+def test_approve_calls_no_model_where_a_file_does_not_read(tmp_path, capsys, fake_provider) -> None:
+    ws = standard(tmp_path)
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, read_text(delta).replace("### REQ-AUTH-002", "### REQ-AUTH-099"))
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    said = capsys.readouterr()
+    assert "delta.target-missing" in said.out and "check.missing" not in said.out, (
+        "what it will make itself is no finding"
+    )
+    assert fake_provider.requests == [] and state(ws).check is None and state(ws).approval is None
+
+
+def test_a_check_that_does_not_finish_approves_nothing(tmp_path, capsys, fake_provider) -> None:
+    ws = standard(tmp_path)
+    fake_provider.raises_when(CHECK, RuntimeError("the provider fell over"))
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 3
+    assert "the provider fell over" in capsys.readouterr().err
+    assert state(ws).check is None and state(ws).approval is None and not (tmp_path / REPORT).exists()
 
 
 def test_no_model_runs_the_codes_passes_alone(tmp_path, fake_provider) -> None:

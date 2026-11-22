@@ -138,15 +138,15 @@ def test_a_lean_change_owes_no_check_and_a_standard_one_owes_a_current_clean_one
     assert (blocking.code, blocking.severity) == ("check.blocking", "ERROR") and "2 blocking" in blocking.message
 
 
-def test_a_draft_with_nothing_else_owed_is_sent_to_its_check_first() -> None:
+def test_a_draft_with_nothing_else_owed_is_sent_to_its_approval_which_checks_first() -> None:
     from adk_spec.domain.lifecycle import check_blockers
     from adk_spec.domain.model import Checked
 
     never = ChangeState(id="passkeys", tier="standard")
-    assert next_action(never, [], ["approval"], check=check_blockers(never, FILES)) == "run `adk-spec check passkeys`"
+    assert next_action(never, [], ["approval"], check=check_blockers(never, FILES)) == "run `adk-spec approve passkeys`"
     found = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=1)})
     step = next_action(found, [], ["approval"], check=check_blockers(found, FILES))
-    assert step == "fix what reports/check.md lists, then run `adk-spec check passkeys`"
+    assert step == "fix what reports/check.md lists, then run `adk-spec approve passkeys`"
     clean = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
     assert next_action(clean, [], ["approval"], check=check_blockers(clean, FILES)) == "run `adk-spec approve passkeys`"
 
@@ -172,12 +172,12 @@ def test_each_next_step_says_who_takes_it(state, findings, actor) -> None:
     assert step.actor == actor and step.phrase == next_action(state, findings, stale)
 
 
-def test_a_check_that_is_owed_is_a_command_to_run_and_one_that_blocks_is_yours() -> None:
+def test_a_check_that_is_owed_is_the_approvals_to_make_and_one_that_blocks_is_yours() -> None:
     from adk_spec.domain.lifecycle import check_blockers, next_step
     from adk_spec.domain.model import Checked
 
     never = ChangeState(id="passkeys", tier="standard")
-    assert next_step(never, [], ["approval"], check=check_blockers(never, FILES)).actor == "run"
+    assert next_step(never, [], ["approval"], check=check_blockers(never, FILES)).actor == "you", "an approval"
     found = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=1)})
     assert next_step(found, [], ["approval"], check=check_blockers(found, FILES)).actor == "you"
 
@@ -238,5 +238,5 @@ def test_a_standard_change_edited_after_approval_is_sent_to_its_check_before_its
     state = approved("standard").model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
     owed = check_blockers(state, {**FILES, "tasks.md": "sha256:edited"})
     said = next_action(state, [], ["tasks.md"], check=owed)
-    assert said == "run `adk-spec check passkeys`, then approve again: tasks.md changed since the approval"
+    assert said == "approve again: tasks.md changed since the approval", "`approve` checks first, by itself"
     assert next_action(approved(), [], ["tasks.md"]) == "approve again: tasks.md changed since the approval"

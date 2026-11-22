@@ -113,6 +113,10 @@ def verified(
     return state.model_copy(update={"verification": held, "status": status})
 
 
+#: What a change's check can owe that an approval settles by itself: it makes the check where none is current.
+MADE_BY_APPROVAL = frozenset({"check.missing", "check.stale"})
+
+
 def check_blockers(state: ChangeState, files: Mapping[str, str]) -> list[Finding]:
     """What a change's check still owes its approval, as one finding or none. A lean change owes no check. Any
     other owes one of its files as they stand now (`files`, their fingerprints), with nothing blocking in it."""
@@ -120,14 +124,14 @@ def check_blockers(state: ChangeState, files: Mapping[str, str]) -> list[Finding
     if state.tier == "lean":
         return []
     if state.check is None:
-        why = ("check.missing", f"`{cid}` has not been checked. Run `adk-spec check {cid}`.")
+        why = ("check.missing", f"`{cid}` has not been checked: `adk-spec approve {cid}` checks it first.")
     elif state.check.files != dict(files):
-        why = ("check.stale", f"A file of `{cid}` changed since its check. Run `adk-spec check {cid}` again.")
+        why = ("check.stale", f"A file of `{cid}` changed since its check: `adk-spec approve {cid}` checks it again.")
     elif state.check.blocking:
         why = (
             "check.blocking",
             f"The check of `{cid}` found {state.check.blocking} blocking: reports/check.md lists them. Fix them and "
-            "check again, or approve with --override and your reason.",
+            "approve again, or approve with --override and your reason.",
         )
     else:
         return []
@@ -216,14 +220,13 @@ class Step:
 _ERROR = "an ERROR"
 #: What holds a draft, the first that applies first: the code of what holds it, who acts on it, and the phrase, in
 #: which `{cid}` is the change. An ERROR comes before everything, since the files it is in will change; an open
-#: point before the plan, since its answer shapes the tasks; and the plan before the check, which reads it.
+#: point before the plan, since its answer shapes the tasks; and the plan before the check, which reads it. A
+#: check that is missing or stale holds nothing: the approval makes it.
 _HOLDS: tuple[tuple[str, Actor, str], ...] = (
     (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
     ("brief.marker-unresolved", "you", "settle the open point in brief.md"),
     ("change.missing-tasks", "run", "run `adk-spec plan {cid}`"),
-    ("check.blocking", "you", "fix what reports/check.md lists, then run `adk-spec check {cid}`"),
-    ("check.missing", "run", "run `adk-spec check {cid}`"),
-    ("check.stale", "run", "run `adk-spec check {cid}`"),
+    ("check.blocking", "you", "fix what reports/check.md lists, then run `adk-spec approve {cid}`"),
 )
 
 
@@ -242,9 +245,8 @@ def next_step(
         return Step("done", "nothing: archived")
     errors = any(found.severity == "ERROR" for found in findings)
     if state.status in ("approved", "verified"):
-        if stale:  # the edit that voided the approval made a check of the old files stale as well
-            first = f"run `adk-spec check {cid}`, then " if check else ""
-            return Step("you", f"{first}approve again: {', '.join(stale)} changed since the approval")
+        if stale:  # the edit that voided the approval made a check stale as well, which the approval makes again
+            return Step("you", f"approve again: {', '.join(stale)} changed since the approval")
         if errors:  # a base that moved, a spec that no longer reads
             return Step("you", f"fix what `adk-spec validate {cid}` lists")
         if state.status == "verified" and drifted and state.tier != "lean":
@@ -257,7 +259,7 @@ def next_step(
     for code, actor, phrase in _HOLDS:
         if code in held:
             return Step(actor, phrase.format(cid=cid))
-    if approve_blockers(state, findings, check=check):  # what blocks an approval and has no step of its own
+    if approve_blockers(state, findings):  # what blocks an approval and has no step of its own
         return Step("you", f"fix what `adk-spec validate {cid}` lists")
     return Step("you", f"run `adk-spec approve {cid}`")
 
