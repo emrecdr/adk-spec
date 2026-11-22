@@ -1,6 +1,7 @@
 # The simple flow: four everyday commands
 
-Design for the next phase of adk-spec. Written on 22 November 2026. Status: waiting for the owner's approval.
+Design for phase 5 of adk-spec. Written on 22 November 2026. Status: approved by the owner on 22 November 2026
+("proceed as recommeded"), after the research below was reported.
 
 ## Intent, and why
 

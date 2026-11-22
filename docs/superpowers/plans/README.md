@@ -32,12 +32,11 @@ How it is applied in every phase below:
 | 2 | Model stages | `2026-11-22-adk-spec-model-stages.md` | `propose` and `plan`, each stage behind a gate; the token ledger; both provider arms. | Done, confirmed live on Copilot |
 | 3 | Check and verify | `2026-11-21-adk-spec-check-and-verify.md` | `check` and `verify`, each finding held to a quote code finds; recordings; the measurement script. | Done, measured live twice. The Gemini arm and a run on Windows are the owner's |
 | 4 | Questions in code | `2026-11-21-adk-spec-questions-in-code.md` | A brief names its open points and code asks them: one model call fewer a round. | Built and merged. Its live proof waits for the owner's go-ahead |
-| 5 | The simple flow | not written yet | See below. | **In design.** `../specs/2026-11-22-simple-flow-design.md` waits for the owner's approval |
+| 5 | The simple flow | `2026-11-22-adk-spec-simple-flow.md` | See below. | **Being built.** Design `../specs/2026-11-22-simple-flow-design.md`, approved by the owner on 22 November 2026 |
 
 ## The plan being followed now
 
-Phase 5 has a design and no plan yet. Until it has one, the last plan worked from is
-`2026-11-21-adk-spec-questions-in-code.md`.
+**`2026-11-22-adk-spec-simple-flow.md`**, phase 5: four everyday commands.
 
 ## How a change flows
 
@@ -92,7 +91,7 @@ phase also shows and measures the lengths of what it writes.
 
 **Depends on.** Nothing unbuilt. **Size.** Medium: the work is in some forty tests that pin today's steps.
 
-**Open.** The owner's approval of the design.
+**Open.** Nothing: the design is approved and the plan is written.
 
 ### Phase 6. Brownfield, part 1: `propose` reads your code
 
