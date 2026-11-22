@@ -58,9 +58,10 @@ from ..workspace.context import (
     living_text,
     tree_text,
 )
-from ..workspace.files import NotTextError
+from ..workspace.files import NotTextError, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, diff, head, is_repository, resolves
 from ..workspace.git import files as tracked_files
+from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGES,
     CONSTITUTION,
@@ -603,6 +604,18 @@ def _ran(app: Any, seed: dict[str, Any], prompt: str) -> Any:
         engine_log.setLevel(level)
 
 
+def _on_a_terminal() -> bool:
+    """Whether a person is watching the error stream. Progress is for them alone: a pipe and a script read what
+    they read before."""
+    stream = sys.stderr
+    return stream is not None and stream.isatty()
+
+
+def _working(stage: str, again: bool) -> None:
+    """One line a model call, as it starts: a command that works for a minute is not silent for a minute."""
+    print(f"working   {stage}{', again' if again else ''}", file=sys.stderr, flush=True)
+
+
 @dataclass
 class _Kept:
     """What a command says for its recording: the plugin that hears its calls, the change it is about, and how it
@@ -621,7 +634,7 @@ def _recording(workspace: Workspace, command: str, change: str | None) -> Genera
     from ..orchestration.recorder import Recorder
 
     keep = workspace.config().keep_runs
-    kept = _Kept(Recorder(), change)
+    kept = _Kept(Recorder(heard=_working if _on_a_terminal() else None), change)
     try:
         yield kept
     except KeyboardInterrupt:
@@ -1068,8 +1081,17 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     for _name, path, _replaced in made.written:
         print(f"          {workspace.shown(path)}")
     print(f"tokens    {_spent(ledger)}")
+    print(f"read      {_first_reads(workspace, change_id)} first")
     _say_next(workspace, change_id, specs)
     return EXIT_OK
+
+
+def _first_reads(workspace: Workspace, change_id: str) -> str:
+    """What a person reads first of a change, each with its length: the brief, and the design where there is one.
+    Review counts most there, early and short; the task list follows from the two."""
+    folder = workspace.home / CHANGES / change_id
+    named = [name for name in (BRIEF_FILE, DESIGN_FILE) if (folder / name).is_file()]
+    return " and ".join(f"{name} ({len(read_text(folder / name).splitlines())} lines)" for name in named)
 
 
 def _rounds(args: argparse.Namespace, known: Any, ledger: Any, recorder: Any, seed: dict[str, Any]) -> dict[str, Any]:
