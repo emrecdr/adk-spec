@@ -267,6 +267,12 @@ class Workspace:
         """A generated report of a change, under its `reports/` folder: written whole, replacing the one before."""
         return self.write_into(change_id, {f"{REPORTS}/{name}": text})[0]
 
+    def write_home(self, name: str, text: str) -> Path:
+        """A file of the `.spec` tree's own, beside the constitution, written whole: where it is."""
+        path = inside(self.home, name)
+        write_text(path, text)
+        return path
+
     def save_state(self, state: ChangeState) -> None:
         write_text(inside(self.home, CHANGES, state.id, STATE), state.model_dump_json(indent=2))
 

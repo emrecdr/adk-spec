@@ -23,7 +23,7 @@ from typing import Any, NoReturn
 
 from ..domain.brief_md import render_brief
 from ..domain.check import nameable, owed, removed
-from ..domain.context_md import PARTIAL, render_context, unknown_count
+from ..domain.context_md import PARTIAL, PROFILE_HEADING, drafted_rules, render_context, unknown_count
 from ..domain.convert import render_design, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
@@ -64,12 +64,14 @@ from ..workspace.context import (
     living_text,
     profile_text,
 )
-from ..workspace.files import NotTextError
+from ..workspace.files import NotTextError, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGES,
     CONSTITUTION,
+    CONSTITUTION_TEXT,
+    PROFILE,
     ROOT_NAME,
     SPEC_FILE,
     SPECS,
@@ -155,7 +157,9 @@ def _parser() -> _Top:
     parser.add_argument("--root", default=".", help="a folder in the repository to work in (default: this one)")
     commands = parser.commands = parser.add_subparsers(metavar="command", parser_class=_Parser)
 
-    init = commands.add_parser("init", help=f"make the {ROOT_NAME} tree in this repository")
+    init = commands.add_parser("init", help=f"make the {ROOT_NAME} tree in this repository, and describe its code")
+    init.add_argument("--no-explore", action="store_true", help="read none of the repository's code")
+    init.add_argument("--refresh", action="store_true", help="read the code again, and rewrite the profile")
     init.set_defaults(handler=_init)
 
     new = commands.add_parser("new", help="start a change: its folder and its state file")
@@ -281,11 +285,92 @@ def _workspace(args: argparse.Namespace) -> Workspace:
     return Workspace.find(Path(args.root).absolute())
 
 
+#: The brief `init` seeds the reading with: what a person changing the repository first needs to know.
+DESCRIBE = """\
+# Describe this repository
+
+## Why
+
+A person is about to change this repository, and needs to know it first.
+
+## What changes
+
+Nothing. Read the code to state what a person changing it first needs to know: the stack and its versions; the
+layout, and where each part lives; how it is built, run and tested; how errors, logging and configuration are
+handled; the conventions new code should follow; and what is risky to change.
+"""
+
+
 def _init(args: argparse.Namespace) -> int:
-    workspace = Workspace.init(Path(args.root).absolute())
-    made = workspace.shown(workspace.home)
-    print(f'made {made}: write its constitution.md, then run `{PROG} propose "<what you want>"`')
+    """The `.spec` tree made, or found with `--refresh`; then the code read where it can be, a profile of the
+    repository written, and the rules already true of the code drafted into the template constitution. The tree is
+    made first: no model, and no failure of one, ever leaves the person without it."""
+    root = Path(args.root).absolute()
+    if args.refresh:
+        workspace = Workspace.find(root)
+    else:
+        workspace = Workspace.init(root)
+        print(f"made      {workspace.shown(workspace.home)}")
+    if not args.no_explore:
+        _load_env()
+        with lock_held(workspace):
+            _described(workspace, refresh=args.refresh)
+    later = f"; `{PROG} init --refresh` reads the code" if args.no_explore else ""
+    print(f'next      keep what is true in constitution.md, then run `{PROG} propose "<what you want>"`{later}')
     return EXIT_OK
+
+
+def _described(workspace: Workspace, *, refresh: bool) -> None:
+    """The repository's code read, and `profile.md` written from what was kept: each way it cannot be is one line.
+    The engine is not loaded where there is nothing to read."""
+    source = _source(workspace, {})
+    if source is None or not source.paths:
+        print(
+            f"not read  no git repository here, or no file in it, to describe. `{PROG} init --refresh` reads it later"
+        )
+        return
+    from ..orchestration.explore import ROLES
+    from ..orchestration.models import require_ready
+    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT, TREE
+    from ..orchestration.stages import CONSTITUTION as RULES
+
+    if why := require_ready(roles=ROLES):
+        print(f"not read  {why}. Once a model is set up, `{PROG} init --refresh` reads the code")
+        return
+    print("reading   the code, to describe this repository: up to 7 model calls. --no-explore skips it")
+    seed = {RULES: constitution_text(workspace), BRIEF_TEXT: DESCRIBE, DELTAS_TEXT: "", TREE: source.tree()}
+    found, failure = _reading(workspace, "init", None, {**seed, PROFILE_TEXT: ""}, None, source)
+    if not found.statements:
+        print(f"explored  nothing: {failure or _nothing_kept(found)}")
+        return
+    print(f"explored  {_explored_said(found, 0)}" + (f"; it ended early: {failure}" if failure else ""))
+    text = render_context(
+        "",
+        at=datetime.now(UTC).isoformat(timespec="seconds"),
+        commit=_commit(workspace),
+        statements=found.statements,
+        read=found.read,
+        left_out=found.left_out,
+        dropped=found.dropped,
+        partial=failure,
+        unknown=found.unknown,
+        disputed=found.disputed,
+        heading=PROFILE_HEADING,
+    )
+    print(f"wrote     {workspace.shown(workspace.write_home(PROFILE, text))}")
+    _drafted(workspace, found.statements, refresh=refresh)
+
+
+def _drafted(workspace: Workspace, statements: Sequence[Any], *, refresh: bool) -> None:
+    """The rules already true of the code drafted into the constitution, only while it is still the template, and
+    never on `--refresh`: a constitution a person wrote in is theirs."""
+    rules = drafted_rules(statements)
+    path = workspace.home / CONSTITUTION
+    if refresh or not rules or read_text(path) != CONSTITUTION_TEXT:
+        return
+    workspace.write_home(CONSTITUTION, CONSTITUTION_TEXT.rstrip("\n") + "\n\n" + rules)
+    count = rules.count("\n- ")
+    print(f"drafted   {count} rule{'' if count == 1 else 's'} into {workspace.shown(path)}: keep, edit or delete each")
 
 
 def _new(args: argparse.Namespace) -> int:
@@ -773,7 +858,7 @@ def _drafting(handler: Callable[[argparse.Namespace, Workspace], int]) -> Callab
 def _asked(
     workspace: Workspace,
     command: str,
-    change_id: str,
+    change_id: str | None,
     build: Callable[[Any, Any], Any],
     seed: dict[str, Any],
     read: Callable[[dict[str, Any]], Any],
@@ -991,27 +1076,17 @@ def _read_code(
         return ("kept: context.md is of a reading that ended early. Delete it to read again" if early else ""), None
     if source is None or not source.paths:
         return "", None
-    from ..orchestration.explore import ROLES, build_explore_app, explored
+    from ..orchestration.explore import ROLES
     from ..orchestration.models import require_ready
     from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT, TREE
     from ..orchestration.stages import CONSTITUTION as RULES
 
     if why := require_ready(roles=ROLES):
         raise UsageError(why)
-
-    def build(ledger: Any, recorder: Any) -> Any:
-        return build_explore_app(source=source, ledger=ledger, recorder=recorder)
-
     reading = {key: seed[key] for key in (RULES, BRIEF_TEXT, DELTAS_TEXT, TREE, PROFILE_TEXT)}
-    nothing_to_read_back = lambda _state: None  # noqa: E731 -- what a reading kept is in its state, also where it failed
-    run, _none, _ledger, failure = _asked(
-        workspace, "explore", change_id, build, reading, nothing_to_read_back, ledger=ledger
-    )
-    found = explored(run.state)
+    found, failure = _reading(workspace, "explore", change_id, reading, ledger, source)
     if not found.statements:
-        nothing = "nothing the scout named could be read" if not found.read else "no statement quoted what was read"
-        nothing = "the review disputed every statement" if found.disputed else nothing
-        return f"nothing: {failure or nothing}", None
+        return f"nothing: {failure or _nothing_kept(found)}", None
     at = datetime.now(UTC).isoformat(timespec="seconds")
     text = render_context(
         change_id,
@@ -1028,6 +1103,27 @@ def _read_code(
     )
     (path,) = workspace.write_into(change_id, {CONTEXT_FILE: text})
     return _explored_said(found, len(source.names)) + (f"; it ended early: {failure}" if failure else ""), path
+
+
+def _reading(
+    workspace: Workspace, label: str, change_id: str | None, seed: dict[str, Any], ledger: Any, source: Source
+) -> tuple[Any, str | None]:
+    """One recorded reading of the code through `source`, seeded with `seed`: what it kept, as `explored` reads it,
+    and why it ended early, where it did. What it kept is in its state, also where it failed."""
+    from ..orchestration.explore import build_explore_app, explored
+
+    def build(ledger: Any, recorder: Any) -> Any:
+        return build_explore_app(source=source, ledger=ledger, recorder=recorder)
+
+    run, _none, _ledger, failure = _asked(workspace, label, change_id, build, seed, lambda _state: None, ledger=ledger)
+    return explored(run.state), failure
+
+
+def _nothing_kept(found: Any) -> str:
+    """Why a reading kept no statement, in the words a person is shown."""
+    if found.disputed:
+        return "the review disputed every statement"
+    return "no statement quoted what was read" if found.read else "nothing the scout named could be read"
 
 
 def _explored_said(found: Any, others: int) -> str:

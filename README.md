@@ -84,7 +84,13 @@ A small change is `lean`: it owes no check and no verification, so it takes thre
 - **`status`** lists each open change and what to do next with it, in groups: `Waiting on you`, `Ready to run`,
   and with `--all` `Done`.
 
-- **`init`** makes `.spec/` with a config, a constitution to fill in, and the folders for specs and changes.
+- **`init`** makes `.spec/` with a config, a constitution and the folders for specs and changes. In an existing
+  repository it then reads the code, saying first what that costs (up to seven model calls; `--no-explore` skips
+  it), and writes `.spec/profile.md`: what is here, how this repository does things, risks and what is unknown,
+  each statement with a quote. Rules already true of the code are drafted into the new constitution, each with its
+  evidence, for you to keep, edit or delete. Every change's reading starts from the profile. `init --refresh` reads
+  the code again and rewrites the profile, never the constitution. Without a model set up, `init` makes the tree
+  and says how to read the code later.
 
 ### Working in an existing repository
 
