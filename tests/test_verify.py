@@ -333,7 +333,7 @@ def test_a_standard_change_takes_four_commands_from_request_to_record(tmp_path, 
     assert run(tmp_path, "verify", "four") == 0
     assert run(tmp_path, "archive", "four") == 0
     assert state_of(tmp_path, "four")["status"] == "archived"
-    assert len(fake_provider.requests) == 5, "brief, deltas, tasks, the check and the verdicts"
+    assert len(fake_provider.requests) == 6, "brief, deltas, the scout, tasks, the check and the verdicts"
 
 
 def test_a_lean_change_takes_three(tmp_path, fake_provider) -> None:

@@ -1,9 +1,10 @@
 """The recorder: each model call of a command, as it was sent and as it was answered.
 
-It stands first in the roster. Run on the pinned engine (`q19_plan3_recorder_plugin_probe.py`): there it is handed
-each instruction already filled from state, sees each answer before the mismatch plugin replaces it, and knows the
-stage by the agent's name. A call the ledger refuses reaches it as a request and no answer, so a call is closed
-when the next one starts, or when the command reads `calls`.
+It stands after the scrub in the roster, and before everything else. Run on the pinned engine
+(`q19_plan3_recorder_plugin_probe.py`): there it is handed each instruction already filled from state, sees each
+answer before the mismatch plugin replaces it, and knows the stage by the agent's name. A call the ledger refuses
+reaches it as a request and no answer, so a call is closed when the next one starts, or when the command reads
+`calls`.
 """
 
 from __future__ import annotations
@@ -16,10 +17,17 @@ from google.adk.models.llm_response import LlmResponse
 from google.adk.plugins.base_plugin import BasePlugin
 from google.adk.utils.content_utils import extract_text_from_content
 
+from ..domain.secrets import scrub
 from ..workspace.runs import Call
 from .models import said
 from .run import Usage
 from .stages import FINDINGS
+
+
+def _kept(answer: str | None) -> str | None:
+    """An answer as a recording keeps it: as it came, less any known secret shape. A model is sent none, since the
+    scrub reads every request first; an answer that holds one all the same is not written to disk."""
+    return scrub(answer)[0] if answer else None
 
 
 class Recorder(BasePlugin):
@@ -65,7 +73,7 @@ class Recorder(BasePlugin):
         error = llm_response.error_code and f"{llm_response.error_code}: {llm_response.error_message or ''}".strip()
         counted = llm_response.usage_metadata
         self._close(
-            answer=extract_text_from_content(llm_response.content) or None,
+            answer=_kept(extract_text_from_content(llm_response.content)),
             error=error or None,
             tokens=Usage.of(counted).total if counted is not None else 0,
         )

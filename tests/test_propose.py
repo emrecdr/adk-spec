@@ -459,3 +459,23 @@ def test_plan_alone_still_redrafts_a_change(tmp_path, fake_provider) -> None:
     write_text(brief, read_text(brief).replace("Passwords are the top source", "Passwords are a source"))
     assert run(tmp_path, "plan", "again") == 0, "nothing is ticked: no --replace is needed"
     assert asked(fake_provider, TASKS) == 2 and ws.load_change("again").change.tasks
+
+
+def test_propose_reads_the_code_once_the_change_is_written(tmp_path, capsys, fake_provider) -> None:
+    """Brownfield, part 1: the reading sits before the design and the tasks, where the change that was agreed is
+    known, and has no command of its own."""
+    from conftest import repository
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    capsys.readouterr()
+    assert proposed(tmp_path, "--tier", "lean", "--id", "read") == 0
+    scout, survey = "You choose what to read", "You read parts of a repository's code"
+    assert [asked(fake_provider, opening) for opening in (BRIEF, DELTAS, scout, survey, TASKS)] == [1, 1, 1, 1, 1]
+    order = [str(r.config.system_instruction).split(".")[0] for r in fake_provider.requests]
+    assert order.index(scout.split(".")[0] + " of a repository's code before a change to it is planned") > 1
+    assert "return password()" in read_text(tmp_path / ".spec/changes/read/context.md")
+    out = capsys.readouterr().out
+    assert "explored  1 file: 1 statement kept" in out and ".spec/changes/read/context.md" in out
+    assert proposed(tmp_path, "--tier", "lean", "--id", "unread", "--no-explore") == 0
+    assert not (tmp_path / ".spec/changes/unread/context.md").exists()

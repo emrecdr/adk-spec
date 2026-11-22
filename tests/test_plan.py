@@ -138,7 +138,9 @@ def test_plans_stages_are_shown_the_repositorys_files(tmp_path, fake_provider) -
     ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"needs_design": True}))
     repository(tmp_path, {"src/app.py": "x = 1\n", "tests/test_app.py": "def test_x(): ...\n"})
     assert run(tmp_path, "plan", "passkeys", "--replace") == 0
-    design, tasks = (between(str(r.config.system_instruction), "tree") for r in fake_provider.requests)
+    drafting = [str(r.config.system_instruction) for r in fake_provider.requests][-2:]
+    assert [text.startswith(opening) for text, opening in zip(drafting, (DESIGN, TASKS), strict=True)] == [True, True]
+    design, tasks = (between(text, "tree") for text in drafting)
     assert design == tasks == "src/app.py\ntests/test_app.py", "what git tracks, and nothing of .spec/"
 
 
@@ -226,3 +228,122 @@ def test_the_plan_is_shown_no_excluded_file(tmp_path, fake_provider) -> None:
     assert run(tmp_path, "plan", "passkeys", "--replace") == 0
     shown = between(str(fake_provider.requests[0].config.system_instruction), "tree")
     assert "src/app.py" in shown and "vendor" not in shown
+
+
+# The plan reads the code first: brownfield, part 1.
+
+SCOUT, SURVEY = "You choose what to read", "You read parts of a repository's code"
+CONTEXT = ".spec/changes/passkeys/context.md"
+STATED = "- `src/app.py:2` Sign-in is decided here.\n  > return password()"
+
+
+def stages(fake_provider) -> list[str]:
+    """The stage each request went to, in order, by the first words of its instruction."""
+    names = {SCOUT: "scout", SURVEY: "survey", TASKS: "tasks", DESIGN: "design"}
+    sent = [str(r.config.system_instruction) for r in fake_provider.requests]
+    return [next(name for opening, name in names.items() if text.startswith(opening)) for text in sent]
+
+
+def test_plan_reads_the_code_and_the_tasks_are_shown_what_it_found(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)
+    repository(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    context = read_text(tmp_path / CONTEXT)
+    assert context.startswith("# Context: passkeys\n\nRead from the repository at commit ")
+    assert "## Where the change plugs in\n\n" + STATED in context and "- src/app.py (whole)" in context
+    assert stages(fake_provider) == ["scout", "survey", "tasks"]
+    shown = between(str(fake_provider.requests[-1].config.system_instruction), "context")
+    assert shown == context.rstrip("\n"), "the tasks stage reads the file as it was written"
+    out = capsys.readouterr().out
+    assert "explored  1 file: 1 statement kept" in out and CONTEXT in out
+    assert "tokens    scout 120 in 1 call, survey 120 in 1 call, tasks 120 in 1 call: 360 total" in out
+
+
+def test_a_context_that_is_there_is_kept_and_read(tmp_path, fake_provider) -> None:
+    seeded(tmp_path)
+    repository(tmp_path)
+    mine = "# Context: passkeys\n\nSign-in lives in src/app.py, and I checked it myself.\n"
+    write_text(tmp_path / CONTEXT, mine)
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    assert stages(fake_provider) == ["tasks"] and read_text(tmp_path / CONTEXT) == mine
+    assert "I checked it myself." in between(str(fake_provider.requests[0].config.system_instruction), "context")
+
+
+def test_no_explore_reads_nothing(tmp_path, fake_provider) -> None:
+    seeded(tmp_path)
+    repository(tmp_path)
+    assert run(tmp_path, "plan", "passkeys", "--replace", "--no-explore") == 0
+    assert stages(fake_provider) == ["tasks"] and not (tmp_path / CONTEXT).exists()
+
+
+def test_outside_a_repository_nothing_is_read_and_the_plan_is_drafted(tmp_path, fake_provider) -> None:
+    seeded(tmp_path)
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    assert stages(fake_provider) == ["tasks"] and not (tmp_path / CONTEXT).exists()
+
+
+def test_a_reading_that_fails_does_not_stop_the_plan(tmp_path, capsys, fake_provider) -> None:
+    """A reading is a help to the plan and no gate of it: the plan is drafted without it, and the command says so."""
+    ws = seeded(tmp_path)
+    repository(tmp_path)
+    fake_provider.raises_when(SURVEY, RuntimeError("the provider fell over"))
+    capsys.readouterr()
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    said = capsys.readouterr()
+    assert "explored  nothing: " in said.out and "the provider fell over" in said.out
+    assert not (tmp_path / CONTEXT).exists() and ws.load_change("passkeys").change.tasks
+    assert stages(fake_provider)[-1] == "tasks"
+
+
+def test_a_scout_that_finds_nothing_to_read_says_so_and_the_plan_is_drafted(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)
+    repository(tmp_path, {"lib/other.py": "x = 1\n"})
+    capsys.readouterr()
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    assert "explored  nothing: nothing the scout named could be read" in capsys.readouterr().out
+    assert stages(fake_provider) == ["scout", "tasks"] and not (tmp_path / CONTEXT).exists()
+
+
+def test_a_ceiling_spent_by_the_reading_leaves_what_it_kept(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)
+    repository(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", '[project]\ndefault_tier = "lean"\n\n[limits]\nmax_tokens = 240\n')
+    capsys.readouterr()
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 3, "the scout and the survey spent it: no tasks call"
+    assert STATED in read_text(tmp_path / CONTEXT), "what was read is kept for the next plan"
+    assert stages(fake_provider) == ["scout", "survey"] and "CEILING" in capsys.readouterr().err
+
+
+def test_a_secret_in_a_tracked_file_reaches_no_request_no_recording_and_no_context(tmp_path, fake_provider) -> None:
+    from adk_spec.workspace.layout import Workspace
+    from adk_spec.workspace.runs import listed
+
+    key = "AKIA" + "IOSFODNN7EXAMPLE"
+    seeded(tmp_path)
+    repository(tmp_path, {"src/app.py": f'def login():\n    return password()\n\n\nAPI = "{key}"\n'})
+    leaked = {"kind": "risk", "file": "src/app.py", "quote": f'API = "{key}"', "note": "A key is in the code."}
+    real = {"kind": "touches", "file": "src/app.py", "quote": "return password()", "note": "Sign-in is decided here."}
+    answer = {"statements": [leaked, real], "more_files": [], "more_folders": [], "more_searches": []}
+    fake_provider.answers_when(SURVEY, answer)
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    assert all(key not in str(r.config.system_instruction) for r in fake_provider.requests)
+    assert "[REDACTED" in between(str(fake_provider.requests[1].config.system_instruction), "material")
+    assert all(key not in read_text(path) for path in listed(Workspace.find(tmp_path)))
+    context = read_text(tmp_path / CONTEXT)
+    assert key not in context and STATED in context and "Left out: 1 statement" in context
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_context_md_is_no_part_of_an_approval(tmp_path, capsys) -> None:
+    from conftest import state_of
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    assert (
+        run(tmp_path, "plan", "passkeys", "--replace") == 0 and run(tmp_path, "approve", "passkeys", "--by", "r") == 0
+    )
+    assert "context.md" not in state_of(tmp_path)["approval"]["files"]
+    write_text(tmp_path / CONTEXT, read_text(tmp_path / CONTEXT) + "\nA note of mine.\n")
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0 and "approve again" not in capsys.readouterr().out

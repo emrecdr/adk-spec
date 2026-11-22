@@ -23,6 +23,7 @@ from typing import Any, NoReturn, get_args
 
 from ..domain.brief_md import render_brief
 from ..domain.check import nameable, owed, removed
+from ..domain.context_md import render_context
 from ..domain.convert import render_design, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
@@ -61,7 +62,7 @@ from ..workspace.context import (
     living_text,
     tree_text,
 )
-from ..workspace.files import NotTextError
+from ..workspace.files import NotTextError, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, diff, head, is_repository, resolves
 from ..workspace.git import files as tracked_files
 from ..workspace.layout import BRIEF as BRIEF_FILE
@@ -76,12 +77,14 @@ from ..workspace.layout import (
     WorkspaceError,
     findings_of,
 )
+from ..workspace.layout import CONTEXT as CONTEXT_FILE
 from ..workspace.layout import DESIGN as DESIGN_FILE
 from ..workspace.layout import TASKS as TASKS_FILE
 from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
+from ..workspace.source import Source
 
 EXIT_OK = 0
 #: A gate refused, or findings at the bar.
@@ -192,11 +195,13 @@ def _parser() -> _Top:
     propose.add_argument("--id", help="the change's name (default: made from the brief's title)")
     propose.add_argument("--tier", choices=("lean", "standard"), help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
+    propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
     propose.set_defaults(handler=_propose)
 
     plan = commands.add_parser("plan", help="draft a change's tasks again, and its design where one is owed")
     plan.add_argument("id", help="the change")
     plan.add_argument("--replace", action="store_true", help="draft anew although a task of the list is ticked")
+    plan.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
     plan.set_defaults(handler=_drafting(_planned))
 
     check = commands.add_parser("check", help="check a change's files against each other, as `approve` does")
@@ -716,7 +721,7 @@ def _propose(args: argparse.Namespace) -> int:
     from ..orchestration.models import require_ready
 
     # Every role of the whole command, asked before anything is spent. A tier given by hand is not asked of triage.
-    drafting = ("brief", "deltas", "design", "tasks")
+    drafting = ("brief", "deltas", "design", "tasks", *(() if args.no_explore else ("scout", "survey")))
     if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
         raise UsageError(why)
     with lock_held(workspace):
@@ -827,6 +832,8 @@ class _Planned:
     written: list[tuple[Path, bool]] = field(default_factory=list)
     ledger: Any = None
     failure: str | None = None
+    #: What the reading of the code before it came to, in the words a person is shown; empty where none was made.
+    explored: str = ""
 
 
 def _plan_made(
@@ -837,10 +844,13 @@ def _plan_made(
     *,
     replace: bool,
     ledger: Any = None,
+    explore: bool = True,
 ) -> _Planned:
-    """A draft change's tasks drafted, and first its design where the brief owes one. What `plan` does, and what
-    `propose` does once its change is written, on the ledger of the whole command. It prints only what stops it:
-    `NotYetError` where the change cannot be planned now, with the findings that say why."""
+    """A draft change's tasks drafted, and first its design where the brief owes one, from what a reading of the
+    repository's code found: one is made first where `explore` allows it and the change has no `context.md` yet.
+    What `plan` does, and what `propose` does once its change is written, on the ledger of the whole command. It
+    prints only what stops it: `NotYetError` where the change cannot be planned now, with the findings that say
+    why."""
     assessed = _assessed(workspace, change_id, specs)
     change, state = assessed.loaded.change, assessed.state
     brief = _plannable(change_id, replace, workspace, assessed, of_specs)
@@ -850,7 +860,8 @@ def _plan_made(
     if why := require_ready(roles=roles):
         raise UsageError(why)
     from ..orchestration.graph import build_plan_app
-    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, LIVING, TREE
+    from ..orchestration.plugins import UsageLedger
+    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, LIVING, TREE
     from ..orchestration.stages import CONSTITUTION as RULES
     from ..orchestration.stages.design import read_design
     from ..orchestration.stages.tasks import DESIGN_TEXT, read_tasks
@@ -865,13 +876,18 @@ def _plan_made(
     if change.design and not state.needs_design:  # a design a person wrote, where the brief owed none
         seed[DESIGN_TEXT] = change.design.strip()
     serves = {"owed": owed(change.deltas), "nameable": nameable(change.deltas, specs)}
+    if ledger is None:  # one ceiling for the reading and the drafting: they are one command's
+        ledger = UsageLedger(workspace.config().max_tokens or None)
+    said, context = _read_code(workspace, change_id, seed, ledger) if explore else ("", None)
+    seed[CONTEXT_TEXT] = _context_text(workspace, change_id)
+    read = [(context, False)] if context else []
 
     def build(ledger: Any, recorder: Any) -> Any:
         return build_plan_app(design=state.needs_design, ledger=ledger, recorder=recorder, **serves)
 
     run, tasks, ledger, failure = _asked(workspace, "plan", change_id, build, seed, read_tasks, ledger=ledger)
     if failure:
-        return _Planned(ledger=ledger, failure=failure)
+        return _Planned(read, ledger, failure, said)
     files = {TASKS_FILE: render_tasks(to_tasks(tasks))}
     design = read_design(run.state) if state.needs_design else None
     if design is not None and not isinstance(design, str):
@@ -879,13 +895,83 @@ def _plan_made(
     folder = workspace.home / CHANGES / change_id
     there = {name for name in files if (folder / name).is_file()}
     paths = workspace.write_into(change_id, files)
-    return _Planned([(path, name in there) for name, path in zip(files, paths, strict=True)], ledger)
+    drafted = [(path, name in there) for name, path in zip(files, paths, strict=True)]
+    return _Planned([*read, *drafted], ledger, explored=said)
+
+
+#: How much of a `context.md` a stage is given.
+CONTEXT_MAX_CHARS = 20_000
+
+
+def _context_text(workspace: Workspace, change_id: str) -> str:
+    """A change's `context.md` as a stage reads it: as the file stands, a person's edits and all, or nothing where
+    there is none. One past the cap is cut, and says so."""
+    path = workspace.home / CHANGES / change_id / CONTEXT_FILE
+    try:
+        text = read_text(path).strip() if path.is_file() else ""
+    except NotTextError:
+        return ""
+    cut = "\n(cut here: context.md is longer than a stage is given)"
+    return text if len(text) <= CONTEXT_MAX_CHARS else text[:CONTEXT_MAX_CHARS] + cut
+
+
+def _read_code(workspace: Workspace, change_id: str, seed: dict[str, Any], ledger: Any) -> tuple[str, Path | None]:
+    """The repository's code read for a change, and `context.md` written from what was kept: what to say of it, and
+    the file where one was written. Nothing is read, and nothing said, where the change has a `context.md` already,
+    which is then a person's to keep, or where there is no repository or no file in it.
+
+    A reading never stops a plan: one that fails, or keeps nothing, is said in a line, and the plan is drafted
+    without it. One that ends early writes what it kept and says that it is partial."""
+    if (workspace.home / CHANGES / change_id / CONTEXT_FILE).is_file():
+        return "", None
+    try:
+        root = workspace.root
+        source = Source.of(root, exclude=workspace.config().exclude) if is_repository(root) else None
+    except GitError:
+        source = None
+    if source is None or not source.paths:
+        return "", None
+    from ..orchestration.explore import build_explore_app, explored
+    from ..orchestration.models import require_ready
+    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, TREE
+    from ..orchestration.stages import CONSTITUTION as RULES
+
+    if why := require_ready(roles=("scout", "survey")):
+        raise UsageError(why)
+
+    def build(ledger: Any, recorder: Any) -> Any:
+        return build_explore_app(source=source, ledger=ledger, recorder=recorder)
+
+    reading = {key: seed[key] for key in (RULES, BRIEF_TEXT, DELTAS_TEXT, TREE)}
+    run, _answer, _ledger, failure = _asked(workspace, "explore", change_id, build, reading, explored, ledger=ledger)
+    found = explored(run.state)
+    if not found.statements:
+        nothing = "nothing the scout named could be read" if not found.read else "no statement quoted what was read"
+        return f"nothing: {failure or nothing}", None
+    at = datetime.now(UTC).isoformat(timespec="seconds")
+    text = render_context(
+        change_id,
+        at=at,
+        commit=_commit(workspace),
+        statements=found.statements,
+        read=found.read,
+        left_out=found.left_out,
+        dropped=found.dropped,
+        partial=failure,
+    )
+    (path,) = workspace.write_into(change_id, {CONTEXT_FILE: text})
+    files, kept = len(found.read), len(found.statements)
+    said = f"{files} file{'' if files == 1 else 's'}: {kept} statement{'' if kept == 1 else 's'} kept"
+    said += f", {found.dropped} left out" if found.dropped else ""
+    return said + (f"; it ended early: {failure}" if failure else ""), path
 
 
 def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
     """The `plan` command: the plan drafted, and what was written said."""
     specs, of_specs = workspace.specs()
-    made = _plan_made(workspace, args.id, specs, of_specs, replace=args.replace)
+    made = _plan_made(workspace, args.id, specs, of_specs, replace=args.replace, explore=not args.no_explore)
+    if made.explored:
+        print(f"explored  {made.explored}")
     if made.failure:
         return _unfinished(f"no plan was written: {made.failure}", made.ledger)
     for path, replaced in made.written:
@@ -1140,9 +1226,13 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     # The plan, in the same command and under the same ceiling. The change is written by now: a plan that does not
     # end well leaves it a draft, and `plan` finishes it.
     try:
-        made = _plan_made(workspace, change_id, specs, of_specs, replace=False, ledger=ledger)
+        made = _plan_made(
+            workspace, change_id, specs, of_specs, replace=False, ledger=ledger, explore=not args.no_explore
+        )
     except NotYetError as exc:  # the calls so far are paid for: what stopped the plan is said as any other failure
         made = _Planned(ledger=ledger, failure=str(exc))
+    if made.explored:
+        print(f"explored  {made.explored}")
     if made.failure:
         return _unfinished(
             f"the brief and the specs are written, and the plan is not: {made.failure}. Run "

@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from itertools import zip_longest
 from pathlib import Path
 
+from ..domain.secrets import scrub
 from ..domain.text import lines_of, normalise, plain
 from .files import NotTextError, read_text
 from .git import files as listed_by_git
@@ -51,6 +52,18 @@ class Gathered:
     read: tuple[str, ...]
     #: What was asked for and not given, each with why.
     left_out: tuple[str, ...]
+
+
+def scrubbed(lines: Sequence[str]) -> list[str]:
+    """`lines` with every known secret shape hidden, each line still at its own number. A shape on one line is
+    hidden there. A shape over several, a private key's block, becomes one line: the lines after it are put back
+    where they stood, so a quote found in them is found at the line the file has it."""
+    each = [scrub(line)[0] for line in lines]
+    whole = scrub("\n".join(each))[0].split("\n")
+    if len(whole) == len(each):
+        return whole
+    at = next((n for n, (was, now) in enumerate(zip(each, whole, strict=False)) if was != now), len(whole) - 1)
+    return [*whole[: at + 1], *[""] * (len(each) - len(whole)), *whole[at + 1 :]]
 
 
 def merged(one: str, other: str) -> str:
@@ -162,7 +175,7 @@ class Source:
             kept.append(line)
         upto = first + len(kept) - 1
         said = "whole" if first == 1 and upto >= total else f"lines {first} to {upto} of {total}"
-        text = "\n".join(kept)
+        text = "\n".join(scrubbed(kept))  # what is shown and kept holds no secret: none can be quoted from it
         if not got.shows(f"=== {path} ({said})\n{text}"):
             got.left_out.append(f"{path}: past what a round reads")
             return
@@ -192,7 +205,7 @@ class Source:
             path, _, rest = line.partition(":")
             number, _, text = rest.partition(":")
             if path in self._listed and number.isdigit() and not (self.root / path).is_symlink():
-                hits.append((path, int(number), text[:LINE_MAX_CHARS].rstrip()))
+                hits.append((path, int(number), scrub(text[:LINE_MAX_CHARS].rstrip())[0]))
         shown = hits[:SEARCH_MAX_LINES]
         note = _counted(len(hits), "line", "lines")
         note += f", the first {len(shown)} shown" if len(shown) < len(hits) else ""

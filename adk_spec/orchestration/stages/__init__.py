@@ -35,6 +35,8 @@ CHANGE_FILES = "change_files"
 TIER = "tier"
 #: The state key the repository's files are read from, as paths.
 TREE = "tree"
+#: The state key a change's `context.md` is read from: what a reading of the code found for it.
+CONTEXT_TEXT = "context_text"
 
 
 def placeholder(key: str, *, optional: bool = False) -> str:
@@ -68,6 +70,7 @@ LIVING_SPECS = section("## The living specs the change touches", "living", LIVIN
 THE_BRIEF = section("## The brief", "brief", BRIEF_TEXT)
 THE_DELTAS = section("## The requirement deltas", "deltas", DELTAS_TEXT, optional=True)
 FILES = section("## The files of this repository", "tree", TREE, optional=True)
+THE_CONTEXT = section("## What the repository already holds", "context", CONTEXT_TEXT, optional=True)
 
 
 def instruction(opening: str, guide: str, *sections: str) -> str:

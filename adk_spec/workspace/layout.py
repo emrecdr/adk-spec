@@ -38,6 +38,8 @@ CONFIG, CONSTITUTION, SPECS, CHANGES = "config.toml", "constitution.md", "specs"
 STATE, BRIEF, DESIGN, TASKS, SPEC_FILE = "change.json", "brief.md", "design.md", "tasks.md", "spec.md"
 #: The folder of a change's generated reports, which no approval fingerprints.
 REPORTS = "reports"
+#: What a reading of the repository's code found for a change. Supporting material: no approval covers it.
+CONTEXT = "context.md"
 #: What `adk-spec init` writes: the sections teams have found a constitution useful for.
 CONSTITUTION_TEXT = """\
 # Constitution
