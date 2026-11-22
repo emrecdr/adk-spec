@@ -338,13 +338,21 @@ class Step:
     phrase: str
 
 
-#: What stands for "a finding of the change is an ERROR" among the codes below, and for one in its task list alone.
+#: What stands among the codes below for "a finding of the change is an ERROR `plan` does not settle", and for "a
+#: finding `plan` settles".
 _ERROR = "an ERROR"
-_PLAN = "an ERROR of the task list"
-#: The errors of a task list alone, which `plan` settles when it drafts the list again.
-TASK_LIST_ERRORS = frozenset(
-    {"check.requirement-no-task", "check.task-unknown-requirement", "tasks.id-duplicate", "tasks.bad-requirement-id"}
-)
+_PLAN = "what plan settles"
+#: What `plan` drafts where a change owes it and has none.
+_OWED_BY_PLAN = frozenset({"change.missing-tasks", "change.missing-design"})
+
+
+def settled_by_plan(found: Finding) -> bool:
+    """Whether `plan` settles a finding, drafting again what it is about: an error in the task list, or a task list
+    or a design owed and missing."""
+    named = (found.path or "").rsplit("/", 1)[-1]
+    return found.code in _OWED_BY_PLAN or (found.severity == "ERROR" and named == TASKS_FILE)
+
+
 #: What a person does about a check that found something blocking, in which `{cid}` is the change.
 _FIX_THE_CHECK = "fix what reports/check.md lists, then run `adk-spec approve {cid}`"
 #: What holds a draft, the first that applies first: the code of what holds it, who acts on it, and the phrase, in
@@ -354,9 +362,7 @@ _FIX_THE_CHECK = "fix what reports/check.md lists, then run `adk-spec approve {c
 _HOLDS: tuple[tuple[str, Actor, str], ...] = (
     (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
     ("brief.marker-unresolved", "you", "settle the open point in brief.md"),
-    ("change.missing-design", "run", "run `adk-spec plan {cid}`"),
     (_PLAN, "run", "run `adk-spec plan {cid}`"),
-    ("change.missing-tasks", "run", "run `adk-spec plan {cid}`"),
     ("check.blocking", "you", _FIX_THE_CHECK),
 )
 
@@ -400,15 +406,9 @@ def next_step(
     errors = any(found.severity == "ERROR" for found in findings)
     if state.status in ("approved", "verified"):
         return _after_approval(state, errors, stale, check, drifted)
-    # An error in the task list alone is one `plan` settles, when it drafts the list again: it holds a draft after
-    # an open point, whose answer the plan waits for, not before it.
-    of_plan = {found.code for found in findings if found.severity == "ERROR" and found.code in TASK_LIST_ERRORS}
-    others = any(found.severity == "ERROR" and found.code not in TASK_LIST_ERRORS for found in findings)
-    held = (
-        {found.code for found in (*findings, *check)}
-        | ({_ERROR} if others else set())
-        | ({_PLAN} if of_plan else set())
-    )
+    # What `plan` settles holds a draft after an open point, whose answer the plan waits for, not before it.
+    held = {found.code for found in (*findings, *check)} | {_PLAN for found in findings if settled_by_plan(found)}
+    held |= {_ERROR for found in findings if found.severity == "ERROR" and not settled_by_plan(found)}
     for code, actor, phrase in _HOLDS:
         if code in held:
             return Step(actor, phrase.format(cid=cid))

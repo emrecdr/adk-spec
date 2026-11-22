@@ -54,7 +54,6 @@ def run(
     """One program, bytes out: standard error apart, or `merged` into standard out. Past `timeout` its whole tree
     is stopped and `subprocess.TimeoutExpired` raised, holding what it had written by then."""
     stderr = subprocess.STDOUT if merged else subprocess.PIPE
-    windows = WINDOWS
     with subprocess.Popen(
         argv,
         cwd=cwd,
@@ -62,19 +61,19 @@ def run(
         stdout=subprocess.PIPE,
         stderr=stderr,
         env=dict(env),
-        start_new_session=not windows,  # its own session: stopped whole, with what it started
+        start_new_session=not WINDOWS,  # its own session: stopped whole, with what it started
     ) as process:
         try:
             out, err = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            _stopped(process, windows)
+            _stopped(process, WINDOWS)
             try:  # the output to its end, which Windows reads on threads, for as long as a stopped tree takes
                 out, err = process.communicate(timeout=DRAIN_S)
             except subprocess.TimeoutExpired as late:  # a process that left the session holds it: what came is kept
                 out, err = late.output or b"", late.stderr or b""
             raise subprocess.TimeoutExpired(argv, timeout, output=out, stderr=err) from None
         except BaseException:  # an interrupt: a session of its own hears none, so it is stopped here
-            _stopped(process, windows)
+            _stopped(process, WINDOWS)
             raise
     return subprocess.CompletedProcess(argv, process.returncode, out, err)
 
@@ -91,9 +90,8 @@ class Kept:
 
 def run_kept(argv: list[str], *, env: Mapping[str, str], timeout: float, keep: int, cwd: Path | None = None) -> Kept:
     """One program, judged by its own exit, its standard error with its standard out, of which only the last `keep`
-    bytes are ever held. Once it ends, past `timeout`, or on an interrupt, every process it started is stopped:
-    what a run leaves running, a server say, outlives it no more than its output keeps it waiting."""
-    windows = WINDOWS
+    bytes are ever held. Past `timeout`, or on an interrupt, every process it started is stopped; once it ends, what it
+    left running, a server say, is stopped too, outside Windows, where a tree is found by its root alone."""
     process = subprocess.Popen(
         argv,
         cwd=cwd,
@@ -101,7 +99,7 @@ def run_kept(argv: list[str], *, env: Mapping[str, str], timeout: float, keep: i
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         env=dict(env),
-        start_new_session=not windows,
+        start_new_session=not WINDOWS,
     )
     tail = _Tail(keep)
     reader = threading.Thread(target=tail.read, args=(process.stdout,), daemon=True)
@@ -111,12 +109,13 @@ def run_kept(argv: list[str], *, env: Mapping[str, str], timeout: float, keep: i
     except subprocess.TimeoutExpired:
         code = None
     except BaseException:
-        _stopped(process, windows)
+        _stopped(process, WINDOWS)
         raise
     # What it left running, also where it passed: its session outlives it while something in it runs. Not on Windows,
-    # where taskkill finds a tree by its root, which is gone, and whose number may be another program's by now.
-    if code is None or not windows:
-        _stopped(process, windows)
+    # where taskkill finds a tree by its root, which has ended: what it left there runs on, until a job object holds
+    # the tree, which waits for a Windows machine to test it on.
+    if code is None or not WINDOWS:
+        _stopped(process, WINDOWS)
     with contextlib.suppress(subprocess.TimeoutExpired):
         process.wait(timeout=DRAIN_S)
     reader.join(DRAIN_S)  # a process that left the session may hold the output: it is waited for no longer

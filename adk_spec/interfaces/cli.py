@@ -56,6 +56,7 @@ from ..domain.lifecycle import (
     next_step,
     owes_design,
     reopened,
+    settled_by_plan,
     verified,
     verify_blockers,
 )
@@ -946,12 +947,6 @@ def _deltas_text(change: Any) -> str:
     return "\n".join(render_delta(delta) for _capability, delta in sorted(change.deltas.items()))
 
 
-def _of_tasks(found: Finding) -> bool:
-    """Whether a finding is about what `plan` is about to write: the task list, or a design owed and missing."""
-    named = (found.path or "").rsplit("/", 1)[-1]
-    return found.code.startswith("tasks.") or named == TASKS_FILE or found.code == "change.missing-design"
-
-
 #: What `--with` says in the help.
 WITH_HELP = "another repository the change spans, read with it: PATH, or NAME=PATH (as often as needed)"
 
@@ -972,23 +967,13 @@ def _source(workspace: Workspace, repositories: Mapping[str, str]) -> Source | N
         return None
 
 
-def _lessons(workspace: Workspace) -> str:
-    """The lessons as a drafting stage reads them, or nothing: a file that is no text is said, and stops nothing. A
-    person edits it by hand, and may have saved it in another encoding."""
+def _optional(workspace: Workspace, read: Callable[[Workspace], str], name: str) -> str:
+    """Optional material as a stage reads it, the profile or the lessons, or nothing: a file that is no text is said,
+    and stops nothing. A person edits it by hand, and may have saved it in another encoding."""
     try:
-        return lessons_text(workspace)
+        return read(workspace)
     except NotTextError:
-        print(f"left out  {workspace.shown(workspace.home / LESSONS)} is not UTF-8: no stage reads it")
-        return ""
-
-
-def _profile(workspace: Workspace) -> str:
-    """The repository's profile as a stage reads it, or nothing: one that is no text is said, and stops no plan.
-    It is optional material, which a person may have re-saved in another encoding."""
-    try:
-        return profile_text(workspace)
-    except NotTextError:
-        print(f"left out  {workspace.shown(workspace.home / PROFILE)} is not UTF-8: no stage reads it")
+        print(f"left out  {workspace.shown(workspace.home / name)} is not UTF-8: no stage reads it")
         return ""
 
 
@@ -1052,7 +1037,7 @@ def _plannable(
         _printed(of_specs)
         raise NotYetError(f"`{change_id}` is not planned: a living spec does not read. Fix it first")
     # What must be right before tasks are worth drafting: everything but the tasks themselves.
-    blocking = [held for held in assessed.findings if held.severity == "ERROR" and not _of_tasks(held)]
+    blocking = [held for held in assessed.findings if held.severity == "ERROR" and not settled_by_plan(held)]
     if blocking or change.brief is None:
         _printed(blocking)
         raise NotYetError(f"`{change_id}` is not planned: its brief and deltas have errors. Fix them first")
@@ -1081,6 +1066,7 @@ def _plan_made(
     ledger: Any = None,
     explore: bool = True,
     repositories: Mapping[str, str] | None = None,
+    lessons: str | None = None,
 ) -> _Planned:
     """A draft change's tasks drafted, and first its design where the brief owes one, from what a reading of the
     repository's code found: one is made first where `explore` allows it and the change has no `context.md` yet.
@@ -1113,8 +1099,8 @@ def _plan_made(
         DELTAS_TEXT: _deltas_text(change),
         LIVING: living_text(specs, sorted(change.deltas)),
         TREE: source.tree() if source else "",
-        PROFILE_TEXT: _profile(workspace),
-        LESSONS_TEXT: _lessons(workspace),
+        PROFILE_TEXT: _optional(workspace, profile_text, PROFILE),
+        LESSONS_TEXT: _optional(workspace, lessons_text, LESSONS) if lessons is None else lessons,
     }
     if change.design and not drafts_design:  # a design a person wrote, or one the change does not owe
         seed[DESIGN_TEXT] = change.design.strip()
@@ -1621,7 +1607,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     # One ledger for every run of this command: the count and the ceiling are the command's.
     ledger = UsageLedger(workspace.config().max_tokens or None)
     seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES: constitution_text(workspace)}
-    seed |= {LESSONS_TEXT: _lessons(workspace), **_as_it_stands(workspace, change)}
+    seed |= {LESSONS_TEXT: _optional(workspace, lessons_text, LESSONS), **_as_it_stands(workspace, change)}
     with _recording(workspace, "propose", args.id) as kept:
         state = _rounds(args, workspace, known, ledger, kept.recorder, seed)
         tier = state.get(TIER)
@@ -1652,7 +1638,8 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     change_id = kept.change or ""
     # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs.
     review = _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first else None
-    return _then_planned(workspace, change_id, specs, of_specs, ledger, explore=explore, keep=keep, review=review)
+    planned = {"explore": explore, "keep": keep, "review": review, "lessons": seed[LESSONS_TEXT]}
+    return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned)
 
 
 def _plan_command(workspace: Workspace, change_id: str, change: Change | None, no_explore: bool) -> str:
@@ -1684,6 +1671,7 @@ def _then_planned(
     explore: bool,
     keep: str | None,
     review: str | None = None,
+    lessons: str | None = None,
 ) -> int:
     """What `propose` does once its change is written: the plan, in the same command and under the same ceiling.
     An open point comes before it, since its answer shapes the tasks: none is drafted on a guess. A revised change
@@ -1703,7 +1691,9 @@ def _then_planned(
         return EXIT_OK
     # The change is written by now: a plan that does not end well leaves it a draft, and `plan` finishes it.
     try:
-        made = _plan_made(workspace, change_id, specs, of_specs, replace=False, ledger=ledger, explore=explore)
+        made = _plan_made(
+            workspace, change_id, specs, of_specs, replace=False, ledger=ledger, explore=explore, lessons=lessons
+        )
     except NotYetError as exc:  # the calls so far are paid for: what stopped the plan is said as any other failure
         made = _Planned(ledger=ledger, failure=str(exc))
     if made.explored:

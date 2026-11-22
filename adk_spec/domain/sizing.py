@@ -20,16 +20,18 @@ LEAN_MAX_CHARS = 240
 _NO_SPEC_SHAPED = re.compile(
     r"\b(typos?|spelling|wording|cosmetic|readme|docs?|documentation|comments?|prototype|throwaway)\b", re.IGNORECASE
 )
-#: Words of a fix that may carry a high risk of regression: the model weighs it, and may call it strict.
+#: Words of a fix that touches security, money or data: the model weighs it, and may call it strict. A list cannot
+#: be whole; it only keeps the rule off the plainest of them.
 _RISKY = re.compile(
-    r"\b(auth\w*|secur\w*|tokens?|passwords?|secrets?|credentials?|permissions?|payments?|billing|migrat\w*|"
-    r"encrypt\w*|privacy)\b",
+    r"\b(auth(n|z|entic\w*|ori[sz]\w*)?|secur\w*|tokens?|passwords?|secrets?|credentials?|permissions?|log-?ins?|"
+    r"sessions?|cookies?|injection|xss|csrf|encrypt\w*|privacy|payments?|billing|refunds?|invoices?|migrat\w*|"
+    r"data loss|corrupt\w*)\b",
     re.IGNORECASE,
 )
 _FIX = re.compile(r"(fix|correct)\b", re.IGNORECASE)
 #: Words that say what is fixed is a fault in behaviour: a bug fix, in the sizing stage's words.
 _FAULT = re.compile(r"\b(bugs?|crash\w*|errors?|exceptions?|fail\w*|broken|wrong|hangs?|leaks?)\b", re.IGNORECASE)
-_FEATURE_WORDS = frozenset({"add", "support", "integrate", "migrate", "introduce", "new", "replace", "redesign"})
+_FEATURE = re.compile(r"\b(add|support|integrate|introduce|new|replace|redesign)\b", re.IGNORECASE)
 
 
 def tier_by_rule(request: str) -> tuple[Tier, str] | None:
@@ -37,7 +39,6 @@ def tier_by_rule(request: str) -> tuple[Tier, str] | None:
     text = flat(request)
     if _NO_SPEC_SHAPED.search(text) or _RISKY.search(text):  # it may owe no spec, or be strict: the model says
         return None
-    named = _FEATURE_WORDS & set(re.findall(r"[a-z]+", text.lower()))
-    if len(text) <= LEAN_MAX_CHARS and _FIX.match(text) and _FAULT.search(text) and not named:
+    if len(text) <= LEAN_MAX_CHARS and _FIX.match(text) and _FAULT.search(text) and not _FEATURE.search(text):
         return "lean", "a short bug fix"
     return None

@@ -28,6 +28,9 @@ NO_BASE = Finding(severity="WARNING", code="delta.base-missing", message="m")
 NO_TASKS = Finding(severity="WARNING", code="change.missing-tasks", message="m")
 MARKER = Finding(severity="WARNING", code="brief.marker-unresolved", message="m")
 OTHER = Finding(severity="WARNING", code="spec.no-shall", message="m")
+#: Errors of the task list alone, which `plan` settles: measured live after a revision, and found by review.
+NO_TASK = Finding(severity="ERROR", code="check.requirement-no-task", message="m", path="tasks.md")
+TASKS_SYNTAX = Finding(severity="ERROR", code="syntax", message="m", path="tasks.md")
 
 
 def approved(tier: str = "lean") -> ChangeState:
@@ -95,6 +98,10 @@ def test_what_an_archive_waits_for() -> None:
         (DRAFT, [ERROR, MARKER, NO_TASKS], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_TASKS, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [MARKER], ["approval"], "settle the open point in brief.md"),
+        (DRAFT, [NO_TASK, MARKER], ["approval"], "settle the open point in brief.md"),
+        (DRAFT, [NO_TASK], ["approval"], "run `adk-spec plan passkeys`"),
+        (DRAFT, [TASKS_SYNTAX], ["approval"], "run `adk-spec plan passkeys`"),
+        (DRAFT, [NO_TASK, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [OTHER], ["approval"], "run `adk-spec approve passkeys`"),
         (DRAFT, [], ["approval"], "run `adk-spec approve passkeys`"),
         (approved(), [], ["tasks.md"], "approve again: tasks.md changed since the approval"),
@@ -186,7 +193,9 @@ def test_whatever_blocks_an_approval_has_a_next_step_of_its_own_or_falls_to_vali
     so a code added to one made `status` say to approve what `approve` then refused."""
     from adk_spec.domain import lifecycle
 
-    assert {code for code, _actor, _phrase in lifecycle._HOLDS} >= lifecycle.BLOCKS_APPROVAL
+    for code in lifecycle.BLOCKS_APPROVAL:  # each has a step of its own, never the approval it blocks
+        held = Finding(severity="WARNING", code=code, message="m")
+        assert next_action(DRAFT, [held], ["approval"]) != "run `adk-spec approve passkeys`", code
     unlisted = Finding(severity="WARNING", code="a.code-with-no-step", message="m")
     assert next_action(DRAFT, [unlisted], ["approval"]) == "run `adk-spec approve passkeys`"
     lifecycle_blocks = lifecycle.BLOCKS_APPROVAL
