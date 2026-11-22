@@ -37,11 +37,11 @@ How it is applied in every phase below:
 | 7 | Brownfield, part 2 | `2026-11-22-adk-spec-across-repositories.md` | A change names the repositories it spans (`--with`); one reading covers them, a model reviews it, `context.md` says what is unknown; `verify` judges the work in all of them. | Built, cleaned up, reviewed and merged. Measured live: `across` caught 5/5 |
 | 8 | Brownfield, part 3 | `2026-11-22-adk-spec-init-profile.md` | `init` reads the code, writes `.spec/profile.md`, drafts rules already true of the code into the template constitution; every change's reading starts from the profile. | Built, cleaned up, reviewed and merged. Measured live: `profile` 3/5 and 5/5, then a fix |
 | 9 | Tests as evidence | `2026-11-22-adk-spec-verify-tests.md` | `verify` runs the test command a person wrote in `.spec/config.toml`, in every repository of the change; a failing run blocks "verified" unless overridden. | Built, cleaned up, reviewed and merged. Its live proof needs a test command in a real repository |
+| 10 and 11 | Sizing by rule; revising by instruction | `2026-11-22-adk-spec-sizing-and-revising.md` | A short bug fix is lean and a long feature request standard with no model call. `propose "<instruction>" --id <id>` revises an open change, keeping its tier, its IDs by name and what the instruction does not reach, and says what it added, changed and dropped. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 
 ## The plan being followed now
 
-**`2026-11-22-adk-spec-sizing-and-revising.md`**, phases 10 and 11 together, as the owner asked: sizing by rules,
-and revising a change by instruction. Design `../specs/2026-11-22-sizing-and-revising-design.md`.
+None: phases 10 and 11 are done. Phase 12, a lessons file, starts with its design.
 
 ## How a change flows
 
@@ -270,6 +270,10 @@ not decide.
 features, a lighter path for fixes" is what users praise. This phase makes the lighter path the default for what
 is small. **Size.** Small.
 
+**State.** Done, on 22 November 2026, built with phase 11 as the owner asked. The code review found the first rule
+took a typo fix, which the sizing stage itself calls `none`: a request that may owe no spec is now never sized by a
+rule, and lean by rule needs a fix verb, a word of a fault and no feature word.
+
 ### Phase 11. Revising a change by instruction
 
 New on the roadmap, from the research.
@@ -283,6 +287,12 @@ change. No new command.
 
 **From the research.** Updating a spec after the fact is the most-voted request in Spec Kit's tracker, and `update`
 was "the most-requested missing capability" in OpenSpec's. **Size.** Medium.
+
+**State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged. A revision keeps the change's tier and
+each requirement's ID by its name, never reads the code again, keeps `tasks.md` where a task is ticked or no
+requirement changed, and makes an approved change a draft again only where a file changed. Hand edits are kept as
+far as the model restates them; what code guarantees is the list of requirements changed. Its live proof waits for
+the owner's go-ahead.
 
 ### Phase 12. A lessons file
 
