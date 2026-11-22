@@ -10,7 +10,7 @@ from google.adk.apps.app import App
 from google.adk.events import Event
 from google.adk.workflow import Workflow
 
-from adk_spec.orchestration.gate import AGAIN, FAILURE, GIVE_UP, OK, checked
+from adk_spec.orchestration.gate import AGAIN, FAILURE, GIVE_UP, OK, SENT_BACK, checked
 from adk_spec.orchestration.plugins import UsageLedger, roster
 from adk_spec.orchestration.run import run_seeded
 from adk_spec.orchestration.stages.triage import build_triage
@@ -25,9 +25,9 @@ def _on_the_fake(monkeypatch) -> None:
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
 
 
-def flow(check: Callable[[Mapping[str, Any]], list[str]], ceiling: int | None = None) -> App:
+def flow(check: Callable[[Mapping[str, Any]], list[str]], ceiling: int | None = None, *, learns: bool = False) -> App:
     """Triage, its gate, and where each of the gate's three routes ends."""
-    agent, gate = build_triage(), checked("triage", check)
+    agent, gate = build_triage(), checked("triage", check, learns=learns)
 
     def done():
         return Event(output="done")
@@ -83,3 +83,51 @@ async def test_a_spent_ceiling_is_said_once_and_not_asked_again(fake_provider) -
     run = await run_seeded(flow(lambda _state: [], ceiling=0), state=dict(STATE), prompt="go")
     assert fake_provider.requests == [] and run.state[FAILURE].startswith("triage: CEILING: ")
     assert run.state["tries_triage"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("fake_provider")
+async def test_a_learning_gate_hands_on_what_it_sent_back_once_the_next_try_passes() -> None:
+    refused = iter([["brief.no-title: one", "the answer did not match its schema."], ["delta.empty: two"], []])
+    run = await run_seeded(flow(lambda _state: next(refused), learns=True), state=dict(STATE), prompt="go")
+    assert run.state[SENT_BACK] == [
+        ["triage", "brief.no-title: one"],
+        ["triage", "the answer did not match its schema."],
+        ["triage", "delta.empty: two"],
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("fake_provider")
+async def test_a_stage_given_up_or_a_gate_that_does_not_learn_hands_on_nothing() -> None:
+    given_up = await run_seeded(flow(lambda _state: ["brief.no-title: x"], learns=True), state=dict(STATE), prompt="go")
+    refused = iter([["brief.no-title: once"], []])
+    unlearned = await run_seeded(flow(lambda _state: next(refused)), state=dict(STATE), prompt="go")
+    assert not given_up.state.get(SENT_BACK) and not unlearned.state.get(SENT_BACK)
+
+
+def test_every_sentence_a_drafting_gate_says_opens_with_its_code() -> None:
+    """A lesson is the same lesson in the next change only where its problem has a code, as the validator's have."""
+    from adk_spec.domain.lessons_md import learned
+    from adk_spec.orchestration import graph
+
+    said = [
+        *graph._check_brief(
+            {
+                "brief": {
+                    "title": "",
+                    "why": "",
+                    "what_changes": "",
+                    "non_goals": "",
+                    "capabilities": [],
+                    "impact": "",
+                    "assumptions": "",
+                    "open_points": [],
+                    "design_needed": False,
+                    "design_reason": "",
+                }
+            }
+        ),
+        *graph._check_design({"design": dict.fromkeys(graph.DESIGN_SECTIONS, "")}),
+    ]
+    assert said and all(learned("", [("x", sentence)]) for sentence in said)

@@ -38,7 +38,7 @@ from ..domain.validate import validate_brief, validate_delta, validate_tasks
 from ..workspace.context import ContextTooLargeError, living_text
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import SPEC_FILE, SPECS
-from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked, tries_key
+from .gate import AGAIN, FAILURE, GIVE_UP, OK, SENT_BACK, checked, pending_key, tries_key
 from .plugins import STAGE_ERROR, Scrub, UsageLedger, roster
 from .stages import BRIEF_TEXT, FINDINGS, LIVING, REQUEST, TIER
 from .stages import brief as brief_stage
@@ -156,14 +156,20 @@ def build_smoke_app() -> App:
 def _check_brief(state: Mapping[str, Any]) -> list[str]:
     brief = _brief(state)
     if not brief.title:
-        return ["the brief has no title. Give it one, on one line."]
+        return ["brief.no-title: the brief has no title. Give it one, on one line."]
     text = render_brief(brief)
     try:
         same = parse_brief(text) == brief
     except GrammarError as exc:
-        return [f"the brief cannot be written as its file: {exc.message}. Write no heading and no open code fence."]
+        return [
+            f"brief.unwritable: the brief cannot be written as its file: {exc.message}. Write no heading and no open "
+            "code fence."
+        ]
     if not same:
-        return ["a section of the brief does not read back as written. Write no line that starts `## ` in one."]
+        return [
+            "brief.round-trip: a section of the brief does not read back as written. Write no line that starts `## ` "
+            "in one."
+        ]
     found = validate_brief(brief, text)
     over = any(one.code == _OVER_BUDGET for one in found)
     return _errors([one for one in found if one.code != _OVER_BUDGET]) + ([_over_budget(state, text)] if over else [])
@@ -190,12 +196,13 @@ def _deltas_check(known: Known) -> Callable[[Mapping[str, Any]], list[str]]:
         made = drafted(state, known)
         listed = set(made.brief.capabilities)
         problems = [
-            f"the delta names `{capability}`, which the brief does not list. Change only a capability the brief lists."
+            f"delta.capability-unlisted: the delta names `{capability}`, which the brief does not list. Change only a "
+            "capability the brief lists."
             for capability in made.deltas
             if capability not in listed
         ]
         problems += [
-            f"the brief lists `{capability}` and no delta changes it. Write its delta."
+            f"delta.capability-missing: the brief lists `{capability}` and no delta changes it. Write its delta."
             for capability in sorted(listed - set(made.deltas))
         ]
         for capability, delta in made.deltas.items():
@@ -210,30 +217,34 @@ def _of_delta(capability: str, delta: Delta, known: Known) -> list[str]:
     living spec, or text that does not survive being written as its file. The validator speaks first: it names the
     ID that is wrong, where a failed round trip could only name a shape."""
     if why := slug_problem(capability):
-        return [f"the delta names a capability that cannot be one: {why}."]
+        return [f"delta.capability-bad-name: the delta names a capability that cannot be one: {why}."]
     bases = capture_bases({capability: delta}, known.living)
     if wrong := _errors(validate_delta(delta, known.living.get(capability), bases)):
         return wrong
     try:
         read = parse_delta(render_delta(delta))
     except GrammarError as exc:
-        return [f"the delta of `{capability}` cannot be written as its file: {exc.message}."]
+        return [f"delta.unwritable: the delta of `{capability}` cannot be written as its file: {exc.message}."]
     before, after = (*delta.added, *delta.modified), (*read.added, *read.modified)
     for wrote, back in zip(before, after, strict=False):
         if wrote != back:
             return [
-                f"{wrote.id} `{wrote.name}` does not read back as written. Keep its name and each step on one line, "
+                f"delta.round-trip: {wrote.id} `{wrote.name}` does not read back as written. Keep its name and each "
+                "step on one line, "
                 "and write no heading and no open code fence in its statement."
             ]
     if read != delta:
-        return [f"the delta of `{capability}` does not read back as written: keep each reason on one line."]
+        return [
+            f"delta.reason-round-trip: the delta of `{capability}` does not read back as written: keep each reason "
+            "on one line."
+        ]
     return []
 
 
 def _check_design(state: Mapping[str, Any]) -> list[str]:
     draft = DesignDraft.model_validate(state[design_stage.KEY])
     return [
-        f"the design's {name} section is empty. Write it."
+        f"design.section-empty: the design's {name} section is empty. Write it."
         for name in DESIGN_SECTIONS
         if not getattr(draft, name).strip()
     ]
@@ -246,14 +257,23 @@ def _tasks_check(owed: frozenset[str], nameable: frozenset[str]) -> Callable[[Ma
     def check_tasks(state: Mapping[str, Any]) -> list[str]:
         groups = to_tasks(TasksDraft.model_validate(state[tasks_stage.KEY]))
         if not any(group.tasks for group in groups):
-            return ["the plan holds no task. Write one task at least for each requirement the deltas add or change."]
+            return [
+                "tasks.empty: the plan holds no task. Write one task at least for each requirement the deltas add or "
+                "change."
+            ]
         if wrong := _errors([*validate_tasks(groups), *coverage(groups, owed=owed, nameable=nameable)]):
             return wrong
         try:
             same = parse_tasks(render_tasks(groups)) == groups
         except GrammarError as exc:
-            return [f"the tasks cannot be written as their file: {exc.message}."]
-        return [] if same else ["the tasks do not read back as written: keep each description and check on one line."]
+            return [f"tasks.unwritable: the tasks cannot be written as their file: {exc.message}."]
+        return (
+            []
+            if same
+            else [
+                "tasks.round-trip: the tasks do not read back as written: keep each description and check on one line."
+            ]
+        )
 
     return check_tasks
 
@@ -312,7 +332,7 @@ def _propose_edges(
     begins after `start`, goes to `done` once the deltas pass their gate, and to `ended` wherever it stops short:
     a stage given up, or a request that owes no spec."""
     gathered = _gathering(known)
-    deltas, deltas_gate = deltas_stage.build_deltas(), checked(deltas_stage.KEY, _deltas_check(known))
+    deltas, deltas_gate = deltas_stage.build_deltas(), checked(deltas_stage.KEY, _deltas_check(known), learns=True)
     edges: list[Any] = [
         (gathered, {GO: deltas, STOP: ended}),
         (deltas, deltas_gate),
@@ -321,7 +341,7 @@ def _propose_edges(
     if entry == "deltas":
         return [(start, gathered), *edges]
     open_points = _open_points(ask)
-    brief, brief_gate = brief_stage.build_brief(), checked(brief_stage.KEY, _check_brief)
+    brief, brief_gate = brief_stage.build_brief(), checked(brief_stage.KEY, _check_brief, learns=True)
     return [
         *_opening(brief, entry, start, ended),
         (brief, brief_gate),
@@ -363,6 +383,8 @@ _NOTHING_YET: dict[str, None] = dict.fromkeys(
     (
         *_DRAFTING,
         *(tries_key(stage) for stage in _DRAFTING),
+        *(pending_key(stage) for stage in _DRAFTING),
+        SENT_BACK,
         *(FAILURE, FINDINGS, STAGE_ERROR, TIER, ASKING, ROUNDS, BRIEF_TEXT, LIVING),
         *(brief_stage.ANSWERS, brief_stage.REPLACES),
     )
@@ -412,10 +434,10 @@ def build_plan_app(
 ) -> App:
     """The design, where the change owes one, and then the tasks, each behind its gate. The tasks are held to the
     change's own requirements: each of `owed` served, and none named outside `nameable`."""
-    tasks, tasks_gate = tasks_stage.build_tasks(), checked(tasks_stage.KEY, _tasks_check(owed, nameable))
+    tasks, tasks_gate = tasks_stage.build_tasks(), checked(tasks_stage.KEY, _tasks_check(owed, nameable), learns=True)
     edges: list[Any] = [(tasks, tasks_gate), (tasks_gate, {OK: _ended, AGAIN: tasks, GIVE_UP: _ended})]
     if design:
-        drafting, design_gate = design_stage.build_design(), checked(design_stage.KEY, _check_design)
+        drafting, design_gate = design_stage.build_design(), checked(design_stage.KEY, _check_design, learns=True)
         edges = [
             ("START", drafting, design_gate),
             (design_gate, {OK: _designed, AGAIN: drafting, GIVE_UP: _ended}),

@@ -30,15 +30,24 @@ OK, AGAIN, GIVE_UP = "OK", "AGAIN", "GIVE_UP"
 #: stage, the marker would end a fenced section early there. Only a model can repeat it, and every answer of a
 #: model comes through a gate.
 ECHO = "the answer repeats a marker line of your instructions. Write no marker line."
+#: Where a learning gate hands on what it sent back, once the next try passed: each as `[stage, problem]`, what the
+#: command notes in the lessons file. What a stage given up was sent back teaches nothing, and is not handed on.
+SENT_BACK = "sent_back"
 
 
 def tries_key(stage: str) -> str:
     return f"tries_{stage}"
 
 
-def checked(stage: str, check: Callable[[Mapping[str, Any]], list[str]]) -> FunctionNode:
+def pending_key(stage: str) -> str:
+    """Where a learning gate keeps what it sent `stage` back, until a try passes or the stage is given up."""
+    return f"sent_back_{stage}"
+
+
+def checked(stage: str, check: Callable[[Mapping[str, Any]], list[str]], *, learns: bool = False) -> FunctionNode:
     """The gate of `stage`, named `<stage>_gate`. `check` is given the state and says what is wrong with the answer
-    at `state[stage]`, a sentence each; nothing wrong sends the run on."""
+    at `state[stage]`, a sentence each; nothing wrong sends the run on. A gate that `learns` hands on what it sent
+    back once the next try passes, under `SENT_BACK`."""
 
     def gate(ctx: Context) -> Event:
         tries = (ctx.state.get(tries_key(stage)) or 0) + 1
@@ -50,13 +59,18 @@ def checked(stage: str, check: Callable[[Mapping[str, Any]], list[str]]) -> Func
         else:
             problems = check(ctx.state.to_dict())
         # The findings are a stage's own: cleared wherever the run leaves it, so no later stage is told them.
-        counted = {tries_key(stage): tries, STAGE_ERROR: None, FINDINGS: None}
+        counted = {tries_key(stage): tries, STAGE_ERROR: None, FINDINGS: None, pending_key(stage): None}
+        pending = ctx.state.get(pending_key(stage)) or []
         if not problems:
-            return Event(route=OK, state=counted)
+            learned = {SENT_BACK: [*(ctx.state.get(SENT_BACK) or []), *pending]} if pending else {}
+            return Event(route=OK, state={**counted, **learned})
         if tries >= MAX_TRIES or problems[0].startswith(FINAL):  # no second asking changes a final reason
             return Event(route=GIVE_UP, state={**counted, FAILURE: f"{stage}: {'; '.join(problems)}"})
         # The refused answer is cleared: were the next one off its schema, this one would stand there and be
         # checked a second time.
-        return Event(route=AGAIN, state={**counted, FINDINGS: "\n".join(problems), stage: None})
+        again = {**counted, FINDINGS: "\n".join(problems), stage: None}
+        if learns:
+            again[pending_key(stage)] = [*pending, *([stage, problem] for problem in problems)]
+        return Event(route=AGAIN, state=again)
 
     return FunctionNode(func=gate, name=f"{stage}_gate")
