@@ -53,29 +53,48 @@ def run(
 ) -> subprocess.CompletedProcess[bytes]:
     """One program, bytes out: standard error apart, or `merged` into standard out. Past `timeout` its whole tree
     is stopped and `subprocess.TimeoutExpired` raised, holding what it had written by then."""
-    stderr = subprocess.STDOUT if merged else subprocess.PIPE
-    with subprocess.Popen(
+    with started(argv, env=env, cwd=cwd, merged=merged) as process:
+        return waited(process, timeout)
+
+
+def started(
+    argv: list[str], *, env: Mapping[str, str], cwd: Path | None = None, merged: bool = False
+) -> subprocess.Popen[bytes]:
+    """One program started, in a session of its own so that its whole tree can be stopped, for a caller that waits on
+    it with `waited`, and may `stop` it first: a call an assistant cancelled, say."""
+    return subprocess.Popen(
         argv,
         cwd=cwd,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
-        stderr=stderr,
+        stderr=subprocess.STDOUT if merged else subprocess.PIPE,
         env=dict(env),
         start_new_session=not WINDOWS,  # its own session: stopped whole, with what it started
-    ) as process:
-        try:
-            out, err = process.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            _stopped(process, WINDOWS)
-            try:  # the output to its end, which Windows reads on threads, for as long as a stopped tree takes
-                out, err = process.communicate(timeout=DRAIN_S)
-            except subprocess.TimeoutExpired as late:  # a process that left the session holds it: what came is kept
-                out, err = late.output or b"", late.stderr or b""
-            raise subprocess.TimeoutExpired(argv, timeout, output=out, stderr=err) from None
-        except BaseException:  # an interrupt: a session of its own hears none, so it is stopped here
-            _stopped(process, WINDOWS)
-            raise
+    )
+
+
+def waited(process: subprocess.Popen[bytes], timeout: float) -> subprocess.CompletedProcess[bytes]:
+    """A started program's output once it ends. Past `timeout` its whole tree is stopped and
+    `subprocess.TimeoutExpired` raised, holding what it had written by then."""
+    argv = process.args if isinstance(process.args, list) else [str(process.args)]
+    try:
+        out, err = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _stopped(process, WINDOWS)
+        try:  # the output to its end, which Windows reads on threads, for as long as a stopped tree takes
+            out, err = process.communicate(timeout=DRAIN_S)
+        except subprocess.TimeoutExpired as late:  # a process that left the session holds it: what came is kept
+            out, err = late.output or b"", late.stderr or b""
+        raise subprocess.TimeoutExpired(argv, timeout, output=out, stderr=err) from None
+    except BaseException:  # an interrupt: a session of its own hears none, so it is stopped here
+        _stopped(process, WINDOWS)
+        raise
     return subprocess.CompletedProcess(argv, process.returncode, out, err)
+
+
+def stop(process: subprocess.Popen[bytes]) -> None:
+    """A started program and every process it started, stopped."""
+    _stopped(process, WINDOWS)
 
 
 @dataclass(frozen=True)

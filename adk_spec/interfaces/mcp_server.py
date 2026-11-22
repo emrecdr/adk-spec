@@ -4,10 +4,11 @@ The owner's choices, 22 November 2026: a thin server, each tool running the comm
 no question, and returning what it printed; every command but `approve` and `archive`, which record a person's
 decision and stay a command the person runs; and the stages on adk-spec's own provider, as from the terminal.
 
-Each tool runs `python -m adk_spec` in a process of its own, through `workspace/process.py`, so the workspace's lock,
-its recordings, its token ceiling and its next line are the terminal's, and nothing a command prints reaches the
-protocol's own stream. Arguments reach the command as the terminal takes them: options as `--name=value`, and the
-request or the change after `--`, so a request that opens with a dash is a request.
+Each tool runs `python -P -m adk_spec` in a process of its own, through `workspace/process.py`, so the workspace's
+lock, its recordings, its token ceiling and its next line are the terminal's, nothing a command prints reaches the
+protocol's own stream, and no module in the repository stands in for one the command imports. A call the assistant
+cancels stops its command, and what it started. Arguments reach the command as the terminal takes them: options as
+`--name=value`, and the request or the change after `--`, so a request that opens with a dash is a request.
 """
 
 from __future__ import annotations
@@ -16,11 +17,12 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Literal
 
+import anyio
 from mcp.server.mcpserver import MCPServer
 
-from ..workspace.process import TimedOut, run
+from ..domain.model import Tier
+from ..workspace.process import TimedOut, started, stop, waited
 
 #: How long a tool waits for its command: a `propose` that reads the code takes minutes. A client may give up sooner.
 TOOL_TIMEOUT_S = 3600.0
@@ -35,58 +37,32 @@ Approving and archiving are the person's decisions: when a change is ready, tell
 in a terminal, and once it is verified `adk-spec archive <id>`. Never approve, archive or set a finding aside for
 them."""
 
-Tier = Literal["lean", "standard", "strict"]
-
 
 def command(root: Path, *args: str) -> list[str]:
-    """The command line that runs adk-spec on the workspace at `root`."""
-    return [sys.executable, "-m", "adk_spec", "--root", str(root), *args]
+    """The command line that runs adk-spec on the workspace at `root`: `-P` keeps the folder it starts in, the
+    person's repository, off the import path."""
+    return [sys.executable, "-P", "-m", "adk_spec", "--root", str(root), *args]
 
 
-def ran(root: Path, argv: list[str]) -> str:
-    """What the command printed, standard out and standard error together, and how it ended where not well."""
+async def ran(root: Path, argv: list[str]) -> str:
+    """What the command printed, standard out and standard error together, and how it ended where not well. A call
+    the assistant cancels stops the command's whole tree: it would otherwise run on, and spend, for an hour."""
+    process = started(command(root, *argv), env=os.environ, cwd=root, merged=True)
     try:
-        done = run(command(root, *argv), env=os.environ, timeout=TOOL_TIMEOUT_S, cwd=root, merged=True)
+        done = await anyio.to_thread.run_sync(lambda: waited(process, TOOL_TIMEOUT_S), abandon_on_cancel=True)
     except TimedOut as exc:
-        text = (exc.output or b"").decode("utf-8", errors="replace").strip()
-        return f"{text}\n(adk-spec did not finish within {TOOL_TIMEOUT_S:g} s, and was stopped)".strip()
-    text = done.stdout.decode("utf-8", errors="replace").strip()
-    return text if done.returncode == 0 else f"{text}\n(adk-spec ended with exit {done.returncode})".strip()
+        text, note = exc.output or b"", f"adk-spec did not finish within {TOOL_TIMEOUT_S:g} s, and was stopped"
+    except BaseException:  # the call cancelled: nothing waits for the answer any longer
+        stop(process)
+        raise
+    else:
+        text, note = done.stdout, "" if done.returncode == 0 else f"adk-spec ended with exit {done.returncode}"
+    said = text.decode("utf-8", errors="replace").strip()
+    return f"{said}\n({note})".strip() if note else said
 
 
-def propose_argv(
-    request: str,
-    id: str | None = None,
-    tier: Tier | None = None,
-    with_repositories: list[str] | None = None,
-    no_explore: bool = False,
-) -> list[str]:
-    argv = ["propose", "--no-input", *([f"--id={id}"] if id else []), *([f"--tier={tier}"] if tier else [])]
-    argv += [f"--with={path}" for path in with_repositories or ()]
-    return [*argv, *(["--no-explore"] if no_explore else []), "--", request]
-
-
-def plan_argv(
-    id: str, replace: bool = False, no_explore: bool = False, with_repositories: list[str] | None = None
-) -> list[str]:
-    argv = ["plan", *(["--replace"] if replace else []), *(["--no-explore"] if no_explore else [])]
-    return [*argv, *(f"--with={path}" for path in with_repositories or ()), "--", id]
-
-
-def check_argv(id: str, no_model: bool = False) -> list[str]:
-    return ["check", *(["--no-model"] if no_model else []), "--", id]
-
-
-def verify_argv(id: str, bases: list[str] | None = None) -> list[str]:
-    return ["verify", *(f"--base={base}" for base in bases or ()), "--", id]
-
-
-def status_argv(include_archived: bool = False) -> list[str]:
-    return ["status", *(["--all"] if include_archived else [])]
-
-
-def validate_argv(id: str | None = None, strict: bool = False) -> list[str]:
-    return ["validate", *(["--strict"] if strict else []), *(["--", id] if id else [])]
+def _flag(on: bool, *words: str) -> list[str]:
+    return list(words) if on else []
 
 
 def build_server(root: Path) -> MCPServer:
@@ -94,36 +70,43 @@ def build_server(root: Path) -> MCPServer:
     server = MCPServer(name="adk-spec", instructions=INSTRUCTIONS)
 
     @server.tool(description="Draft a change from a request, or revise the open change `id` names. Asks nothing.")
-    def propose(
+    async def propose(
         request: str,
         id: str | None = None,
         tier: Tier | None = None,
         with_repositories: list[str] | None = None,
         no_explore: bool = False,
     ) -> str:
-        return ran(root, propose_argv(request, id, tier, with_repositories, no_explore))
+        named = [*_flag(bool(id), f"--id={id}"), *_flag(bool(tier), f"--tier={tier}")]
+        widened = [f"--with={path}" for path in with_repositories or ()]
+        return await ran(
+            root, ["propose", "--no-input", *named, *widened, *_flag(no_explore, "--no-explore"), "--", request]
+        )
 
     @server.tool(description="Draft a change's tasks again, and its design where one is owed.")
-    def plan(
+    async def plan(
         id: str, replace: bool = False, no_explore: bool = False, with_repositories: list[str] | None = None
     ) -> str:
-        return ran(root, plan_argv(id, replace, no_explore, with_repositories))
+        widened = [f"--with={path}" for path in with_repositories or ()]
+        return await ran(
+            root, ["plan", *_flag(replace, "--replace"), *_flag(no_explore, "--no-explore"), *widened, "--", id]
+        )
 
     @server.tool(description="Check a change's files against each other and against the repository's rules.")
-    def check(id: str, no_model: bool = False) -> str:
-        return ran(root, check_argv(id, no_model))
+    async def check(id: str, no_model: bool = False) -> str:
+        return await ran(root, ["check", *_flag(no_model, "--no-model"), "--", id])
 
     @server.tool(description="Run the project's tests and judge the work against each requirement of a change.")
-    def verify(id: str, bases: list[str] | None = None) -> str:
-        return ran(root, verify_argv(id, bases))
+    async def verify(id: str, bases: list[str] | None = None) -> str:
+        return await ran(root, ["verify", *(f"--base={base}" for base in bases or ()), "--", id])
 
     @server.tool(description="List each open change and what comes next with it.")
-    def status(include_archived: bool = False) -> str:
-        return ran(root, status_argv(include_archived))
+    async def status(include_archived: bool = False) -> str:
+        return await ran(root, ["status", *_flag(include_archived, "--all")])
 
     @server.tool(description="Check the structure of the living specs and of the open changes, or of one.")
-    def validate(id: str | None = None, strict: bool = False) -> str:
-        return ran(root, validate_argv(id, strict))
+    async def validate(id: str | None = None, strict: bool = False) -> str:
+        return await ran(root, ["validate", *_flag(strict, "--strict"), *_flag(bool(id), "--", id or "")])
 
     return server
 
