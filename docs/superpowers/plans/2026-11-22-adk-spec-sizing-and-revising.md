@@ -88,3 +88,16 @@ Measured live in phase 9: the run inherited adk-spec's virtual environment first
   - A test run keeps a virtual environment inside the project: adk-spec installed in the project's own `.venv`.
   - Not done: moving the retry section after the long inputs in every stage (older than this phase), a revision
     schema that returns only what changed (large), and the sizing rule in ADK's web chat (outside this phase).
+- **After the code review.**
+  - The lean rule took a typo fix, which the sizing stage's own guide calls `none`, and short feature requests that
+    opened with "fix" or named a typo. Now a request with a typo-, wording-, docs- or prototype-shaped word is never
+    sized by a rule, and lean by rule needs a fix verb first, a word of a fault (bug, crash, error, fails, wrong...)
+    and no feature word.
+  - A requirement the change adds, given back by the model as modified or removed, stays added with its ID or is
+    dropped; the deltas guide says so too.
+  - A delta off its grammar of a capability no longer touched is taken out: what is gone is read from the disk.
+  - Two requirements of one name keep their IDs in order.
+  - A revision that writes every file as it stood keeps the approval.
+  - A person's `--tier` beside an `--id` of an open change is said to be unused.
+  - The kept-tasks line is said beside a point left open.
+  - A virtual environment whose folder holds the project, a monorepo's top `.venv` too, stays on a test run's PATH.

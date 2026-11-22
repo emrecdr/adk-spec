@@ -181,6 +181,19 @@ def test_a_run_is_given_the_persons_environment_not_adk_specs_own(tmp_path, monk
     assert "venv None" in run.tail and str(own / "bin") not in run.tail
 
 
+def test_a_virtual_environment_beside_the_project_in_a_monorepo_is_kept(tmp_path, monkeypatch) -> None:
+    """Found by the review: a `.venv` at the top of a monorepo, `.spec/` in one service below it, was stripped."""
+    own, project = tmp_path / "mono/.venv", tmp_path / "mono/services/api"
+    (own / "bin").mkdir(parents=True)
+    project.mkdir(parents=True)
+    monkeypatch.setattr(sys, "prefix", str(own))
+    monkeypatch.setattr(sys, "base_prefix", "/usr")
+    monkeypatch.setenv("VIRTUAL_ENV", str(own))
+    monkeypatch.setenv("PATH", os.pathsep.join([str(own / "bin"), os.environ["PATH"]]))
+    code = "import os\nprint('venv', os.environ.get('VIRTUAL_ENV'))"
+    assert f"venv {own}" in run_tests(project, program(tmp_path, code), timeout=60).tail
+
+
 def test_a_virtual_environment_inside_the_project_is_the_projects_own_and_is_kept(tmp_path, monkeypatch) -> None:
     """Found by the cleanup review: adk-spec installed in the project's own `.venv` took the project's pytest away."""
     own = tmp_path / ".venv"

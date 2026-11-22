@@ -57,11 +57,11 @@ def run_tests(root: Path, argv: Sequence[str], *, timeout: int, name: str = "") 
 def _environment(root: Path) -> dict[str, str]:
     """The person's environment, less adk-spec's own virtual environment. Run from its checkout by `uv run`, or as an
     installed tool, adk-spec's interpreter stands first on PATH and in VIRTUAL_ENV, and a plain `pytest` in a test
-    command would be adk-spec's own, not the project's. A virtual environment inside the project is the project's
-    own, adk-spec installed in it, and stays."""
+    command would be adk-spec's own, not the project's. A virtual environment whose folder holds the project, its
+    own `.venv` or one at the top of a monorepo, is the project's, adk-spec installed in it, and stays."""
     env = dict(os.environ)
     own = Path(sys.prefix).resolve()
-    if sys.prefix == sys.base_prefix or own.is_relative_to(root.resolve()):
+    if sys.prefix == sys.base_prefix or root.resolve().is_relative_to(own.parent):
         return env
     if env.get("VIRTUAL_ENV") and Path(env["VIRTUAL_ENV"]).resolve() == own:
         del env["VIRTUAL_ENV"]

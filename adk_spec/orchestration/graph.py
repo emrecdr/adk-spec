@@ -73,7 +73,7 @@ class Known:
     #: Every requirement ID spoken for, in a living spec or in an open change.
     taken: frozenset[str]
     #: The IDs a change being revised has given, by capability and requirement name: kept where a name stays.
-    kept: Mapping[tuple[str, str], str] = field(default_factory=dict)
+    kept: Mapping[tuple[str, str], Sequence[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

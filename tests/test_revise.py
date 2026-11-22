@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pytest
 from conftest import (
+    BRIEF_WITH_A_MARKER,
     CANNED_BRIEF,
     CANNED_DELTAS,
     approved,
@@ -119,11 +120,13 @@ def test_a_hand_edit_the_model_keeps_is_written_back_and_not_listed_as_changed(t
     assert "added nothing; changed nothing;" in capsys.readouterr().out and edited in read_text(tmp_path / DELTA)
 
 
-def test_the_change_keeps_its_tier_and_no_sizing_is_asked(tmp_path, fake_provider) -> None:
+def test_the_change_keeps_its_tier_and_no_sizing_is_asked(tmp_path, capsys, fake_provider) -> None:
     ws = unticked(tmp_path)
     ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"tier": "standard"}))
+    capsys.readouterr()
     assert revised(tmp_path, "--tier", "lean", instruction="Fix the typo in the passkey requirement.") == 0
     assert state_of(tmp_path)["tier"] == "standard" and asked(fake_provider, TRIAGE) == 0
+    assert "`--tier lean` is not used: a change keeps its tier" in capsys.readouterr().out
 
 
 @pytest.mark.usefixtures("fake_provider")
@@ -194,3 +197,48 @@ def test_a_verified_or_archived_change_is_not_revised(tmp_path, capsys, fake_pro
     ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"status": status}))
     assert revised(tmp_path) == 1
     assert f"`passkeys` is {status}" in capsys.readouterr().err and fake_provider.requests == []
+
+
+def test_a_requirement_the_change_adds_restated_as_modified_stays_added(tmp_path, capsys, fake_provider) -> None:
+    unticked(tmp_path)
+    edited = {**PASSKEY, "statement": "The system SHALL let a user sign in with a passkey on any device."}
+    restated = {"capability": "auth", "purpose": "", "added": [], "removed": []}
+    fake_provider.answers_when(
+        DELTAS, {"deltas": [{**restated, "modified": [{"id": "REQ-AUTH-004", "requirement": edited}]}]}
+    )
+    capsys.readouterr()
+    assert revised(tmp_path) == 0
+    assert "revised   added nothing; changed REQ-AUTH-004;" in capsys.readouterr().out
+    delta = read_text(tmp_path / DELTA)
+    assert delta.index("## ADDED Requirements") < delta.index("REQ-AUTH-004") and "MODIFIED" not in delta
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_delta_off_its_grammar_of_a_capability_no_longer_touched_is_taken_out(tmp_path) -> None:
+    """Found by the review: a delta that did not read was never known to the change, and stayed behind."""
+    seeded(tmp_path)  # a task is ticked: tasks.md is kept, and no plan is drafted
+    broken = tmp_path / ".spec/changes/passkeys/specs/sessions/spec.md"
+    write_text(broken, "# Delta: sessions\n\nHalf written.\n")
+    assert revised(tmp_path) == 0
+    assert not broken.exists() and (tmp_path / DELTA).is_file()
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_revision_that_changes_nothing_keeps_the_approval(tmp_path, capsys) -> None:
+    """Found by the review: an approval was voided by a revision that wrote every file as it stood."""
+    seeded(tmp_path)
+    assert run(tmp_path, "propose", "Let users sign in with a passkey.", "--id", "fresh", "--no-input") == 0
+    approved(tmp_path, "fresh")
+    capsys.readouterr()
+    assert run(tmp_path, "propose", "Keep it as it is.", "--id", "fresh", "--no-input") == 0
+    held = state_of(tmp_path, "fresh")
+    assert held["status"] == "approved" and held["approval"] and "approval is void" not in capsys.readouterr().out
+
+
+def test_a_kept_task_list_is_said_beside_a_point_left_open(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)  # a task is ticked
+    fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
+    capsys.readouterr()
+    assert revised(tmp_path) == 0
+    out = capsys.readouterr().out
+    assert "plan      waits: the brief leaves 1 point open" in out and "kept      tasks.md: a task is ticked" in out

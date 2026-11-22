@@ -9,7 +9,7 @@ What a model points to is held to the text: a finding whose quote is not in the 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Protocol
 
 from .brief_md import asked_in, marker_of, render_brief, worded
@@ -122,16 +122,18 @@ def to_deltas(
     draft: DeltasDraft,
     living: Mapping[str, Spec],
     taken: Iterable[str],
-    kept: Mapping[tuple[str, str], str] | None = None,
+    kept: Mapping[tuple[str, str], Sequence[str]] | None = None,
 ) -> dict[str, Delta]:
     """One delta a capability. An added requirement is given the next ID no spec and no open change holds, and each
     one given counts as held; a purpose is kept only for a capability that is not there yet. A requirement given as
     modified that says what the living spec says is left out: a model restating a spec copies its neighbours.
 
-    `kept` holds the IDs a change being revised has already given, by capability and requirement name: a
-    requirement the revision keeps by its name keeps its ID, once: a second one of that name gets one of its own."""
-    kept = dict(kept or {})  # each kept ID given once: taken out as it is
-    held = set(taken) | set(kept.values())
+    `kept` holds the IDs a change being revised has already given, by capability and requirement name, in order: a
+    requirement the revision keeps by its name keeps its ID, each ID given once. One of those requirements given
+    back as modified or removed is no living one: it stays added, with its ID, or is dropped."""
+    left = {key: list(ids) for key, ids in (kept or {}).items()}  # each kept ID given once: taken out as it is
+    own = {req_id for ids in left.values() for req_id in ids}
+    held = set(taken) | own
     slots: dict[str, dict] = {}
     for one in draft.deltas:
         capability = one.capability.strip()
@@ -140,15 +142,21 @@ def to_deltas(
             slot["purpose"] = slot["purpose"] or _text(one.purpose) or None
         stands = {req.id: req for req in living[capability].requirements} if capability in living else {}
         for added in one.added:
-            req_id = kept.pop((capability, named(added.name)), None) or next_requirement_id(capability, held)
+            ids = left.get((capability, named(added.name)))
+            req_id = ids.pop(0) if ids else next_requirement_id(capability, held)
             held.add(req_id)
             slot["added"].append(_requirement(req_id, added))
-        restated = [_requirement(changed.id.strip(), changed.requirement) for changed in one.modified]
-        slot["modified"] += [req for req in restated if stands.get(req.id) != req]
+        mine = own - stands.keys()  # the change's own IDs, which no living spec holds
+        for changed in one.modified:
+            req = _requirement(changed.id.strip(), changed.requirement)
+            if req.id not in mine:
+                slot["modified"] += [req] if stands.get(req.id) != req else []
+            elif req.id not in {given.id for given in slot["added"]}:
+                slot["added"].append(req)
         slot["removed"] += [
             Removal(id=gone, name=stands[gone].name if gone in stands else "", reason=flat(removed.reason))
             for removed in one.removed
-            for gone in [removed.id.strip()]
+            if (gone := removed.id.strip()) not in mine
         ]
     return {
         capability: Delta(
@@ -273,9 +281,13 @@ def named(name: str) -> str:
     return flat(name).casefold()
 
 
-def kept_ids(deltas: Mapping[str, Delta]) -> dict[tuple[str, str], str]:
-    """The IDs a change has given its added requirements, by capability and name: what a revision keeps."""
-    return {(capability, named(req.name)): req.id for capability, delta in deltas.items() for req in delta.added}
+def kept_ids(deltas: Mapping[str, Delta]) -> dict[tuple[str, str], list[str]]:
+    """The IDs a change has given its added requirements, by capability and name, in order: what a revision keeps."""
+    kept: dict[tuple[str, str], list[str]] = {}
+    for capability, delta in deltas.items():
+        for req in delta.added:
+            kept.setdefault((capability, named(req.name)), []).append(req.id)
+    return kept
 
 
 def _by_id(deltas: Mapping[str, Delta]) -> dict[str, Requirement | Removal]:

@@ -11,7 +11,7 @@ from samples import SPEC
 
 from adk_spec.domain import drafts
 from adk_spec.domain.brief_md import asked_in, markers, parse_brief, render_brief
-from adk_spec.domain.convert import questions_of, render_design, slug_of, to_brief, to_deltas, to_tasks
+from adk_spec.domain.convert import kept_ids, questions_of, render_design, slug_of, to_brief, to_deltas, to_tasks
 from adk_spec.domain.delta_md import parse_delta, render_delta
 from adk_spec.domain.drafts import (
     BriefDraft,
@@ -60,9 +60,26 @@ def test_an_added_requirement_is_given_the_next_free_id_and_each_one_counts() ->
 
 def test_a_kept_id_is_given_once_and_a_second_requirement_of_its_name_gets_its_own() -> None:
     """A revision keeps a requirement's ID by its name: once, so two of one name are never given one ID."""
-    kept = {("auth", "sign in with a passkey"): "REQ-AUTH-004"}
+    kept = {("auth", "sign in with a passkey"): ["REQ-AUTH-004"]}
     delta = to_deltas(one(added=[ADD, ADD]), LIVING, {"REQ-AUTH-004"}, kept)["auth"]
     assert [r.id for r in delta.added] == ["REQ-AUTH-004", "REQ-AUTH-005"]
+
+
+def test_two_requirements_of_one_name_keep_their_ids_in_order() -> None:
+    """Found by the review: the second ID of a name overwrote the first, and both requirements moved."""
+    kept = kept_ids(to_deltas(one(added=[ADD, ADD]), LIVING, {"REQ-AUTH-003"}))
+    delta = to_deltas(one(added=[ADD, ADD]), LIVING, {"REQ-AUTH-004", "REQ-AUTH-005"}, kept)["auth"]
+    assert [r.id for r in delta.added] == ["REQ-AUTH-004", "REQ-AUTH-005"]
+
+
+def test_a_requirement_the_change_adds_given_back_as_modified_stays_added_with_its_id() -> None:
+    """Found by the review: a revision shows the model the change's own IDs, and it may restate one as modified."""
+    kept = {("auth", "sign in with a passkey"): ["REQ-AUTH-004"]}
+    restated = one(modified=[{"id": "REQ-AUTH-004", "requirement": ADD}], removed=[])
+    delta = to_deltas(restated, LIVING, {"REQ-AUTH-004"}, kept)["auth"]
+    assert [r.id for r in delta.added] == ["REQ-AUTH-004"] and delta.modified == ()
+    dropped = to_deltas(one(removed=[{"id": "REQ-AUTH-004", "reason": "Not wanted."}]), LIVING, {"REQ-AUTH-004"}, kept)
+    assert dropped["auth"].removed == () and dropped["auth"].added == ()
 
 
 def test_a_modified_draft_keeps_its_id_and_a_removed_one_takes_the_living_name() -> None:

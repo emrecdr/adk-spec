@@ -46,8 +46,9 @@ to read first. Between `approve` and `verify` you implement the tasks, with the 
 box. `adk-spec` writes specs and plans and judges the result. It does not edit your code.
 
 A small change is `lean`: it owes no check and no verification, so it takes three commands, `propose`, `approve`,
-`archive`. `propose` sizes a request itself: a short fix is lean and a long feature request standard by rule, with no
-model call, and a model sizes the rest. `--tier lean` or `--tier standard` says it by hand.
+`archive`. `propose` sizes a request itself: a short bug fix is lean and a long feature request standard by rule, with
+no model call, and a model sizes the rest, a typo or a cosmetic change among them, which may owe no spec at all.
+`--tier lean` or `--tier standard` says it by hand.
 
 ### What each command does
 

@@ -1494,6 +1494,8 @@ def _tier_of(args: argparse.Namespace, change: Change | None) -> Tier | None:
     if change is not None:
         state = change.state
         print(f"revising  {state.id}, a {state.tier} {state.status}: its files kept where the request does not reach")
+        if args.tier and args.tier != state.tier:
+            print(f"          `--tier {args.tier}` is not used: a change keeps its tier")
         return state.tier
     if args.tier:
         return args.tier
@@ -1601,7 +1603,7 @@ def _then_planned(
         print(f"tokens    {_spent(ledger)}")
         if waiting:
             print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
-        else:
+        if keep:
             print(f"kept      tasks.md: {keep}")
         _say_next(workspace, change_id, specs)
         return EXIT_OK
@@ -1643,15 +1645,21 @@ def _rewritten(
     workspace: Workspace, change: Change, deltas: Mapping[str, Delta], files: Mapping[str, str], fields: dict[str, Any]
 ) -> bool:
     """A change revised in place: its files and state written anew, a delta of a capability it no longer touches
-    taken out, and what changed in its requirements said: whether anything did. An approved change is a draft again,
-    as after a rebase, and is approved again: what was approved is no longer what it says."""
-    gone = [f"{SPECS}/{capability}/{SPEC_FILE}" for capability in sorted(set(change.deltas) - set(deltas))]
-    folder = workspace.rewrite_change(reopened(change.state, **fields), files, gone)
+    taken out, and what changed in its requirements said: whether anything did. An approved change whose files
+    changed is a draft again, as after a rebase, and is approved again: what was approved is no longer what it says.
+    One the revision wrote as it stood keeps its approval."""
+    texts = workspace.approval_texts(change.state.id)  # as they stand on disk: a delta off its grammar too
+    gone = sorted(name for name in texts if name.startswith(f"{SPECS}/") and name not in files)
+    same = not gone and all(texts.get(name) == text for name, text in files.items())
+    same = same and fields["repositories"] == change.state.repositories
+    folder = workspace.rewrite_change(
+        change.state.model_copy(update=fields) if same else reopened(change.state, **fields), files, gone
+    )
     added, changed, dropped = revision(change.deltas, deltas)
     lists = (("added", added), ("changed", changed), ("dropped", dropped))
     said = "; ".join(f"{verb} {', '.join(ids) or 'nothing'}" for verb, ids in lists)
     print(f"revised   {said}")
-    if change.state.approval is not None:
+    if change.state.approval is not None and not same:
         print(f"the approval is void: read what changed, then run `{PROG} approve {change.state.id}` again")
     _said_written(workspace, folder, files, "")
     return bool(added or changed or dropped)
