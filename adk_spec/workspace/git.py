@@ -211,6 +211,18 @@ def files(root: Path, *, exclude: Sequence[str] = ()) -> list[str]:
     return sorted(set(_listed(root, "--cached", "--others", "--exclude-standard", exclude=exclude)))
 
 
+#: How many lines of one file a search gives back.
+GREP_A_FILE = 5
+
+
+def grep(root: Path, term: str, *, exclude: Sequence[str] = ()) -> list[str]:
+    """Each `path:line:text` git finds for `term` among the text files it tracks or would track under `root`:
+    nothing it ignores, nothing of `.spec/`, nothing a person excluded, and `GREP_A_FILE` lines of a file at most.
+    `term` is a fixed string, never a pattern, its letters matched in either case."""
+    asked = ("-n", "-I", "-F", "-i", "--untracked", "--no-color", f"--max-count={GREP_A_FILE}", "-e", term)
+    return [line for line in git(root, "grep", *asked, *_here(exclude), ok=(0, 1)).split("\n") if line]
+
+
 def diff(root: Path, base: str, *, exclude: Sequence[str] = ()) -> str:
     """`base` against the working tree under `root`, as one unified diff with paths from `root`. A file git does
     not track yet reads as added: new work is new files, and a person may not have added them. `.spec/` is left
