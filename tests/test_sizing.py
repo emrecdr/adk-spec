@@ -45,6 +45,14 @@ def test_a_short_bug_fix_that_names_no_risk_is_lean(request_) -> None:
         "Fix the SQL injection error in search.",
         "Fix the wrong refund amount bug.",
         "Fix the crash when the login session cookie expires.",
+        # Found by the code review: sign-in, single sign-on, keys and prices.
+        "Fix the crash on the sign-in page.",
+        "Fix the OAuth callback error.",
+        "Fix the SSO redirect error.",
+        "Fix the wrong price at checkout.",
+        "Fix the error when an API key is missing.",
+        "Fix the crash when a passkey is missing.",
+        "Fix the error in the MFA prompt.",
     ],
 )
 def test_anything_else_is_sized_by_the_model(request_) -> None:

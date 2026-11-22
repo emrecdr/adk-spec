@@ -54,9 +54,9 @@ from ..domain.lifecycle import (
     first_of_two,
     missing_bases,
     next_step,
+    of_the_plan,
     owes_design,
     reopened,
-    settled_by_plan,
     verified,
     verify_blockers,
 )
@@ -424,7 +424,11 @@ class Assessed:
     @property
     def step(self) -> Step:
         """What happens next with the change, and who makes it happen."""
-        return next_step(self.state, self.findings, self.stale, check=self.unchecked, drifted=self.drifted)
+        tasks = self.loaded.change.tasks or ()
+        started = any(task.done for group in tasks for task in group.tasks)
+        return next_step(
+            self.state, self.findings, self.stale, check=self.unchecked, drifted=self.drifted, started=started
+        )
 
 
 def _assessed(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> Assessed:
@@ -967,14 +971,14 @@ def _source(workspace: Workspace, repositories: Mapping[str, str]) -> Source | N
         return None
 
 
-def _optional(workspace: Workspace, read: Callable[[Workspace], str], name: str) -> str:
-    """Optional material as a stage reads it, the profile or the lessons, or nothing: a file that is no text is said,
-    and stops nothing. A person edits it by hand, and may have saved it in another encoding."""
+def _optional(workspace: Workspace, read: Callable[[Workspace], str], name: str) -> str | None:
+    """Optional material as a stage reads it, the profile or the lessons; None where the file is no text, which is
+    said, and stops nothing. A person edits it by hand, and may have saved it in another encoding."""
     try:
         return read(workspace)
     except NotTextError:
         print(f"left out  {workspace.shown(workspace.home / name)} is not UTF-8: no stage reads it")
-        return ""
+        return None
 
 
 def _with_checked(workspace: Workspace, given: Sequence[str], held: Mapping[str, str], here: Path) -> dict[str, str]:
@@ -1037,7 +1041,7 @@ def _plannable(
         _printed(of_specs)
         raise NotYetError(f"`{change_id}` is not planned: a living spec does not read. Fix it first")
     # What must be right before tasks are worth drafting: everything but the tasks themselves.
-    blocking = [held for held in assessed.findings if held.severity == "ERROR" and not settled_by_plan(held)]
+    blocking = [held for held in assessed.findings if held.severity == "ERROR" and not of_the_plan(held)]
     if blocking or change.brief is None:
         _printed(blocking)
         raise NotYetError(f"`{change_id}` is not planned: its brief and deltas have errors. Fix them first")
@@ -1099,8 +1103,8 @@ def _plan_made(
         DELTAS_TEXT: _deltas_text(change),
         LIVING: living_text(specs, sorted(change.deltas)),
         TREE: source.tree() if source else "",
-        PROFILE_TEXT: _optional(workspace, profile_text, PROFILE),
-        LESSONS_TEXT: _optional(workspace, lessons_text, LESSONS) if lessons is None else lessons,
+        PROFILE_TEXT: _optional(workspace, profile_text, PROFILE) or "",
+        LESSONS_TEXT: (_optional(workspace, lessons_text, LESSONS) or "") if lessons is None else lessons,
     }
     if change.design and not drafts_design:  # a design a person wrote, or one the change does not owe
         seed[DESIGN_TEXT] = change.design.strip()
@@ -1607,7 +1611,8 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     # One ledger for every run of this command: the count and the ceiling are the command's.
     ledger = UsageLedger(workspace.config().max_tokens or None)
     seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES: constitution_text(workspace)}
-    seed |= {LESSONS_TEXT: _optional(workspace, lessons_text, LESSONS), **_as_it_stands(workspace, change)}
+    lessons = _optional(workspace, lessons_text, LESSONS)
+    seed |= {LESSONS_TEXT: lessons or "", **_as_it_stands(workspace, change)}
     with _recording(workspace, "propose", args.id) as kept:
         state = _rounds(args, workspace, known, ledger, kept.recorder, seed)
         tier = state.get(TIER)
@@ -1638,7 +1643,8 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     change_id = kept.change or ""
     # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs.
     review = _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first else None
-    planned = {"explore": explore, "keep": keep, "review": review, "lessons": seed[LESSONS_TEXT]}
+    # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
+    planned = {"explore": explore, "keep": keep, "review": review, "lessons": "" if lessons is None else None}
     return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned)
 
 

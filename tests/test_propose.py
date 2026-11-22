@@ -535,7 +535,12 @@ def test_a_model_the_review_cannot_run_on_is_refused_before_any_call(
 
 def test_a_short_fix_is_sized_by_rule_and_the_model_is_not_asked(tmp_path, capsys, fake_provider) -> None:
     seeded(tmp_path)
-    assert proposed(tmp_path, "--no-input", "--id", "typo", request="Fix the crash when a passkey is missing.") == 0
+    assert (
+        proposed(
+            tmp_path, "--no-input", "--id", "typo", request="Fix the crash when the export runs on an empty month."
+        )
+        == 0
+    )
     assert asked(fake_provider, TRIAGE) == 0 and state_of(tmp_path, "typo")["tier"] == "lean"
     assert "sized     lean, by rule: a short bug fix" in capsys.readouterr().out
 

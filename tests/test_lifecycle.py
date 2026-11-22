@@ -100,7 +100,7 @@ def test_what_an_archive_waits_for() -> None:
         (DRAFT, [MARKER], ["approval"], "settle the open point in brief.md"),
         (DRAFT, [NO_TASK, MARKER], ["approval"], "settle the open point in brief.md"),
         (DRAFT, [NO_TASK], ["approval"], "run `adk-spec plan passkeys`"),
-        (DRAFT, [TASKS_SYNTAX], ["approval"], "run `adk-spec plan passkeys`"),
+        (DRAFT, [TASKS_SYNTAX], ["approval"], "fix what `adk-spec validate passkeys` lists"),  # a hand edit: theirs
         (DRAFT, [NO_TASK, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [OTHER], ["approval"], "run `adk-spec approve passkeys`"),
         (DRAFT, [], ["approval"], "run `adk-spec approve passkeys`"),
@@ -287,3 +287,13 @@ def test_an_approved_change_edited_and_found_blocking_is_sent_to_the_report_not_
     state = approved("standard").model_copy(update={"check": Checked(at="t", files=edited, blocking=2)})
     said = next_action(state, [], ["tasks.md"], check=check_blockers(state, edited))
     assert said == "fix what reports/check.md lists, then run `adk-spec approve passkeys`"
+
+
+def test_a_task_list_with_a_ticked_box_is_fixed_by_hand_not_by_plan() -> None:
+    """Found by review: after a revision of a change whose task was ticked, the next line said `plan`, which a
+    ticked task refuses: drafting the list again would throw the work away."""
+    from adk_spec.domain.lifecycle import next_step
+
+    assert next_step(DRAFT, [NO_TASK], ["approval"]).phrase == "run `adk-spec plan passkeys`"
+    begun = next_step(DRAFT, [NO_TASK], ["approval"], started=True).phrase
+    assert begun == "fix what `adk-spec validate passkeys` lists"

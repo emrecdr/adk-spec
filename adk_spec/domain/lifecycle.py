@@ -344,13 +344,22 @@ _ERROR = "an ERROR"
 _PLAN = "what plan settles"
 #: What `plan` drafts where a change owes it and has none.
 _OWED_BY_PLAN = frozenset({"change.missing-tasks", "change.missing-design"})
+#: The errors of a task list that no longer matches the requirements, which drafting it again settles.
+_UNMATCHED = frozenset({"check.requirement-no-task", "check.task-unknown-requirement"})
 
 
-def settled_by_plan(found: Finding) -> bool:
-    """Whether `plan` settles a finding, drafting again what it is about: an error in the task list, or a task list
-    or a design owed and missing."""
+def settled_by_plan(found: Finding, *, started: bool = False) -> bool:
+    """Whether `plan` is the step that settles a finding: a task list or a design owed and missing, or a task list
+    that no longer matches the requirements while none of its tasks is ticked. An error a person made in the list,
+    or a list whose work has begun, is fixed by hand: drafting it again would throw their work away."""
+    return found.code in _OWED_BY_PLAN or (found.code in _UNMATCHED and not started)
+
+
+def of_the_plan(found: Finding) -> bool:
+    """Whether a finding is about what `plan` writes, so that it does not stop `plan`: the task list, which it drafts
+    again, or a design owed and missing."""
     named = (found.path or "").rsplit("/", 1)[-1]
-    return found.code in _OWED_BY_PLAN or (found.severity == "ERROR" and named == TASKS_FILE)
+    return found.code in _OWED_BY_PLAN or named == TASKS_FILE
 
 
 #: What a person does about a check that found something blocking, in which `{cid}` is the change.
@@ -397,9 +406,10 @@ def next_step(
     *,
     check: Sequence[Finding] = (),
     drifted: bool = False,
+    started: bool = False,
 ) -> Step:
-    """What happens next with a change, and who makes it happen. `check` is what `check_blockers` gives for it, and
-    `drifted` whether the work changed since it was verified."""
+    """What happens next with a change, and who makes it happen. `check` is what `check_blockers` gives for it,
+    `drifted` whether the work changed since it was verified, and `started` whether a task of it is ticked."""
     cid = state.id
     if state.status == "archived":
         return Step("done", "nothing: archived")
@@ -407,8 +417,9 @@ def next_step(
     if state.status in ("approved", "verified"):
         return _after_approval(state, errors, stale, check, drifted)
     # What `plan` settles holds a draft after an open point, whose answer the plan waits for, not before it.
-    held = {found.code for found in (*findings, *check)} | {_PLAN for found in findings if settled_by_plan(found)}
-    held |= {_ERROR for found in findings if found.severity == "ERROR" and not settled_by_plan(found)}
+    plan = [found for found in findings if settled_by_plan(found, started=started)]
+    held = {found.code for found in (*findings, *check)} | ({_PLAN} if plan else set())
+    held |= {_ERROR for found in findings if found.severity == "ERROR" and found not in plan}
     for code, actor, phrase in _HOLDS:
         if code in held:
             return Step(actor, phrase.format(cid=cid))

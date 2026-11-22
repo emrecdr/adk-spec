@@ -261,3 +261,12 @@ def test_a_lessons_file_that_is_no_text_is_left_out_and_stops_nothing(tmp_path, 
     capsys.readouterr()
     assert proposed(tmp_path, "--id", "utf16") == 0
     assert "left out  .spec/lessons.md is not UTF-8" in capsys.readouterr().out
+
+
+def test_a_lesson_a_propose_learned_reaches_its_own_plan(tmp_path, monkeypatch, fake_provider) -> None:
+    """Found by review: the plan was given the lessons as they stood before the run, without the one it learned."""
+    on_the_fake(monkeypatch)
+    seeded(tmp_path)
+    fake_provider.answers_each_time(DELTAS, iter([DELTAS_ON_A_MISSING_ID, None]))
+    assert proposed(tmp_path, "--id", "learned") == 0
+    assert "delta.target-missing" in between(sent_to(fake_provider, TASKS), "lessons")

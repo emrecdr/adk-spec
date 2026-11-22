@@ -23,9 +23,10 @@ _NO_SPEC_SHAPED = re.compile(
 #: Words of a fix that touches security, money or data: the model weighs it, and may call it strict. A list cannot
 #: be whole; it only keeps the rule off the plainest of them.
 _RISKY = re.compile(
-    r"\b(auth(n|z|entic\w*|ori[sz]\w*)?|secur\w*|tokens?|passwords?|secrets?|credentials?|permissions?|log-?ins?|"
-    r"sessions?|cookies?|injection|xss|csrf|encrypt\w*|privacy|payments?|billing|refunds?|invoices?|migrat\w*|"
-    r"data loss|corrupt\w*)\b",
+    r"\b(o?auth(n|z|entic\w*|ori[sz]\w*)?|secur\w*|tokens?|passwords?|passkeys?|secrets?|credentials?|"
+    r"api[- ]?keys?|permissions?|log-?ins?|sign[- ]?(in|on|up)|sso|saml|[m2]fa|otp|sessions?|cookies?|injection|xss|"
+    r"csrf|encrypt\w*|privacy|payments?|billing|refunds?|invoices?|prices?|charges?|checkout|migrat\w*|data loss|"
+    r"corrupt\w*)\b",
     re.IGNORECASE,
 )
 _FIX = re.compile(r"(fix|correct)\b", re.IGNORECASE)
