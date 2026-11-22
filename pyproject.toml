@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 adk-spec = "adk_spec.interfaces.cli:run"
+adk-spec-mcp = "adk_spec.interfaces.mcp_server:main"
 
 [build-system]
 requires = ["hatchling>=1.27"]
