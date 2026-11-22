@@ -179,3 +179,9 @@ def test_the_integration_case_is_caught_where_a_statement_names_the_planted_file
     fake_provider.answers_when(survey, {"statements": [{**decoy, "note": "Sessions start here."}], **more})
     missed = measure.measured(case("integration"), runs=1, folder=tmp_path / "missed")
     assert missed.caught == [0] and "context.exists on src/legacy/auth_session_old.py" in missed.missed[0]
+
+
+def test_a_model_no_plan_stage_can_run_is_said_before_anything_is_spent(monkeypatch, capsys, fake_provider) -> None:
+    monkeypatch.setenv("SPEC_SCOUT_MODEL", "gpt-4.1")  # ADK would send it to another provider's class
+    assert measure.main(["--runs", "1", "--case", "integration"]) == 2
+    assert "SPEC_SCOUT_MODEL" in capsys.readouterr().err and fake_provider.requests == []

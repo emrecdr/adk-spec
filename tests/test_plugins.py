@@ -81,3 +81,19 @@ async def test_an_answer_off_its_schema_is_still_paid_for_and_counted(fake_provi
     ledger = next(plugin for plugin in plugins if isinstance(plugin, UsageLedger))
     assert ledger.total.total == 120, "the ledger reads the answer before the mismatch replaces it"
     assert [type(plugin) for plugin in plugins] == [Scrub, UsageLedger, SchemaMismatch], "the scrub reads first"
+
+
+def test_adk_keeps_no_message_content_in_its_spans_unless_a_person_asks(monkeypatch) -> None:
+    """ADK records each request and answer in its trace spans by default, and `adk web` sends them where an
+    OpenTelemetry endpoint is set. The engine's package says no, unless the person has said otherwise."""
+    import importlib
+    import os
+
+    import adk_spec.orchestration as engine
+
+    monkeypatch.delenv("ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS", raising=False)
+    importlib.reload(engine)
+    assert os.environ["ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS"] == "false"
+    monkeypatch.setenv("ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS", "true")
+    importlib.reload(engine)
+    assert os.environ["ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS"] == "true"

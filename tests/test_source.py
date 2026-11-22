@@ -273,3 +273,27 @@ def test_what_was_left_out_for_room_is_named_to_the_stage_and_may_be_asked_for_a
     assert made(tmp_path / "b").gathered(["src/app.py", "src/auth/session.py"], [], []).deferred == (
         "src/auth/session.py",
     )
+
+
+PPK_BODY = ["AAAAgQC" + "Z" * 57, "AAAAQQD" + "Y" * 57, "AAAAQQC" + "X" * 30]
+PPK = "\n".join(
+    [
+        *("PuTTY-User-Key-File-" + "3: ssh-rsa", "Encryption: none", "Comment: deploy", "Public-Lines: 1"),
+        *("AAAAB3NzaC1yc2E", "Private-Lines: 3", *PPK_BODY, "Private-MAC: 0123abcd", ""),
+    ]
+)
+
+
+def test_a_putty_key_file_is_never_shown_and_its_part_of_a_diff_is_left_out(tmp_path) -> None:
+    """A PuTTY key is known to the scrub by its first line. A diff of a change among its private lines shows none,
+    and a key cut before its last line was shown by the reader."""
+    commit = repository(tmp_path, {**FILES, "keys/deploy.ppk": PPK, "keys/cut.ppk": PPK.rsplit("Private-MAC", 1)[0]})
+    (tmp_path / "keys/deploy.ppk").write_text(PPK.replace("Y" * 57, "W" * 57), encoding="utf-8", newline="\n")
+    held = Source.of(tmp_path, exclude=())
+    got = held.gathered(["keys/deploy.ppk", "keys/cut.ppk"], [], [])
+    assert got.texts == {} and got.left_out == (
+        "keys/deploy.ppk: holds a private key, which is never shown",
+        "keys/cut.ppk: holds a private key, which is never shown",
+    )
+    kept, omitted = held.without_keys(diff(tmp_path, commit, exclude=()))
+    assert omitted == ("keys/deploy.ppk",) and "AAAAQQ" not in kept

@@ -234,7 +234,7 @@ def main(argv: list[str]) -> int:
     from adk_spec.orchestration.models import require_ready, serving
 
     cli._load_env()  # the checkout's .env, as the commands read it
-    if why := require_ready(roles=("check", "verify")):
+    if why := require_ready(roles=("check", "verify", "scout", "survey", "design", "tasks")):
         print(f"measure: {why}", file=sys.stderr)
         return 2
     # A case code decides costs no call; a plan reads the code first: a scout, a survey or more, then the tasks.
@@ -243,7 +243,8 @@ def main(argv: list[str]) -> int:
         f"measuring {len(cases)} cases, {args.runs} runs each, on {serving('check')}: about {calls} model calls",
         flush=True,
     )
-    with tempfile.TemporaryDirectory(prefix="adk-spec-measure-") as folder:
+    # A file held open on Windows, by a virus scanner say, must not cost the report of calls already paid for.
+    with tempfile.TemporaryDirectory(prefix="adk-spec-measure-", ignore_cleanup_errors=True) as folder:
         rows = []
         for case in cases:
             rows.append(measured(case, runs=args.runs, folder=Path(folder)))

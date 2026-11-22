@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
-from typing import Any, NoReturn, get_args
+from typing import Any, NoReturn
 
 from ..domain.brief_md import render_brief
 from ..domain.check import nameable, owed, removed
@@ -53,7 +53,7 @@ from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import failed, finding, validate_spec
 from ..domain.verify import Verdict, grounded
-from ..workspace.config import ConfigError
+from ..workspace.config import BUILT_TIERS, ConfigError
 from ..workspace.context import (
     CONSTITUTION_MAX_CHARS,
     ContextTooLargeError,
@@ -160,7 +160,7 @@ def _parser() -> _Top:
 
     new = commands.add_parser("new", help="start a change: its folder and its state file")
     new.add_argument("id", help="the change's name: lowercase words joined by hyphens")
-    new.add_argument("--tier", choices=get_args(Tier), help="how much ceremony it gets (default: the config's)")
+    new.add_argument("--tier", choices=BUILT_TIERS, help="how much ceremony it gets (default: the config's)")
     new.set_defaults(handler=_new)
 
     validate = commands.add_parser("validate", help="check the structure of the living specs and of open changes")
@@ -361,7 +361,7 @@ def _drifted(workspace: Workspace, state: ChangeState) -> bool:
     if state.status != "verified" or held is None:
         return False
     try:
-        return sha256_of(diff(workspace.root, held.base, exclude=workspace.config().exclude)) != held.diff
+        return sha256_of(_work_diff(workspace, held.base)[0]) != held.diff
     except GitError:
         return True
 
@@ -1075,6 +1075,14 @@ def _judged(
     return *to_findings(answer, texts), ledger, None
 
 
+def _work_diff(workspace: Workspace, base: str) -> tuple[str, tuple[str, ...]]:
+    """The diff of the work from `base` as a stage is shown it, and the files left out of it for holding a private
+    key. One function for `verify` and for drift: the fingerprint `verify` records and the one drift is read from
+    must be of the same text, or a change reads as drifted the moment it is verified."""
+    exclude = workspace.config().exclude
+    return Source.of(workspace.root, exclude=exclude).without_keys(diff(workspace.root, base, exclude=exclude))
+
+
 def _key_files(held: Sequence[str], then: str) -> str:
     """What is said of the files a diff was shown without: `a.pem: holds a private key, which is never shown`."""
     return f"{', '.join(held)}{then}{'holds' if len(held) == 1 else 'hold'} a private key, which is never shown"
@@ -1095,9 +1103,8 @@ def _work(args: argparse.Namespace, workspace: Workspace, state: ChangeState) ->
     base = resolves(root, named)
     if base is None:
         raise UsageError(f"`{named}` names no commit in this repository")
-    exclude = workspace.config().exclude
     # A file that holds a private key is no part of the work a model is shown, as an excluded path is none.
-    text, held = Source.of(root, exclude=exclude).without_keys(diff(root, base, exclude=exclude))
+    text, held = _work_diff(workspace, base)
     if not text.strip():
         beside = f"{_key_files(held, ' ')}, and nothing else" if held else "nothing"
         raise NotYetError(f"{beside} under {root} changed since {base[:12]}: there is nothing to verify")
@@ -1318,7 +1325,7 @@ def _models(args: argparse.Namespace) -> int:
     from ..orchestration.catalog import CatalogError, list_models, shown
     from ..orchestration.models import require_ready
 
-    if why := require_ready():
+    if why := require_ready(names=False):  # a wrong name is what the list is for
         raise UsageError(why)
     try:
         models = list_models()

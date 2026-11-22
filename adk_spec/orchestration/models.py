@@ -160,15 +160,16 @@ def request_config() -> types.GenerateContentConfig:
     )
 
 
-def require_ready(*, roles: tuple[str, ...] = ()) -> str | None:
+def require_ready(*, roles: tuple[str, ...] = (), names: bool = True) -> str | None:
     """Why the chosen arm cannot run, or None. Called by a command before anything is spent, never at import.
-    `roles` names the stages the run will build, so a model no class serves is a sentence here, not a traceback."""
+    `roles` names the stages the run will build, so a model no class serves is a sentence here, not a traceback.
+    `names` off asks after the arm alone, its token or key: for a command that lists the models to choose from."""
     try:
         arm = provider()
     except ValueError as exc:
         return str(exc)
-    named = [model_pick(role) for role in ("", *roles)]
-    if fallback := fallback_name():
+    named = [model_pick(role) for role in ("", *roles)] if names else []
+    if names and (fallback := fallback_name()):
         named.append(("SPEC_FALLBACK_MODEL", fallback))
     if arm == "copilot":
         return _copilot_refused(named)

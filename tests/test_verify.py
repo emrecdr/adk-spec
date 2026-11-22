@@ -398,11 +398,11 @@ PEM = "-----BEGIN RSA " + "PRIVATE KEY-----\n" + "".join(f"MIIEow{n}BAAKCAQEA7x1
 PEM += "-----END RSA " + "PRIVATE KEY-----\n"
 
 
-def with_a_key(root):
+def with_a_key(root, tier: str = "lean"):
     """An approved change in a repository whose first commit holds a private key."""
     (root / "keys").mkdir(parents=True)
     write_text(root / "keys/live.pem", PEM)
-    return approved_in_a_repository(root, tier="lean")
+    return approved_in_a_repository(root, tier=tier)
 
 
 def test_verify_is_sent_no_line_of_a_file_that_holds_a_private_key(tmp_path, fake_provider, capsys) -> None:
@@ -427,3 +427,15 @@ def test_work_done_only_in_a_file_that_holds_a_private_key_is_nothing_to_verify(
     assert run(tmp_path, "verify", "passkeys") == 1
     assert "keys/live.pem holds a private key, which is never shown" in capsys.readouterr().err
     assert len(fake_provider.requests) == sent_before, "no model is asked"
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_verified_change_whose_diff_holds_a_key_file_has_not_drifted(tmp_path) -> None:
+    """`verify` recorded the fingerprint of the diff less the key file, and drift was read from the diff with it:
+    the change read as drifted at once, and could not be archived."""
+    with_a_key(tmp_path, tier="standard")
+    implemented(tmp_path)
+    write_text(tmp_path / "keys/live.pem", PEM.replace("MIIEow3", "MIINew3"))
+    assert run(tmp_path, "verify", "passkeys") == 0
+    assert state_of(tmp_path, "passkeys")["status"] == "verified"
+    assert run(tmp_path, "archive", "passkeys") == 0

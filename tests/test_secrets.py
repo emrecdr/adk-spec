@@ -103,6 +103,9 @@ BODY = "MIIEow0BAAKCAQEA7x1yQ9"
         (f'HEADER = "{BEGINS}"\n', False),  # code that names the line and holds no key
         ("-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n", False),
         ("-----BEGIN CERTIFICATE-----\n", False),
+        ("PuTTY-User-Key-File-" + "3: ssh-ed25519\nEncryption: none\n", True),  # PuTTY's own key file
+        ("+PuTTY-User-Key-File-" + "2: ssh-rsa\n", True),
+        ('PREFIX = "PuTTY-User-Key-File-' + '3: "\n', False),
         ("def login(user):\n    return password(user)\n", False),
     ],
 )

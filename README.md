@@ -182,9 +182,11 @@ that must not leave under `[repository] exclude`.
 ## Watching a run in ADK's own interface
 
 `adk_spec/agent.py` is the shape ADK's interface loads. From inside a repository that holds `.spec/`, run
-`uv run --project <this checkout> adk web <this checkout>` and choose `adk_spec`. One message you type is one
-request: it is drafted as `propose --no-input` drafts it, stage by stage in the event view, and the chat ends on the
-drafts. Nothing is written and no question is asked. The commands are the product; this is for watching.
+`uv run --project <this checkout> adk web --no_use_local_storage <this checkout>` and choose `adk_spec`. One message
+you type is one request: it is drafted as `propose --no-input` drafts it, stage by stage in the event view, and the
+chat ends on the drafts. Nothing is written to `.spec/` and no question is asked. Without `--no_use_local_storage`,
+ADK keeps each session, the code a reading showed included, in a `.adk` folder of the checkout. The commands are
+the product; this is for watching.
 
 ## Measuring the model's stages
 

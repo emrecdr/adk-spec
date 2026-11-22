@@ -96,3 +96,10 @@ def test_a_key_the_provider_will_not_issue_is_a_sentence(monkeypatch, tmp_path, 
     assert main(["models"]) == 3
     err = capsys.readouterr().err
     assert "no seat" in err and "Traceback" not in err
+
+
+def test_models_lists_the_models_where_the_model_named_is_wrong(monkeypatch, tmp_path, capsys) -> None:
+    """Listing is how a person finds a model's right name: a wrong one in SPEC_MODEL must not stop the list."""
+    _copilot_answers(monkeypatch, tmp_path, 200, {"data": [ENTRY]})
+    monkeypatch.setenv("SPEC_MODEL", "no-such-model")
+    assert main(["models"]) == 0 and capsys.readouterr().out.startswith("model-a")

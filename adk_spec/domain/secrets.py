@@ -364,8 +364,9 @@ def scrub_lines(text: str, *, cut: bool = False) -> tuple[str, int]:
 
 
 #: A private key's first line where a line begins with it, a diff's sign or a block's indent before it: how a key's
-#: own file has it, and how code that only names the line in a string does not.
-_KEY_BEGINS_A_LINE = re.compile(r"(?m)^[+\- ]?[ \t]*" + _KEY_HEADER)
+#: own file has it, and how code that only names the line in a string does not. A PEM block's header, or a PuTTY key
+#: file's, whose private lines a diff shows without the header as a PEM block's are.
+_KEY_BEGINS_A_LINE = re.compile(r"(?m)^[+\- ]?[ \t]*(?:" + _KEY_HEADER + r"|PuTTY-User-Key-File-[23]:)")
 
 
 def holds_a_key(text: str) -> bool:

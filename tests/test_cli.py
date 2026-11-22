@@ -414,3 +414,10 @@ def test_a_base_not_yet_recorded_fails_no_strict_validation(tmp_path, capsys) ->
     assert not any(
         f["severity"] in ("ERROR", "WARNING") and f["code"].startswith("delta.base") for f in said["findings"]
     )
+
+
+def test_new_refuses_the_strict_tier_until_it_is_built(tmp_path, capsys) -> None:
+    Workspace.init(tmp_path)
+    with pytest.raises(SystemExit):
+        run(tmp_path, "new", "x", "--tier", "strict")
+    assert "invalid choice: 'strict'" in capsys.readouterr().err
