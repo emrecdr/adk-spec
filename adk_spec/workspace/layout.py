@@ -267,6 +267,15 @@ class Workspace:
         """A generated report of a change, under its `reports/` folder: written whole, replacing the one before."""
         return self.write_into(change_id, {f"{REPORTS}/{name}": text})[0]
 
+    def drafted(self, section: str) -> bool:
+        """`section` added at the end of the constitution, only while it is exactly the template `init` wrote:
+        whether it was. A constitution a person wrote in is theirs, and never written to."""
+        path = self.home / CONSTITUTION
+        if not section or read_text(path) != CONSTITUTION_TEXT:
+            return False
+        write_text(path, CONSTITUTION_TEXT.rstrip("\n") + "\n\n" + section)
+        return True
+
     def write_home(self, name: str, text: str) -> Path:
         """A file of the `.spec` tree's own, beside the constitution, written whole: where it is."""
         path = inside(self.home, name)

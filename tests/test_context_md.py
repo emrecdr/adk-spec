@@ -65,7 +65,7 @@ def test_context_md_has_a_section_a_kind_and_says_what_was_read_and_left_out() -
         TEXTS,
     )
     text = render_context(
-        "passkeys",
+        "Context: passkeys",
         at="2026-11-22T10:00:00+00:00",
         commit="1a2b3c4d5e6f7a8b9c0d",
         statements=kept,
@@ -90,7 +90,7 @@ def test_context_md_has_a_section_a_kind_and_says_what_was_read_and_left_out() -
 
 def test_a_partial_reading_says_so_at_its_top() -> None:
     text = render_context(
-        "passkeys",
+        "Context: passkeys",
         at="2026-11-22T10:00:00+00:00",
         commit=None,
         statements=[],
@@ -103,7 +103,7 @@ def test_a_partial_reading_says_so_at_its_top() -> None:
 
 def test_a_reading_across_repositories_names_each_commit() -> None:
     text = render_context(
-        "passkeys",
+        "Context: passkeys",
         at="2026-11-22T10:00:00+00:00",
         commit="1a2b3c4d5e6f7a8b9c0d",
         statements=[],
@@ -121,7 +121,7 @@ def test_what_is_still_unknown_has_its_section_and_the_disputed_are_counted() ->
         kind="touches", path="api/src/routes.py", line=2, quote="return x()", note="Here.", within="def a():"
     )
     text = render_context(
-        "passkeys",
+        "Context: passkeys",
         at="2026-11-22T10:00:00+00:00",
         commit=None,
         statements=[held],
@@ -143,9 +143,7 @@ def test_what_is_still_unknown_has_its_section_and_the_disputed_are_counted() ->
 
 
 def test_a_profile_has_its_own_heading() -> None:
-    text = render_context(
-        "x", at="2026-11-22T10:00:00+00:00", commit=None, statements=[], read=(), heading=PROFILE_HEADING
-    )
+    text = render_context(PROFILE_HEADING, at="2026-11-22T10:00:00+00:00", commit=None, statements=[], read=())
     assert text.startswith("# This repository\n\nRead from the repository on 2026-11-22.\n")
 
 

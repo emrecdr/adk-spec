@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 
 from ..domain.model import Spec
 from ..domain.spec_md import render_spec
@@ -69,10 +70,7 @@ def context_text(workspace: Workspace, change_id: str) -> str:
     """A change's `context.md` as a stage reads it: as the file stands, a person's edits and all, or nothing where
     there is none. One past the cap is cut, and says so. `NotTextError` where the file is no text: it is there, and
     reading it as nothing would also keep the code from being read again."""
-    path = workspace.home / CHANGES / change_id / CONTEXT
-    text = read_text(path).strip() if path.is_file() else ""
-    cut = "\n(cut here: context.md is longer than a stage is given)"
-    return text if len(text) <= CONTEXT_FILE_MAX_CHARS else text[:CONTEXT_FILE_MAX_CHARS] + cut
+    return _capped(workspace.home / CHANGES / change_id / CONTEXT, CONTEXT_FILE_MAX_CHARS)
 
 
 #: How much of the repository's `profile.md` a stage is given.
@@ -82,10 +80,13 @@ PROFILE_MAX_CHARS = 10_000
 def profile_text(workspace: Workspace) -> str:
     """The repository's `profile.md` as a stage reads it: as the file stands, or nothing where there is none. One
     past the cap is cut, and says so."""
-    path = workspace.home / PROFILE
+    return _capped(workspace.home / PROFILE, PROFILE_MAX_CHARS)
+
+
+def _capped(path: Path, cap: int) -> str:
+    """A file a stage reads as it stands, stripped, or nothing where there is none: cut past `cap`, saying so."""
     text = read_text(path).strip() if path.is_file() else ""
-    cut = "\n(cut here: profile.md is longer than a stage is given)"
-    return text if len(text) <= PROFILE_MAX_CHARS else text[:PROFILE_MAX_CHARS] + cut
+    return text if len(text) <= cap else text[:cap] + f"\n(cut here: {path.name} is longer than a stage is given)"
 
 
 def constitution_text(workspace: Workspace) -> str:

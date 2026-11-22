@@ -39,6 +39,23 @@ LOOK_BUDGET = 3
 STATEMENT_BUDGET = 40
 #: How often a reading is reviewed, and how many unknowns, each how long, a review leaves.
 REVIEW_BUDGET = 2
+#: The most model calls one reading makes, a gate's asking again aside: a scout, the rounds and the review's one
+#: round more, each surveyed, and the reviews. What a command says before it reads.
+MAX_CALLS = 1 + LOOK_BUDGET + 1 + REVIEW_BUDGET
+#: The brief a reading of a whole repository is seeded with, where there is no change: `init`'s.
+DESCRIBE = """\
+# Describe this repository
+
+## Why
+
+A person is about to change this repository, and needs to know it first.
+
+## What changes
+
+Nothing. Read the code to state what a person changing it first needs to know: the stack and its versions; the
+layout, and where each part lives; how it is built, run and tested; how errors, logging and configuration are
+handled; the conventions new code should follow; and what is risky to change.
+"""
 UNKNOWN_BUDGET = 8
 QUESTION_MAX_CHARS = 200
 WHERE_MAX_CHARS = 120

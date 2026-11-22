@@ -7,6 +7,7 @@ import pytest
 from conftest import on_the_fake, repository, run
 
 from adk_spec.domain.secrets import scrub_lines
+from adk_spec.orchestration.explore import MAX_CALLS
 from adk_spec.workspace.files import read_text, write_text
 from adk_spec.workspace.layout import CONSTITUTION_TEXT
 
@@ -58,7 +59,7 @@ def test_init_says_what_it_will_spend_before_it_reads(tmp_path, capsys) -> None:
     repository(tmp_path, FILES)
     assert run(tmp_path, "init") == 0
     (reading,) = [line for line in capsys.readouterr().out.splitlines() if line.startswith("reading")]
-    assert "up to 7 model calls" in reading and "--no-explore skips it" in reading
+    assert f"up to {MAX_CALLS} model calls" in reading and MAX_CALLS == 7 and "--no-explore skips it" in reading
 
 
 def test_no_explore_and_no_repository_read_nothing(tmp_path, capsys, fake_provider) -> None:
@@ -87,10 +88,8 @@ def test_refresh_rewrites_the_profile_and_never_the_constitution(tmp_path, fake_
     write_text(tmp_path / RULES, mine)
     write_text(tmp_path / PROFILE, "# This repository\n\nWritten by hand.\n")
     assert run(tmp_path, "init", "--refresh") == 0
-    assert read_text(tmp_path / RULES) == mine
-    assert "Written by hand." not in read_text(tmp_path / PROFILE) and "Each module has a test" in read_text(
-        tmp_path / PROFILE
-    )
+    profile = read_text(tmp_path / PROFILE)
+    assert read_text(tmp_path / RULES) == mine and "Written by hand." not in profile and "Each module has a" in profile
 
 
 def test_refresh_where_there_is_no_workspace_is_refused(tmp_path, capsys, fake_provider) -> None:

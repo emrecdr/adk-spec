@@ -1,5 +1,5 @@
-"""`context.md`: what a reading of the repository's code found for one change, each statement with the line it
-rests on.
+"""What a reading of a repository's code found, each statement with the line it rests on: a change's `context.md`,
+the repository's `profile.md`, and the rules `init` drafts into a template constitution from what it found.
 
 Written by code from statements a model made and code kept: a statement is here only because its quote was found in
 the file it names. A person may edit the file afterwards, as every file of a change, and a plan is drafted from it
@@ -30,7 +30,7 @@ SECTIONS: tuple[tuple[StatementKind, str], ...] = (
 
 
 def render_context(
-    change_id: str,
+    title: str,
     *,
     at: str,
     commit: str | None,
@@ -42,18 +42,17 @@ def render_context(
     others: Mapping[str, str | None] | None = None,
     unknown: Sequence[tuple[str, str]] = (),
     disputed: int = 0,
-    heading: str | None = None,
 ) -> str:
-    """The file: when and of what commit each repository was read, the statements under a heading a kind, what is
-    still unknown, what was read, and what was left out. `partial` says why a reading ended early, where it did.
-    `heading` names the file where it is no change's `context.md`: a repository's profile."""
-    lines = [f"# {heading or f'Context: {change_id}'}", "", _read_from(at, commit, others or {}), ""]
+    """The file, under `title`: when and of what commit each repository was read, the statements under a heading a
+    kind, what is still unknown, what was read, and what was left out. `partial` says why a reading ended early,
+    where it did."""
+    lines = [f"# {title}", "", _read_from(at, commit, others or {}), ""]
     if partial:
         lines += [f"{PARTIAL}{partial}.", ""]
-    for kind, heading in SECTIONS:
+    for kind, section in SECTIONS:
         held = [one for one in statements if one.kind == kind]
         if held:
-            lines += [f"## {heading}", ""]
+            lines += [f"## {section}", ""]
             for one in held:
                 lines += [f"- `{one.path}:{one.line}` {one.note}", *([f"  in: {one.within}"] if one.within else ())]
                 lines.append(f"  > {one.quote}")

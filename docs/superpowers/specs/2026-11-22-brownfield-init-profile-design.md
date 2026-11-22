@@ -138,5 +138,5 @@ should need fewer rounds for it.
   no model, a failed reading and an edited constitution each leave the tree made and say why; `--refresh` rewrites
   the profile alone; a change's scout is shown the profile.
 - A labelled case: a repository with a planted convention (tests beside the code, errors raised as one class), scored
-  on whether a drafted rule names it.
+  on whether a convention the profile keeps, which `init` drafts as a rule, names it.
 - Live, on the owner's go-ahead: `init` on a copy of adk-spec itself, read by hand.
