@@ -673,3 +673,14 @@ def test_a_model_that_cannot_run_is_refused_before_the_tests_are_run(tmp_path, m
     monkeypatch.delenv("GOOGLE_API_KEY")
     assert run(tmp_path, "verify", "passkeys") == 2
     assert not (tmp_path / "ran.flag").exists() and "testing" not in capsys.readouterr().out
+
+
+def test_the_work_is_judged_as_it_stands_after_the_tests(tmp_path, fake_provider) -> None:
+    """A test run may rewrite a tracked file, a lock file say: judged and fingerprinted before it, the change drifted
+    the moment it was verified, and could never be archived."""
+    approved_in_a_repository(tmp_path, tier="standard")
+    implemented(tmp_path)
+    with_tests(tmp_path, "open('src/auth.py', 'a').write('# touched by the tests\\n')")
+    assert run(tmp_path, "verify", "passkeys") == 0
+    assert "# touched by the tests" in str(fake_provider.requests[-1].config.system_instruction)
+    assert run(tmp_path, "archive", "passkeys") == 0

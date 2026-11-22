@@ -271,6 +271,8 @@ def test_the_test_command_is_a_list_with_a_timeout(tmp_path) -> None:
         ('test = [""]', "a list"),
         ("test = [3]", "a list"),
         ("timeout = 0", "timeout"),
+        ("timeout = 100000000", "timeout"),
+        ('test = ["a\\u0000b"]', "a list"),
     ],
 )
 def test_a_test_command_that_is_no_list_of_words_is_refused(tmp_path, line, said) -> None:

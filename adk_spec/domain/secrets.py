@@ -377,3 +377,16 @@ def holds_a_key(text: str) -> bool:
     one is read. Text that is shown in pieces is therefore judged by the file it is a piece of: a file that holds a
     key is shown in no piece at all."""
     return _KEY_BEGINS_A_LINE.search(text) is not None
+
+
+#: A private key's first line, wherever in a line it stands.
+_KEY_ANYWHERE = re.compile(_KEY_HEADER + r"|PuTTY-User-Key-File-[23]:")
+
+
+def mentions_a_key(text: str) -> bool:
+    """Whether a private key's first line stands anywhere in `text`.
+
+    Not the reference project's. For text no quote is held to, a test run's output: a test runner writes its own
+    words before each line of a failure, pytest an `E` and spaces, and a key's block is then no shape the scrub
+    knows, so text that names one is shown in no part."""
+    return _KEY_ANYWHERE.search(text) is not None

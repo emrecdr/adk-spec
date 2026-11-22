@@ -82,6 +82,9 @@ A small change is `lean`: it owes no check and no verification, so it takes thre
   past its time keeps the change from being verified, whatever the verdicts; `--override` still verifies it, with
   your reason. Only the command you wrote is run, as the list of words you wrote, with no shell to read it; another
   repository of the change runs the command in its own `.spec/config.toml`, where it has one.
+  A run is judged by its own exit, and whatever it started, a server say, is stopped when it ends, as on Ctrl-C.
+  Output that names a private key is shown in no part. On Windows a batch file (`npm.cmd`) is refused, since
+  cmd.exe reads its words again: name the program it runs. The work is judged as it stands after the tests.
 
   ```toml
   [verify]

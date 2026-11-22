@@ -1382,13 +1382,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
 
         if why := require_ready(roles=("verify",)):
             raise UsageError(why)
-    source = _sources(workspace, state.repositories)
-    base, bases, text, held = _work(args, workspace, state, source)
-    for name, commit in bases.items():
-        print(f"with      {name} from {state.repositories[name]}, since {commit[:12]}")
-    runs = _tested(workspace, source)
-    if held:
-        print(f"left out  {_key_files(held, ': ')}")
+    runs, base, bases, text = _tested_work(args, workspace, state)
     verdicts: list[Verdict] = []
     ledger, model = None, None
     if added or gone:  # a change with no delta has no requirement to judge
@@ -1415,6 +1409,27 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
         print(f"tokens    {_spent(ledger)}")
     _say_next(workspace, args.id, specs)
     return EXIT_OK if after.status == "verified" else EXIT_FINDINGS
+
+
+def _tested_work(
+    args: argparse.Namespace, workspace: Workspace, state: ChangeState
+) -> tuple[list[TestRun], str, dict[str, str], str]:
+    """The work a verification judges, and the runs of the tests before it: refused first where there is nothing
+    to judge, then the tests, then the work read again, as it stands after them. A run may write to the work, a
+    lock file say: judged and fingerprinted before it, the change would drift the moment it is verified."""
+    source = _sources(workspace, state.repositories)
+    base, bases, text, held = _work(args, workspace, state, source)
+    for name, commit in bases.items():
+        print(f"with      {name} from {state.repositories[name]}, since {commit[:12]}")
+    runs = _tested(workspace, source)
+    if runs:
+        judged = text
+        base, bases, text, held = _work(args, workspace, state, _sources(workspace, state.repositories))
+        if text != judged:
+            print("changed   the tests changed the work: it is judged as it stands after them")
+    if held:
+        print(f"left out  {_key_files(held, ': ')}")
+    return runs, base, bases, text
 
 
 def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
