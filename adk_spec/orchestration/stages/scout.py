@@ -9,7 +9,7 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import ScoutDraft
-from . import FILES, RULES, THE_BRIEF, THE_DELTAS, instruction, stage
+from . import FILES, RULES, THE_BRIEF, THE_DELTAS, THE_PROFILE, instruction, stage
 
 KEY = "scout"
 OPENING = "You choose what to read of a repository's code before a change to it is planned. You plan nothing."
@@ -23,5 +23,5 @@ Name little, and what matters most first: twelve files, four folders and six sea
 
 
 def build_scout() -> LlmAgent:
-    text = instruction(OPENING, GUIDE, RULES, FILES, THE_BRIEF, THE_DELTAS)
+    text = instruction(OPENING, GUIDE, RULES, THE_PROFILE, FILES, THE_BRIEF, THE_DELTAS)
     return stage(KEY, "Chooses what to read of a repository's code for a change.", text, ScoutDraft)

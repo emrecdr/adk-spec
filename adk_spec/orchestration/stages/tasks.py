@@ -15,6 +15,7 @@ from . import (
     THE_BRIEF,
     THE_CONTEXT,
     THE_DELTAS,
+    THE_PROFILE,
     instruction,
     read_back,
     section,
@@ -39,7 +40,9 @@ Where it lists something as still unknown, do not plan on it as if it were known
 
 def build_tasks() -> LlmAgent:
     design = section("## The design", "design", DESIGN_TEXT, optional=True)
-    text = instruction(OPENING, GUIDE, RULES, LIVING_SPECS, FILES, THE_CONTEXT, THE_BRIEF, THE_DELTAS, design)
+    text = instruction(
+        OPENING, GUIDE, RULES, LIVING_SPECS, THE_PROFILE, FILES, THE_CONTEXT, THE_BRIEF, THE_DELTAS, design
+    )
     return stage(KEY, "Breaks a change into tasks.", text, TasksDraft)
 
 

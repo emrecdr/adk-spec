@@ -62,6 +62,7 @@ from ..workspace.context import (
     context_text,
     files_text,
     living_text,
+    profile_text,
 )
 from ..workspace.files import NotTextError
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
@@ -932,7 +933,7 @@ def _plan_made(
         raise UsageError(why)
     from ..orchestration.graph import build_plan_app
     from ..orchestration.plugins import UsageLedger
-    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, LIVING, TREE
+    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, LIVING, PROFILE_TEXT, TREE
     from ..orchestration.stages import CONSTITUTION as RULES
     from ..orchestration.stages.design import read_design
     from ..orchestration.stages.tasks import DESIGN_TEXT, read_tasks
@@ -946,6 +947,7 @@ def _plan_made(
         DELTAS_TEXT: _deltas_text(change),
         LIVING: living_text(specs, sorted(change.deltas)),
         TREE: source.tree() if source else "",
+        PROFILE_TEXT: profile_text(workspace),
     }
     if change.design and not state.needs_design:  # a design a person wrote, where the brief owed none
         seed[DESIGN_TEXT] = change.design.strip()
@@ -991,7 +993,7 @@ def _read_code(
         return "", None
     from ..orchestration.explore import ROLES, build_explore_app, explored
     from ..orchestration.models import require_ready
-    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, TREE
+    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT, TREE
     from ..orchestration.stages import CONSTITUTION as RULES
 
     if why := require_ready(roles=ROLES):
@@ -1000,7 +1002,7 @@ def _read_code(
     def build(ledger: Any, recorder: Any) -> Any:
         return build_explore_app(source=source, ledger=ledger, recorder=recorder)
 
-    reading = {key: seed[key] for key in (RULES, BRIEF_TEXT, DELTAS_TEXT, TREE)}
+    reading = {key: seed[key] for key in (RULES, BRIEF_TEXT, DELTAS_TEXT, TREE, PROFILE_TEXT)}
     nothing_to_read_back = lambda _state: None  # noqa: E731 -- what a reading kept is in its state, also where it failed
     run, _none, _ledger, failure = _asked(
         workspace, "explore", change_id, build, reading, nothing_to_read_back, ledger=ledger

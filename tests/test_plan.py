@@ -539,3 +539,34 @@ def test_a_with_that_names_no_repository_is_refused_before_any_call(tmp_path, ca
     assert run(root, "plan", "passkeys", "--replace", "--with", "../apl") == 2
     assert "apl: no git repository at ../apl" in capsys.readouterr().err and fake_provider.requests == []
     assert not state_of(root).get("repositories")
+
+
+# Phase 8: every change's reading starts from the repository's profile.
+
+
+def sent_to(fake_provider, opening: str) -> str:
+    (instruction,) = [
+        str(r.config.system_instruction)
+        for r in fake_provider.requests
+        if str(r.config.system_instruction).startswith(opening)
+    ]
+    return instruction
+
+
+def test_the_scout_and_the_plan_are_shown_the_profile(tmp_path, fake_provider) -> None:
+    ws = seeded(tmp_path)
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"needs_design": True}))
+    repository(tmp_path)
+    write_text(tmp_path / ".spec/profile.md", "# This repository\n\nTests stand beside the code.\n")
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    for opening in (SCOUT, DESIGN, TASKS):
+        assert (
+            between(sent_to(fake_provider, opening), "profile") == "# This repository\n\nTests stand beside the code."
+        )
+
+
+def test_with_no_profile_no_stage_is_shown_one(tmp_path, fake_provider) -> None:
+    seeded(tmp_path)
+    repository(tmp_path)
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    assert between(sent_to(fake_provider, SCOUT), "profile") == "" == between(sent_to(fake_provider, TASKS), "profile")

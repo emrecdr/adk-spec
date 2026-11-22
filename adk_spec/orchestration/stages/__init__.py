@@ -37,6 +37,8 @@ TIER = "tier"
 TREE = "tree"
 #: The state key a change's `context.md` is read from: what a reading of the code found for it.
 CONTEXT_TEXT = "context_text"
+#: The repository's profile, which `init` writes: what is known of the repository before any change reads it.
+PROFILE_TEXT = "profile"
 
 
 def placeholder(key: str, *, optional: bool = False) -> str:
@@ -71,6 +73,7 @@ THE_BRIEF = section("## The brief", "brief", BRIEF_TEXT)
 THE_DELTAS = section("## The requirement deltas", "deltas", DELTAS_TEXT, optional=True)
 FILES = section("## The files of this repository", "tree", TREE, optional=True)
 THE_CONTEXT = section("## What the repository already holds", "context", CONTEXT_TEXT, optional=True)
+THE_PROFILE = section("## What is known of this repository", "profile", PROFILE_TEXT, optional=True)
 
 
 def instruction(opening: str, guide: str, *sections: str) -> str:

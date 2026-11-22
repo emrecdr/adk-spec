@@ -8,7 +8,7 @@ from typing import Any
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import DesignDraft
-from . import FILES, LIVING_SPECS, RULES, THE_BRIEF, THE_CONTEXT, THE_DELTAS, instruction, read_back, stage
+from . import FILES, LIVING_SPECS, RULES, THE_BRIEF, THE_CONTEXT, THE_DELTAS, THE_PROFILE, instruction, read_back, stage
 
 KEY = "design"
 OPENING = "You write the design of a change. You write no code."
@@ -23,7 +23,7 @@ depends on it says so."""
 
 
 def build_design() -> LlmAgent:
-    text = instruction(OPENING, GUIDE, RULES, LIVING_SPECS, FILES, THE_CONTEXT, THE_BRIEF, THE_DELTAS)
+    text = instruction(OPENING, GUIDE, RULES, LIVING_SPECS, THE_PROFILE, FILES, THE_CONTEXT, THE_BRIEF, THE_DELTAS)
     return stage(KEY, "Writes the design of a change.", text, DesignDraft)
 
 
