@@ -87,3 +87,19 @@ model filing `AppError` under what exists in the other two. The same fault as th
 
 **What it changed.** `init`'s brief asks for the whole repository, not one feature of it, and for each convention
 as a rule new code must follow, in one sentence; a drafted rule is its note's first sentence.
+
+## Phase 9: one change from `propose` to `verify`, with its own tests
+
+Measured the same day, on the owner's go-ahead, at commit `cf1b5a3` (phase 9 merged), on a copy of adk-spec with
+`[verify] test = ["uv", "run", "pytest", "-q", "tests/test_cli.py"]`. The request: a `--count` flag on `status`.
+
+- **`propose`**: 12 calls, 46,248 tokens (the reading used its whole budget: four surveys and two reviews; the deltas
+  stage asked once more). A lean change: a brief, one delta with three scenarios, `context.md` with 8 statements and
+  2 unknowns, and two tasks, the test first.
+- **`approve`**: no model call. The change was implemented by hand, with its test.
+- **`verify`**: said what it would run, ran the tests (passed in 7.5 s, 35 tests), then judged the one requirement
+  met in one call, 2,238 tokens. The report holds the command, the outcome and the end of the output.
+
+13 calls in all, one over the estimate. One fault, seen in the output: the test run was given adk-spec's own
+environment, its virtual environment first on `PATH` and in `VIRTUAL_ENV`. `uv` ignored it; a plain `["pytest"]`
+would have found adk-spec's own pytest and run the project's tests in the wrong environment.
