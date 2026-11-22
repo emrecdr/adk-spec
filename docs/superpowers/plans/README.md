@@ -97,48 +97,53 @@ phase also shows and measures the lengths of what it writes.
 `propose` writes the brief and the specs and drafts no plan on a guess; the person settles the point and runs
 `plan`. Its live proof, one standard change through the four commands, waits for the owner's go-ahead.
 
-### Phase 6. Brownfield, part 1: `propose` reads your code
+### Phase 6. Brownfield, part 1: the plan rests on your code
 
-**Goal.** A brief, a design and a task list for a new feature rest on what the repository's code is.
+**Goal.** A design and a task list for a new feature rest on what the repository's code is, not on file names.
 
 **Features it adds.**
 
-- **`propose` reads the code that matters** for the request before it writes the brief. No command of its own.
+- **`propose` reads the code that matters for the change** before it drafts the design and the tasks. No command of
+  its own. `plan` does the same for a change that has no context yet.
 - **`context.md`** in the change's folder, in four sections: what exists, where the change plugs in, conventions
   to follow, risks. Every statement names a file and a line and quotes the code.
 - **Checked statements**: one whose quote is not in the file it names is left out and counted.
 - **Safe reading**: only files git tracks or would track; no symbolic link; nothing git ignores.
-- **An exclusion setting** for paths that must never be read or sent, by any command.
+- **`[repository] exclude`**: paths that are never read, listed or sent, by any command.
 - **Secret scrubbing in every command**: known secret shapes are removed from every model request and from the
   recordings.
-- **`--no-explore`** on `propose`, to skip the reading.
+- **`--no-explore`** on `propose` and `plan`, to skip the reading.
 
 **By the end of this phase, you can:**
 
-- Run `propose` in an existing repository and get a brief, a design and tasks that name the functions and files
-  that exist and follow the conventions the code already keeps.
+- Run `propose` in an existing repository and get a design and tasks that name the functions and files that exist
+  and follow the conventions the code already keeps.
 - Open `context.md` and see, for each statement, the file, the line and the quoted code.
-- Name folders that are never to leave the machine.
+- Name paths that are never to leave the machine.
 - Know that a key or a password of a known shape, in a tracked file, is not sent to the provider.
 
-**Not yet, at the end of this phase.** No profile of the whole repository; no spec for behaviour that already
-exists.
+**Not yet, at the end of this phase.** The brief and the specs do not read the code; no profile of the whole
+repository; no spec for behaviour that already exists.
 
 **How it works.** The model points and Python reads, as the owner chose. A scout stage names files, folders and
 search words; code checks every path against git's own list and reads within fixed caps; a survey stage writes
 statements, each with a quote; code keeps only those whose quote is in the file.
 
+**Where it sits, and why.** After the brief and the specs are written, before the design and the tasks. The scout
+then knows the change that was agreed, with the answers to its questions; a request that owes no spec and a change
+with a question left open read nothing; and a reading that fails leaves a written change and a plan drafted
+without it.
+
 **From the research.** OpenSpec's `propose` has read "relevant implementation, nearby tests, configuration, and
-documentation" before drafting since its version 1.12.0, so the place is proven. It keeps no record of what it
-read and checks none of it; the checked quotes are what this phase adds. The scout is told to look at nearby tests
-and configuration as well as source.
+documentation" before drafting since its version 1.12.0. It keeps no record of what it read and checks none of
+it; the checked quotes are what this phase adds.
 
-**Cost to a person.** It makes `propose` several times dearer: up to some 20,000 tokens more for one change.
+**Cost to a person.** It becomes the largest part of `propose`: up to four model calls and some 30,000 tokens at
+the caps, far less in a small repository. `[limits] max_tokens` holds it and `--no-explore` skips it.
 
-**Design.** `../specs/2026-11-22-brownfield-feature-context-design.md`, to be revised for this place in the flow
-before its plan is written.
+**Design.** `../specs/2026-11-22-brownfield-feature-context-design.md`.
 
-**Depends on.** Phase 5. **Size.** About seven tasks.
+**Depends on.** Phase 5. **Size.** About eight tasks.
 
 ### Phase 7. Brownfield, part 2: `init` describes the repository
 
