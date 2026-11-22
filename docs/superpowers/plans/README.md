@@ -42,7 +42,8 @@ How it is applied in every phase below:
 
 ## The plan being followed now
 
-None: phase 12 is done. Phase 13, the `strict` tier, starts with its design.
+**`2026-11-22-adk-spec-strict-tier.md`**, phase 13: the `strict` tier, as the owner chose. Design
+`../specs/2026-11-22-strict-tier-design.md`.
 
 ## How a change flows
 
