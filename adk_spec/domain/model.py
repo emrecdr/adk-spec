@@ -114,6 +114,9 @@ class Statement(_Held):
     line: int
     quote: str
     note: str
+    #: The line that opens the block the quoted line stands in, found by code in the file as it stands; empty at
+    #: the top level. It is what shows a note about one function resting on a line of another.
+    within: str = ""
 
 
 class Finding(_Held):

@@ -234,11 +234,12 @@ def main(argv: list[str]) -> int:
     from adk_spec.orchestration.models import require_ready, serving
 
     cli._load_env()  # the checkout's .env, as the commands read it
-    if why := require_ready(roles=("check", "verify", "scout", "survey", "design", "tasks")):
+    if why := require_ready(roles=("check", "verify", "scout", "survey", "review", "design", "tasks")):
         print(f"measure: {why}", file=sys.stderr)
         return 2
-    # A case code decides costs no call; a plan reads the code first: a scout, a survey or more, then the tasks.
-    calls = args.runs * sum(0 if case.by_code else 3 if case.command == "plan" else 1 for case in cases)
+    # A case code decides costs no call; a plan reads the code first: a scout, a survey or more, a review, then the
+    # tasks.
+    calls = args.runs * sum(0 if case.by_code else 4 if case.command == "plan" else 1 for case in cases)
     print(
         f"measuring {len(cases)} cases, {args.runs} runs each, on {serving('check')}: about {calls} model calls",
         flush=True,

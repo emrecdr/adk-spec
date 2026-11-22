@@ -17,6 +17,7 @@ from adk_spec.workspace.context import tree_text
 from adk_spec.workspace.source import Source
 
 SCOUT, SURVEY = "You choose what to read", "You read parts of a repository's code"
+REVIEW = "You review what a reading of a repository's code found"
 FILES = {
     "src/app.py": "def login():\n    return password()\n",
     "src/auth/session.py": "def start_session(user):\n    return Session(user)\n",
@@ -179,3 +180,95 @@ async def test_a_repository_too_large_to_list_is_read_by_way_of_a_folder(tmp_pat
     assert found.read == ("src/auth/session.py (whole)",) and [one.path for one in found.statements] == [
         SESSION["file"]
     ]
+
+
+# The review: a model reads the statements a reading kept, and no file.
+
+
+def reviewed(*, disputed=(), unknown=(), files: tuple[str, ...] = ()) -> dict:
+    return {
+        "disputed": [{"statement": n, "reason": "Its quote is from another function."} for n in disputed],
+        "unknown": [{"question": q, "where": w} for q, w in unknown],
+        "more_files": list(files),
+        "more_folders": [],
+        "more_searches": [],
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("fake_provider")
+async def test_a_kept_statement_carries_the_line_that_opens_its_block(tmp_path) -> None:
+    found = explored((await read(tmp_path)).state)
+    assert [(one.path, one.line, one.within) for one in found.statements] == [("src/app.py", 2, "def login():")]
+
+
+@pytest.mark.asyncio
+async def test_the_review_reads_the_statements_and_no_file(tmp_path, fake_provider) -> None:
+    await read(tmp_path)
+    (review,) = sent(fake_provider, REVIEW)
+    numbered = between(review, "statements")
+    assert numbered.startswith("1. touches src/app.py:2\n   in: def login():\n   Sign-in is decided here.")
+    assert "   > return password()" in numbered and "=== src/app.py" not in review
+
+
+@pytest.mark.asyncio
+async def test_a_disputed_statement_is_left_out_and_counted_and_a_number_naming_nothing_is_ignored(
+    tmp_path, fake_provider
+) -> None:
+    fake_provider.answers_when(
+        SCOUT, {"files": ["src/app.py", "docs/auth.md"], "folders": [], "searches": [], "reason": "."}
+    )
+    fake_provider.answers_when(SURVEY, survey(APP, DOCS))
+    fake_provider.answers_when(REVIEW, reviewed(disputed=(2, 9)))
+    found = explored((await read(tmp_path)).state)
+    assert [one.path for one in found.statements] == ["src/app.py"] and found.disputed == 1 and found.dropped == 0
+
+
+@pytest.mark.asyncio
+async def test_unknowns_are_kept_plain_and_at_most_eight(tmp_path, fake_provider) -> None:
+    asked = [(f"Who owns sessions?\x1b[31m {n}", "the API\nrepository") for n in range(10)]
+    fake_provider.answers_when(REVIEW, reviewed(unknown=asked))
+    found = explored((await read(tmp_path)).state)
+    assert len(found.unknown) == explore.UNKNOWN_BUDGET == 8
+    assert found.unknown[0] == ("Who owns sessions? [31m 0", "the API repository")
+
+
+@pytest.mark.asyncio
+async def test_the_review_may_send_the_reading_one_round_further_and_runs_twice_at_most(
+    tmp_path, fake_provider
+) -> None:
+    fake_provider.answers_each_time(SURVEY, iter([survey(APP), survey(DOCS)]))
+    first = reviewed(unknown=[("How long does a session last?", "docs")], files=("docs/auth.md",))
+    second = reviewed(unknown=[("Where is a session ended?", "src/auth")], files=("src/auth/session.py",))
+    fake_provider.answers_each_time(REVIEW, iter([first, second]))
+    found = explored((await read(tmp_path)).state)
+    assert len(sent(fake_provider, REVIEW)) == explore.REVIEW_BUDGET == 2
+    assert found.read == ("src/app.py (whole)", "docs/auth.md (whole)"), "what the second review asked is not read"
+    assert [one.path for one in found.statements] == ["src/app.py", "docs/auth.md"]
+    assert found.unknown == (("Where is a session ended?", "src/auth"),), "the second review's unknowns stand"
+
+
+@pytest.mark.asyncio
+async def test_a_reading_is_at_most_seven_model_calls(tmp_path, fake_provider) -> None:
+    many = {**FILES, **{f"src/m{n}.py": f"VALUE_{n} = {n}\n" for n in range(8)}}
+    rounds = [survey(APP, files=("src/m0.py",)), survey(files=("src/m1.py",)), survey(files=("src/m2.py",))]
+    fake_provider.answers_each_time(SURVEY, iter([*rounds, survey(files=("src/m4.py",))]))
+    fake_provider.answers_each_time(REVIEW, iter([reviewed(files=("src/m3.py",)), reviewed(files=("src/m5.py",))]))
+    await read(tmp_path, many)
+    assert len(fake_provider.requests) == 7, "one scout, four surveys, two reviews"
+
+
+@pytest.mark.asyncio
+async def test_a_review_that_fails_keeps_what_was_kept_and_ends_the_run(tmp_path, fake_provider) -> None:
+    fake_provider.answers_when(REVIEW, "not json")
+    run = await read(tmp_path)
+    assert run.state[FAILURE].startswith("review:") and [one.path for one in explored(run.state).statements] == [
+        "src/app.py"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_reading_that_kept_nothing_is_not_reviewed(tmp_path, fake_provider) -> None:
+    fake_provider.answers_when(SURVEY, survey())
+    await read(tmp_path)
+    assert sent(fake_provider, REVIEW) == []

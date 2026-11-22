@@ -20,12 +20,14 @@ from google.adk.events import Event
 from google.adk.plugins.base_plugin import BasePlugin
 
 from ..domain.convert import to_statements
-from ..domain.drafts import ScoutDraft, SurveyDraft
+from ..domain.drafts import ReviewDraft, ScoutDraft, SurveyDraft
 from ..domain.model import Statement
+from ..domain.text import plain
 from ..workspace.source import Source, merged
 from .gate import AGAIN, GIVE_UP, OK, checked, tries_key
 from .graph import NONE, SOME, _app, _ended
 from .plugins import UsageLedger
+from .stages import review as review_stage
 from .stages import scout as scout_stage
 from .stages import survey as survey_stage
 from .stages.survey import MATERIAL, READ, STATED
@@ -33,6 +35,11 @@ from .stages.survey import MATERIAL, READ, STATED
 #: How many rounds of reading one change gets, and how many statements are kept of it.
 LOOK_BUDGET = 3
 STATEMENT_BUDGET = 40
+#: How often a reading is reviewed, and how many unknowns, each how long, a review leaves.
+REVIEW_BUDGET = 2
+UNKNOWN_BUDGET = 8
+QUESTION_MAX_CHARS = 200
+WHERE_MAX_CHARS = 120
 #: The state keys of a reading: the statements kept, each file's text as it was shown, what was asked for and not
 #: given, how many statements quoted nothing real, how many rounds were read, every file read, how far each file
 #: was read from its top, and every request that was made.
@@ -44,6 +51,10 @@ LOOKS = "looks"
 _READ_LIST = "read_list"
 _REACHED = "reached"
 _ASKED = "asked"
+#: What the review leaves: what is still unknown, how many statements it disputed, and how often it ran.
+UNKNOWN = "unknown"
+DISPUTED = "disputed"
+REVIEWS = "reviews"
 
 
 @dataclass(frozen=True)
@@ -57,19 +68,36 @@ class Explored:
     left_out: tuple[str, ...]
     #: How many statements were left out for quoting text that is not in the file they name.
     dropped: int
+    #: What the last review named as still unknown, each a question and where it might be answered.
+    unknown: tuple[tuple[str, str], ...] = ()
+    #: How many statements a review left out for a quote that does not bear out their note.
+    disputed: int = 0
 
 
 def explored(state: Mapping[str, Any]) -> Explored:
     """What a run kept, as it stands in `state`: also the state of a run that ended early."""
     statements = [Statement.model_validate(one) for one in state.get(KEPT) or ()]
-    return Explored(
-        statements, tuple(state.get(_READ_LIST) or ()), tuple(state.get(LEFT_OUT) or ()), state.get(DROPPED) or 0
-    )
+    unknown = tuple((question, where) for question, where in state.get(UNKNOWN) or ())
+    read, left_out = tuple(state.get(_READ_LIST) or ()), tuple(state.get(LEFT_OUT) or ())
+    return Explored(statements, read, left_out, state.get(DROPPED) or 0, unknown, state.get(DISPUTED) or 0)
 
 
 def _said(statements: Sequence[Statement]) -> str:
     """The statements kept so far, as a later round reads them: one a line."""
-    return "\n".join(f"- {one.kind}: {one.path}:{one.line} {one.note}" for one in statements)
+    return "\n".join(
+        f"- {one.kind}: {one.path}:{one.line} {one.note}" + (f" (in: {one.within})" if one.within else "")
+        for one in statements
+    )
+
+
+def _numbered(statements: Sequence[Statement]) -> str:
+    """The statements kept, as the review reads them: each numbered, with the block it stands in and its quote."""
+    return "\n".join(
+        f"{number}. {one.kind} {one.path}:{one.line}"
+        + (f"\n   in: {one.within}" if one.within else "")
+        + f"\n   {one.note}\n   > {one.quote}"
+        for number, one in enumerate(statements, 1)
+    )
 
 
 def _new(state: Mapping[str, Any], files: Sequence[str], folders: Sequence[str], searches: Sequence[str]) -> Any:
@@ -95,59 +123,73 @@ def _new(state: Mapping[str, Any], files: Sequence[str], folders: Sequence[str],
     return fresh
 
 
-def _looking(source: Source) -> tuple[Callable[[Context], Event], Callable[[Context], Event]]:
-    """The two nodes that read: the first look, of what the scout named, and each look after a survey."""
+def _look(
+    source: Source, state: Mapping[str, Any], files: Sequence[str], folders: Sequence[str], searches: Sequence[str]
+) -> Event:
+    """One round read and left in state for the survey, or the run's end where nothing new is left to show."""
+    fresh = _new(state, files, folders, searches)
+    if not any(fresh):
+        return Event(route=NONE)
+    got = source.gathered(*([what for what, _key in part] for part in fresh))
+    # What was left out for room alone is not answered: asked for again, it is read.
+    later = set(got.deferred)
+    answered = [key for part in fresh for what, key in part if what not in later]
+    seen = dict(state.get(SEEN) or {})
+    for path, text in got.texts.items():
+        seen[path] = merged(seen.get(path, ""), text)
+    reached = dict(state.get(_REACHED) or {})
+    for path, (first, upto, total) in got.reached.items():
+        if first == 1 or (path in reached and first == reached[path][0] + 1):  # read on from its top
+            reached[path] = [upto, total]
+    read = list(state.get(_READ_LIST) or ())
+    read += [note for note in got.read if note not in read]
+    update = {
+        SEEN: seen,
+        _REACHED: reached,
+        _ASKED: [*(state.get(_ASKED) or ()), *answered],
+        _READ_LIST: read,
+        READ: "\n".join(read),
+        LEFT_OUT: [*(state.get(LEFT_OUT) or ()), *got.left_out],
+    }
+    if not got.shown:
+        return Event(route=NONE, state=update)
+    # The survey of this round starts anew: its own tries, and no answer of the round before to be taken for it.
+    anew = {survey_stage.KEY: None, tries_key(survey_stage.KEY): 0, LOOKS: (state.get(LOOKS) or 0) + 1}
+    return Event(route=SOME, state={**update, **anew, MATERIAL: got.shown})
 
-    def look(state: Mapping[str, Any], files: Sequence[str], folders: Sequence[str], searches: Sequence[str]) -> Event:
-        """One round read and left in state for the survey, or the run's end where nothing new is left to show."""
-        fresh = _new(state, files, folders, searches)
-        if not any(fresh):
-            return Event(route=NONE)
-        got = source.gathered(*([what for what, _key in part] for part in fresh))
-        # What was left out for room alone is not answered: asked for again, it is read.
-        later = set(got.deferred)
-        answered = [key for part in fresh for what, key in part if what not in later]
-        seen = dict(state.get(SEEN) or {})
-        for path, text in got.texts.items():
-            seen[path] = merged(seen.get(path, ""), text)
-        reached = dict(state.get(_REACHED) or {})
-        for path, (first, upto, total) in got.reached.items():
-            if first == 1 or (path in reached and first == reached[path][0] + 1):  # read on from its top
-                reached[path] = [upto, total]
-        read = list(state.get(_READ_LIST) or ())
-        read += [note for note in got.read if note not in read]
-        update = {
-            SEEN: seen,
-            _REACHED: reached,
-            _ASKED: [*(state.get(_ASKED) or ()), *answered],
-            _READ_LIST: read,
-            READ: "\n".join(read),
-            LEFT_OUT: [*(state.get(LEFT_OUT) or ()), *got.left_out],
-        }
-        if not got.shown:
-            return Event(route=NONE, state=update)
-        # The survey of this round starts anew: its own tries, and no answer of the round before to be taken for it.
-        anew = {survey_stage.KEY: None, tries_key(survey_stage.KEY): 0, LOOKS: (state.get(LOOKS) or 0) + 1}
-        return Event(route=SOME, state={**update, **anew, MATERIAL: got.shown})
+
+def _looking(source: Source) -> tuple[Callable[[Context], Event], ...]:
+    """The nodes that read: the first look, of what the scout named; each look after a survey; the one look a review
+    may ask for, past the rounds of the budget; and the grounding of what a survey stated, which finds the block each
+    quoted line stands in."""
 
     def first_look(ctx: Context) -> Event:
         asked = ScoutDraft.model_validate(ctx.state[scout_stage.KEY])
-        return look(ctx.state.to_dict(), asked.files, asked.folders, asked.searches)
+        return _look(source, ctx.state.to_dict(), asked.files, asked.folders, asked.searches)
 
     def next_look(ctx: Context) -> Event:
         asked = SurveyDraft.model_validate(ctx.state[survey_stage.KEY])
-        return look(ctx.state.to_dict(), asked.more_files, asked.more_folders, asked.more_searches)
+        return _look(source, ctx.state.to_dict(), asked.more_files, asked.more_folders, asked.more_searches)
 
-    return first_look, next_look
+    def review_look(ctx: Context) -> Event:
+        asked = ReviewDraft.model_validate(ctx.state[review_stage.KEY])
+        return _look(source, ctx.state.to_dict(), asked.more_files, asked.more_folders, asked.more_searches)
+
+    def grounded(ctx: Context) -> Event:
+        return _grounded(ctx, source)
+
+    return first_look, next_look, review_look, grounded
 
 
-def _grounded(ctx: Context) -> Event:
-    """What the survey stated is held to the text it was shown, and kept. It is a node of its own, before any
-    further reading: what was kept is in state whatever becomes of the reading after it. The run reads on where the
-    survey asked for more and a round and room for a statement are left."""
+def _grounded(ctx: Context, source: Source) -> Event:
+    """What the survey stated is held to the text it was shown, and kept, each with the block its quoted line stands
+    in. It is a node of its own, before any further reading: what was kept is in state whatever becomes of the
+    reading after it. The run reads on where the survey asked for more and a round and room for a statement are
+    left, and goes to the review where not."""
     state = ctx.state.to_dict()
     answer = SurveyDraft.model_validate(state[survey_stage.KEY])
-    fresh, dropped = to_statements(answer, state.get(SEEN) or {})
+    found, dropped = to_statements(answer, state.get(SEEN) or {})
+    fresh = [one.model_copy(update={"within": source.within(one.path, one.line)}) for one in found]
     before = explored(state)
     held = {(one.path, one.line, one.kind) for one in before.statements}
     kept = [*before.statements, *(one for one in fresh if (one.path, one.line, one.kind) not in held)]
@@ -158,19 +200,61 @@ def _grounded(ctx: Context) -> Event:
     return Event(route=SOME if on else NONE, state=update)
 
 
+def _to_review(ctx: Context) -> Event:
+    """The review started anew on what was kept, numbered: its own tries, and no answer of the review before. No
+    review where nothing was kept, or where the reviews of the budget ran."""
+    state = ctx.state.to_dict()
+    found, reviews = explored(state), state.get(REVIEWS) or 0
+    if not found.statements or reviews >= REVIEW_BUDGET:
+        return Event(route=NONE)
+    anew = {review_stage.KEY: None, tries_key(review_stage.KEY): 0, REVIEWS: reviews + 1}
+    numbered = {review_stage.NUMBERED: _numbered(found.statements), review_stage.NOT_READ: "\n".join(found.left_out)}
+    return Event(route=SOME, state={**anew, **numbered})
+
+
+def _weighed(ctx: Context) -> Event:
+    """What the review said, done: each disputed statement that names a kept number left out and counted, and what
+    is still unknown kept, plain and within the budget. The run reads one more round where the review asked for it
+    and a review is left."""
+    state = ctx.state.to_dict()
+    answer = ReviewDraft.model_validate(state[review_stage.KEY])
+    found = explored(state)
+    numbers = {one.statement for one in answer.disputed}
+    kept = [one for number, one in enumerate(found.statements, 1) if number not in numbers]
+    asked = ((plain(one.question)[:QUESTION_MAX_CHARS], plain(one.where)[:WHERE_MAX_CHARS]) for one in answer.unknown)
+    unknown = [[question, where] for question, where in asked if question][:UNKNOWN_BUDGET]
+    update = {
+        KEPT: [one.model_dump() for one in kept],
+        STATED: _said(kept),
+        DISPUTED: found.disputed + len(found.statements) - len(kept),
+        UNKNOWN: unknown,
+    }
+    more = any((answer.more_files, answer.more_folders, answer.more_searches))
+    on = more and (state.get(REVIEWS) or 0) < REVIEW_BUDGET and 0 < len(kept) < STATEMENT_BUDGET
+    return Event(route=SOME if on else NONE, state=update)
+
+
 def build_explore_app(*, source: Source, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:
     """The scout behind its gate, the first look, and then the survey behind its gate for as many rounds as it asks
-    for and the budget leaves. Every way out ends the run: what was kept is read from its state by `explored`."""
-    first_look, next_look = _looking(source)
+    for and the budget leaves; then the review behind its gate, which may send the reading one round further and is
+    then asked once more. At most seven model calls: one scout, four surveys, two reviews. Every way out ends the
+    run: what was kept is read from its state by `explored`."""
+    first_look, next_look, review_look, grounded = _looking(source)
     scout, scout_gate = scout_stage.build_scout(), checked(scout_stage.KEY, lambda _state: [])
     survey, survey_gate = survey_stage.build_survey(), checked(survey_stage.KEY, lambda _state: [])
+    review, review_gate = review_stage.build_review(), checked(review_stage.KEY, lambda _state: [])
     edges: list[Any] = [
         ("START", scout, scout_gate),
         (scout_gate, {OK: first_look, AGAIN: scout, GIVE_UP: _ended}),
         (first_look, {SOME: survey, NONE: _ended}),
         (survey, survey_gate),
-        (survey_gate, {OK: _grounded, AGAIN: survey, GIVE_UP: _ended}),
-        (_grounded, {SOME: next_look, NONE: _ended}),
-        (next_look, {SOME: survey, NONE: _ended}),
+        (survey_gate, {OK: grounded, AGAIN: survey, GIVE_UP: _ended}),
+        (grounded, {SOME: next_look, NONE: _to_review}),
+        (next_look, {SOME: survey, NONE: _to_review}),
+        (_to_review, {SOME: review, NONE: _ended}),
+        (review, review_gate),
+        (review_gate, {OK: _weighed, AGAIN: review, GIVE_UP: _ended}),
+        (_weighed, {SOME: review_look, NONE: _ended}),
+        (review_look, {SOME: survey, NONE: _ended}),
     ]
     return _app(edges, ledger, recorder)

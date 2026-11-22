@@ -965,7 +965,7 @@ def _read_code(
     from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, TREE
     from ..orchestration.stages import CONSTITUTION as RULES
 
-    if why := require_ready(roles=("scout", "survey")):
+    if why := require_ready(roles=("scout", "survey", "review")):
         raise UsageError(why)
 
     def build(ledger: Any, recorder: Any) -> Any:

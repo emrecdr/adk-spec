@@ -150,6 +150,8 @@ CANNED_VERDICTS = {
         },
     ]
 }
+#: A review that disputes nothing, finds nothing unknown and asks for nothing more.
+CANNED_REVIEW = {"disputed": [], "unknown": [], "more_files": [], "more_folders": [], "more_searches": []}
 CANNED: tuple[dict, ...] = (
     CANNED_TRIAGE,
     CANNED_BRIEF,
@@ -160,6 +162,7 @@ CANNED: tuple[dict, ...] = (
     CANNED_VERDICTS,
     CANNED_SCOUT,
     CANNED_SURVEY,
+    CANNED_REVIEW,
 )
 
 

@@ -12,10 +12,11 @@ from adk_spec.workspace.files import read_text, write_text
 
 DESIGN, TASKS = "You write the design of a change", "You break a change into tasks"
 SCOUT, SURVEY = "You choose what to read", "You read parts of a repository's code"
+REVIEW = "You review what a reading of a repository's code found"
 
 
 def openings(fake_provider) -> list[str]:
-    known = (DESIGN, TASKS, SCOUT, SURVEY)
+    known = (DESIGN, TASKS, SCOUT, SURVEY, REVIEW)
     sent = (str(r.config.system_instruction) for r in fake_provider.requests)
     return [next((opening for opening in known if instruction.startswith(opening)), "?") for instruction in sent]
 
@@ -239,7 +240,7 @@ STATED = "- `src/app.py:2` Sign-in is decided here.\n  > return password()"
 
 def stages(fake_provider) -> list[str]:
     """The stage each request went to, in order."""
-    names = {SCOUT: "scout", SURVEY: "survey", TASKS: "tasks", DESIGN: "design"}
+    names = {SCOUT: "scout", SURVEY: "survey", REVIEW: "review", TASKS: "tasks", DESIGN: "design"}
     return [names[opening] for opening in openings(fake_provider)]
 
 
@@ -251,12 +252,15 @@ def test_plan_reads_the_code_and_the_tasks_are_shown_what_it_found(tmp_path, cap
     context = read_text(tmp_path / CONTEXT)
     assert context.startswith("# Context: passkeys\n\nRead from the repository at commit ")
     assert "## Where the change plugs in\n\n" + STATED in context and "- src/app.py (whole)" in context
-    assert stages(fake_provider) == ["scout", "survey", "tasks"]
+    assert stages(fake_provider) == ["scout", "survey", "review", "tasks"]
     shown = between(str(fake_provider.requests[-1].config.system_instruction), "context")
     assert shown == context.rstrip("\n"), "the tasks stage reads the file as it was written"
     out = capsys.readouterr().out
     assert "explored  1 file: 1 statement kept" in out and CONTEXT in out
-    assert "tokens    scout 120 in 1 call, survey 120 in 1 call, tasks 120 in 1 call: 360 total" in out
+    assert (
+        "tokens    scout 120 in 1 call, survey 120 in 1 call, review 120 in 1 call, tasks 120 in 1 call: 480 total"
+        in out
+    )
 
 
 def test_a_context_that_is_there_is_kept_and_read(tmp_path, fake_provider) -> None:

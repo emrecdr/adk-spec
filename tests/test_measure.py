@@ -90,8 +90,8 @@ def test_the_measurement_runs_whole_on_the_fake(tmp_path, capsys, fake_provider)
     assert len(rows) == 7 and "fake on gemini" in text and "2 runs a case" in text
     assert "| `no-task` | check | 2/2 |" in text and "| `half-done` | verify | 2/2, 2/2 |" in text
     assert "| `clean` | check | nothing planted | 0 |" in text
-    assert "about 16 model calls" in capsys.readouterr().out, "it says what it is about to spend before it starts"
-    assert len(fake_provider.requests) == 16, "five cases of one call, and a plan: its scout, its survey, its tasks"
+    assert "about 18 model calls" in capsys.readouterr().out, "it says what it is about to spend before it starts"
+    assert len(fake_provider.requests) == 18, "five cases of one call, and a plan: scout, survey, review, tasks"
 
 
 def test_one_case_can_be_measured_alone(tmp_path, fake_provider) -> None:
@@ -173,7 +173,7 @@ def test_the_integration_case_is_caught_where_a_statement_names_the_planted_file
         survey, {"statements": [{**planted, "note": "A passkey sign-in ends here too."}], **more}
     )
     found = measure.measured(case("integration"), runs=1, folder=tmp_path / "found")
-    assert (found.caught, found.failed) == ([1], 0) and found.tokens == 360, "the scout, the survey and the tasks"
+    assert (found.caught, found.failed) == ([1], 0) and found.tokens == 480, "the scout, survey, review and tasks"
     fake_provider.clear()
     fake_provider.answers_when("You choose what to read", {**scout, "reason": "Where sign-in starts a session."})
     fake_provider.answers_when(survey, {"statements": [{**decoy, "note": "Sessions start here."}], **more})

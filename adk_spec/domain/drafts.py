@@ -238,3 +238,26 @@ class SurveyDraft(BaseModel):
     )
     more_folders: list[str] = Field(description="Folders still worth listing. Empty where none is.")
     more_searches: list[str] = Field(description="Words still worth searching for. Empty where none is.")
+
+
+class DisputeDraft(BaseModel):
+    statement: int = Field(description="The number of a statement above.")
+    reason: str = Field(description="Why its quote, or the block it stands in, does not show what its note says.")
+
+
+class UnknownDraft(BaseModel):
+    question: str = Field(description="What the change needs to know that no statement establishes, on one line.")
+    where: str = Field(description="Where it might be answered: a file, a folder, a word, a person. Empty if unsure.")
+
+
+class ReviewDraft(BaseModel):
+    """A review of what a reading of the code kept: statements its code does not bear out, what is still unknown, and
+    what to read to know it."""
+
+    disputed: list[DisputeDraft] = Field(description="Each statement its quote does not bear out. Empty where none.")
+    unknown: list[UnknownDraft] = Field(description="What is still unknown that matters. Empty where nothing is.")
+    more_files: list[str] = Field(
+        description="Files to read to answer an unknown, by path or with a range of lines. Empty where none would."
+    )
+    more_folders: list[str] = Field(description="Folders to list to answer an unknown. Empty where none would.")
+    more_searches: list[str] = Field(description="Words to search for to answer an unknown. Empty where none would.")
