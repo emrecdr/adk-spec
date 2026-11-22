@@ -14,6 +14,10 @@ from .model import Statement, StatementKind
 
 #: How the line begins that a reading which ended early carries at its top.
 PARTIAL = "This reading is partial: "
+#: The heading of a repository's profile, which `init` writes from a reading of the whole repository.
+PROFILE_HEADING = "This repository"
+#: The heading of the rules `init` drafts into a template constitution.
+DRAFTED_HEADING = "## Drafted from the code"
 #: The heading what a review named as still unknown stands under.
 UNKNOWN_HEADING = "## What is still unknown"
 #: The kinds of statement, each with the heading it stands under, in the order of the file.
@@ -38,10 +42,12 @@ def render_context(
     others: Mapping[str, str | None] | None = None,
     unknown: Sequence[tuple[str, str]] = (),
     disputed: int = 0,
+    heading: str | None = None,
 ) -> str:
     """The file: when and of what commit each repository was read, the statements under a heading a kind, what is
-    still unknown, what was read, and what was left out. `partial` says why a reading ended early, where it did."""
-    lines = [f"# Context: {change_id}", "", _read_from(at, commit, others or {}), ""]
+    still unknown, what was read, and what was left out. `partial` says why a reading ended early, where it did.
+    `heading` names the file where it is no change's `context.md`: a repository's profile."""
+    lines = [f"# {heading or f'Context: {change_id}'}", "", _read_from(at, commit, others or {}), ""]
     if partial:
         lines += [f"{PARTIAL}{partial}.", ""]
     for kind, heading in SECTIONS:
@@ -94,3 +100,14 @@ def unknown_count(text: str) -> int:
         elif under and line.startswith("- "):
             count += 1
     return count
+
+
+def drafted_rules(statements: Sequence[Statement]) -> str:
+    """The rules a reading of a repository found already true of its code, as a constitution's section: each kept
+    `convention` statement, its note the rule and its quote the evidence. Nothing where none is a convention. Drafted
+    by code from statements whose quotes were found, and the person's to keep, edit or delete."""
+    rules = [f"- {one.note} (`{one.path}:{one.line}`: {one.quote})" for one in statements if one.kind == "convention"]
+    if not rules:
+        return ""
+    said = "Drafted by `adk-spec init` from the code as it stands: each is yours to keep, edit or delete."
+    return "\n".join([DRAFTED_HEADING, "", said, "", *rules, ""])

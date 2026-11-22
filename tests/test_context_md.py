@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from adk_spec.domain.context_md import SECTIONS, render_context, unknown_count
+from adk_spec.domain.context_md import PROFILE_HEADING, SECTIONS, drafted_rules, render_context, unknown_count
 from adk_spec.domain.convert import to_statements
 from adk_spec.domain.drafts import SurveyDraft
 from adk_spec.domain.model import Statement
@@ -137,3 +137,29 @@ def test_what_is_still_unknown_has_its_section_and_the_disputed_are_counted() ->
     ) in text
     assert "Left out: 2 statements whose quote was not in the file named; 1 the review disputed." in text
     assert unknown_count(text) == 2 and unknown_count("# Context: x\n") == 0
+
+
+# Phase 8: the profile of a repository, and the rules drafted from it.
+
+
+def test_a_profile_has_its_own_heading() -> None:
+    text = render_context(
+        "x", at="2026-11-22T10:00:00+00:00", commit=None, statements=[], read=(), heading=PROFILE_HEADING
+    )
+    assert text.startswith("# This repository\n\nRead from the repository on 2026-11-22.\n")
+
+
+def test_drafted_rules_are_the_conventions_each_with_its_evidence() -> None:
+    tests = Statement(
+        kind="convention", path="tests/test_app.py", line=1, quote="def test_login():", note="Each module has a test."
+    )
+    app = Statement(kind="exists", path="src/app.py", line=1, quote="def login(user):", note="Sign-in is here.")
+    text = drafted_rules([tests, app])
+    assert text.startswith("## Drafted from the code\n\n") and "adk-spec init" in text
+    assert "keep, edit or delete" in text and "Sign-in is here." not in text
+    assert "- Each module has a test. (`tests/test_app.py:1`: def test_login():)\n" in text
+
+
+def test_no_convention_drafts_no_rule() -> None:
+    held = Statement(kind="risk", path="src/app.py", line=1, quote="def login(user):", note="Unclear.")
+    assert drafted_rules([]) == "" and drafted_rules([held]) == ""

@@ -35,6 +35,8 @@ from .paths import PathError, inside
 
 ROOT_NAME = ".spec"
 CONFIG, CONSTITUTION, SPECS, CHANGES = "config.toml", "constitution.md", "specs", "changes"
+#: A repository's profile, written by `init` from a reading of its code: no part of any approval.
+PROFILE = "profile.md"
 STATE, BRIEF, DESIGN, TASKS, SPEC_FILE = "change.json", "brief.md", "design.md", "tasks.md", "spec.md"
 #: The folder of a change's generated reports, which no approval fingerprints.
 REPORTS = "reports"

@@ -9,9 +9,15 @@ from adk_spec.domain.text import lines_of
 from adk_spec.interfaces.cli import main
 from adk_spec.orchestration.stages import BOUNDARY
 from adk_spec.workspace import context
-from adk_spec.workspace.context import ContextTooLargeError, capability_index, constitution_text, living_text
+from adk_spec.workspace.context import (
+    ContextTooLargeError,
+    capability_index,
+    constitution_text,
+    living_text,
+    profile_text,
+)
 from adk_spec.workspace.files import write_text
-from adk_spec.workspace.layout import Workspace
+from adk_spec.workspace.layout import PROFILE, Workspace
 
 
 def test_the_index_gives_each_capability_its_purpose(tmp_path) -> None:
@@ -73,3 +79,12 @@ def test_a_tree_within_the_limit_is_every_path_and_past_it_folders_with_counts()
     assert lines[0].startswith("303 files: too many to list")
     assert "src/pkg0/ (76 files)" in lines and "./ (1 file)" in lines and "docs/guide/ (1 file)" in lines
     assert len(lines) == 7, "the first line, then one a folder"
+
+
+def test_the_profile_is_read_as_it_stands_and_cut_past_its_cap(tmp_path, monkeypatch) -> None:
+    ws = Workspace.init(tmp_path)
+    assert profile_text(ws) == ""
+    write_text(ws.home / PROFILE, "# This repository\n\nA profile a person edited.\n")
+    assert profile_text(ws) == "# This repository\n\nA profile a person edited."
+    monkeypatch.setattr(context, "PROFILE_MAX_CHARS", 10)
+    assert profile_text(ws).startswith("# This rep\n(cut here: profile.md is longer than a stage is given)")

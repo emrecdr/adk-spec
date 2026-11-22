@@ -14,7 +14,7 @@ from ..domain.model import Spec
 from ..domain.spec_md import render_spec
 from ..domain.text import lines_of
 from .files import read_text
-from .layout import CHANGES, CONSTITUTION, CONTEXT, Workspace, WorkspaceError
+from .layout import CHANGES, CONSTITUTION, CONTEXT, PROFILE, Workspace, WorkspaceError
 
 #: What a stage may be given of living specs, in characters. Provisional: sized for the smallest model a role may
 #: run on, 128,000 input tokens in the pinned LiteLLM map, until a live run measures it.
@@ -73,6 +73,19 @@ def context_text(workspace: Workspace, change_id: str) -> str:
     text = read_text(path).strip() if path.is_file() else ""
     cut = "\n(cut here: context.md is longer than a stage is given)"
     return text if len(text) <= CONTEXT_FILE_MAX_CHARS else text[:CONTEXT_FILE_MAX_CHARS] + cut
+
+
+#: How much of the repository's `profile.md` a stage is given.
+PROFILE_MAX_CHARS = 10_000
+
+
+def profile_text(workspace: Workspace) -> str:
+    """The repository's `profile.md` as a stage reads it: as the file stands, or nothing where there is none. One
+    past the cap is cut, and says so."""
+    path = workspace.home / PROFILE
+    text = read_text(path).strip() if path.is_file() else ""
+    cut = "\n(cut here: profile.md is longer than a stage is given)"
+    return text if len(text) <= PROFILE_MAX_CHARS else text[:PROFILE_MAX_CHARS] + cut
 
 
 def constitution_text(workspace: Workspace) -> str:
