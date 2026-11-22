@@ -182,6 +182,38 @@ quote that runs over lines no longer breaks the page; the count of findings left
 **Not proved:** the brief's new instruction has met the suite's fake model alone. Whether a real model fills
 `open_points`, with a suggestion each, and writes no marker by hand, is Task 4.
 
+### After the code review
+
+`/code-review` at high effort read the whole range on 22 November 2026: three findings it called important, five
+nits. Each fix below was written test first.
+
+**Fixed.**
+
+- **A spent ceiling asked the person anyway.** Asking costs no model call now, so `[limits] max_tokens` no longer
+  refused it: the person was asked, answered, and the next brief's refusal threw the answer away. `propose` now
+  ends before the question, saying the open points were not put
+  (`test_a_spent_ceiling_asks_the_person_nothing`).
+- **A marker that is no marker.** `[NEEDS CLARIFICATION: which provider` with no `]`, one with no colon, or one
+  misspelt was counted as no open point at all, so it held no approval, or it ran on to the next `]` in the file
+  and took what stood between into its question, the appended marker included. The validator has a new error,
+  `brief.marker-malformed`, which the brief's gate sends back and `adk-spec validate` reports for a brief edited by
+  hand.
+- **A brief past its budget was told what only a person can do.** The gate passed on "settle some with its author
+  first". It now says how many points are open, how many of them were written as a marker in a section, and to
+  name the three that matter most.
+- **`=` where nothing is suggested** now says that the point stays open.
+- **A left-out finding's file name** reaches the measurement page as plain text.
+
+**Left as they are, each a ruling.**
+
+- A marker the model keeps from the brief it replaces, beside the same point reworded in `open_points`, is two
+  markers and two questions, the first with nothing suggested. No rule of text tells a point reworded from a second
+  point, and dropping a kept marker could drop a point still open. The hard case, a brief pushed past its budget,
+  now gets a sentence the stage can act on. Whether a real model copies markers at all is for Task 4 to show.
+- Two markers written by hand with no question are asked as one question that names nothing. Both stay in the brief
+  and hold its approval.
+- A marker written by hand whose question holds a `]` is cut there, as the marker's grammar always cut it.
+
 ## What this plan leaves
 
 Tests as evidence for `verify`; the Gemini arm and Windows, which are the owner's; a measurement that reports a range and not a count.

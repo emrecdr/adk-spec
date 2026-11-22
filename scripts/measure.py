@@ -126,7 +126,7 @@ WORDS_MAX = 400
 
 def _said(run: int, one: Seen) -> str:
     """A finding in its own words, as one line of a list under the table."""
-    return f"run {run + 1}: `{one.code}` {one.path}: {plain(one.text)[:WORDS_MAX]}"
+    return f"run {run + 1}: `{one.code}` {plain(one.path)}: {plain(one.text)[:WORDS_MAX]}"
 
 
 def measured(case: Case, *, runs: int, folder: Path) -> Row:

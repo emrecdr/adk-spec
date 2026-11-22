@@ -147,3 +147,13 @@ def test_a_finding_left_out_for_its_quote_is_kept_in_its_own_words_too(tmp_path,
     ]
     page = measure.rendered([row], model="a model", commit=None, at="t")
     assert "## Left out, no such quote" in page and "- `ambiguity`, run 1: `check.ambiguity`" in page
+
+
+def test_a_left_out_findings_file_name_cannot_break_the_page(tmp_path, fake_provider) -> None:
+    """Found by the code review: a left-out finding's path is the model's own `file`, never printed before, and it
+    reached the page as it came."""
+    invented = {"kind": "gap", "severity": "warning", "message": "m", "quote": "nowhere to be found at all"}
+    invented["file"] = "specs/auth/spec.md\n## Missed"
+    fake_provider.answers_when("You review the files of a change", {"findings": [invented]})
+    row = measure.measured(case("clean"), runs=1, folder=tmp_path)
+    assert row.left_out == ["run 1: `check.gap` specs/auth/spec.md ## Missed: quoted `nowhere to be found at all`: m"]

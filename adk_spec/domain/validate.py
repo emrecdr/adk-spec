@@ -11,7 +11,7 @@ import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 
-from .brief_md import MARKER_BUDGET, markers
+from .brief_md import MARKER_BUDGET, malformed, markers
 from .ids import REQ_ID, capability_of, slug_problem
 from .model import Brief, Change, Delta, Finding, Requirement, Severity, Spec, TaskGroup
 from .spec_md import fingerprint
@@ -49,6 +49,7 @@ SEVERITY: dict[str, Severity] = {
     "brief.section-empty": "ERROR",
     "brief.capability-bad-slug": "ERROR",
     "brief.markers-over-budget": "ERROR",
+    "brief.marker-malformed": "ERROR",
     "brief.marker-unresolved": "WARNING",
     "change.missing-brief": "ERROR",
     "change.no-deltas": "ERROR",
@@ -280,6 +281,15 @@ def validate_brief(brief: Brief, raw: str) -> list[Finding]:
         for capability in brief.capabilities
         if (why := slug_problem(capability))
     ]
+    if malformed(raw):
+        found.append(
+            finding(
+                "brief.marker-malformed",
+                "The brief begins a `[NEEDS CLARIFICATION` marker that is none: it is not closed with `]` before the "
+                "next one begins, or it has no `:` before its question. Write it as "
+                "`[NEEDS CLARIFICATION: the question]`, or remove it.",
+            )
+        )
     open_points = markers(raw)
     if len(open_points) > MARKER_BUDGET:
         found.append(

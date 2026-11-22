@@ -90,11 +90,16 @@ class UsageLedger(BasePlugin):
     def total(self) -> Usage:
         return sum(self.spent.values(), Usage())
 
-    @override
-    async def before_model_callback(self, *, callback_context: Any, llm_request: Any) -> LlmResponse | None:
+    def refusal(self) -> str | None:
+        """Why the next call would be refused, or nothing while the ceiling holds."""
         if self.ceiling is None or self.total.total < self.ceiling:
             return None
-        why = f"{CEILING}: the run's token ceiling of {self.ceiling:,} is spent"
+        return f"{CEILING}: the run's token ceiling of {self.ceiling:,} is spent"
+
+    @override
+    async def before_model_callback(self, *, callback_context: Any, llm_request: Any) -> LlmResponse | None:
+        if (why := self.refusal()) is None:
+            return None
         callback_context.state[STAGE_ERROR] = why
         return LlmResponse(error_code=CEILING, error_message=why)
 

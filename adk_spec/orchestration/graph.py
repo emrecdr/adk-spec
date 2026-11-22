@@ -25,7 +25,7 @@ from google.adk.plugins.base_plugin import BasePlugin
 from google.adk.workflow import Workflow
 from google.genai import types
 
-from ..domain.brief_md import parse_brief, render_brief
+from ..domain.brief_md import MARKER_BUDGET, markers, parse_brief, render_brief
 from ..domain.check import coverage
 from ..domain.convert import DESIGN_SECTIONS, questions_of, render_design, to_brief, to_deltas, to_tasks
 from ..domain.delta_md import parse_delta, render_delta
@@ -164,7 +164,25 @@ def _check_brief(state: Mapping[str, Any]) -> list[str]:
         return [f"the brief cannot be written as its file: {exc.message}. Write no heading and no open code fence."]
     if not same:
         return ["a section of the brief does not read back as written. Write no line that starts `## ` in one."]
-    return _errors(validate_brief(brief, text))
+    found = validate_brief(brief, text)
+    over = any(one.code == _OVER_BUDGET for one in found)
+    return _errors([one for one in found if one.code != _OVER_BUDGET]) + ([_over_budget(state, text)] if over else [])
+
+
+#: The validator's finding for a brief past its markers. It is worded for a person, "settle some with its author
+#: first", which a stage cannot do: the gate says in its place what the stage can.
+_OVER_BUDGET = "brief.markers-over-budget"
+
+
+def _over_budget(state: Mapping[str, Any], text: str) -> str:
+    draft = BriefDraft.model_validate(state[brief_stage.KEY])
+    held = len(markers(text))
+    by_hand = len(markers(render_brief(to_brief(draft.model_copy(update={"open_points": []})))))
+    copied = f", {by_hand} of them written as a marker in a section. Write no marker there" if by_hand else ""
+    return (
+        f"{_OVER_BUDGET}: the brief leaves {held} points open, past the {MARKER_BUDGET} it may{copied}. Name in "
+        "open_points the three that matter most, and state what you assume for the rest."
+    )
 
 
 def _deltas_check(known: Known) -> Callable[[Mapping[str, Any]], list[str]]:

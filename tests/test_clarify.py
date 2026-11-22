@@ -11,7 +11,7 @@ import pytest
 from conftest import BRIEF_WITH_A_MARKER, CANNED_BRIEF, CANNED_TRIAGE, OPEN_POINT, between, on_the_fake, run, seeded
 
 from adk_spec.domain.brief_md import markers
-from adk_spec.workspace.files import read_text
+from adk_spec.workspace.files import read_text, write_text
 
 REQUEST = "Let users sign in with a passkey."
 #: Triage's own call for the standard tier: a tier given by hand is not asked of the model at all.
@@ -72,7 +72,9 @@ def test_an_open_point_with_nothing_suggested_is_asked_without_one_and_equals_ta
     fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "open_points": [{**OPEN_POINT, "suggested": ""}]})
     monkeypatch.setattr("sys.stdin", io.StringIO("=\n"))
     assert proposed(tmp_path, "--tier", "standard", "--id", "unsuggested") == 0
-    assert "suggested: (none)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "suggested: (none)" in out
+    assert "nothing is suggested: the point stays open" in out, "found by the code review: `=` did nothing, unsaid"
     assert len(asked(fake_provider, BRIEF)) == 1, "nothing was taken for an answer, so the brief stands"
     assert len(markers(brief_md(tmp_path, "unsuggested"))) == 1
 
@@ -250,3 +252,47 @@ def test_the_brief_is_told_where_an_open_point_goes(tmp_path, fake_provider) -> 
     assert "goes in open_points" in sent and "Write no [NEEDS CLARIFICATION] marker yourself." in sent
     assert "On the lean tier no question is asked: leave open_points empty there" in sent
     assert "is a point that draft left open: do not copy it." in sent, "the brief it replaces shows its markers"
+
+
+def test_a_spent_ceiling_asks_the_person_nothing(tmp_path, monkeypatch, capsys, fake_provider) -> None:
+    """Found by the code review: asking costs no model call now, so the ceiling no longer refused it. The person was
+    asked, answered, and the refusal of the next brief threw the answer away."""
+    seeded(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", '[project]\ndefault_tier = "lean"\n\n[limits]\nmax_tokens = 100\n')
+    fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)  # one call is 120 tokens: the ceiling is spent by it
+    monkeypatch.setattr("sys.stdin", io.StringIO("Chrome and Firefox\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "spent") == 3
+    told = capsys.readouterr()
+    assert ASKED not in told.out and "A line answers" not in told.out
+    assert "token ceiling of 100 is spent" in told.err and "open points were not put to you" in told.err
+    assert len(fake_provider.requests) == 1 and not (tmp_path / ".spec/changes/spent").exists()
+
+
+def test_a_marker_left_unclosed_is_sent_back_and_swallows_no_question(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    """Found by two reviews: a marker written by hand and never closed ran on to the next `]`, which is the end of
+    the marker code appends. The person was shown both as one garbled question, its suggestion lost."""
+    seeded(tmp_path)
+    unclosed = {**BRIEF_WITH_A_MARKER, "assumptions": "We assume. [NEEDS CLARIFICATION: which provider"}
+    fake_provider.answers_each_time(BRIEF, iter([unclosed, BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
+    monkeypatch.setattr("sys.stdin", io.StringIO("=\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "unclosed") == 0
+    out = capsys.readouterr().out
+    assert f"1. {ASKED}" in out and "which provider" not in out
+    assert "brief.marker-malformed" in asked(fake_provider, BRIEF)[1], "the gate sent the first draft back"
+
+
+def test_a_brief_over_its_budget_is_told_what_its_stage_can_do_about_it(tmp_path, fake_provider) -> None:
+    """Found by the code review: the gate passed on the validator's sentence, written for a person: "settle some
+    with its author first". A model that named three points and kept a marker of the brief it replaces was sent
+    back three times with nothing it could act on, after the person had answered a round."""
+    seeded(tmp_path)
+    three = [{"question": f"Question {n}?", "suggested": ""} for n in range(1, 4)]
+    kept = {**CANNED_BRIEF, "assumptions": "A. [NEEDS CLARIFICATION: an old point?]", "open_points": three}
+    fake_provider.answers_each_time(BRIEF, iter([kept, CANNED_BRIEF]))
+    assert proposed(tmp_path, "--tier", "lean", "--id", "over") == 0
+    again = asked(fake_provider, BRIEF)[1]  # the gate's findings are a line of the next instruction
+    assert "brief.markers-over-budget: the brief leaves 4 points open, past the 3 it may" in again
+    assert "1 of them written as a marker in a section. Write no marker there" in again
+    assert "settle some with its author" not in again

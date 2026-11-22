@@ -133,6 +133,7 @@ three rounds, each with the answer the brief's own stage suggests. No further mo
 its open points, and code asks them. A line answers, `=` takes the suggestion, and an empty line leaves the point
 open, in which case approval waits until you settle it in the brief, where it stands as a
 `[NEEDS CLARIFICATION: ...]` line. A round you answer nothing in ends the asking, and the brief is kept as it stood.
+Where `[limits] max_tokens` is spent by then, nothing is asked: no answer could be used.
 The `tokens` line counts each stage's calls, the asked-again ones too.
 
 Every command that calls a model keeps what it sent and what came back, one file a command, under `.spec/runs/`:

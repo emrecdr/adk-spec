@@ -107,6 +107,7 @@ CASES: dict[str, Callable[[], list[Finding]]] = {
     "brief.capability-bad-slug": lambda: _change(brief=BRIEF.replace("- auth", "- Auth Service")),
     "brief.markers-over-budget": lambda: _change(brief=BRIEF + "[NEEDS CLARIFICATION] " * 4 + "\n"),
     "brief.marker-unresolved": lambda: _change(brief=BRIEF + "[NEEDS CLARIFICATION: which browsers?]\n"),
+    "brief.marker-malformed": lambda: _change(brief=BRIEF + "[NEEDS CLARIFICATION: which browsers\n"),
     "change.missing-brief": lambda: _change(drop=("brief",)),
     "change.no-deltas": lambda: _change(drop=("deltas",)),
     "change.missing-tasks": lambda: _change(drop=("tasks",)),

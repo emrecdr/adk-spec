@@ -523,6 +523,8 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
         line = "" if ended else _line()
         ended = ended or line == ""  # no line at all: the input is over
         typed = line.strip()
+        if typed == "=" and not question["suggested"]:
+            print("   nothing is suggested: the point stays open")
         answers.append(question["suggested"] if typed == "=" else typed)
     return answers
 
@@ -961,6 +963,8 @@ def _rounds(args: argparse.Namespace, known: Any, ledger: Any, recorder: Any, se
         state = {**run.state, FAILURE: run.state.get(FAILURE) or run.failure}
         if state[FAILURE] or state.get(ASKING) is None:
             return state
+        if why := ledger.refusal():  # asking costs no call, so nothing else would stop it: no answer could be used
+            return {**state, FAILURE: f"{why}, and the brief's open points were not put to you"}
         entry, seed = next_run(seed, state, _answered(state[ASKING]))
 
 

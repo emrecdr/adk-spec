@@ -306,3 +306,24 @@ def test_a_hand_written_question_is_read_by_the_markers_own_grammar() -> None:
         "x",
         "",
     ]
+
+
+@pytest.mark.parametrize(
+    "written",
+    [
+        "We assume. [NEEDS CLARIFICATION: which provider",  # never closed
+        "We assume. [NEEDS CLARIFICATION which provider]",  # no colon before its question
+        "We assume. [NEEDS CLARIFICATIONS: which provider?]",  # not the marker's words
+    ],
+)
+def test_a_marker_that_is_no_marker_is_an_error_and_not_a_point_silently_dropped(written: str) -> None:
+    """Found by two reviews: such a line was counted as no marker at all, so the point it left open held no
+    approval, or it ran on to the next `]` in the file and took what stood between into its question."""
+    brief = to_brief(brief_draft(assumptions=written, open_points=[]))
+    codes = [found.code for found in validate_brief(brief, render_brief(brief)) if found.severity == "ERROR"]
+    assert codes == ["brief.marker-malformed"]
+
+
+def test_a_well_formed_marker_is_not_called_malformed() -> None:
+    brief = to_brief(brief_draft(assumptions="A. [ needs clarification : which of [a, b? ] B. [NEEDS CLARIFICATION]"))
+    assert [found.code for found in validate_brief(brief, render_brief(brief))] == ["brief.marker-unresolved"] * 3
