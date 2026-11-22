@@ -28,7 +28,7 @@ build-backend = "hatchling.build"
 packages = ["adk_spec"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff==0.17.5", "pyrefly==1.4.1"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff==0.17.6", "pyrefly==1.5.0"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
