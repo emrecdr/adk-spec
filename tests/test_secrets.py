@@ -194,3 +194,13 @@ def test_a_file_quoting_a_key_is_known_to_hold_one() -> None:
     assert holds_a_key("Pasted from the issue:\n\n> -----BEGIN OPENSSH PRIVATE KEY-----\n> b3BlbnNzaC1rZXk\n")
     assert holds_a_key("+> > PuTTY-User-Key-File-3: ssh-ed25519\n")
     assert not holds_a_key('KEY = "-----BEGIN RSA PRIVATE KEY-----"\n')
+
+
+def test_a_comment_line_after_a_header_named_in_code_is_not_taken_for_the_key() -> None:
+    """Found by review: PGP's armour fields, allowed after every header to close the audit's bypass, took a line of code
+    or prose opening with `Comment:` after a header only named, and hid it from the model."""
+    code = '+KEY = "-----BEGIN RSA PRIVATE KEY-----"\n+\n+    Comment: this line of code is the change\n+x = 1\n'
+    prose = "> The header `-----BEGIN RSA PRIVATE KEY-----` opens it.\n>\n> Comment: this is prose\n"
+    for text, kept in ((code, "Comment: this line of code is the change"), (prose, "Comment: this is prose")):
+        for scrubbed, _count in (scrub(text), scrub_lines(text)):
+            assert kept in scrubbed

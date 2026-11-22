@@ -5,7 +5,8 @@ no question, and returning what it printed; every command but `approve` and `arc
 decision and stay a command the person runs; and the stages on adk-spec's own provider, as from the terminal. After
 an outside audit, no tool names another repository: an assistant misled by text it read could have pointed adk-spec
 at any repository of the person's and sent its code to a model. A change spanning repositories starts in a terminal,
-and the tools keep the repositories it names.
+and the tools keep the repositories it names. That narrows what a tool takes, not what an assistant can do: one that
+edits `change.json`, or runs a terminal, is held by the editor's own approval of each step.
 
 Each tool runs `python -P -m adk_spec` in a process of its own, through `workspace/process.py`, so the workspace's
 lock, its recordings, its token ceiling and its next line are the terminal's, nothing a command prints reaches the

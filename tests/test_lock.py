@@ -12,11 +12,16 @@ import pytest
 from adk_spec.workspace.layout import Workspace, WorkspaceError
 from adk_spec.workspace.lock import LOCK, TAKING, held
 
+#: Each ended process's handle, kept open: Windows gives an ended process's number to another only once no handle
+#: holds it, and a test that took a new process for the ended one would fail by chance.
+_ENDED: list[subprocess.Popen[bytes]] = []
+
 
 def ended_pid() -> int:
     """The number of a process that ran and ended."""
     done = subprocess.Popen([sys.executable, "-c", "pass"])
     done.wait()
+    _ENDED.append(done)
     return done.pid
 
 
@@ -76,3 +81,12 @@ def test_a_takeover_marker_is_ignored_by_git_and_named_where_it_blocks(tmp_path)
     (ws.home / TAKING).write_text("1 elsewhere", encoding="ascii")
     with pytest.raises(WorkspaceError, match=r"\.lock\.taking"), held(ws):
         pass
+
+
+def test_a_run_removes_its_lock_though_the_machines_name_changed_meanwhile(tmp_path, monkeypatch) -> None:
+    """Found by review: a laptop's name follows its network, and a run that read it again as it ended took its own lock
+    for another's and left it, refusing every command after."""
+    ws = Workspace.init(tmp_path)
+    with held(ws):
+        monkeypatch.setattr(platform, "node", lambda: "renamed-on-another-network")
+    assert not (ws.home / LOCK).exists()

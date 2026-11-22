@@ -37,6 +37,9 @@ _LEAD = r"[+\- ]?(?:[ \t]*+>)*+[ \t]*+"
 #: An armour header a key's block may hold: PEM's, and PGP's, GnuPG writing `Version:` before the body. Found by an
 #: outside audit: with no footer, `Version:` ended the key's lines, and the body after it reached the model.
 _ARMOUR = r"(?:Proc-Type|DEK-Info|Version|Comment|Hash|Charset): [^\n]*+"
+#: PEM's alone, where a key's block has no footer and its header is not PGP's: found by review, PGP's taken after
+#: every header hid a line of code opening `Comment:` after a header only named in a string.
+_PEM_ARMOUR = r"(?:Proc-Type|DEK-Info): [^\n]*+"
 #: The fields a PuTTY key file writes before and among its base64.
 _PUTTY_FIELD = (
     r"(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation|Argon2-Memory|Argon2-Passes|Argon2-Parallelism"
@@ -56,10 +59,12 @@ def _key_line(base64: str, fields: str) -> str:
 
 _KEY_HEADER = r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
 _KEY_FOOTER = r"-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
+#: The header as the key rule reads it: `pgp` set where it opens PGP's block, whose lines may hold PGP's armour.
+_KEY_OPENS = r"-----BEGIN (?:(?P<pgp>PGP )|[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
 #: A line of a key's body where no footer follows: base64 of sixteen characters or more, an armour header, or a blank
 #: line. Found by review: a header only named in code, and every short line after it taken for a key line, hid the
 #: code from the model. With a footer, the block between is the key's whatever its lines.
-_KEY_BODY = _key_line(_LONG_BASE64, _ARMOUR)
+_KEY_BODY = _key_line(_LONG_BASE64, r"(?(pgp)" + _ARMOUR + r"|" + _PEM_ARMOUR + r")")
 #: Each run read once and kept: measured by review, a line's blanks split every way between the two runs, a header and
 #: 8,000 spaces took 0.6 s to scrub, four times as long for each doubling, and every request of a review is scrubbed.
 _KEY_LINE = _key_line(_ANY_BASE64, _ARMOUR)
@@ -248,7 +253,7 @@ _VENDOR = (
         # 8,000 headers on one line 5.7 s.
         "private_key",
         re.compile(
-            _KEY_HEADER
+            _KEY_OPENS
             + r"(?:(?:(?!-----BEGIN )[^\n])*?"
             + _KEY_FOOTER
             + r"|(?:(?!-----BEGIN )[^\n])*(?:\n(?>"

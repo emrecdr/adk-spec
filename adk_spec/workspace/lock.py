@@ -27,13 +27,15 @@ _STILL_ACTIVE = 259
 def held(workspace: Workspace) -> Generator[None]:
     """The workspace's lock, for the block. `WorkspaceError` names the file where another run holds it; that run's
     lock is left alone. A lock a process on this machine left when it ended is taken over."""
-    path = workspace.home / LOCK
-    if not _taken(path) and not _taken_over(path):
+    path, mine = workspace.home / LOCK, _mark()
+    if not _taken(path, mine) and not _taken_over(path, mine):
         raise WorkspaceError(_refusal(workspace, path))
     try:
         yield
     finally:
-        if _ours(path):  # a lock a person removed, and another run then took, is that run's
+        # Removed while it says what this run wrote: a lock a person removed, and another run then took, is that
+        # run's. Not the machine's name read again: found by review, a laptop's follows its network.
+        if _said(path) == mine:
             path.unlink(missing_ok=True)
 
 
@@ -50,10 +52,6 @@ def _said(path: Path) -> str:
         return ""
 
 
-def _ours(path: Path) -> bool:
-    return _said(path) == _mark()
-
-
 def _refusal(workspace: Workspace, path: Path) -> str:
     marker = path.with_name(TAKING)  # where a run stopped part way through a takeover left it
     also = f", and {workspace.shown(marker)}, which a takeover stopped part way left" if marker.exists() else ""
@@ -63,29 +61,28 @@ def _refusal(workspace: Workspace, path: Path) -> str:
     )
 
 
-def _taken(path: Path) -> bool:
-    """Whether the file was made, a lock or a marker, naming this process and this machine. Where another run made it
-    first, it is not."""
+def _taken(path: Path, mine: str) -> bool:
+    """Whether the file was made, a lock or a marker, saying `mine`. Where another run made it first, it is not."""
     try:
         with path.open("xb") as made:  # made exclusively: it fails where the file is there
-            made.write(_mark().encode())
+            made.write(mine.encode())
     except FileExistsError:
         return False
     return True
 
 
-def _taken_over(path: Path) -> bool:
+def _taken_over(path: Path, mine: str) -> bool:
     """Whether a lock left by an ended process of this machine was removed and the lock made anew. One run at a time
     takes over, under a marker it makes exclusively, and reads the lock again inside it: two runs that found the same
     lock left behind cannot both remove it, nor remove the one a run made after it."""
     marker = path.with_name(TAKING)
-    if not _taken(marker):  # another run is taking it over
+    if not _taken(marker, mine):  # another run is taking it over
         return False
     try:
         if not _left(path):
             return False
         path.unlink(missing_ok=True)
-        return _taken(path)
+        return _taken(path, mine)
     finally:
         marker.unlink(missing_ok=True)
 
