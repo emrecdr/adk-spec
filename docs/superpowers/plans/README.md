@@ -39,7 +39,8 @@ How it is applied in every phase below:
 
 ## The plan being followed now
 
-None: phase 8 is done. Phase 9, tests as evidence inside `verify`, starts with its design.
+**`2026-11-22-adk-spec-verify-tests.md`**, phase 9: tests as evidence inside `verify`. Design
+`../specs/2026-11-22-verify-tests-design.md`, with the owner's two decisions.
 
 ## How a change flows
 
