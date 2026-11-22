@@ -43,8 +43,8 @@ How it is applied in every phase below:
 
 ## The plan being followed now
 
-None yet: phases 1 to 13 are done, phase 10's rule since removed. Phase 14, adk-spec inside a coding assistant as
-an MCP server, which the owner chose on 22 November 2026, starts with its design.
+**`2026-11-22-adk-spec-mcp-server.md`**, phase 14: adk-spec inside a coding assistant, as an MCP server, as the
+owner chose. Design `../specs/2026-11-22-mcp-server-design.md`.
 
 ## How a change flows
 
