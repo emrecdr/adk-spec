@@ -81,6 +81,7 @@ from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGES,
     CONSTITUTION,
+    LESSONS,
     PROFILE,
     ROOT_NAME,
     SPEC_FILE,
@@ -633,8 +634,16 @@ def _approve(args: argparse.Namespace) -> int:
     reason = args.override if any(held.code == "check.blocking" for held in assessed.unchecked) else None
     began = _began(workspace, assessed.state)
     held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=_commit(workspace), others=began)
-    workspace.save_state(held)
+    # A draft a person corrected is named once: the approved fingerprint then stands for what was drafted.
+    drafted = assessed.state.drafted
+    edited = sorted(name for name, mark in files.items() if drafted.get(name, mark) != mark)
+    workspace.save_state(held.model_copy(update={"drafted": {**drafted, **{name: files[name] for name in edited}}}))
     print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
+    if edited:
+        print(
+            f"lessons   {', '.join(edited)} edited since drafted: say what you corrected in one line in "
+            f".spec/{LESSONS}, and later drafts follow it"
+        )
     _say_next(workspace, args.id, living)
     return EXIT_OK
 
@@ -1080,6 +1089,7 @@ def _plan_made(
     folder = workspace.home / CHANGES / change_id
     there = {name for name in files if (folder / name).is_file()}
     paths = workspace.write_into(change_id, files)
+    workspace.save_state(state.model_copy(update={"drafted": {**state.drafted, **approval_files(files)}}))
     drafted = [(path, name in there) for name, path in zip(files, paths, strict=True)]
     return _Planned([*read, *drafted], ledger, explored=said)
 
@@ -1662,6 +1672,8 @@ def _rewritten(
     One the revision wrote as it stood keeps its approval."""
     texts = workspace.approval_texts(change.state.id)  # as they stand on disk: a delta off its grammar too
     gone = sorted(name for name in texts if name.startswith(f"{SPECS}/") and name not in files)
+    kept = {name: mark for name, mark in change.state.drafted.items() if name not in gone}
+    fields = {**fields, "drafted": {**kept, **fields["drafted"]}}
     same = not gone and all(texts.get(name) == text for name, text in files.items())
     same = same and fields["repositories"] == change.state.repositories
     folder = workspace.rewrite_change(
@@ -1736,12 +1748,13 @@ def _written(
     from ..orchestration.graph import drafted, files_of
 
     made = drafted(state, known)
+    files = files_of(made)
     fields: dict[str, Any] = {
         "bases": capture_bases(made.deltas, known.living),
         "needs_design": made.needs_design,
         "repositories": dict(repositories),
+        "drafted": approval_files(files),
     }
-    files = files_of(made)
     if change is not None:
         return change.state.id, _rewritten(workspace, change, made.deltas, files, fields)
     change_id = args.id or slug_of(made.brief.title, workspace.names_held())

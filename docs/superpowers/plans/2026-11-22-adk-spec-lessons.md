@@ -54,3 +54,17 @@ seeds the file into the drafting stages, and records drafted fingerprints in the
 `_approve`), `README.md`. Test: `tests/test_lessons.py`.
 
 - [ ] Failing tests; implement; gate; commit.
+
+---
+
+## What changed in the build
+
+- **Task 1.** A workspace whose lessons file holds no lesson yet, only the template, sends the stages nothing: the
+  template's opening paragraph would cost every drafting call some 400 characters for nothing.
+- **Task 2.** The gate keeps what it sent a stage back under a key of its own until a try passes; engine faults are
+  kept too and left out when the file is written, by having no code. A second kind of round trip in the deltas got
+  a code of its own, `delta.reason-round-trip`.
+- **Task 3.** The lessons section sits right after each stage's guide, ahead of the long inputs, so that it is part
+  of the stable start of the instruction.
+- **Task 4.** `plan` and a revision record what they drafted, as `propose` does; `new` records nothing, so a change
+  written by hand is never named.

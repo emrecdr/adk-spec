@@ -202,6 +202,9 @@ class ChangeState(_Held):
     #: Where the work began in each of `repositories`, recorded at the first approval that found it there, and never
     #: moved past work already done, as `base_commit` is not.
     base_commits: dict[str, str] = {}
+    #: The fingerprint each file had as adk-spec drafted it, by its path, as an approval takes it: what `approve`
+    #: compares to name a draft a person corrected. Once named, the approved fingerprint stands in its place.
+    drafted: dict[str, str] = {}
 
 
 class Change(_Held):

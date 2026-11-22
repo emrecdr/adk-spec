@@ -4,7 +4,17 @@ read by every drafting stage."""
 from __future__ import annotations
 
 import pytest
-from conftest import BRIEF_OWING_A_DESIGN, DELTAS_ON_A_MISSING_ID, between, on_the_fake, run, seeded, sent_to
+from conftest import (
+    BRIEF_OWING_A_DESIGN,
+    DELTAS_ON_A_MISSING_ID,
+    approved,
+    between,
+    on_the_fake,
+    run,
+    seeded,
+    sent_to,
+    state_of,
+)
 
 from adk_spec.domain.lessons_md import GATE_HEADING, TEMPLATE, learned
 from adk_spec.workspace.context import lessons_text
@@ -114,3 +124,61 @@ def test_a_workspace_with_no_lesson_yet_sends_none(tmp_path, monkeypatch, fake_p
     seeded(tmp_path)
     assert proposed(tmp_path, "--id", "none") == 0
     assert between(sent_to(fake_provider, BRIEF), "lessons") == ""
+
+
+NUDGE = "lessons   "
+
+
+def drafted_and_approved(root, monkeypatch, capsys, edit=None) -> str:
+    """A change `propose` drafted, `edit` applied to its folder, then approved: what `approve` printed."""
+    on_the_fake(monkeypatch)
+    seeded(root)
+    assert proposed(root, "--id", "drafted") == 0
+    if edit:
+        edit(root / ".spec/changes/drafted")
+    capsys.readouterr()
+    approved(root, "drafted")
+    return capsys.readouterr().out
+
+
+def appended(path, line: str) -> None:
+    write_text(path, read_text(path).rstrip("\n") + f"\n\n{line}\n")
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_approve_names_a_drafted_file_a_person_edited_once(tmp_path, monkeypatch, capsys) -> None:
+    out = drafted_and_approved(tmp_path, monkeypatch, capsys, lambda folder: appended(folder / "brief.md", "By hand."))
+    (said,) = [line for line in out.splitlines() if line.startswith(NUDGE)]
+    assert "brief.md edited since drafted" in said and ".spec/lessons.md" in said
+    held = state_of(tmp_path, "drafted")
+    assert held["drafted"]["brief.md"] == held["approval"]["files"]["brief.md"], "the same edit is not named again"
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_approve_says_nothing_of_drafts_untouched_or_only_ticked(tmp_path, monkeypatch, capsys) -> None:
+    def ticked(folder) -> None:
+        tasks = folder / "tasks.md"
+        write_text(tasks, read_text(tasks).replace("- [ ]", "- [x]", 1))
+
+    assert NUDGE not in drafted_and_approved(tmp_path, monkeypatch, capsys, ticked)
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_change_written_by_hand_owes_no_lesson(tmp_path, monkeypatch, capsys) -> None:
+    on_the_fake(monkeypatch)
+    seeded(tmp_path)  # written by hand, not drafted
+    appended(tmp_path / ".spec/changes/passkeys/brief.md", "By hand.")
+    capsys.readouterr()
+    approved(tmp_path)
+    assert NUDGE not in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_revised_change_counts_its_revision_as_drafted(tmp_path, monkeypatch, capsys) -> None:
+    on_the_fake(monkeypatch)
+    seeded(tmp_path)
+    assert proposed(tmp_path, "--id", "drafted") == 0
+    assert run(tmp_path, "propose", "Also say why.", "--id", "drafted", "--no-input") == 0
+    capsys.readouterr()
+    approved(tmp_path, "drafted")
+    assert NUDGE not in capsys.readouterr().out

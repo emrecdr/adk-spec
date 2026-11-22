@@ -78,6 +78,15 @@ no model call, and a model sizes the rest, a typo or a cosmetic change among the
   you were already shown, never one of the same run. Where no model is set up, `adk-spec check <id> --no-model`
   checks by code alone.
 
+  Where you edited a file adk-spec drafted, `approve` names it once, so that you can write what you corrected in
+  `.spec/lessons.md`.
+
+- **`.spec/lessons.md`** is what every draft in the workspace follows: each stage that writes a brief, a delta, a
+  design or tasks reads it, within 6,000 characters. Write a correction there in one line, under "From people", and
+  edit or delete any line. adk-spec adds a line under "Sent back by a gate" each time a gate sent a draft back and
+  the next try put it right, by the stage and the fault, and counts it when it comes back. No model writes it. It
+  is shared through git, as the constitution is.
+
 - **`verify`** reads what changed in the repository since the change was approved, as one diff: tracked files, and
   files git does not track yet and does not ignore. A model gives each requirement a verdict, `met`, `unmet` or
   `unclear`, and quotes the lines that show it. Code keeps a `met` only where a quoted line is really in the diff.
