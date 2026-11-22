@@ -55,10 +55,11 @@ _PUTTY_LINE = (
     r"[+\- ]?[ \t]*+(?:[A-Za-z0-9+/=]++|(?:Encryption|Comment|Public-Lines|Private-Lines|Key-Derivation"
     r"|Argon2-Memory|Argon2-Passes|Argon2-Parallelism|Argon2-Salt): [^\n]*+)?[ \t]*+\r?"
 )
+#: The key's lines are taken whether or not its MAC line follows: a key pasted in part is a key all the same.
 _PUTTY = (
-    r"\bPuTTY-User-Key-File-[23]: [^\n]*(?:\n(?:(?>"
+    r"\bPuTTY-User-Key-File-[23]: [^\n]*(?:\n(?>"
     + _PUTTY_LINE
-    + r"\n)){0,80}?[+\- ]?[ \t]*+Private-MAC: [0-9a-fA-F]+)?"
+    + r"(?=\n|\Z)))*(?:\n[+\- ]?[ \t]*+Private-MAC: [0-9a-fA-F]+)?"
 )
 #: The shapes a vendor's credential takes, or a URL's or a key file's: what the secrets rule finds.
 _VENDOR = (
@@ -212,19 +213,21 @@ _VENDOR = (
         "[REDACTED:discord_webhook]",
     ),
     (
-        # The whole block where the text holds it, its header where a line is all there is. Each key line is matched
-        # once, atomic, and no run reads past another header: measured by review, a header with 25 key lines and no
-        # footer took over 45 s to scrub, each line matched two ways or three, and 8,000 headers on one line 5.7 s.
+        # The whole block: its header, every key line after it, and its footer where one follows. A key pasted with no
+        # footer is a key all the same: found by an outside audit, its body went to the model where the footer was
+        # missing. Each key line is matched once, atomic, and no run reads past another header: measured by review, a
+        # header with 25 key lines and no footer took over 45 s to scrub, each line matched two ways or three, and
+        # 8,000 headers on one line 5.7 s.
         "private_key",
         re.compile(
             _KEY_HEADER
             + r"(?:(?:(?!-----BEGIN )[^\n])*?"
             + _KEY_FOOTER
-            + r"|(?:(?!-----BEGIN )[^\n])*\n(?:(?>"
+            + r"|(?:(?!-----BEGIN )[^\n])*(?:\n(?>"
             + _KEY_LINE
-            + r"\n)){0,400}?[^\n]*?"
+            + r"(?=\n|\Z)))*(?:\n[^\n]*?"
             + _KEY_FOOTER
-            + r")?"
+            + r")?)"
         ),
         "[REDACTED:private_key]",
     ),

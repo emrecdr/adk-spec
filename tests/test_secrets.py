@@ -112,3 +112,46 @@ BODY = "MIIEow0BAAKCAQEA7x1yQ9"
 def test_a_text_holds_a_key_where_a_line_begins_with_a_private_keys_first_line(text: str, held: bool) -> None:
     """A key's own file has its first line at a line's start. Code that names that line in a string is still read."""
     assert holds_a_key(text) is held
+
+
+#: A private key's lines, as a person pastes part of one: base64, sixty-four characters a line.
+KEY_BODY = [
+    "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW",
+    "QyNTUxOQAAACDZ2ZmZ2ZmZ2ZmZ2ZmZ2ZmZ2ZmZ2ZmZ2ZmZ2ZmZ2ZmZ2ZmZ2QAAAJg",
+]
+PUTTY_BODY = [
+    "AAAAC3NzaC1lZDI1NTE5AAAAIGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm",
+    "AAAAIGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm",
+]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Brief.\n-----BEGIN OPENSSH PRIVATE KEY-----\n" + "\n".join(KEY_BODY) + "\nmore prose after.\n",
+        "Brief.\n-----BEGIN RSA PRIVATE KEY-----\n" + "\n".join(KEY_BODY) + "\n",
+        "PuTTY-User-Key-File-3: ssh-ed25519\nEncryption: none\nComment: k\nPublic-Lines: 1\n"
+        + PUTTY_BODY[0]
+        + "\nPrivate-Lines: 1\n"
+        + PUTTY_BODY[1]
+        + "\nmore prose after.\n",
+    ],
+)
+def test_a_key_with_no_footer_has_its_body_scrubbed_too(text: str) -> None:
+    """Found by an outside audit: a key pasted without its footer lost its header to the scrub, and every line of its
+    body went to the model and into the recordings."""
+    scrubbed, _count = scrub(text)
+    assert not any(line in scrubbed for line in (*KEY_BODY, *PUTTY_BODY))
+    assert "more prose after." in scrubbed or not text.endswith("more prose after.\n")
+    held, _count = scrub_lines(text)
+    assert not any(line in held for line in (*KEY_BODY, *PUTTY_BODY)) and held.count("\n") == text.count("\n")
+
+
+def test_a_footerless_key_of_many_lines_is_scrubbed_at_once() -> None:
+    """The review's measure, kept: a header with key lines and no footer once took 45 s to scrub."""
+    import time
+
+    text = "-----BEGIN PRIVATE KEY-----\n" + (KEY_BODY[0] + "\n") * 2_000 + "the prose after it.\n"
+    started = time.perf_counter()
+    scrubbed, _count = scrub(text)
+    assert time.perf_counter() - started < 1.0 and KEY_BODY[0] not in scrubbed and "the prose after it." in scrubbed
