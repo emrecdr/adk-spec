@@ -9,6 +9,7 @@ dependencies = [
     "google-adk==2.14.1",
     # Held: ADK declares litellm below 1.106.3, and 1.110.0 removed the names the login imports.
     "litellm==1.106.2",
+    "mcp==2.3.0",
     "pydantic>=2.12",
     "python-dotenv>=1.0",
     # Certificates through the operating system's store, for a company proxy that re-signs HTTPS.
