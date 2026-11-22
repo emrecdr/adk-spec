@@ -46,19 +46,50 @@ The owner chose phases 5 and 6 and their order on 22 November 2026. The order af
 follows the research report (`reports/Spec driven framework on Google ADK.md`, its migration table) and plan 3's
 "What this plan leaves".
 
+Each phase below says what features it adds and what a person can do once it is finished. Phase 5 has a design;
+phases 6 to 11 give their expected shape, which each one's own design confirms or changes.
+
 ### Phase 5. Brownfield, part 1: context for one feature
 
 **Goal.** A design and a task list for a new feature rest on what the repository's code is, not on file names.
 
-**What a person will see.**
+**Features it adds.**
 
-- A new command, `adk-spec explore <id>`, run between `propose` and `plan`.
-- A new file in the change's folder, `context.md`, in four sections: what exists, where the change plugs in,
-  conventions to follow, risks. Each statement names a file and a line and quotes the code. The file is the
-  person's to edit.
-- `plan` drafting from it. Without it, `plan` works as today and says the plan rests on file names alone.
-- `status` naming `explore` as the next step for a draft with a brief and no context.
-- A setting, `[explore] exclude`, for paths that must never be read.
+- **`adk-spec explore <id>`**: a new command, run between `propose` and `plan`, that reads the code that matters
+  for one change.
+- **`context.md`**: a new file in the change's folder, in four sections: what exists, where the change plugs in,
+  conventions to follow, risks. Every statement names a file and a line and quotes the code.
+- **Checked statements**: a statement whose quote is not in the file it names is left out and counted. Nothing
+  invented reaches a later stage.
+- **`plan` drafting from the context**: the design and tasks stages read `context.md`.
+- **Safe reading**: only files git tracks or would track; no symbolic link; no file git ignores.
+- **`[explore] exclude`**: a setting for paths that must never be read.
+- **Secret scrubbing in every command**: known secret shapes are removed from every model request, `verify`'s diff
+  included, and from the recordings.
+- **`status` naming the step**: `explore` is shown as the next step for a draft with a brief and no context.
+- **A measurement case**: a small repository with one planted integration point and one decoy.
+
+**By the end of this phase, you can:**
+
+- Start a feature in an existing repository and have adk-spec read the relevant code for it:
+
+  ```
+  adk-spec propose "Let users sign in with a passkey."
+  adk-spec explore sign-in-with-a-passkey
+  adk-spec plan sign-in-with-a-passkey
+  ```
+
+- Open `context.md` and see, for each statement, the file, the line and the quoted code, then correct or delete
+  any of it before a design is drafted from it.
+- Get a design and a task list that name the functions and files that exist and follow the conventions the code
+  already keeps.
+- Name folders that are never to leave the machine, and know they are not read.
+- Know that a key or a password of a known shape, in a tracked file, is not sent to the provider by any command.
+- See what an exploration cost on its `tokens` line, and hold it with `[limits] max_tokens`.
+
+**Not yet, at the end of this phase.** `propose` does not read code before it writes the brief. There is no profile
+of the whole repository and no map of folders to capabilities. No spec is written for behaviour that already
+exists.
 
 **How it works.** The model points and Python reads. A scout stage names files, folders and search words. Code
 checks every path against git's own list, reads within fixed caps, and runs each search as a fixed string. A survey
@@ -75,14 +106,13 @@ files, so it first asks for a folder's listing or for a search.
 4. The scout and survey stages, the loop between them, their gates, and the `explore` command with its recording
    and its tokens line.
 5. `plan` reading `context.md`: the design and tasks stages gain one section each.
-6. `status`, the README, and a labelled case for the measurement script: a small repository with one planted
-   integration point and one decoy.
+6. `status`, the README, and the labelled case for the measurement script.
 7. Live, on the owner's go-ahead: that case several times, and one real repository read by hand.
 
-**Depends on.** Nothing unbuilt.
+**Depends on.** Nothing unbuilt. **Size.** About seven tasks.
 
 **Cost to a person.** The most expensive command: three or four model calls and up to some 20,000 tokens for one
-exploration, where a `propose` and a `plan` together spend 3,000 to 10,000. `[limits] max_tokens` holds it.
+exploration, where a `propose` and a `plan` together spend 3,000 to 10,000.
 
 **Risks.** A real model quoting loosely, so that true statements are left out. A scout that names the wrong files
 in a large repository. Scrubbing that changes what other commands send. Each has a test or a live measurement.
@@ -91,27 +121,36 @@ in a large repository. Scrubbing that changes what other commands send. Each has
 
 ### Phase 6. Brownfield, part 2: a baseline of the repository
 
-Expected shape; its own design confirms it.
-
 **Goal.** adk-spec knows a repository before the first change: its stack, its structure, its conventions, and which
 folders belong to which capability.
 
-**What a person will see.**
+**Features it adds.**
 
-- A one-time command, run after `init` on an existing repository.
-- A repository profile under `.spec/`: languages and frameworks with their versions, the layout, how the project
-  is built and tested, each statement with a quote from a manifest, a README or the code.
-- A proposed map from capability to folders, written to the config only when the person accepts it.
-- A constitution drafted from rules that are already true of the code, each with its evidence, for the person to
+- **A one-time survey command**, run after `init` on an existing repository.
+- **A repository profile** under `.spec/`: languages and frameworks with their versions, the layout, how the
+  project is built and tested, each statement with a quote from a manifest, a README or the code.
+- **A capability-to-folder map**, proposed by the survey and written to the config only when the person accepts it.
+- **A drafted constitution**: rules that are already true of the code, each with its evidence, for the person to
   accept, change or drop. Spec Kit's own advice for an existing project is to write only such rules.
+- **`explore` starting from the map**: for a change that touches a capability, that capability's folders are read
+  first, with no model call spent on finding them.
+- **Every drafting stage reading the profile**, the brief included.
+
+**By the end of this phase, you can:**
+
+- Adopt adk-spec in an existing repository with two commands, and have it describe that repository back to you,
+  with its evidence.
+- Accept, edit or reject each proposed rule and each folder mapping, one at a time.
+- Get briefs and plans that use your stack and your conventions without your having written them down first.
+- Explore a change faster and for fewer tokens, because the first files come from the map.
+
+**Not yet, at the end of this phase.** No spec for behaviour that already exists; no check that code and specs
+still agree.
 
 **How it works.** The reading, grounding and scrubbing of phase 5, pointed at the repository as a whole and at its
-manifests first. `explore` then starts from the folders of the capabilities a change touches, which is the "code
-picks" approach where a map exists.
+manifests first.
 
-**Depends on.** Phase 5.
-
-**Size.** Medium to large.
+**Depends on.** Phase 5. **Size.** Medium to large.
 
 **Risks.** A wrong map misleads every later run, so nothing is written to the config without the person.
 
@@ -125,31 +164,43 @@ picks" approach where a map exists.
 
 ### Phase 7. Tests as evidence for `verify`
 
-Expected shape; its own design confirms it.
-
 **Goal.** A verdict rests on the project's own tests as well as on the diff.
 
-**What a person will see.** A test command set in `.spec/config.toml`. `verify` runs it, shows which requirements
-its results speak for, and judges with that evidence in hand.
+**Features it adds.**
 
-**How it works.** Code runs the configured command, as an argument list and never through a shell, with a timeout
-and with no provider token in its environment. It maps results to requirement IDs. The model judges what the
-evidence leaves open; a `met` still needs evidence code can check.
+- **A test command in `.spec/config.toml`**, written by the person.
+- **`verify` running it** before a model judges, with a timeout.
+- **Results mapped to requirements**: which tests speak for which requirement ID, and whether they pass.
+- **Evidence in the report**: `reports/verify.md` shows the tests beside the quoted lines of the diff.
 
-**Depends on.** Nothing unbuilt.
+**By the end of this phase, you can:**
 
-**Size.** Large.
+- Have `verify` say "met" for a requirement because a named test passes, and "unmet" because one fails, with no
+  model's opinion needed for either.
+- See, for each requirement, the tests that cover it, and which requirements no test covers.
+- Archive a change knowing its requirements were checked by running code, not only by reading a diff.
+
+**How it works.** Code runs the configured command as an argument list and never through a shell, with no provider
+token in its environment. It maps results to requirement IDs. The model judges only what the evidence leaves open.
+
+**Depends on.** Nothing unbuilt. **Size.** Large.
 
 **Risks.** It is the first phase in which adk-spec runs a command of the project's: a process left running, most of
-all on Windows, and a command that should not have been run at all. Only a command the person wrote is ever run;
-a model never chooses one.
+all on Windows, and a command that should not have been run at all. Only a command the person wrote is ever run; a
+model never chooses one.
 
 ### Phase 8. Triage by rules
 
 **Goal.** Most requests are sized (lean, standard, none) with no model call.
 
-**How it works.** Rules on measurable inputs, drawn from the recordings of real runs, with the model asked only
-where the rules do not decide. It is proven by replaying recorded triage answers against the rules.
+**Features it adds.** Rules that size a request from what can be measured in it, and a model asked only where the
+rules do not decide. `propose` says which rule sized the request.
+
+**By the end of this phase, you can:** run `propose` without `--tier` and, for most requests, have the first model
+call go straight to the brief: faster, and one call cheaper.
+
+**How it works.** The rules are drawn from the recordings of real runs and proven by replaying recorded triage
+answers against them.
 
 **Size.** Small.
 
@@ -157,9 +208,15 @@ where the rules do not decide. It is proven by replaying recorded triage answers
 
 **Goal.** What code can decide about two files that disagree is decided by code.
 
+**Features it adds.** Code checks for the kinds of disagreement that need no reading, reported by `check` and by
+`check --no-model`.
+
+**By the end of this phase, you can:** catch a share of contradictions for free and the same way every run, where
+today a model catches them in some runs and not in others.
+
 **Depends on.** More measurement, and it may not happen. The two measurements so far show this pass is the least
-steady of all: caught in 2 runs of 3, then in 1 of 3. The spec's own rule is that a step moves to code only where
-its output is a function of its input with no judgement, and this one may not be.
+steady of all: caught in 2 runs of 3, then in 1 of 3. A step moves to code only where its output is a function of
+its input with no judgement, and this one may not be.
 
 **Size.** Medium.
 
@@ -167,20 +224,26 @@ its output is a function of its input with no judgement, and this one may not be
 
 **Goal.** A workspace learns from its own runs.
 
-**What a person will see.** A file under `.spec/` that keeps what a gate sent back and what a person corrected in
-a draft. Later drafts read it, within a cap, and the person can edit it.
+**Features it adds.** A file under `.spec/` that keeps what a gate sent back and what a person corrected in a
+draft. Later drafts read it, within a cap. The person can edit it.
+
+**By the end of this phase, you can:** correct a draft once and not have to make the same correction in the next
+change.
 
 **Size.** Medium.
 
 ### Phase 11. The `strict` tier
 
-**Goal.** The third level of ceremony. The report describes it for a change of many capabilities, high regression
-risk or an owed audit trail: the standard tier, plus a mandatory design, a checklist a reviewer owns, no critical
-finding, and a second approver. Today `strict` is read as `standard`.
+**Goal.** The third level of ceremony, for a change of many capabilities, high regression risk or an owed audit
+trail. Today `strict` is read as `standard`.
 
-**Depends on.** A real change that needs it, in the report's words.
+**Features it adds.** As the report describes the tier: the standard tier, plus a design that is always owed, a
+checklist a reviewer owns, no critical finding allowed, and a second approver recorded.
 
-**Size.** Medium.
+**By the end of this phase, you can:** mark a risky change `strict` and have adk-spec refuse to approve or archive
+it until two people have approved it and nothing critical stands.
+
+**Depends on.** A real change that needs it, in the report's words. **Size.** Medium.
 
 ## The owner's, outside any phase
 
