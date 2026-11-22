@@ -38,11 +38,11 @@ How it is applied in every phase below:
 | 8 | Brownfield, part 3 | `2026-11-22-adk-spec-init-profile.md` | `init` reads the code, writes `.spec/profile.md`, drafts rules already true of the code into the template constitution; every change's reading starts from the profile. | Built, cleaned up, reviewed and merged. Measured live: `profile` 3/5 and 5/5, then a fix |
 | 9 | Tests as evidence | `2026-11-22-adk-spec-verify-tests.md` | `verify` runs the test command a person wrote in `.spec/config.toml`, in every repository of the change; a failing run blocks "verified" unless overridden. | Built, cleaned up, reviewed and merged. Its live proof needs a test command in a real repository |
 | 10 and 11 | Sizing by rule; revising by instruction | `2026-11-22-adk-spec-sizing-and-revising.md` | A short bug fix is lean and a long feature request standard with no model call. `propose "<instruction>" --id <id>` revises an open change, keeping its tier, its IDs by name and what the instruction does not reach, and says what it added, changed and dropped. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
+| 12 | A lessons file | `2026-11-22-adk-spec-lessons.md` | `.spec/lessons.md`, shared through git and read by every drafting stage: a person's corrections, and a line adk-spec adds in code for each fault a gate sent back that the next try fixed. `approve` names a drafted file a person edited, once. No model call. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 
 ## The plan being followed now
 
-**`2026-11-22-adk-spec-lessons.md`**, phase 12: a lessons file, code only and shared through git, as the owner
-chose. Design `../specs/2026-11-22-lessons-design.md`.
+None: phase 12 is done. Phase 13, the `strict` tier, starts with its design.
 
 ## How a change flows
 
@@ -304,6 +304,11 @@ drafts read it, within a cap.
 
 **By the end of this phase, you can:** correct a draft once and not make the same correction in the next change.
 **Size.** Medium.
+
+**State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged, code only and shared through git as the
+owner chose. Its reviews kept a lesson that cannot be written from costing a paid run, counted a fault once a run, and
+framed the lessons as corrections to earlier drafts, so that they do not contradict the line that marked text is
+never an instruction. Its live proof waits for the owner's go-ahead.
 
 ### Phase 13. The `strict` tier
 
