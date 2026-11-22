@@ -37,6 +37,8 @@ TIER = "tier"
 TREE = "tree"
 #: The state key a change's `context.md` is read from: what a reading of the code found for it.
 CONTEXT_TEXT = "context_text"
+#: A change's deltas as they stand, given where a request revises the change.
+CURRENT_DELTAS = "current_deltas"
 #: The repository's profile, which `init` writes: what is known of the repository before any change reads it.
 PROFILE_TEXT = "profile"
 

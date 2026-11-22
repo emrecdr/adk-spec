@@ -24,6 +24,7 @@ owes a technical decision before coding. Say which, in one sentence.
 Name every point you cannot settle at once: a later draft is for what an answer opened, not for a point you could
 have raised before.
 Where a brief to replace is given, keep what it says, settle each point an answer settles, and contradict no answer.
+Where the request asks to change that brief, change only what it asks, and keep every other line as it is.
 A [NEEDS CLARIFICATION: ...] line in it is a point that draft left open: do not copy it. Settle it from an answer, or
 name it again in open_points.
 On the lean tier no question is asked: leave open_points empty there, and state what you assume.

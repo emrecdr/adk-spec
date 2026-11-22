@@ -5,7 +5,7 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import DeltasDraft
-from . import LIVING_SPECS, THE_BRIEF, instruction, stage
+from . import CURRENT_DELTAS, LIVING_SPECS, THE_BRIEF, instruction, section, stage
 
 KEY = "deltas"
 OPENING = "You write the requirement deltas of a change. You write no code."
@@ -16,9 +16,12 @@ A scenario is steps in order. Each step starts with GIVEN, WHEN, THEN or AND. It
 To change a living requirement, give its ID exactly as the spec spells it and restate it whole, with every scenario
 that still holds. To remove one, give its ID and one sentence of reason.
 A new requirement carries no ID: one is assigned. Never invent one.
-Give a purpose only for a capability that has no living spec yet."""
+Give a purpose only for a capability that has no living spec yet.
+Where the deltas as they stand are given, revise them: change only what the brief now asks, keep every other
+requirement and scenario word for word, and keep the name of each requirement that stays."""
 
 
 def build_deltas() -> LlmAgent:
-    text = instruction(OPENING, GUIDE, LIVING_SPECS, THE_BRIEF)
+    current = section("## The deltas as they stand", "current deltas", CURRENT_DELTAS, optional=True)
+    text = instruction(OPENING, GUIDE, LIVING_SPECS, THE_BRIEF, current)
     return stage(KEY, "Writes the requirement deltas of a change.", text, DeltasDraft)

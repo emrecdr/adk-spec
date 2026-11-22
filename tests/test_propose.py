@@ -547,3 +547,16 @@ def test_a_tier_given_by_hand_wins_over_a_rule(tmp_path) -> None:
     seeded(tmp_path)
     assert proposed(tmp_path, "--tier", "standard", "--no-input", "--id", "t", request="Fix the typo in help.") == 0
     assert state_of(tmp_path, "t")["tier"] == "standard"
+
+
+def test_the_brief_and_deltas_stages_revise_what_stands_and_change_only_what_is_asked() -> None:
+    """Phase 11: a revision gives both stages the change's files as they stand, a person's edits included."""
+    from adk_spec.orchestration.stages import CURRENT_DELTAS
+    from adk_spec.orchestration.stages.brief import build_brief
+    from adk_spec.orchestration.stages.deltas import build_deltas
+
+    brief = " ".join(str(build_brief().instruction).split())
+    deltas = " ".join(str(build_deltas().instruction).split())
+    assert "change only what it asks, and keep every other line as it is" in brief
+    assert "## The deltas as they stand" in deltas and f"{{{CURRENT_DELTAS}?}}" in deltas
+    assert "keep every other requirement and scenario word for word" in deltas
