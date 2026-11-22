@@ -18,12 +18,11 @@ from __future__ import annotations
 
 import functools
 import os
-import shutil
-import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
 from .layout import ROOT_NAME
+from .process import Completed, TimedOut, on_path, run
 
 #: How long one git command may run, in seconds.
 GIT_TIMEOUT_S: float = 30
@@ -52,20 +51,6 @@ _HERE = ("--", ".", f":(exclude){ROOT_NAME}")
 
 class GitError(Exception):
     """git could not answer: a reason to say, never an empty answer to read."""
-
-
-def on_path(name: str) -> str | None:
-    """`name` by its full path, as PATH's absolute entries find it, or nothing: never from the current folder."""
-    return _found(name, os.environ.get("PATH", ""))
-
-
-@functools.cache
-def _found(name: str, path: str) -> str | None:
-    """Once per PATH: on Windows each lookup tries every PATHEXT. An empty entry or a relative one names the
-    current folder, and is left out."""
-    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"  # read by `shutil.which` on Windows, ignored elsewhere
-    absolute = os.pathsep.join(entry for entry in path.split(os.pathsep) if os.path.isabs(entry))
-    return shutil.which(name, path=absolute)
 
 
 def _environment(root: Path, trust: bool = True) -> dict[str, str]:
@@ -109,30 +94,13 @@ def _excludes(*_homes: str) -> str | None:
     env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
     argv = [program, "config", "--global", "--type=path", "--get", "core.excludesFile"]
     try:
-        done = subprocess.run(argv, env=env | {"LC_ALL": "C"}, capture_output=True, timeout=GIT_TIMEOUT_S, check=False)
-    except OSError, subprocess.TimeoutExpired:
+        done = run(argv, env=env | {"LC_ALL": "C"}, timeout=GIT_TIMEOUT_S)
+    except OSError, TimedOut:
         return None
     return done.stdout.decode("utf-8", "replace").strip() or None
 
 
-def _run(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[bytes]:
-    """One command, bytes out, stopped whole past `GIT_TIMEOUT_S`."""
-    with subprocess.Popen(
-        argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
-    ) as process:
-        try:
-            out, err = process.communicate(timeout=GIT_TIMEOUT_S)
-        except subprocess.TimeoutExpired:
-            if os.name == "nt":  # the tree first, then the output to its end, which Windows reads on threads
-                taskkill = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "taskkill.exe")
-                subprocess.run([taskkill, "/F", "/T", "/PID", str(process.pid)], capture_output=True, check=False)
-                process.communicate()
-            process.kill()
-            raise
-    return subprocess.CompletedProcess(argv, process.returncode, out, err)
-
-
-def _called(root: Path, *args: str, trust: bool = True) -> subprocess.CompletedProcess[bytes]:
+def _called(root: Path, *args: str, trust: bool = True) -> Completed[bytes]:
     """One git command in `root`, run to its end whatever its code. `GitError` where git is not found, cannot
     start, or does not answer in time."""
     verb = _verb(args)
@@ -140,8 +108,8 @@ def _called(root: Path, *args: str, trust: bool = True) -> subprocess.CompletedP
     if program is None:  # Git for Windows can be installed for Git Bash alone
         raise GitError("git is not on PATH. Install git, with its folder among PATH's absolute entries")
     try:
-        return _run([program, "-C", str(root), *args], _environment(root, trust))
-    except subprocess.TimeoutExpired:
+        return run([program, "-C", str(root), *args], env=_environment(root, trust), timeout=GIT_TIMEOUT_S)
+    except TimedOut:
         raise GitError(f"git {verb} did not answer within {GIT_TIMEOUT_S:g} s") from None
     except OSError as exc:  # found, and still could not start
         raise GitError(f"git {verb} could not start: {exc.strerror or exc}") from None
@@ -151,7 +119,7 @@ def _verb(args: tuple[str, ...]) -> str:
     return next((arg for arg in args if not arg.startswith("-")), "")
 
 
-def _refusal(done: subprocess.CompletedProcess[bytes]) -> str:
+def _refusal(done: Completed[bytes]) -> str:
     """Why git refused, in its own first line. Its advice (`hint: ...`) comes first at times, and is never the
     reason."""
     said = done.stderr.decode("utf-8", "replace").split("\n")

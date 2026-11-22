@@ -252,3 +252,29 @@ def test_the_strict_tier_is_refused_until_it_is_built(tmp_path) -> None:
     write_text(tmp_path / ".spec/config.toml", '[project]\ndefault_tier = "strict"\n')
     with pytest.raises(ConfigError, match="strict is not built yet"):
         ws.config()
+
+
+def test_the_test_command_is_a_list_with_a_timeout(tmp_path) -> None:
+    ws = Workspace.init(tmp_path)
+    held = '[project]\ndefault_tier = "lean"\n\n[verify]\ntest = ["uv", "run", "pytest", "-q"]\ntimeout = 120\n'
+    write_text(tmp_path / ".spec/config.toml", held)
+    assert (ws.config().test, ws.config().test_timeout) == (("uv", "run", "pytest", "-q"), 120)
+    write_text(tmp_path / ".spec/config.toml", '[project]\ndefault_tier = "lean"\n')
+    assert (ws.config().test, ws.config().test_timeout) == ((), 900)
+
+
+@pytest.mark.parametrize(
+    ("line", "said"),
+    [
+        ('test = "uv run pytest -q"', "a list"),
+        ("test = []", "a list"),
+        ('test = [""]', "a list"),
+        ("test = [3]", "a list"),
+        ("timeout = 0", "timeout"),
+    ],
+)
+def test_a_test_command_that_is_no_list_of_words_is_refused(tmp_path, line, said) -> None:
+    ws = Workspace.init(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", f'[project]\ndefault_tier = "lean"\n\n[verify]\n{line}\n')
+    with pytest.raises(ConfigError, match=said):
+        ws.config()

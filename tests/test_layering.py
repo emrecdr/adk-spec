@@ -100,14 +100,15 @@ def test_a_pure_layer_names_nothing_it_may_not(layer: str) -> None:
     assert offenders == [], offenders
 
 
-def test_only_the_git_layer_starts_a_program() -> None:
-    """A program is started in one place, where its path, its environment and its time are all decided."""
+def test_one_module_starts_a_program() -> None:
+    """A program is started in one place, where how it is found, how long it may run and how it is stopped are all
+    decided: git and a project's tests both go through it."""
     starters = [
         path.relative_to(PACKAGE).as_posix()
         for path in sorted(PACKAGE.rglob("*.py"))
         if "subprocess" in _absolute_imports(path)
     ]
-    assert starters == ["workspace/git.py"]
+    assert starters == ["workspace/process.py"]
 
 
 def test_the_package_builds_nothing_until_adks_loader_asks_for_its_agent() -> None:

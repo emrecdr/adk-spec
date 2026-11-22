@@ -35,10 +35,19 @@ class Config:
     #: Paths no command lists, reads or sends: each a pattern git reads as a path from the workspace's root, such
     #: as `vendor/**` or `**/*.pem`.
     exclude: tuple[str, ...] = ()
+    #: The command `verify` runs the project's tests with, as the words a person wrote: none where it is not set.
+    test: tuple[str, ...] = ()
+    #: How long a test run may take, in seconds, before it is stopped and counts as failed.
+    test_timeout: int = 900
 
 
 #: Each table the code reads, and the keys it reads there.
-KNOWN = {"project": ("default_tier",), "limits": ("max_tokens", "keep_runs"), "repository": ("exclude",)}
+KNOWN = {
+    "project": ("default_tier",),
+    "limits": ("max_tokens", "keep_runs"),
+    "repository": ("exclude",),
+    "verify": ("test", "timeout"),
+}
 
 
 def load_config(path: Path) -> Config:
@@ -71,7 +80,35 @@ def load_config(path: Path) -> Config:
     limits = held.get("limits", {})
     ceiling = _whole(path, limits, "max_tokens", Config.max_tokens, "a whole number of tokens, 0 for no ceiling")
     keep = _whole(path, limits, "keep_runs", Config.keep_runs, "a whole number of recordings, 0 to keep none")
-    return Config(default_tier=tier, max_tokens=ceiling, keep_runs=keep, exclude=_excluded(path, held))
+    test, timeout = _verifying(path, held.get("verify", {}))
+    return Config(
+        default_tier=tier,
+        max_tokens=ceiling,
+        keep_runs=keep,
+        exclude=_excluded(path, held),
+        test=test,
+        test_timeout=timeout,
+    )
+
+
+def _verifying(path: Path, verify: object) -> tuple[tuple[str, ...], int]:
+    """The test command under `[verify]`, as a list of words, and its timeout in seconds. A string is refused: no
+    shell reads the command, and splitting a string into words is a guess on Windows."""
+    held = verify if isinstance(verify, dict) else {}
+    test = held.get("test", [])
+    if (
+        not isinstance(test, list)
+        or (test and not all(isinstance(one, str) and one.strip() for one in test))
+        or ("test" in held and not test)
+    ):
+        raise ConfigError(
+            f"{path} sets test to `{test}`: a list of words, the program first, such as "
+            '["uv", "run", "pytest", "-q"]. No shell reads it'
+        )
+    timeout = held.get("timeout", Config.test_timeout)
+    if type(timeout) is not int or timeout < 1:
+        raise ConfigError(f"{path} sets timeout to `{timeout}`: a whole number of seconds, 1 or more")
+    return tuple(test), timeout
 
 
 def _pattern(one: str) -> bool:
