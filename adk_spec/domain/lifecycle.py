@@ -57,6 +57,11 @@ def approval_files(texts: Mapping[str, str]) -> dict[str, str]:
     return {path: sha256_of(_as_approved(path, text)) for path, text in texts.items()}
 
 
+def owes_design(tier: str, said: bool = False) -> bool:
+    """Whether a change owes a design before its tasks: where its brief `said` so, and always on the strict tier."""
+    return said or tier == "strict"
+
+
 def edited_drafts(state: ChangeState, files: Mapping[str, str]) -> list[str]:
     """Each file of `files`, fingerprints by path, that adk-spec drafted and a person changed since: a correction
     later drafts could follow. Ticking a box is no change, as an approval takes it."""
@@ -265,6 +270,7 @@ _FIX_THE_CHECK = "fix what reports/check.md lists, then run `adk-spec approve {c
 #: point before the plan, since its answer shapes the tasks; and the plan before the check, which reads it. A
 #: check that is missing or stale holds nothing: the approval makes it.
 _HOLDS: tuple[tuple[str, Actor, str], ...] = (
+    ("change.missing-design", "run", "run `adk-spec plan {cid}`"),  # an error, which `plan` settles
     (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
     ("brief.marker-unresolved", "you", "settle the open point in brief.md"),
     ("change.missing-tasks", "run", "run `adk-spec plan {cid}`"),

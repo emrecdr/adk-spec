@@ -28,7 +28,7 @@ from ..domain.delta_md import parse_delta
 from ..domain.ids import REQ_ID, slug_problem
 from ..domain.lessons_md import TEMPLATE as LESSONS_TEMPLATE
 from ..domain.lessons_md import learned
-from ..domain.lifecycle import approval_files
+from ..domain.lifecycle import approval_files, owes_design
 from ..domain.model import Change, ChangeState, Finding, GrammarError, Spec, Tier
 from ..domain.spec_md import parse_spec, render_spec
 from ..domain.tasks_md import parse_tasks
@@ -226,7 +226,7 @@ class Workspace:
 
     def new_change(self, change_id: str, tier: Tier) -> Path:
         """A new draft change's folder, holding its state file."""
-        return self.write_change(ChangeState(id=change_id, tier=tier), {})
+        return self.write_change(ChangeState(id=change_id, tier=tier, needs_design=owes_design(tier)), {})
 
     def taken(self, specs: Mapping[str, Spec]) -> set[str]:
         """Every requirement ID that is spoken for: in a living spec of `specs`, retired there, or spelled in a

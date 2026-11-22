@@ -387,10 +387,10 @@ def test_the_brief_is_told_its_tier(tmp_path, fake_provider) -> None:
     assert proposed(tmp_path, "--tier", "lean", "--id", "by-hand") == 0
     assert proposed(tmp_path, "--id", "by-triage") == 0  # the canned triage says lean
     fake_provider.answers_when(TRIAGE, {**CANNED_TRIAGE, "tier": "strict"})
-    assert proposed(tmp_path, "--no-input", "--id", "strict-as-standard") == 0
+    assert proposed(tmp_path, "--no-input", "--id", "strict") == 0
     briefs = [str(r.config.system_instruction) for r in fake_provider.requests]
     told = [text.split("This change's tier is ")[1].split(".")[0] for text in briefs if text.startswith(BRIEF)]
-    assert told == ["lean", "lean", "standard"]
+    assert told == ["lean", "lean", "strict"]
     assert "On the lean tier no question is asked" in next(text for text in briefs if text.startswith(BRIEF))
 
 

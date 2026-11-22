@@ -50,6 +50,7 @@ from ..domain.lifecycle import (
     edited_drafts,
     missing_bases,
     next_step,
+    owes_design,
     reopened,
     verified,
     verify_blockers,
@@ -911,8 +912,9 @@ def _deltas_text(change: Any) -> str:
 
 
 def _of_tasks(found: Finding) -> bool:
-    """Whether a finding is about the task list alone, which `plan` is about to replace."""
-    return found.code.startswith("tasks.") or (found.path or "").rsplit("/", 1)[-1] == TASKS_FILE
+    """Whether a finding is about what `plan` is about to write: the task list, or a design owed and missing."""
+    named = (found.path or "").rsplit("/", 1)[-1]
+    return found.code.startswith("tasks.") or named == TASKS_FILE or found.code == "change.missing-design"
 
 
 #: What `--with` says in the help.
@@ -1748,7 +1750,7 @@ def _written(
     files = files_of(made)
     fields: dict[str, Any] = {
         "bases": capture_bases(made.deltas, known.living),
-        "needs_design": made.needs_design,
+        "needs_design": owes_design(tier, made.needs_design),
         "repositories": dict(repositories),
     }
     if change is not None:

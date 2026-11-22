@@ -44,10 +44,12 @@ def _change(
     bases: dict[str, str] | None = None,
     skip_specs: bool = False,
     drop: tuple[str, ...] = (),
+    needs_design: bool = False,
 ) -> list[Finding]:
     """The findings of the valid change with one of its files, its bases or a flag replaced, or a file dropped."""
     parsed = parse_delta(delta)
-    state = ChangeState(id="passkeys", tier="lean", bases=BASES if bases is None else bases, skip_specs=skip_specs)
+    held = BASES if bases is None else bases
+    state = ChangeState(id="passkeys", tier="lean", bases=held, skip_specs=skip_specs, needs_design=needs_design)
     change = Change(
         state=state,
         brief=None if "brief" in drop else parse_brief(brief),
@@ -111,6 +113,7 @@ CASES: dict[str, Callable[[], list[Finding]]] = {
     "change.missing-brief": lambda: _change(drop=("brief",)),
     "change.no-deltas": lambda: _change(drop=("deltas",)),
     "change.missing-tasks": lambda: _change(drop=("tasks",)),
+    "change.missing-design": lambda: _change(needs_design=True),
 }
 
 

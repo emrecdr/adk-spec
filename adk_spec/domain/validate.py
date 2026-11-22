@@ -54,6 +54,7 @@ SEVERITY: dict[str, Severity] = {
     "change.missing-brief": "ERROR",
     "change.no-deltas": "ERROR",
     "change.missing-tasks": "WARNING",
+    "change.missing-design": "ERROR",
     "check.requirement-no-task": "ERROR",
     "check.task-unknown-requirement": "ERROR",
 }
@@ -327,4 +328,7 @@ def validate_change(change: Change, living: Mapping[str, Spec]) -> list[Finding]
         about("tasks.md", [finding("change.missing-tasks", no_tasks)])
     else:
         about("tasks.md", validate_tasks(groups))
+    if change.state.needs_design and change.design is None:
+        owed = "The change owes a design and has none. `adk-spec plan` drafts it, or write design.md."
+        about("design.md", [finding("change.missing-design", owed)])
     return found

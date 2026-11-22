@@ -301,10 +301,13 @@ def _ended() -> Event:
 
 
 def _sized(ctx: Context) -> Event:
-    """The model's tier, `strict` read as `standard` for now. `none` ends the run with nothing drafted."""
-    model = Triage.model_validate(ctx.state[triage_stage.KEY]).tier
-    chosen = "standard" if model == "strict" else model
+    """The model's tier. `none` ends the run with nothing drafted."""
+    chosen = Triage.model_validate(ctx.state[triage_stage.KEY]).tier
     return Event(route=NONE if chosen == "none" else GO, state={TIER: chosen})
+
+
+#: The tiers whose open points are put to the person as questions: a lean change states what it assumes instead.
+ASKED_ON = frozenset({"standard", "strict"})
 
 
 def _open_points(ask: bool) -> Callable[[Context], Event]:
@@ -313,7 +316,7 @@ def _open_points(ask: bool) -> Callable[[Context], Event]:
         the brief leaves a point open. The questions are read by code from the brief that passed its gate, and the
         run ends on them: the command puts them to the person, and `next_run` starts the run after with what was
         answered."""
-        if not (ask and ctx.state.get(TIER) == "standard" and (ctx.state.get(ROUNDS) or 0) < ROUND_BUDGET):
+        if not (ask and ctx.state.get(TIER) in ASKED_ON and (ctx.state.get(ROUNDS) or 0) < ROUND_BUDGET):
             return Event(route=NONE)
         questions = questions_of(BriefDraft.model_validate(ctx.state[brief_stage.KEY]))
         return Event(route=SOME, state={ASKING: questions}) if questions else Event(route=NONE)

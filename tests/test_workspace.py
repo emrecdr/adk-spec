@@ -247,14 +247,6 @@ def test_exclude_must_be_a_list_of_patterns(tmp_path, value) -> None:
         ws.config()
 
 
-def test_the_strict_tier_is_refused_until_it_is_built(tmp_path) -> None:
-    """`strict` was taken and read as `standard`, with nothing said: a person who chose it got less than asked."""
-    ws = Workspace.init(tmp_path)
-    write_text(tmp_path / ".spec/config.toml", '[project]\ndefault_tier = "strict"\n')
-    with pytest.raises(ConfigError, match="strict is not built yet"):
-        ws.config()
-
-
 def test_the_test_command_is_a_list_with_a_timeout(tmp_path) -> None:
     ws = Workspace.init(tmp_path)
     held = '[project]\ndefault_tier = "lean"\n\n[verify]\ntest = ["uv", "run", "pytest", "-q"]\ntimeout = 120\n'

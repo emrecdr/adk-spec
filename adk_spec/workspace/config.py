@@ -16,7 +16,7 @@ TIERS = get_args(Tier)
 DEFAULT = """\
 # adk-spec's settings for this repository. Read whole: a key the code does not know is refused by name.
 [project]
-# The tier a new change gets where none is named: lean or standard. `strict` is planned, and refused until it is built.
+# The tier a new change gets where none is named: lean, standard or strict.
 default_tier = "standard"
 """
 
@@ -73,8 +73,6 @@ def load_config(path: Path) -> Config:
     if not isinstance(project, dict) or "default_tier" not in project:
         raise ConfigError(f"{path} lacks `default_tier` under [project]: one of {', '.join(BUILT_TIERS)}")
     tier = project["default_tier"]
-    if tier == "strict":
-        raise ConfigError(f"{path} sets default_tier to `strict`: strict is not built yet. Until it is, use standard")
     if tier not in BUILT_TIERS:
         raise ConfigError(f"{path} sets default_tier to `{tier}`, which is none of {', '.join(BUILT_TIERS)}")
     limits = held.get("limits", {})
