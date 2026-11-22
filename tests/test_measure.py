@@ -20,7 +20,7 @@ def case(name: str):
     return next(one for one in CASES if one.name == name)
 
 
-def test_the_set_holds_six_cases_one_of_them_clean_and_one_for_verify() -> None:
+def test_the_set_holds_seven_cases_one_clean_one_for_verify_and_one_for_the_reading() -> None:
     assert [one.name for one in CASES] == [
         "contradiction",
         "ambiguity",
@@ -28,9 +28,10 @@ def test_the_set_holds_six_cases_one_of_them_clean_and_one_for_verify() -> None:
         "constitution",
         "clean",
         "half-done",
+        "integration",
     ]
     assert [one.name for one in CASES if one.clean] == ["clean"] and case("clean").expect == ()
-    assert [one.command for one in CASES if one.command != "check"] == ["verify"]
+    assert [one.command for one in CASES if one.command != "check"] == ["verify", "plan"]
 
 
 def test_a_planted_fault_is_caught_by_a_finding_on_its_file_that_names_it() -> None:
@@ -86,11 +87,11 @@ def test_the_measurement_runs_whole_on_the_fake(tmp_path, capsys, fake_provider)
     assert measure.main(["--runs", "2", "--out", str(out)]) == 0
     text = out.read_text(encoding="utf-8")
     rows = [line for line in text.split("\n") if line.startswith("| `")]
-    assert len(rows) == 6 and "fake on gemini" in text and "2 runs a case" in text
+    assert len(rows) == 7 and "fake on gemini" in text and "2 runs a case" in text
     assert "| `no-task` | check | 2/2 |" in text and "| `half-done` | verify | 2/2, 2/2 |" in text
     assert "| `clean` | check | nothing planted | 0 |" in text
-    assert "about 10 model calls" in capsys.readouterr().out, "it says what it is about to spend before it starts"
-    assert len(fake_provider.requests) == 10
+    assert "about 16 model calls" in capsys.readouterr().out, "it says what it is about to spend before it starts"
+    assert len(fake_provider.requests) == 14, "five cases of one call, and a plan whose scout found nothing to read"
 
 
 def test_one_case_can_be_measured_alone(tmp_path, fake_provider) -> None:
@@ -157,3 +158,24 @@ def test_a_left_out_findings_file_name_cannot_break_the_page(tmp_path, fake_prov
     fake_provider.answers_when("You review the files of a change", {"findings": [invented]})
     row = measure.measured(case("clean"), runs=1, folder=tmp_path)
     assert row.left_out == ["run 1: `check.gap` specs/auth/spec.md ## Missed: quoted `nowhere to be found at all`: m"]
+
+
+def test_the_integration_case_is_caught_where_a_statement_names_the_planted_file(tmp_path, fake_provider) -> None:
+    """Brownfield, part 1: a small repository with one place where sign-in starts a session, and an old file of a
+    similar name that nothing uses. The reading is caught out where it names only the old one."""
+    scout = {"files": ["src/auth/password.py", "src/legacy/auth_session_old.py"], "folders": [], "searches": []}
+    fake_provider.answers_when("You choose what to read", {**scout, "reason": "Where sign-in starts a session."})
+    planted = {"kind": "touches", "file": "src/auth/password.py", "quote": "return start_session(user)"}
+    decoy = {"kind": "exists", "file": "src/legacy/auth_session_old.py", "quote": "def start_session_v1(user):"}
+    more = {"more_files": [], "more_folders": [], "more_searches": []}
+    survey = "You read parts of a repository's code"
+    fake_provider.answers_when(
+        survey, {"statements": [{**planted, "note": "A passkey sign-in ends here too."}], **more}
+    )
+    found = measure.measured(case("integration"), runs=1, folder=tmp_path / "found")
+    assert (found.caught, found.failed) == ([1], 0) and found.tokens == 360, "the scout, the survey and the tasks"
+    fake_provider.clear()
+    fake_provider.answers_when("You choose what to read", {**scout, "reason": "Where sign-in starts a session."})
+    fake_provider.answers_when(survey, {"statements": [{**decoy, "note": "Sessions start here."}], **more})
+    missed = measure.measured(case("integration"), runs=1, folder=tmp_path / "missed")
+    assert missed.caught == [0] and "context.exists on src/legacy/auth_session_old.py" in missed.missed[0]

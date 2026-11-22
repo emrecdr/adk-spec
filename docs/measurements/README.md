@@ -2,8 +2,8 @@
 
 Each file here is one run of `uv run python -m scripts.measure`, on one model, at one commit of this package.
 
-The labelled set is `scripts/cases.py`: six small changes, each well formed, five with one fault planted and one
-with none.
+The labelled set is `scripts/cases.py`: seven small changes, each well formed. Five have one fault planted, one
+has none, and one has nothing wrong and a place in the code to be found.
 
 | Case | What is planted | Found by |
 |---|---|---|
@@ -13,6 +13,7 @@ with none.
 | `constitution` | The repository's rules ask for a test with every change; the tasks hold none. | the model, in `check` |
 | `clean` | Nothing. A blocking finding here is a false one, or a fault of the set itself: read its wording. | |
 | `half-done` | Two requirements approved, one implemented. | the model, in `verify`, held to the diff by code |
+| `integration` | A repository with one place where sign-in starts a session, and an old file of a similar name that nothing uses. | the model, in the reading `plan` makes of the code: caught where a statement it kept names the planted file |
 
 A measurement calls a model with the account the environment names: about `5 x runs` calls for the whole set. The
 script says the number before the first call. It holds for the model it ran on and for the instructions at that

@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import re
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -24,12 +25,14 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from adk_spec.domain.context_md import SECTIONS
 from adk_spec.domain.convert import pointed_at
 from adk_spec.domain.drafts import FindingDraft, FindingsDraft
-from adk_spec.domain.text import plain
+from adk_spec.domain.text import lines_of, plain
 from adk_spec.interfaces import cli
+from adk_spec.workspace.files import read_text
 from adk_spec.workspace.git import GitError, head
-from adk_spec.workspace.layout import Workspace, findings_of
+from adk_spec.workspace.layout import CHANGES, CONTEXT, Workspace, findings_of
 from adk_spec.workspace.runs import listed, read
 
 from .cases import CASES, Case
@@ -92,8 +95,11 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[Seen
     workspace = Workspace.find(root)
     loaded = workspace.load_change(change)
     kept = [read(path) for path in listed(workspace)]
-    calls = [call for held in kept if held.command == case.command for call in held.calls]
+    passes = ("explore", "plan") if case.command == "plan" else (case.command,)  # a plan reads the code first
+    calls = [call for held in kept if held.command in passes for call in held.calls]
     tokens, seconds = sum(call.tokens for call in calls), sum(call.seconds for call in calls)
+    if case.command == "plan":
+        return _stated(workspace.home / CHANGES / change / CONTEXT), [], tokens, seconds
     if case.command == "verify":
         verdicts = loaded.change.state.verification.verdicts if loaded.change.state.verification else {}
         return [Seen(f"verdict.{verdict}", req, "", False) for req, verdict in verdicts.items()], [], tokens, seconds
@@ -109,6 +115,24 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[Seen
         else:  # the quote is kept here beside the message: a planted fault is named by either
             seen.append(Seen(code, at[0], f"{one.quote} {one.message}", critical))
     return seen, left_out, tokens, seconds
+
+
+#: A statement as `context.md` holds one: the file and the line it rests on, and what it says.
+_STATEMENT = re.compile(r"- `(?P<path>[^`]+):\d+` (?P<note>.*)")
+
+
+def _stated(context: Path) -> list[Seen]:
+    """Each statement a reading kept, read back from the `context.md` it wrote: its kind from the heading it
+    stands under. None where no file was written."""
+    kinds = {heading: kind for kind, heading in SECTIONS}
+    seen: list[Seen] = []
+    kind = None
+    for line in lines_of(read_text(context)) if context.is_file() else ():
+        if line.startswith("## "):
+            kind = kinds.get(line.removeprefix("## "))
+        elif kind and (found := _STATEMENT.fullmatch(line)):
+            seen.append(Seen(f"context.{kind}", found["path"], found["note"], False))
+    return seen
 
 
 def _findings(answer: str | None) -> list[FindingDraft]:
@@ -213,7 +237,8 @@ def main(argv: list[str]) -> int:
     if why := require_ready(roles=("check", "verify")):
         print(f"measure: {why}", file=sys.stderr)
         return 2
-    calls = args.runs * sum(not case.by_code for case in cases)
+    # A case code decides costs no call; a plan reads the code first: a scout, a survey or more, then the tasks.
+    calls = args.runs * sum(0 if case.by_code else 3 if case.command == "plan" else 1 for case in cases)
     print(
         f"measuring {len(cases)} cases, {args.runs} runs each, on {serving('check')}: about {calls} model calls",
         flush=True,

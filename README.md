@@ -33,7 +33,7 @@ adk-spec archive <id>
 
 | Command | The question it answers | What happens inside |
 |---|---|---|
-| `propose` | What do we want to build? | Sizes the request, asks its questions, writes the brief, the specs, the design where one is owed, and the tasks |
+| `propose` | What do we want to build? | Sizes the request, asks its questions, writes the brief and the specs, reads the code that matters for them, and writes the design where one is owed, and the tasks |
 | `approve` | Do I agree with this plan? | Records what the change is written against, checks the files against each other, stops on anything blocking, then records your approval |
 | `verify` | Is it built? | Judges what changed in the repository against each requirement. Run it as often as you like while implementing |
 | `archive` | Make it the record? | Folds the change into the living specs, all of it or none |
@@ -54,10 +54,12 @@ A small change is `lean`: it owes no check and no verification, so it takes thre
   asks again at most twice. On the standard tier it puts each point the brief leaves open to you as a question, at
   most three a round and three rounds, each with a suggested answer: a line answers, `=` takes the suggestion, and
   an empty line leaves the point open, in which case approval waits until you settle it in the brief.
-  `--no-input` asks nothing, and `--id` names the change. In a git repository the plan is shown the repository's
-  file names, so a task names real paths. Where you leave a question unanswered, `propose` writes the brief and
-  the specs and drafts no plan on a guess: settle the point in the brief, then `adk-spec plan <id>`. The same
-  command finishes a plan that did not end well.
+  `--no-input` asks nothing, and `--id` names the change. Where you leave a question unanswered, `propose` writes
+  the brief and the specs and drafts no plan on a guess: settle the point in the brief, then `adk-spec plan <id>`.
+  The same command finishes a plan that did not end well.
+
+  In a git repository `propose` reads the code before it drafts the design and the tasks, and writes what it found
+  to `context.md` in the change's folder. See "Working in an existing repository" below. `--no-explore` skips it.
 
 - **`approve`** records who approved, when, and the fingerprint of each file. A later edit voids it; ticking a
   task does not. The name is a recorded claim, not an authentication. On a standard change it first makes the
@@ -84,6 +86,33 @@ A small change is `lean`: it owes no check and no verification, so it takes thre
 
 - **`init`** makes `.spec/` with a config, a constitution to fill in, and the folders for specs and changes.
 
+### Working in an existing repository
+
+Before `propose` or `plan` drafts a design and tasks, it reads the code that matters for the change, so that both
+rest on what is there and not on file names.
+
+- **How it reads.** A model names what it wants to see: files, folders to list, words to search for. Code reads
+  them, and only where git lists the path: nothing git ignores, nothing outside the repository, never a symbolic
+  link. A second model call states what the text shows. It may ask to see more, three rounds at most.
+- **What you get.** `context.md` in the change's folder, in four sections: what exists, where the change plugs
+  in, conventions to follow, risks. Every statement names a file and a line and quotes the code, and a statement
+  whose quote is not in that file is left out and counted. The design and the tasks are drafted from it.
+- **It is yours.** Edit `context.md` as you would any file of the change. One that is there is kept and read as it
+  stands; delete it and the next `adk-spec plan <id>` reads the code again. It is no part of an approval.
+- **What it costs.** Up to four model calls and, at its caps, some 30,000 tokens; far less in a small repository.
+  It is the largest part of `propose`. `[limits] max_tokens` holds it, and the `tokens` line shows it.
+- **It never stops a plan.** A reading that fails or finds nothing says so in one line, and the plan is drafted
+  without it.
+
+To keep paths out of every command, name them in `.spec/config.toml`. Each is a path from the folder that holds
+`.spec/`, as git reads a pattern. An excluded path is never read, never listed among the repository's files, and
+never part of the diff `verify` sends, so work done only there is no evidence for `verify`.
+
+```toml
+[repository]
+exclude = ["vendor/**", "**/*.pem", "config/production.yaml"]
+```
+
 ### To redo one step
 
 You never need these in a normal change. Each does one step of the flow again, by itself.
@@ -97,7 +126,8 @@ adk-spec new <id> --tier lean
 ```
 
 - `plan` drafts a change's tasks again, and its design where one is owed, after you edited the brief or the specs.
-  Where a task is already ticked it replaces nothing unless you add `--replace`.
+  Where a task is already ticked it replaces nothing unless you add `--replace`. It reads the code first where the
+  change has no `context.md`; `--no-explore` skips that.
 - `check` makes the check `approve` makes, and writes `reports/check.md`, without approving.
 - `rebase` records anew what a change's deltas are written against, after a living spec moved under them.
 - `validate` checks the structure of the living specs and of every open change. `--strict` fails on a warning too.
@@ -132,11 +162,17 @@ max_tokens = 30000
 
 On a terminal a command says which stage it is on while it works. Every command that calls a model keeps what it
 sent and what came back under `.spec/runs/`, which ignores itself for git: one file a model pass, so a `propose`
-leaves two, its own and its plan's. The newest 20 are kept, and `[limits] keep_runs` changes that.
+leaves up to three, its own, its reading of the code and its plan's. The newest 20 are kept, and
+`[limits] keep_runs` changes that.
 
 What a model is sent is what the command reads: your request, your specs and the change's files, the names of the
-repository's files, and for `verify` the diff of your working tree. No key or token of the provider is ever part of
-it. A diff holds whatever changed in files git tracks or would track, so keep secrets in files git ignores.
+repository's files, the parts of your code the reading asked for, and for `verify` the diff of your working tree.
+No key or token of the provider is ever part of it.
+
+Every request is scrubbed of known secret shapes before it is sent or recorded: vendors' keys and tokens, private
+key blocks, passwords in URLs, and values a name says are secret. If the scrub fails, nothing is sent. It knows
+shapes, not secrets, so it is a net and no guarantee: keep secrets in files git ignores, and name anything else
+that must not leave under `[repository] exclude`.
 
 ## Watching a run in ADK's own interface
 
@@ -147,10 +183,10 @@ drafts. Nothing is written and no question is asked. The commands are the produc
 
 ## Measuring the model's stages
 
-`uv run python -m scripts.measure` builds six small changes, five with one fault planted, runs `check` or `verify`
-on each a few times on the arm your environment names, and reports how often each fault was caught. It calls a
-model: about five calls a run of the set, and it says the number before the first. `docs/measurements/README.md`
-says what each case plants.
+`uv run python -m scripts.measure` builds seven small changes, runs `check`, `verify` or `plan` on each a few
+times on the arm your environment names, and reports how often each planted fault was caught, and whether the
+reading of the code named the place a change plugs in. It calls a model: about eight calls a run of the set, and
+it says the number before the first. `docs/measurements/README.md` says what each case plants.
 
 `uv run python scripts/dump_instructions.py` prints every stage's instruction, to compare before and after a change
 to one.

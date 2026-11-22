@@ -248,6 +248,29 @@ def _half_done(root: Path) -> str:
     return CHANGE
 
 
+SESSION_PY = '"""Sessions: the one place a signed-in user is given one."""\n\n\ndef start_session(user):\n'
+SESSION_PY += '    return {"user": user, "hours": 8}\n'
+PASSWORD_PY = "from auth.session import start_session\n\n\ndef sign_in_with_password(user, password):\n"
+PASSWORD_PY += '    if not user.check(password):\n        raise PermissionError("wrong password")\n'
+PASSWORD_PY += "    return start_session(user)\n"
+OLD_PY = "# Kept for the 2019 migration. Nothing imports this file.\n\n\ndef start_session_v1(user):\n"
+OLD_PY += "    return user.id\n"
+#: Where a passkey sign-in plugs in, and the old file of a similar name that it does not.
+INTEGRATION = ("src/auth/password.py", "src/auth/session.py")
+DECOY = "src/legacy/auth_session_old.py"
+
+
+def _integration(root: Path) -> str:
+    """A repository with one place where sign-in starts a session, and an old file of a similar name that nothing
+    uses. The change has no plan yet: `plan` reads the code first, and what it states is what is scored."""
+    _workspace(root, brief=BRIEF, delta=Delta(capability="auth", added=(PASSKEY,)), tasks=())
+    sources = {INTEGRATION[0]: PASSWORD_PY, INTEGRATION[1]: SESSION_PY, DECOY: OLD_PY}
+    for path, text in {**sources, "tests/test_password.py": "def test_sign_in(): ...\n"}.items():
+        write_text(root / path, text)
+    _commit_all(root)
+    return CHANGE
+
+
 def _commit_all(root: Path) -> None:
     """A git repository at `root` with one commit of all it holds, made under settings of this script's own."""
     git = shutil.which("git")
@@ -290,4 +313,5 @@ CASES = (
         "verify",
         (Expected("verdict.met", ("REQ-AUTH-003",)), Expected("verdict.un", ("REQ-AUTH-002",))),
     ),
+    Case("integration", _integration, "plan", (Expected(("context.touches", "context.exists"), INTEGRATION),)),
 )
