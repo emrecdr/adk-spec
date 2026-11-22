@@ -33,12 +33,11 @@ How it is applied in every phase below:
 | 3 | Check and verify | `2026-11-21-adk-spec-check-and-verify.md` | `check` and `verify`, each finding held to a quote code finds; recordings; the measurement script. | Done, measured live twice. The Gemini arm and a run on Windows are the owner's |
 | 4 | Questions in code | `2026-11-21-adk-spec-questions-in-code.md` | A brief names its open points and code asks them: one model call fewer a round. | Built and merged. Its live proof waits for the owner's go-ahead |
 | 5 | The simple flow | `2026-11-22-adk-spec-simple-flow.md` | A standard change in four commands, a lean one in three: `propose` writes the whole change, `approve` records bases and makes the check. Help in three groups, progress lines, a `next` line. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
-| 6 | Brownfield, part 1 | not written yet | See below. | **Next.** Its design is to be revised for its place inside `propose` |
+| 6 | Brownfield, part 1 | `2026-11-22-adk-spec-brownfield-context.md` | See below. | **Being built.** Design `../specs/2026-11-22-brownfield-feature-context-design.md` |
 
 ## The plan being followed now
 
-Phase 5 is finished. Phase 6, `propose` reading your code, is next: its design
-(`../specs/2026-11-22-brownfield-feature-context-design.md`) is revised first, then its plan is written.
+**`2026-11-22-adk-spec-brownfield-context.md`**, phase 6: the plan of a change rests on the repository's code.
 
 ## How a change flows
 
