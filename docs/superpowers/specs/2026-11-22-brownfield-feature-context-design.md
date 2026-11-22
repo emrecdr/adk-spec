@@ -1,6 +1,19 @@
 # Brownfield, part 1: context for one feature, read from the repository's code
 
-Design for phase 5 of adk-spec. Written on 22 November 2026. Status: waiting for the owner's approval.
+Design for the brownfield phase of adk-spec, now phase 6. Written on 22 November 2026.
+
+**Status: to be revised before its plan is written.** After it was written the owner set a golden rule (few
+subcommands, simple flows) and the simple flow became phase 5. What changes here, and nothing else:
+
+1. There is no `explore` command. The reading happens inside `propose`, before the brief, and `--no-explore` skips
+   it. Everything below about what is read, how it is checked and what `context.md` holds stands.
+2. In a repository past 300 files the scout is shown folders and not files, so it may also name folders to list.
+   That makes four model calls at most, not three.
+3. The exclusion setting holds for every command that sends anything of the repository, not for the reading alone.
+4. A later stage takes `context.md` as its file stands. The check of quotes is made when the file is written.
+5. An exploration that ends early writes what it kept so far and says that it is partial.
+
+Points 2 to 5 answer the questions a reviewer raised when reading this design as its builder.
 
 ## Intent, and why
 
