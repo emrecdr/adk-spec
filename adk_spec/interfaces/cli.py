@@ -56,6 +56,7 @@ from ..domain.merge import MergeError, apply_delta
 from ..domain.model import BUILT_TIERS, Brief, ChangeState, Finding, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
 from ..domain.secrets import scrub, scrub_lines
+from ..domain.sizing import sized as sized_by_rule
 from ..domain.spec_md import render_spec
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
@@ -1477,6 +1478,14 @@ def _verdicts(
     return grounded(answer, text, added=added, removed=gone), ledger, None
 
 
+def _sized_by_rule(args: argparse.Namespace) -> None:
+    """The tier a rule gives the request, taken where no person named one, and said, so that `--tier` can overrule
+    it next time: the sizing call is skipped where a rule is sure."""
+    if not args.tier and (by_rule := sized_by_rule(args.request)):
+        args.tier = by_rule[0]
+        print(f"sized     {by_rule[0]}, by rule: {by_rule[1]}")
+
+
 def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import Known
@@ -1494,6 +1503,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
         print(f"{PROG}: nothing was drafted: a living spec does not read. Fix it first", file=sys.stderr)
         return EXIT_FINDINGS
     known = Known(living=specs, taken=frozenset(workspace.taken(specs)))
+    _sized_by_rule(args)
     # One ledger for every run of this command: the count and the ceiling are the command's.
     ledger = UsageLedger(workspace.config().max_tokens or None)
     seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES: constitution_text(workspace)}
@@ -1577,7 +1587,7 @@ def _rounds(args: argparse.Namespace, known: Any, ledger: Any, recorder: Any, se
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import ASKING, build_propose_app, first_run, next_run
 
-    entry, seed = first_run(args.tier, seed)
+    entry, seed = first_run(args.tier, seed)  # a tier a rule gave is in args.tier, as a person's would be
     while True:
         app = build_propose_app(known, ask=not args.no_input, entry=entry, ledger=ledger, recorder=recorder)
         run = _ran(app, seed, "propose")

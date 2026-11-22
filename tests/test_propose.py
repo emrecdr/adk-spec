@@ -533,3 +533,17 @@ def test_a_model_the_review_cannot_run_on_is_refused_before_any_call(
     monkeypatch.setenv("SPEC_REVIEW_MODEL", "gpt-4.1")  # ADK would send it to another provider's class
     assert proposed(tmp_path) == 2
     assert "SPEC_REVIEW_MODEL" in capsys.readouterr().err and fake_provider.requests == []
+
+
+def test_a_short_fix_is_sized_by_rule_and_the_model_is_not_asked(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)
+    assert proposed(tmp_path, "--no-input", "--id", "typo", request="Fix the typo in the sign-in error message.") == 0
+    assert asked(fake_provider, TRIAGE) == 0 and state_of(tmp_path, "typo")["tier"] == "lean"
+    assert "sized     lean, by rule: a short fix" in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_tier_given_by_hand_wins_over_a_rule(tmp_path) -> None:
+    seeded(tmp_path)
+    assert proposed(tmp_path, "--tier", "standard", "--no-input", "--id", "t", request="Fix the typo in help.") == 0
+    assert state_of(tmp_path, "t")["tier"] == "standard"
