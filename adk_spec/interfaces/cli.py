@@ -213,7 +213,13 @@ def _parser() -> _Top:
 
     verify = commands.add_parser("verify", help="judge the work done against each requirement of a change")
     verify.add_argument("id", help="the change")
-    verify.add_argument("--base", metavar="REF", help="the commit the work started from (default: the approval's)")
+    verify.add_argument(
+        "--base",
+        action="append",
+        default=[],
+        metavar="REF",
+        help="the commit the work started from (default: the approval's); NAME=REF for another repository",
+    )
     verify.add_argument(
         "--override", metavar="REASON", help="verify although a requirement is not shown met, and record why"
     )
@@ -362,8 +368,9 @@ def _drifted(workspace: Workspace, state: ChangeState) -> bool:
     if state.status != "verified" or held is None:
         return False
     try:
-        return sha256_of(_work_diff(workspace, held.base)[0]) != held.diff
-    except GitError:
+        source = _change_source(workspace, state)
+        return sha256_of(_work_diff(workspace, state, source, held.base, held.bases)[0]) != held.diff
+    except GitError, SourceError:  # a repository gone, or no longer readable beside this one: not what was judged
         return True
 
 
@@ -544,10 +551,18 @@ def _approve(args: argparse.Namespace) -> int:
     at = datetime.now(UTC).isoformat(timespec="seconds")
     # A reason is recorded only where it set something aside: a blocking finding of the check.
     reason = args.override if any(held.code == "check.blocking" for held in assessed.unchecked) else None
-    workspace.save_state(approve(assessed.state, files=files, by=by, at=at, override=reason, commit=_commit(workspace)))
+    began = _commits(workspace, assessed.state)
+    held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=_commit(workspace), others=began)
+    workspace.save_state(held)
     print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
     _say_next(workspace, args.id, living)
     return EXIT_OK
+
+
+def _commits(workspace: Workspace, state: ChangeState) -> dict[str, str]:
+    """The commit checked out in each other repository of a change that is here: where its work begins."""
+    source = _source(workspace, state.repositories) if state.repositories else None
+    return {name: commit for name, commit in (source.commits() if source else {}).items() if commit}
 
 
 def _commit(workspace: Workspace) -> str | None:
@@ -1133,12 +1148,45 @@ def _judged(
     return *to_findings(answer, texts), ledger, None
 
 
-def _work_diff(workspace: Workspace, base: str) -> tuple[str, tuple[str, ...]]:
-    """The diff of the work from `base` as a stage is shown it, and the files left out of it for holding a private
-    key. One function for `verify` and for drift: the fingerprint `verify` records and the one drift is read from
-    must be of the same text, or a change reads as drifted the moment it is verified."""
-    exclude = workspace.config().exclude
-    return Source.of(workspace.root, exclude=exclude).without_keys(diff(workspace.root, base, exclude=exclude))
+def _change_source(workspace: Workspace, state: ChangeState) -> Source:
+    """The source of a change: this repository's files and those of every other repository it names."""
+    return Source.of(workspace.root, exclude=workspace.config().exclude, others=list(state.repositories.items()))
+
+
+def _work_diff(
+    workspace: Workspace, state: ChangeState, source: Source, base: str, bases: Mapping[str, str]
+) -> tuple[str, tuple[str, ...]]:
+    """The diff of the work, from `base` here and from each of `bases` in the repository it names, as a stage is
+    shown it, and the files left out of it for holding a private key. One function for `verify` and for drift: the
+    fingerprint `verify` records and the one drift is read from must be of the same text, or a change reads as
+    drifted the moment it is verified. `GitError` for a repository that is not here."""
+    parts = [diff(workspace.root, base, exclude=workspace.config().exclude)]
+    for name, commit in bases.items():
+        if (held := source.repository(name)) is None:
+            path = state.repositories.get(name, "a path no longer named")
+            raise GitError(f"{name}: no git repository at {path}: the work cannot be judged on part of it")
+        parts.append(diff(held[0], commit, exclude=held[1], prefix=f"{name}/"))
+    return source.without_keys("".join(parts))
+
+
+def _starts(args: argparse.Namespace, source: Source, state: ChangeState) -> dict[str, str]:
+    """Where the work began in each other repository of a change: as `--base NAME=REF` names it, or as an approval
+    recorded it. `UsageError` for one that is not here, or has no starting point: the work cannot be judged on part
+    of it."""
+    named = {name: ref for name, _, ref in (one.partition("=") for one in args.base) if name in state.repositories}
+    bases: dict[str, str] = {}
+    for name, path in state.repositories.items():
+        if (held := source.repository(name)) is None:
+            raise UsageError(f"{name}: no git repository at {path}: the work cannot be judged on part of it")
+        if not (ref := named.get(name) or state.base_commits.get(name)):
+            raise UsageError(
+                f"{name} has no starting point: it was named after `{state.id}` was first approved. Name where its "
+                f"work began with --base {name}=REF"
+            )
+        if (commit := resolves(held[0], ref)) is None:
+            raise UsageError(f"`{ref}` names no commit in {name}")
+        bases[name] = commit
+    return bases
 
 
 def _key_files(held: Sequence[str], then: str) -> str:
@@ -1146,14 +1194,19 @@ def _key_files(held: Sequence[str], then: str) -> str:
     return f"{', '.join(held)}{then}{'holds' if len(held) == 1 else 'hold'} a private key, which is never shown"
 
 
-def _work(args: argparse.Namespace, workspace: Workspace, state: ChangeState) -> tuple[str, str, tuple[str, ...]]:
-    """The commit a change's work is compared with, the diff from it to the working tree as a stage may be shown
-    it, and the files left out of that diff for holding a private key. `UsageError` where there is nothing to
-    compare with; `NotYetError` where nothing was done that can be shown."""
+def _work(
+    args: argparse.Namespace, workspace: Workspace, state: ChangeState
+) -> tuple[str, dict[str, str], str, tuple[str, ...]]:
+    """The commit a change's work is compared with here and in each other repository it names, the diff from them
+    to the working trees as a stage may be shown it, and the files left out of that diff for holding a private key.
+    `UsageError` where there is nothing to compare with; `NotYetError` where nothing was done that can be shown."""
     cid, root = state.id, workspace.root
     if not is_repository(root):
         raise UsageError(f"{root} is in no git repository: verify reads what changed since the approval")
-    named = args.base or state.base_commit
+    here = [one for one in args.base if one.partition("=")[0] not in state.repositories]
+    if len(here) > 1:
+        raise UsageError("--base names the commit of this repository once; NAME=REF names another repository's")
+    named = (here[0] if here else None) or state.base_commit
     if not named:
         raise UsageError(
             f"no commit was recorded when `{cid}` was first approved. Name the commit the work started from with --base"
@@ -1161,8 +1214,10 @@ def _work(args: argparse.Namespace, workspace: Workspace, state: ChangeState) ->
     base = resolves(root, named)
     if base is None:
         raise UsageError(f"`{named}` names no commit in this repository")
+    source = _change_source(workspace, state)
+    bases = _starts(args, source, state)
     # A file that holds a private key is no part of the work a model is shown, as an excluded path is none.
-    text, held = _work_diff(workspace, base)
+    text, held = _work_diff(workspace, state, source, base, bases)
     if not text.strip():
         beside = f"{_key_files(held, ' ')}, and nothing else" if held else "nothing"
         raise NotYetError(f"{beside} under {root} changed since {base[:12]}: there is nothing to verify")
@@ -1171,7 +1226,7 @@ def _work(args: argparse.Namespace, workspace: Workspace, state: ChangeState) ->
             f"the diff since {base[:12]} holds {len(text):,} characters, past the {DIFF_MAX_CHARS:,} a stage is "
             "given. It is never cut. Verify a smaller change, or name a later commit with --base"
         )
-    return base, text, held
+    return base, bases, text, held
 
 
 def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
@@ -1183,7 +1238,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     change, state = assessed.loaded.change, assessed.state
     if why := verify_blockers(state, assessed.stale):
         raise NotYetError(why[0])
-    base, text, held = _work(args, workspace, state)
+    base, bases, text, held = _work(args, workspace, state)
     if held:
         print(f"left out  {_key_files(held, ': ')}")
     added, gone = owed(change.deltas), removed(change.deltas)
@@ -1198,9 +1253,11 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
         model = serving("verify")
     at = datetime.now(UTC).isoformat(timespec="seconds")
     said = {one.id: one.verdict for one in verdicts}
-    after = verified(state, said, base=base, diff=sha256_of(text), at=at, model=model, override=args.override)
+    after = verified(
+        state, said, base=base, diff=sha256_of(text), at=at, model=model, override=args.override, bases=bases
+    )
     reason = after.verification.override if after.verification else None
-    report = render_verify(args.id, at, base, verdicts, model=model, override=reason)
+    report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases)
     path = workspace.write_report(args.id, "verify.md", report)
     workspace.save_state(after)
     for one in verdicts:

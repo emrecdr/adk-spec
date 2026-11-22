@@ -199,3 +199,15 @@ def test_a_pattern_is_read_as_a_person_means_it_at_any_depth_and_in_either_case(
     assert "Vendor/lib.py" not in files(tmp_path, exclude=("vendor/**",))
     assert files(tmp_path, exclude=("secrets", "*.pem", "vendor/")) == ["secretsfile", "src/app.py"]
     assert "src/secrets/c.txt" in files(tmp_path, exclude=("secrets/**",)), "one with a slash is read from the root"
+
+
+def test_a_diff_names_its_paths_under_a_prefix(tmp_path) -> None:
+    """Another repository's diff stands beside this one's, its paths under its name, its new files too."""
+    from adk_spec.domain.verify import lines_of_diff
+
+    base = repository(tmp_path, {"src/app.py": "x = 1\n"})
+    (tmp_path / "src/app.py").write_text("x = 2\n", encoding="utf-8")
+    (tmp_path / "src/new.py").write_text("y = 1\n", encoding="utf-8")
+    text = diff(tmp_path, base, exclude=(), prefix="api/")
+    assert "diff --git a/api/src/app.py b/api/src/app.py" in text and "+++ b/api/src/new.py" in text
+    assert lines_of_diff(text)["api/src/app.py"] == (["x = 2"], ["x = 1"])

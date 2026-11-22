@@ -230,19 +230,21 @@ def grep(root: Path, term: str, *, exclude: Sequence[str]) -> list[str]:
     return [line for line in git(root, "grep", *asked, *_here(exclude), ok=(0, 1)).split("\n") if line]
 
 
-def diff(root: Path, base: str, *, exclude: Sequence[str]) -> str:
+def diff(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "") -> str:
     """`base` against the working tree under `root`, as one unified diff with paths from `root`. A file git does
     not track yet reads as added: new work is new files, and a person may not have added them. `.spec/` is left
     out. `GitError` where `base` names no commit, or too many files are neither tracked nor ignored."""
     commit = resolves(root, base)
     if commit is None:
         raise GitError(f"`{base}` names no commit in {root}")
-    changed = git(root, "diff", *_PLAIN, "--relative", commit, *_here(exclude))
+    # Paths as `a/` and `b/` say, whatever a person's settings say, and under `prefix` for another repository's diff.
+    named = (f"--src-prefix=a/{prefix}", f"--dst-prefix=b/{prefix}")
+    changed = git(root, "diff", *_PLAIN, *named, "--relative", commit, *_here(exclude))
     new = _listed(root, "--others", "--exclude-standard", exclude=exclude)
     if len(new) > UNTRACKED_MAX:
         raise GitError(
             f"{len(new):,} files under {root} are neither tracked nor ignored. Add them to git, or ignore what is "
             "no source, such as a virtual environment or a build folder"
         )
-    added = [git(root, "diff", *_PLAIN, "--no-index", "--", "/dev/null", path, ok=(0, 1)) for path in new]
+    added = [git(root, "diff", *_PLAIN, *named, "--no-index", "--", "/dev/null", path, ok=(0, 1)) for path in new]
     return changed + "".join(added)

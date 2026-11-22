@@ -3,8 +3,10 @@ line the diff really holds makes one `met`."""
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
-from conftest import CANNED_VERDICTS, on_the_fake, repository, run, seeded, state_of
+from conftest import CANNED_VERDICTS, on_the_fake, repository, repository_commit, run, seeded, state_of
 
 from adk_spec.domain.drafts import VerdictsDraft
 from adk_spec.domain.verify import grounded, lines_of_diff, parts_of_diff
@@ -439,3 +441,95 @@ def test_a_verified_change_whose_diff_holds_a_key_file_has_not_drifted(tmp_path)
     assert run(tmp_path, "verify", "passkeys") == 0
     assert state_of(tmp_path, "passkeys")["status"] == "verified"
     assert run(tmp_path, "archive", "passkeys") == 0
+
+
+# The work in every repository of a change: phase 7.
+
+ROUTES_BEFORE = "def sign_in(request):\n    return password(request.user)\n"
+ROUTES_AFTER = "def sign_in(request):\n    return passkey(request.user)\n"
+
+
+def across(tmp_path, tier: str = "lean"):
+    """An approved change whose work spans the workspace's repository and an API repository beside it."""
+    root, api = tmp_path / "app", tmp_path / "api"
+    repository(api, {"src/routes.py": ROUTES_BEFORE})
+    ws = seeded(root)
+    state = ws.load_change("passkeys").change.state
+    ws.save_state(state.model_copy(update={"tier": tier, "repositories": {"api": "../api"}}))
+    repository(root, {"src/auth.py": BEFORE})
+    assert tier == "lean" or run(root, "check", "passkeys", "--no-model") == 0
+    assert run(root, "approve", "passkeys", "--by", "reviewer") == 0
+    return ws, root, api
+
+
+def also(ws, **repositories: str) -> None:
+    """Repositories named after the change was approved."""
+    state = ws.load_change("passkeys").change.state
+    ws.save_state(state.model_copy(update={"repositories": {**state.repositories, **repositories}}))
+
+
+def test_approve_records_where_each_repository_began_and_never_moves_it(tmp_path) -> None:
+    _ws, root, api = across(tmp_path)
+    began = head(api)
+    assert state_of(root)["base_commits"] == {"api": began}
+    write_text(api / "src/routes.py", ROUTES_AFTER)
+    repository_commit(api, "the work")
+    assert run(root, "approve", "passkeys", "--by", "reviewer") == 0
+    assert state_of(root)["base_commits"] == {"api": began}
+
+
+def test_verify_judges_the_work_in_every_repository_of_the_change(tmp_path, fake_provider) -> None:
+    _ws, root, api = across(tmp_path)
+    implemented(root)
+    write_text(api / "src/routes.py", ROUTES_AFTER)
+    shown = {"evidence": [{"path": "api/src/routes.py", "quote": "return passkey(request.user)"}], "reason": "API."}
+    fake_provider.answers_when("You judge whether a diff", verdicts(**{"004": shown}))
+    assert run(root, "verify", "passkeys") == 0
+    sent = str(fake_provider.requests[-1].config.system_instruction)
+    assert "+++ b/api/src/routes.py" in sent and "+    return passkey(request.user)" in sent
+    report = read_text(root / REPORT)
+    assert f", and api at {head(api)[:12]}," in report and "api/src/routes.py" in report
+    assert state_of(root)["verification"]["bases"] == {"api": head(api)}
+
+
+def test_a_repository_missing_at_verify_is_refused_by_name(tmp_path, capsys, fake_provider) -> None:
+    _ws, root, api = across(tmp_path)
+    implemented(root)
+    shutil.rmtree(api)
+    capsys.readouterr()
+    assert run(root, "verify", "passkeys") == 2
+    assert "api: no git repository at ../api" in capsys.readouterr().err and fake_provider.requests == []
+
+
+def test_a_repository_with_no_starting_point_is_refused_and_base_gives_one(tmp_path, capsys, fake_provider) -> None:
+    ws, root, _api = across(tmp_path)
+    began = repository(tmp_path / "web", {"index.js": "export const x = 1;\n"})
+    also(ws, web="../web")
+    implemented(root)
+    write_text(tmp_path / "web/index.js", "export const x = 2;\n")
+    capsys.readouterr()
+    assert run(root, "verify", "passkeys") == 2
+    err = capsys.readouterr().err
+    assert "web has no starting point" in err and "--base web=" in err and fake_provider.requests == []
+    assert run(root, "verify", "passkeys", "--base", f"web={began}") == 0
+    assert "+++ b/web/index.js" in str(fake_provider.requests[-1].config.system_instruction)
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_work_changed_in_another_repository_makes_a_verified_change_drift(tmp_path) -> None:
+    _ws, root, api = across(tmp_path, tier="standard")
+    implemented(root)
+    assert run(root, "verify", "passkeys") == 0 and state_of(root)["status"] == "verified"
+    write_text(api / "src/routes.py", ROUTES_AFTER)
+    assert run(root, "archive", "passkeys") == 1
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_verified_change_whose_other_repository_is_gone_reads_as_drifted(tmp_path, capsys) -> None:
+    _ws, root, api = across(tmp_path, tier="standard")
+    implemented(root)
+    assert run(root, "verify", "passkeys") == 0
+    shutil.rmtree(api)
+    capsys.readouterr()
+    assert run(root, "status") == 0
+    assert "verify passkeys` again: the work changed since it was verified" in capsys.readouterr().out

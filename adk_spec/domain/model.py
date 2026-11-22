@@ -159,6 +159,8 @@ class Verification(_Held):
     verdicts: dict[str, str]
     override: str | None = None
     model: str | None = None
+    #: The commit each other repository's work was compared with.
+    bases: dict[str, str] = {}
 
 
 class ChangeState(_Held):
@@ -184,6 +186,9 @@ class ChangeState(_Held):
     #: The other repositories the change spans, each a name and a path from the folder that holds `.spec/`, with
     #: forward slashes: read, approved and verified with this change alone. Named with `--with`.
     repositories: dict[str, str] = {}
+    #: Where the work began in each of `repositories`, recorded at the first approval that found it there, and never
+    #: moved past work already done, as `base_commit` is not.
+    base_commits: dict[str, str] = {}
 
 
 class Change(_Held):

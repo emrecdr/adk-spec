@@ -6,7 +6,7 @@ needs of a check or a verification is in the change's state file, not here.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from .model import Finding
 from .verify import Verdict
@@ -46,12 +46,25 @@ def render_check(change_id: str, at: str, findings: Sequence[Finding], *, model:
 
 
 def render_verify(
-    change_id: str, at: str, base: str, verdicts: Sequence[Verdict], *, model: str | None, override: str | None = None
+    change_id: str,
+    at: str,
+    base: str,
+    verdicts: Sequence[Verdict],
+    *,
+    model: str | None,
+    override: str | None = None,
+    bases: Mapping[str, str] | None = None,
 ) -> str:
     """`reports/verify.md`: what the work was compared with, and for each requirement its verdict, the reason, and
     the lines of the diff that show it."""
     judge = f"by {model}" if model else "with no requirement to judge"
-    lines = [f"# Verification of `{change_id}`", "", f"Judged {at} against the commit {base[:12]}, {judge}.", ""]
+    beside = "".join(f", and {name} at {commit[:12]}" for name, commit in (bases or {}).items())
+    lines = [
+        f"# Verification of `{change_id}`",
+        "",
+        f"Judged {at} against the commit {base[:12]}{beside}, {judge}.",
+        "",
+    ]
     open_ = [one for one in verdicts if one.verdict != "met"]
     if not open_:
         lines += ["Every requirement is shown met.", ""]

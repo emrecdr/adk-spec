@@ -65,13 +65,17 @@ def approve(
     at: str,
     override: str | None = None,
     commit: str | None = None,
+    others: Mapping[str, str] | None = None,
 ) -> ChangeState:
     """The state with the approval recorded: who, when, each file's fingerprint and the bases as they stand, and
-    the reason where the approver set a blocking finding of the check aside. `commit` is what is checked out now:
-    it is kept as where the work began only where none is kept yet, so approving again does not move it."""
+    the reason where the approver set a blocking finding of the check aside. `commit` is what is checked out now,
+    and `others` what is checked out in each other repository of the change: each is kept as where the work began
+    only where none is kept yet, so approving again does not move it."""
     approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override)
     began = state.base_commit or commit
-    return state.model_copy(update={"status": "approved", "approval": approval, "base_commit": began})
+    commits = {**(others or {}), **state.base_commits}
+    update = {"status": "approved", "approval": approval, "base_commit": began, "base_commits": commits}
+    return state.model_copy(update=update)
 
 
 def check_stands(state: ChangeState, files: Mapping[str, str]) -> bool:
@@ -102,13 +106,16 @@ def verified(
     at: str,
     model: str | None = None,
     override: str | None = None,
+    bases: Mapping[str, str] | None = None,
 ) -> ChangeState:
     """The state with a verification recorded. The change is `verified` where every requirement's verdict is `met`,
     or a person says so with a reason, which is kept only where it was needed. Otherwise it is `approved`, also
     where it was verified before: the newest judgement is the one that stands."""
     met = all(verdict == "met" for verdict in verdicts.values())
     reason = None if met else (override or None)
-    held = Verification(at=at, base=base, diff=diff, verdicts=dict(verdicts), override=reason, model=model)
+    held = Verification(
+        at=at, base=base, diff=diff, verdicts=dict(verdicts), override=reason, model=model, bases=dict(bases or {})
+    )
     status = "verified" if met or reason else "approved"
     return state.model_copy(update={"verification": held, "status": status})
 

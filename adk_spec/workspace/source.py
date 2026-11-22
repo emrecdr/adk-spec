@@ -269,6 +269,11 @@ class Source:
             blocks.append(f"=== {one.name} ({_counted(len(one.paths), 'file', 'files')})\n{listed}")
         return "\n".join(blocks)
 
+    def repository(self, name: str) -> tuple[Path, tuple[str, ...]] | None:
+        """Another repository's root and its own exclusions, or nothing where it was not read."""
+        one = self._others.get(name)
+        return None if one is None else (one.root, one.exclude)
+
     def commits(self) -> dict[str, str | None]:
         """The commit each other repository has checked out, or nothing where git cannot say."""
         held: dict[str, str | None] = {}
