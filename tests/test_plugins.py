@@ -10,7 +10,7 @@ from google.adk.workflow import Workflow
 
 from adk_spec.domain.drafts import Triage
 from adk_spec.orchestration.models import build_model, request_config
-from adk_spec.orchestration.plugins import STAGE_ERROR, SchemaMismatch, UsageLedger, roster
+from adk_spec.orchestration.plugins import STAGE_ERROR, SchemaMismatch, Scrub, UsageLedger, roster
 from adk_spec.orchestration.run import run_seeded
 from adk_spec.orchestration.stages.triage import build_triage
 
@@ -80,4 +80,4 @@ async def test_an_answer_off_its_schema_is_still_paid_for_and_counted(fake_provi
     await run_seeded(app, state=dict(STATE), prompt="go")
     ledger = next(plugin for plugin in plugins if isinstance(plugin, UsageLedger))
     assert ledger.total.total == 120, "the ledger reads the answer before the mismatch replaces it"
-    assert [type(plugin) for plugin in plugins] == [UsageLedger, SchemaMismatch]
+    assert [type(plugin) for plugin in plugins] == [Scrub, UsageLedger, SchemaMismatch], "the scrub reads first"

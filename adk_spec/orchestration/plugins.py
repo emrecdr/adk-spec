@@ -7,9 +7,12 @@ workflow goes on to the next node with the stage's key unwritten, and a gate the
 `UsageLedger` counts each stage's calls and tokens as the provider reports them, and past a ceiling refuses a call
 before it is sent. The stages of a command run one after another, so the count is exact when the next call asks.
 
+`Scrub` hides known secret shapes in everything a model is about to be sent, and sends nothing where it cannot.
+
 Each leaves its reason in state under `STAGE_ERROR`, where the gate after the stage reads why there is no answer.
-The ledger stands first in the roster: a plugin that answers a hook ends it for the plugins after it, and an answer
-off its schema was still paid for.
+The scrub stands first in the roster, so that the recorder and the provider both read what it left; the ledger
+stands before the mismatch: a plugin that answers a hook ends it for the plugins after it, and an answer off its
+schema was still paid for.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from google.adk.utils._schema_utils import validate_schema
 from google.adk.utils.content_utils import extract_text_from_content
 from pydantic import BaseModel, ValidationError
 
+from ..domain.secrets import scrub
 from .run import Usage
 
 #: The state key a plugin leaves its reason under, for the gate after the stage.
@@ -34,8 +38,11 @@ MISMATCH = "the answer did not fit its schema"
 CEILING = "CEILING"
 #: How the reason begins where the provider itself ended an answer: cut at the model's output limit, or filtered.
 ENDED = "the provider ended the answer"
-#: The reasons no second asking can change: the same request would meet the same ceiling, or be cut the same way.
-FINAL = (CEILING, ENDED)
+#: How the scrub's refusal begins, and its error code: what would be sent could not be scrubbed of secrets.
+REDACTION = "REDACTION_FAILED"
+#: The reasons no second asking can change: the same request would meet the same ceiling, be cut the same way, or
+#: fail the same scrub.
+FINAL = (CEILING, ENDED, REDACTION)
 
 
 class SchemaMismatch(BasePlugin):
@@ -113,8 +120,39 @@ class UsageLedger(BasePlugin):
         return None
 
 
+class Scrub(BasePlugin):
+    """Known secret shapes hidden in every request before anything else reads it: its instruction, and each text
+    of its content. Fail closed: where the scrub raises, the call is not sent."""
+
+    def __init__(self) -> None:
+        super().__init__(name="scrub")
+        #: How many secrets were hidden, over every call.
+        self.redacted = 0
+
+    @override
+    async def before_model_callback(self, *, callback_context: Any, llm_request: Any) -> LlmResponse | None:
+        try:
+            instruction = llm_request.config.system_instruction
+            if isinstance(instruction, str):
+                llm_request.config.system_instruction, count = scrub(instruction)
+                self.redacted += count
+            elif instruction is not None:  # ADK writes a string: any other shape is refused, never sent unread
+                raise TypeError(f"the instruction is a {type(instruction).__name__}, and the scrub reads a string")
+            for content in llm_request.contents or ():
+                for part in content.parts or ():
+                    if part.text:
+                        part.text, count = scrub(part.text)
+                        self.redacted += count
+        except Exception as exc:  # noqa: BLE001 -- a scrub that breaks must not send what it did not read
+            why = f"{REDACTION}: nothing was sent, since it could not be scrubbed of secrets first: {exc}"
+            callback_context.state[STAGE_ERROR] = why
+            return LlmResponse(error_code=REDACTION, error_message=why)
+        return None
+
+
 def roster(ledger: UsageLedger, recorder: BasePlugin | None = None) -> list[BasePlugin]:
-    """The plugins of every app: the recorder where the command keeps one, then the ledger, then the mismatch. Each
+    """The plugins of every app: the scrub, the recorder where the command keeps one, then the ledger, then the
+    mismatch. The scrub is first, so nothing after it reads a secret. Each
     must read an answer before the mismatch replaces it, and the recorder a request before the ledger refuses it.
     The ledger is the command's own, one for everything it spends; the recorder is one pass's."""
-    return [*([recorder] if recorder is not None else []), ledger, SchemaMismatch()]
+    return [Scrub(), *([recorder] if recorder is not None else []), ledger, SchemaMismatch()]
