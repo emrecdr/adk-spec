@@ -160,14 +160,14 @@ enough and what is still unknown.
 
 **Features it adds** (a recommendation, settled in the phase's design).
 
-- **Other repositories named once**, in `.spec/config.toml`, each read through its own git list with the same rules
-  as the first: no link, nothing ignored, its own exclusions, secrets scrubbed, no file that holds a key.
+- **Other repositories named with each change**: `propose "..." --with ../api --with ../web`. Each is read through
+  its own git list with the same rules as the first: no link, nothing ignored, its own exclusions, secrets scrubbed,
+  no file that holds a key.
 - **One reading across them**: the scout sees each repository's files under its name, and a statement names the
   repository, the file and the line.
 - **A model's verdict on the reading**: once the rounds end, a stage reads the brief, the specs and what was kept,
   and says what is established and what is still unknown. The unknowns go into `context.md`, where the person and
   the planning stages both see them, and may send the reading one round further.
-- **Room as a setting**: rounds and characters a round in `.spec/config.toml`, for a large feature.
 
 **By the end of this phase, you can:** plan a feature that changes an API and the web app that calls it, from one
 workspace, and read in `context.md` what was found in each and what nobody could establish.
@@ -176,7 +176,8 @@ workspace, and read in `context.md` what was found in each and what nobody could
   work in all of them.
 
 **Decided by the owner, 22 November 2026.** adk-spec reads every named repository and a model reviews the reading;
-`verify` covers every repository in this phase; an unknown is said, and `propose` does not stop on it.
+`verify` covers every repository in this phase; an unknown is said, and `propose` does not stop on it. The
+repositories are named with each change, not in a project's config.
 
 **Design.** `../specs/2026-11-22-brownfield-across-repositories-design.md`.
 

@@ -17,6 +17,10 @@ Design for phase 7 of adk-spec. Written on 22 November 2026.
   repository and a model reviews the reading), **`verify` across repositories in this phase**, and **an unknown is
   said, and `propose` does not stop on it**.
 
+- The same day, on where the other repositories are named: "this adk sdd app is not only for 1 time for a 1
+  project. so we shouldn't put 1 project details into the single config of the our app", and then, of three ways,
+  **with each change**: the repositories a feature spans are the feature's, named when it is proposed.
+
 Everything else is the builder's call, listed at the end for the owner to check.
 
 ## Intent, and why
@@ -43,8 +47,8 @@ the planning stages read them.
 
 ## Goals
 
-1. Other repositories are named once, in `.spec/config.toml`, and every reading covers them with the same rules as
-   the first repository.
+1. A change names the other repositories it spans when it is proposed, and every reading for that change covers
+   them with the same rules as the first repository.
 2. A statement names its repository, file and line. Its quote is checked in that repository's file.
 3. A model reviews each reading: it marks statements whose note the quoted code does not support, which are then
    left out and counted, and it names what is still unknown. It may send the reading one round further.
@@ -75,7 +79,7 @@ the planning stages read them.
 
 | | How | For | Against |
 |---|---|---|---|
-| **A. adk-spec reads every named repository, and a model reviews the reading** (recommended) | Phase 6's reader, given several repositories; one review stage at the end | One flow, in `propose`; every rule of phase 6 holds in every repository; what the owner asked | More code to read means more tokens |
+| **A. adk-spec reads every repository the change names, and a model reviews the reading** (chosen) | Phase 6's reader, given several repositories; one review stage at the end | One flow, in `propose`; every rule of phase 6 holds in every repository; what the owner asked | More code to read means more tokens |
 | B. The person's coding assistant gathers, adk-spec checks | The person has their assistant write `context.md`; adk-spec grounds each statement and has a model review it | Little to build; the assistant may already see every repository | A step outside adk-spec before every plan; a file in a free form to parse; nothing keeps the assistant from reading what `exclude` names |
 | C. One reading per repository | Phase 6 run once per repository, one `context.md` each | Simple to build | A feature's seam is where two repositories meet, and no one reading sees both sides |
 
@@ -83,25 +87,27 @@ the planning stages read them.
 
 ## How it works
 
-### Naming the other repositories
+### Naming the other repositories, with the change
 
-```toml
-[[repositories]]
-name = "api"
-path = "../api"
-exclude = ["fixtures/**"]
-
-[[repositories]]
-name = "web"
-path = "../web"
+```
+adk-spec propose "Let users sign in with a passkey." --with ../api --with ../web
+adk-spec plan passkeys --with ../mobile
 ```
 
-- `name` is a short word (`a` to `z`, digits, `-`), unique, and not the name of a top-level folder of the
-  workspace's own repository, so that `api/src/routes.py` can only mean one file.
-- `path` is relative to the folder that holds `.spec/`, or absolute. It must be a git repository's folder, and not
-  inside the workspace's own repository nor the workspace itself.
-- `exclude` holds patterns read as `[repository] exclude` reads them, from that repository's root.
-- A repository whose path is missing on this machine, or is no git repository, is said in one line and left out.
+- `--with` on `propose` and `plan`, as often as needed. It is the one flag this phase adds.
+- The repositories are recorded in the change's own state, each a name and a path, and are read, approved and
+  verified with that change alone. The next change names its own, or none. The project's config is not touched.
+- `--with PATH` names the repository after its folder: `../api` is `api`. `--with NAME=PATH` gives it another name.
+  A name is a short word (`a` to `z`, digits, `-`), unique in the change, and not the name of a top-level folder of
+  the workspace's own repository, so that `api/src/routes.py` can only mean one file.
+- `--with` on `plan` adds to the change's repositories; a name given again takes its new path. Where the change has
+  a `context.md` already, it is kept, as today, and the command says to delete it to read again.
+- A path is relative to the folder that holds `.spec/`, or absolute, and is recorded with forward slashes. It must be
+  a git repository's folder, and not the workspace's own repository.
+- Another repository's exclusions are its own: the `[repository] exclude` of its own `.spec/config.toml`, where it
+  is an adk-spec project too. git's ignore rules, the link rule and the key rule hold in every repository regardless.
+- A repository whose path is missing on this machine, or is no git repository, is said in one line and left out of
+  the reading.
 
 ### The reading
 
@@ -184,7 +190,7 @@ pass `verify` without a person overriding it: the four-command flow breaks for t
 
 ## Constraints
 
-- No subcommand, and no flag beyond what exists.
+- No subcommand. One flag, `--with`, on `propose` and `plan`.
 - The layers keep their one-way imports. Reading files and running git stay in `workspace/`.
 - macOS and Windows. A `path` with backslashes is read as a path on Windows.
 - No live model call in the build. The plan's last task holds the live steps, each on the owner's go-ahead.
@@ -199,8 +205,8 @@ the same room, not three times the cost. `max_tokens` holds it.
 
 ## Decided by the builder, for the owner to check
 
-1. The other repositories are named in the workspace's committed config, with paths relative to it: teams that
-   clone side by side share one config. A machine where a path differs is told so and reads without that repository.
+1. A change records its repositories with paths relative to the folder that holds `.spec/`: teams that clone side
+   by side share them. A machine where a path differs is told so, and `plan <id> --with api=PATH` corrects it.
 2. A repository's name prefixes its paths, and may not be a top-level folder of the workspace's repository.
 3. The review reads statements, not code, and runs at most twice.
 4. A disputed statement is left out, as one whose quote is not found, and counted apart from those.
@@ -213,7 +219,8 @@ the same room, not three times the cost. `max_tokens` holds it.
 
 ## Left for later
 
-- Paths per machine, for a team whose checkouts differ: a local file beside the config that git ignores.
+- Paths per machine, for a team whose checkouts differ widely: a local file that git ignores.
+- A short list of a project's usual neighbours to pick from by name. The owner chose names with each change.
 - An unknown asked of the person, where it is one only the person can answer.
 - `check` reading `context.md`, to find a task that names a file no repository holds.
 - Room as a setting, after a live measurement.
