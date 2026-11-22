@@ -33,18 +33,18 @@ How it is applied in every phase below:
 | 3 | Check and verify | `2026-11-21-adk-spec-check-and-verify.md` | `check` and `verify`, each finding held to a quote code finds; recordings; the measurement script. | Done, measured live twice. The Gemini arm and a run on Windows are the owner's |
 | 4 | Questions in code | `2026-11-21-adk-spec-questions-in-code.md` | A brief names its open points and code asks them: one model call fewer a round. | Built and merged. Its live proof waits for the owner's go-ahead |
 | 5 | The simple flow | `2026-11-22-adk-spec-simple-flow.md` | A standard change in four commands, a lean one in three: `propose` writes the whole change, `approve` records bases and makes the check. Help in three groups, progress lines, a `next` line. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
-| 6 | Brownfield, part 1 | `2026-11-22-adk-spec-brownfield-context.md` | See below. | **Being built.** Design `../specs/2026-11-22-brownfield-feature-context-design.md` |
+| 6 | Brownfield, part 1 | `2026-11-22-adk-spec-brownfield-context.md` | `propose` reads the code that matters before it plans, and writes `context.md`, every statement with a quote code found. Secrets scrubbed from every request; `[repository] exclude`. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 
 ## The plan being followed now
 
-**`2026-11-22-adk-spec-brownfield-context.md`**, phase 6: the plan of a change rests on the repository's code.
+None yet for phase 7: its design is written first, for the owner to approve.
 
 ## How a change flows
 
-| | Before phase 5 | Now | After phases 6 and 7 |
+| | Before phase 5 | Now | After phases 7 and 8 |
 |---|---|---|---|
 | Once for a repository | `init` | `init` | `init`, which also describes the repository back to you |
-| One standard change | `propose`, `plan`, `check`, `approve`, `verify`, `archive` | `propose`, `approve`, `verify`, `archive` | the same four, with `propose` reading your code first |
+| One standard change | `propose`, `plan`, `check`, `approve`, `verify`, `archive` | `propose`, `approve`, `verify`, `archive`, with `propose` reading your code first | the same four, reading every repository the feature spans |
 | One lean change | `propose`, `plan`, `approve`, `archive` | `propose`, `approve`, `archive` | the same three |
 
 ## Roadmap: the phases to come
@@ -144,7 +144,39 @@ the caps, far less in a small repository. `[limits] max_tokens` holds it and `--
 
 **Depends on.** Phase 5. **Size.** About eight tasks.
 
-### Phase 7. Brownfield, part 2: `init` describes the repository
+**State.** Done, on 22 November 2026. Its reviews found and fixed real leaks, among them a private key's body shown
+by a range of lines, and lines of a key shown by a diff of a change next to it; the plan's "What changed" section
+lists them. Its live proof, the `integration` case and one reading of a real repository, waits for the owner's
+go-ahead. A note on the key gap, which the reference project shares, is in `../../notes/`.
+
+### Phase 7. Brownfield, part 2: context across repositories, checked by a model
+
+New on the roadmap on 22 November 2026, from the owner: "we will work mostly on brownfields, and in many cases more
+than 1 repo is involved in building new features, so gathering context is very imprortant part of the process, so
+llm model should be checking results".
+
+**Goal.** The context a plan rests on covers every repository the feature spans, and a model says whether it is
+enough and what is still unknown.
+
+**Features it adds** (a recommendation, settled in the phase's design).
+
+- **Other repositories named once**, in `.spec/config.toml`, each read through its own git list with the same rules
+  as the first: no link, nothing ignored, its own exclusions, secrets scrubbed, no file that holds a key.
+- **One reading across them**: the scout sees each repository's files under its name, and a statement names the
+  repository, the file and the line.
+- **A model's verdict on the reading**: once the rounds end, a stage reads the brief, the specs and what was kept,
+  and says what is established and what is still unknown. The unknowns go into `context.md`, where the person and
+  the planning stages both see them, and may send the reading one round further.
+- **Room as a setting**: rounds and characters a round in `.spec/config.toml`, for a large feature.
+
+**By the end of this phase, you can:** plan a feature that changes an API and the web app that calls it, from one
+workspace, and read in `context.md` what was found in each and what nobody could establish.
+
+**Not yet, at the end of this phase.** `verify` judges the work in the workspace's own repository only.
+
+**Depends on.** Phase 6. **Size.** Medium.
+
+### Phase 8. Brownfield, part 3: `init` describes the repository
 
 **Goal.** adk-spec knows a repository before the first change.
 
@@ -172,12 +204,12 @@ only principles "already true for the repository", from the README, the architec
 guide and the CI configuration: those are what `init` reads first. OpenSpec's position is "You write specs only for
 what you're about to change", so this phase writes a profile and rules, and no spec of the existing system.
 
-**Depends on.** Phase 6. **Size.** Medium to large.
+**Depends on.** Phase 7. **Size.** Medium to large.
 
 **To decide then.** Whether living specs are ever drafted from existing code. It is an open request in both
 projects' trackers and the part most likely to be wrong; it stays out until the owner asks for it.
 
-### Phase 8. Tests as evidence, inside `verify`
+### Phase 9. Tests as evidence, inside `verify`
 
 **Goal.** A verdict rests on the project's own tests as well as on the diff.
 
@@ -193,7 +225,7 @@ a gate already and stays one, and the tests run inside it, with no new command.
 **Depends on.** Nothing unbuilt. **Size.** Large, and security-sensitive: it is the first phase in which adk-spec
 runs a command of the project's. Only a command the person wrote is ever run.
 
-### Phase 9. Triage by rules
+### Phase 10. Triage by rules
 
 **Goal.** Most requests are sized (lean, standard, none) with no model call.
 
@@ -206,7 +238,7 @@ not decide.
 features, a lighter path for fixes" is what users praise. This phase makes the lighter path the default for what
 is small. **Size.** Small.
 
-### Phase 10. Revising a change by instruction
+### Phase 11. Revising a change by instruction
 
 New on the roadmap, from the research.
 
@@ -220,7 +252,7 @@ change. No new command.
 **From the research.** Updating a spec after the fact is the most-voted request in Spec Kit's tracker, and `update`
 was "the most-requested missing capability" in OpenSpec's. **Size.** Medium.
 
-### Phase 11. A lessons file
+### Phase 12. A lessons file
 
 **Goal.** A workspace learns from its own runs.
 
@@ -230,7 +262,7 @@ drafts read it, within a cap.
 **By the end of this phase, you can:** correct a draft once and not make the same correction in the next change.
 **Size.** Medium.
 
-### Phase 12. The `strict` tier
+### Phase 13. The `strict` tier
 
 **Goal.** More ceremony only where a change is risky.
 

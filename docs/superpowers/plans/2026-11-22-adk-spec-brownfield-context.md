@@ -254,3 +254,32 @@ Each step calls a model with the owner's account, on the owner's go-ahead in so 
 ## What this plan leaves
 
 The brief and the specs reading the code. `check` reading `context.md`. The repository baseline inside `init` (the next phase).
+
+## What changed while this plan was executed
+
+Tasks 1 to 7 were built as written, with the rulings in the ledger. Task 8, the live steps, waits for the owner's
+go-ahead. The cleanup review and the code review found real faults, each fixed test first; the ones that change what
+the plan says are these.
+
+- **A file is scrubbed whole, once, before anything is cut from it.** Task 6 scrubbed each line alone, after a range
+  or a search line was cut out. A private key's first line was then hidden on its own, its block was no longer
+  known, and its body was shown. `secrets.scrub_lines` keeps every line at its number, and the reader takes every
+  range, search line and capped file from that one text.
+- **A model is held to the text it was shown.** With every request scrubbed, `check` and `verify` looked for a
+  model's quote in the unscrubbed text, so a quote of a scrubbed line was "not there". Both now scrub once and use
+  that text for the request and for the grounding. The fingerprint of the work stays that of the diff as it stands.
+- **A file that holds a private key is shown in no piece.** A diff shows a file in pieces, and a piece near or inside
+  a key holds neither of the lines the scrub knows a key by. Measured: one line changed in a key's middle showed all
+  eight lines around it. Such a file is left out of a reading and of `verify`'s diff, and that is said. The same
+  gap is in the reference project's table; the note `docs/notes/2026-11-22-private-key-lines-in-a-diff-hunk.md` is
+  for the owner to take there.
+- **Exclusions mean what a person means.** A pattern with no slash names a file or a folder at any depth, and letters
+  match in either case. Handed to git as written, `*.pem` kept only the top folder's keys out. `exclude` is a
+  required argument of every reader of the repository, and a table written as a value is refused.
+- **The reader refuses a link anywhere on the path**, not only at its end: git lists a tracked file still after its
+  folder became a link.
+- **A search counts only lines that still hold the word once scrubbed**, so it cannot tell whether a hidden value
+  holds a word.
+- **What was left out for room may be asked for again**, and the stage is told what that is. A request is remembered
+  as answered only once it was shown or refused for good; before, a file left out for room was never read.
+- `smoke` is scrubbed as every command is.
