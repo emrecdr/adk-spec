@@ -112,11 +112,41 @@ class _Parser(argparse.ArgumentParser):
         super().error(f"{message}\n{PROG}: --help lists every command and flag")
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = _Parser(prog=PROG, description="Spec-driven development on Google ADK.")
+#: The commands as the help lists them. One change is the first four: a command where a person decides something,
+#: with the tool's own work inside it. The second group does one step of that work again, by itself.
+COMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Everyday", ("propose", "approve", "verify", "archive", "status", "init")),
+    ("To redo one step", ("plan", "check", "rebase", "validate", "new")),
+    ("Setup", ("login", "models", "smoke")),
+)
+
+
+class _Top(_Parser):
+    """The parser of the command itself, whose help lists the commands in their groups: what most people need
+    first, and the rest apart."""
+
+    commands: Any = None
+
+    def format_help(self) -> str:
+        formatter = self._get_formatter()
+        formatter.add_usage(self.usage, self._actions, self._mutually_exclusive_groups)
+        formatter.add_text(self.description)
+        listed = {action.dest: action for action in self.commands._get_subactions()}  # argparse's own help rows
+        for heading, names in COMMAND_GROUPS:
+            formatter.start_section(heading)
+            formatter.add_arguments([listed[name] for name in names if name in listed])
+            formatter.end_section()
+        formatter.start_section("Options")
+        formatter.add_arguments([action for action in self._actions if action.option_strings])
+        formatter.end_section()
+        return formatter.format_help()
+
+
+def _parser() -> _Top:
+    parser = _Top(prog=PROG, description="Spec-driven development on Google ADK.")
     parser.add_argument("--version", action="version", version=f"{PROG} {metadata.version('adk-spec')}")
     parser.add_argument("--root", default=".", help="a folder in the repository to work in (default: this one)")
-    commands = parser.add_subparsers(metavar="command", parser_class=_Parser)
+    commands = parser.commands = parser.add_subparsers(metavar="command", parser_class=_Parser)
 
     init = commands.add_parser("init", help=f"make the {ROOT_NAME} tree in this repository")
     init.set_defaults(handler=_init)
@@ -137,11 +167,11 @@ def _parser() -> argparse.ArgumentParser:
     status.add_argument("--json", action="store_true", help="print the list as JSON")
     status.set_defaults(handler=_status)
 
-    rebase = commands.add_parser("rebase", help="record what a change's deltas are written against")
+    rebase = commands.add_parser("rebase", help="record anew what a change's deltas are written against")
     rebase.add_argument("id", help="the change")
     rebase.set_defaults(handler=_locked(_rebase))
 
-    approval = commands.add_parser("approve", help="record an approval of a change's files as they stand")
+    approval = commands.add_parser("approve", help="check a change, then record your approval of its files")
     approval.add_argument("id", help="the change")
     approval.add_argument("--by", help="who approves: a recorded claim, not an authentication (default: this account)")
     approval.add_argument("--strict", action="store_true", help="refuse on a warning too")
@@ -150,28 +180,28 @@ def _parser() -> argparse.ArgumentParser:
     )
     approval.set_defaults(handler=_locked(_approve))
 
-    archive = commands.add_parser("archive", help="fold an approved change's deltas into the living specs")
+    archive = commands.add_parser("archive", help="fold a finished change into the living specs")
     archive.add_argument("id", help="the change")
     archive.set_defaults(handler=_locked(_archive))
 
-    propose = commands.add_parser("propose", help="draft a change from a request: its brief and its deltas")
+    propose = commands.add_parser("propose", help="draft a whole change from a request: brief, specs and tasks")
     propose.add_argument("request", help="what is wanted, in a sentence or a paragraph")
     propose.add_argument("--id", help="the change's name (default: made from the brief's title)")
     propose.add_argument("--tier", choices=("lean", "standard"), help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
     propose.set_defaults(handler=_propose)
 
-    plan = commands.add_parser("plan", help="draft a change's tasks, and its design where one is owed")
+    plan = commands.add_parser("plan", help="draft a change's tasks again, and its design where one is owed")
     plan.add_argument("id", help="the change")
     plan.add_argument("--replace", action="store_true", help="draft anew although a task of the list is ticked")
     plan.set_defaults(handler=_drafting(_planned))
 
-    check = commands.add_parser("check", help="check a change's files against each other, before it is approved")
+    check = commands.add_parser("check", help="check a change's files against each other, as `approve` does")
     check.add_argument("id", help="the change")
     check.add_argument("--no-model", action="store_true", help="run the checks code makes, and call no model")
     check.set_defaults(handler=_drafting(_reviewed))
 
-    verify = commands.add_parser("verify", help="judge what changed in the repository against a change's requirements")
+    verify = commands.add_parser("verify", help="judge the work done against each requirement of a change")
     verify.add_argument("id", help="the change")
     verify.add_argument("--base", metavar="REF", help="the commit the work started from (default: the approval's)")
     verify.add_argument(

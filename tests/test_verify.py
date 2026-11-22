@@ -315,3 +315,45 @@ def test_work_that_changed_after_it_was_verified_is_verified_again_before_it_is_
     assert ws.load_change("passkeys").change.state.status == "verified", "nothing is rewritten by a refusal"
     implemented(tmp_path)
     assert run(tmp_path, "archive", "passkeys") == 0, "the same work as was verified is archived"
+
+
+# The simple flow, from end to end.
+
+
+def test_a_standard_change_takes_four_commands_from_request_to_record(tmp_path, fake_provider) -> None:
+    """`propose`, `approve`, `verify`, `archive`: one command a decision. Nobody runs `plan`, `rebase` or `check`."""
+    from conftest import state_of
+
+    seeded(tmp_path)
+    repository(tmp_path, {"src/auth.py": BEFORE})
+    request = "Let users sign in with a passkey."
+    assert run(tmp_path, "propose", request, "--tier", "standard", "--no-input", "--id", "four") == 0
+    assert run(tmp_path, "approve", "four", "--by", "reviewer") == 0
+    implemented(tmp_path)
+    met = {"id": "REQ-AUTH-005", "verdict": "met", "reason": "Sign-in goes through the passkey."}
+    met["evidence"] = [{"path": "src/auth.py", "quote": "return passkey(user)"}]
+    fake_provider.answers_when("You judge whether", {"verdicts": [met]})
+    assert run(tmp_path, "verify", "four") == 0
+    assert run(tmp_path, "archive", "four") == 0
+    assert state_of(tmp_path, "four")["status"] == "archived"
+    assert len(fake_provider.requests) == 5, "brief, deltas, tasks, the check and the verdicts"
+
+
+def test_a_lean_change_takes_three(tmp_path, fake_provider) -> None:
+    from conftest import state_of
+
+    seeded(tmp_path)
+    assert run(tmp_path, "propose", "Let users sign in with a passkey.", "--tier", "lean", "--id", "three") == 0
+    assert run(tmp_path, "approve", "three", "--by", "reviewer") == 0
+    assert run(tmp_path, "archive", "three") == 0
+    assert state_of(tmp_path, "three")["status"] == "archived" and len(fake_provider.requests) == 3
+
+
+def test_a_change_written_by_hand_needs_only_approve_verify_and_archive(tmp_path, fake_provider) -> None:
+    ws = seeded(tmp_path)
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"tier": "standard"}))
+    repository(tmp_path, {"src/auth.py": BEFORE})
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0, "its bases and its check are its own work"
+    implemented(tmp_path)
+    assert run(tmp_path, "verify", "passkeys") == 0 and run(tmp_path, "archive", "passkeys") == 0
+    assert len(fake_provider.requests) == 2, "the check and the verdicts"

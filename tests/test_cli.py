@@ -378,3 +378,26 @@ def test_approve_never_records_anew_a_base_that_moved(tmp_path, capsys) -> None:
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
     assert "delta.base-stale" in capsys.readouterr().out
     assert state_of(tmp_path)["bases"] == recorded and state_of(tmp_path)["approval"] is None
+
+
+def test_the_help_lists_the_everyday_commands_first_under_three_headings(capsys) -> None:
+    """Command-line guidance, and git, gh and cargo: the commands most people need come first in the help, and the
+    rest stand apart. One flat list in the order they were written put `propose` eighth."""
+    from adk_spec.interfaces import cli
+
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    out = capsys.readouterr().out
+    everyday, again = ("propose", "approve", "verify", "archive", "status", "init"), ("plan", "check", "rebase")
+    order = ["Everyday:", *(f"\n  {name} " for name in everyday), "To redo one step:"]
+    order += [*(f"\n  {name} " for name in (*again, "validate", "new")), "Setup:", "\n  login "]
+    assert [out.index(word) for word in order] == sorted(out.index(word) for word in order)
+    assert "--root" in out and "--version" in out, "the options are still listed"
+
+
+def test_every_command_stands_in_exactly_one_group() -> None:
+    from adk_spec.interfaces import cli
+
+    grouped = [name for _heading, names in cli.COMMAND_GROUPS for name in names]
+    assert sorted(grouped) == sorted(cli._parser().commands.choices), "a command registered and left out of the help"
+    assert len(grouped) == len(set(grouped))
