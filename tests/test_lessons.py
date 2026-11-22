@@ -3,6 +3,9 @@ read by every drafting stage."""
 
 from __future__ import annotations
 
+import pytest
+from conftest import BRIEF_OWING_A_DESIGN, DELTAS_ON_A_MISSING_ID, between, on_the_fake, run, seeded, sent_to
+
 from adk_spec.domain.lessons_md import GATE_HEADING, TEMPLATE, learned
 from adk_spec.workspace.context import lessons_text
 from adk_spec.workspace.files import read_text, write_text
@@ -73,3 +76,41 @@ def test_nothing_learned_leaves_the_file_as_it_stands(tmp_path) -> None:
     ws.learn([])
     ws.learn([("brief", "an engine fault.")])
     assert read_text(ws.home / LESSONS) == "# Mine\n"
+
+
+BRIEF, DELTAS = "You write the brief of a change", "You write the requirement deltas"
+DESIGN, TASKS = "You write the design of a change", "You break a change into tasks"
+MINE = "- Name a requirement after what the user does, not after the screen."
+
+
+def proposed(root, *argv: str) -> int:
+    return run(
+        root, "propose", "Let users sign in with a passkey.", "--tier", "lean", "--no-input", "--no-explore", *argv
+    )
+
+
+def test_a_stage_sent_back_and_then_put_right_teaches_the_workspace(tmp_path, monkeypatch, fake_provider) -> None:
+    on_the_fake(monkeypatch)
+    seeded(tmp_path)
+    fake_provider.answers_each_time(DELTAS, iter([DELTAS_ON_A_MISSING_ID, None]))
+    fake_provider.answers_each_time(TASKS, iter([{"groups": []}, None]))
+    assert proposed(tmp_path, "--id", "taught") == 0
+    lessons = read_text(tmp_path / ".spec" / LESSONS)
+    assert "- deltas, `delta.target-missing` (1): REQ-AUTH-099" in lessons and "- tasks, `tasks.empty` (1)" in lessons
+
+
+@pytest.mark.parametrize("stage", [BRIEF, DELTAS, DESIGN, TASKS])
+def test_every_drafting_stage_reads_the_lessons(tmp_path, monkeypatch, fake_provider, stage) -> None:
+    on_the_fake(monkeypatch)
+    ws = seeded(tmp_path)
+    write_text(ws.home / LESSONS, TEMPLATE.replace("## From people\n", f"## From people\n\n{MINE}\n"))
+    fake_provider.answers_when(BRIEF, BRIEF_OWING_A_DESIGN)
+    assert proposed(tmp_path, "--id", "read") == 0
+    assert MINE in between(sent_to(fake_provider, stage), "lessons")
+
+
+def test_a_workspace_with_no_lesson_yet_sends_none(tmp_path, monkeypatch, fake_provider) -> None:
+    on_the_fake(monkeypatch)
+    seeded(tmp_path)
+    assert proposed(tmp_path, "--id", "none") == 0
+    assert between(sent_to(fake_provider, BRIEF), "lessons") == ""

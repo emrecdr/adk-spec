@@ -5,7 +5,7 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import BriefDraft
-from . import CAPABILITIES, ENDING, REQUEST, RETRY, RULES, TIER, fenced, placeholder, stage
+from . import CAPABILITIES, ENDING, REQUEST, RETRY, RULES, THE_LESSONS, TIER, fenced, placeholder, stage
 
 KEY = "brief"
 #: The state keys a new draft reads beside the request: a person's answers, each beside the question that was put,
@@ -47,6 +47,8 @@ def build_brief() -> LlmAgent:
             "",
             "## What to write",
             GUIDE,
+            "",
+            THE_LESSONS,
             "",
             "## Answers from the person, to use and not to question",
             fenced("answers", placeholder(ANSWERS, optional=True)),

@@ -71,6 +71,7 @@ from ..workspace.context import (
     constitution_text,
     context_text,
     files_text,
+    lessons_text,
     living_text,
     profile_text,
 )
@@ -871,10 +872,20 @@ def _asked(
         ledger = UsageLedger(workspace.config().max_tokens or None)
     with _recording(workspace, command, change_id) as kept:
         run = _ran(build(ledger, kept.recorder), seed, command)
+        _learned(workspace, run.state)
         answer = read(run.state)
         failure = run.state.get(FAILURE) or run.failure or (answer if isinstance(answer, str) else None)
         kept.outcome = f"failed: {failure}" if failure else "answered"
     return run, (None if failure else answer), ledger, (str(failure) if failure else None)
+
+
+def _learned(workspace: Workspace, state: Mapping[str, Any]) -> None:
+    """What a run's gates sent back that the next try put right, noted in the lessons file. A file that cannot be
+    read or written costs the command nothing."""
+    from ..orchestration.gate import SENT_BACK
+
+    with contextlib.suppress(OSError, NotTextError):
+        workspace.learn([(stage, problem) for stage, problem in state.get(SENT_BACK) or ()])
 
 
 def _unfinished(sentence: str, ledger: Any) -> int:
@@ -1030,7 +1041,7 @@ def _plan_made(
         raise UsageError(why)
     from ..orchestration.graph import build_plan_app
     from ..orchestration.plugins import UsageLedger
-    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, LIVING, PROFILE_TEXT, TREE
+    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, LESSONS_TEXT, LIVING, PROFILE_TEXT, TREE
     from ..orchestration.stages import CONSTITUTION as RULES
     from ..orchestration.stages.design import read_design
     from ..orchestration.stages.tasks import DESIGN_TEXT, read_tasks
@@ -1045,6 +1056,7 @@ def _plan_made(
         LIVING: living_text(specs, sorted(change.deltas)),
         TREE: source.tree() if source else "",
         PROFILE_TEXT: _profile(workspace),
+        LESSONS_TEXT: lessons_text(workspace),
     }
     if change.design and not state.needs_design:  # a design a person wrote, where the brief owed none
         seed[DESIGN_TEXT] = change.design.strip()
@@ -1524,7 +1536,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import Known
     from ..orchestration.plugins import UsageLedger
-    from ..orchestration.stages import CAPABILITIES, REQUEST, TIER
+    from ..orchestration.stages import CAPABILITIES, LESSONS_TEXT, REQUEST, TIER
     from ..orchestration.stages import CONSTITUTION as RULES
     from ..orchestration.stages.brief import KEY as BRIEF_KEY
     from ..orchestration.stages.deltas import KEY as DELTAS_KEY
@@ -1542,9 +1554,9 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     # One ledger for every run of this command: the count and the ceiling are the command's.
     ledger = UsageLedger(workspace.config().max_tokens or None)
     seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES: constitution_text(workspace)}
-    seed |= _as_it_stands(workspace, change)
+    seed |= {LESSONS_TEXT: lessons_text(workspace), **_as_it_stands(workspace, change)}
     with _recording(workspace, "propose", args.id) as kept:
-        state = _rounds(args, known, ledger, kept.recorder, seed)
+        state = _rounds(args, workspace, known, ledger, kept.recorder, seed)
         tier = state.get(TIER)
         whole = tier == "none" or (state.get(BRIEF_KEY) and state.get(DELTAS_KEY))
         if tier is None or not whole or state.get(FAILURE):
@@ -1687,7 +1699,9 @@ def _first_reads(workspace: Workspace, change_id: str) -> str:
     return " and ".join(first)
 
 
-def _rounds(args: argparse.Namespace, known: Any, ledger: Any, recorder: Any, seed: dict[str, Any]) -> dict[str, Any]:
+def _rounds(
+    args: argparse.Namespace, workspace: Workspace, known: Any, ledger: Any, recorder: Any, seed: dict[str, Any]
+) -> dict[str, Any]:
     """The runs of one `propose`, and the state the last of them left, a failure of the engine's own under the
     gate's key: the first run, then one more for each round of questions. A run ends on its questions and the
     person answers here, between two runs. Run on the pinned engine: a run paused and resumed runs again, unseen,
@@ -1699,6 +1713,7 @@ def _rounds(args: argparse.Namespace, known: Any, ledger: Any, recorder: Any, se
     while True:
         app = build_propose_app(known, ask=not args.no_input, entry=entry, ledger=ledger, recorder=recorder)
         run = _ran(app, seed, "propose")
+        _learned(workspace, run.state)
         state = {**run.state, FAILURE: run.state.get(FAILURE) or run.failure}
         if state[FAILURE] or state.get(ASKING) is None:
             return state
