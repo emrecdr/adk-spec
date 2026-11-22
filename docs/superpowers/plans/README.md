@@ -40,7 +40,8 @@ How it is applied in every phase below:
 
 ## The plan being followed now
 
-None: phase 9 is done. Phase 10, sizing requests by rules, starts with its design.
+**`2026-11-22-adk-spec-sizing-and-revising.md`**, phases 10 and 11 together, as the owner asked: sizing by rules,
+and revising a change by instruction. Design `../specs/2026-11-22-sizing-and-revising-design.md`.
 
 ## How a change flows
 
