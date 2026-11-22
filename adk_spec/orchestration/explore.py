@@ -22,7 +22,7 @@ from google.adk.plugins.base_plugin import BasePlugin
 from ..domain.convert import to_statements
 from ..domain.drafts import ScoutDraft, SurveyDraft
 from ..domain.model import Statement
-from ..workspace.source import FILES_A_ROUND, FOLDERS_A_ROUND, SEARCHES_A_ROUND, Source, merged
+from ..workspace.source import Source, merged
 from .gate import AGAIN, GIVE_UP, OK, checked, tries_key
 from .graph import NONE, SOME, _app, _ended
 from .plugins import UsageLedger
@@ -73,10 +73,10 @@ def _said(statements: Sequence[Statement]) -> str:
 
 
 def _new(state: Mapping[str, Any], files: Sequence[str], folders: Sequence[str], searches: Sequence[str]) -> Any:
-    """What of a request has not been answered yet, within a round's caps, with the key each piece is remembered
-    by. A file read to its end and a request made before are left out: the same text shown again would be paid for
-    with a model call and tell it nothing. A file read from its top and cut there is read on from where it stopped,
-    which is what asking for it again by its path means."""
+    """What of a request has not been answered yet, each piece with the key it is remembered by. A file read to its
+    end and a request answered before are left out: the same text shown again would be paid for with a model call
+    and tell it nothing. A file read from its top and cut there is read on from where it stopped, which is what
+    asking for it again by its path means."""
     reached, asked = state.get(_REACHED) or {}, set(state.get(_ASKED) or ())
     wanted: list[tuple[str, str]] = []
     for one in files:
@@ -86,12 +86,13 @@ def _new(state: Mapping[str, Any], files: Sequence[str], folders: Sequence[str],
             wanted += [(f"{path}:{upto + 1}-{total}", f"file {path}:{upto + 1}")] if upto < total else []
         else:
             wanted.append((path, f"file {path}"))
-    fresh = [(what, key) for what, key in wanted if key not in asked][:FILES_A_ROUND]
     listed = [(one, f"folder {one.strip().strip('/')}") for one in folders]
     sought = [(one, f"search {one.strip()}") for one in searches]
-    fresh_folders = [(what, key) for what, key in listed if key not in asked][:FOLDERS_A_ROUND]
-    fresh_searches = [(what, key) for what, key in sought if key not in asked][:SEARCHES_A_ROUND]
-    return fresh, fresh_folders, fresh_searches
+    fresh = []
+    for part in (wanted, listed, sought):
+        once = {key: what for what, key in reversed(part) if key not in asked}  # one named twice is read once
+        fresh.append([(what, key) for key, what in reversed(once.items())])
+    return fresh
 
 
 def _looking(source: Source) -> tuple[Callable[[Context], Event], Callable[[Context], Event]]:
@@ -103,6 +104,9 @@ def _looking(source: Source) -> tuple[Callable[[Context], Event], Callable[[Cont
         if not any(fresh):
             return Event(route=NONE)
         got = source.gathered(*([what for what, _key in part] for part in fresh))
+        # What was left out for room alone is not answered: asked for again, it is read.
+        later = set(got.deferred)
+        answered = [key for part in fresh for what, key in part if what not in later]
         seen = dict(state.get(SEEN) or {})
         for path, text in got.texts.items():
             seen[path] = merged(seen.get(path, ""), text)
@@ -115,7 +119,7 @@ def _looking(source: Source) -> tuple[Callable[[Context], Event], Callable[[Cont
         update = {
             SEEN: seen,
             _REACHED: reached,
-            _ASKED: [*(state.get(_ASKED) or ()), *(key for part in fresh for _what, key in part)],
+            _ASKED: [*(state.get(_ASKED) or ()), *answered],
             _READ_LIST: read,
             READ: "\n".join(read),
             LEFT_OUT: [*(state.get(LEFT_OUT) or ()), *got.left_out],

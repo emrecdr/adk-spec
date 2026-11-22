@@ -208,7 +208,8 @@ def scout_naming(instruction: str) -> dict:
     first one otherwise. A scout that names a file the repository does not hold reads nothing, and a test would
     then pass without the reading it thinks it made."""
     try:
-        listed = [line for line in between(instruction, "tree").split("\n") if line and not line.endswith(")")]
+        # A repository too large to list is shown as a sentence and its folders, and none of those is a file.
+        listed = [line for line in between(instruction, "tree").split("\n") if line and not line.endswith((")", ":"))]
     except ValueError:
         return CANNED_SCOUT
     if not listed or set(CANNED_SCOUT["files"]) <= set(listed):

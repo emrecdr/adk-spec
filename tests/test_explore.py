@@ -12,6 +12,7 @@ from adk_spec.orchestration.gate import FAILURE
 from adk_spec.orchestration.plugins import UsageLedger
 from adk_spec.orchestration.run import run_seeded
 from adk_spec.orchestration.stages import BRIEF_TEXT, CONSTITUTION, DELTAS_TEXT, TREE
+from adk_spec.workspace import context, source
 from adk_spec.workspace.context import tree_text
 from adk_spec.workspace.source import Source
 
@@ -35,8 +36,8 @@ def survey(*statements: dict, files: tuple[str, ...] = ()) -> dict:
     return {"statements": list(statements), "more_files": list(files), "more_folders": [], "more_searches": []}
 
 
-async def read(root):
-    repository(root, FILES)
+async def read(root, files: dict[str, str] | None = None):
+    repository(root, files or FILES)
     held = Source.of(root, exclude=())
     seed = {BRIEF_TEXT: "# Sign in with a passkey\n", DELTAS_TEXT: "", CONSTITUTION: "", TREE: tree_text(held.paths)}
     return await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
@@ -144,3 +145,37 @@ async def test_a_reader_that_fails_on_a_later_look_loses_no_statement_already_ma
     fake_provider.answers_when(SURVEY, survey(APP, files=("src/auth/session.py",)))
     run = await read(tmp_path)
     assert [one.path for one in explored(run.state).statements] == ["src/app.py"] and len(looks) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_file_left_out_for_room_is_read_when_it_is_asked_for_again(
+    tmp_path, monkeypatch, fake_provider
+) -> None:
+    """Every request of a round was remembered as answered, also one left out for room: asked for again by its
+    path, it was passed over, nothing was left to read, and the reading ended as if it were whole."""
+    monkeypatch.setattr(source, "ROUND_MAX_CHARS", 120)
+    fake_provider.answers_when(SCOUT, {"files": list(FILES), "folders": [], "searches": [], "reason": "All three."})
+    # The first round has room for two of the three files: the session's is left out for room, and asked for again.
+    rounds = [survey(APP, DOCS, files=("src/auth/session.py",)), survey(SESSION)]
+    fake_provider.answers_each_time(SURVEY, iter(rounds))
+    found = explored((await read(tmp_path)).state)
+    assert found.read == ("src/app.py (whole)", "docs/auth.md (whole)", "src/auth/session.py (whole)")
+    assert [one.path for one in found.statements] == ["src/app.py", "docs/auth.md", "src/auth/session.py"]
+    assert "not shown, for room" in between(sent(fake_provider, SURVEY)[0], "material")
+
+
+@pytest.mark.asyncio
+async def test_a_repository_too_large_to_list_is_read_by_way_of_a_folder(tmp_path, monkeypatch, fake_provider) -> None:
+    """Past the cap the scout is shown folders and no file. It lists a folder, the survey names a file it then
+    sees, and the file is read: the way every reading of a large repository goes."""
+    monkeypatch.setattr(context, "TREE_MAX_PATHS", 2)
+    fake_provider.answers_when(SCOUT, {"files": [], "folders": ["src/auth"], "searches": [], "reason": "Sign-in."})
+    fake_provider.answers_each_time(SURVEY, iter([survey(files=("src/auth/session.py",)), survey(SESSION)]))
+    run = await read(tmp_path)
+    found = explored(run.state)
+    (scout,) = sent(fake_provider, SCOUT)
+    assert "too many to list" in between(scout, "tree") and "src/auth/session.py" not in between(scout, "tree")
+    assert "=== src/auth/ (1 file)\nsrc/auth/session.py" in between(sent(fake_provider, SURVEY)[0], "material")
+    assert found.read == ("src/auth/session.py (whole)",) and [one.path for one in found.statements] == [
+        SESSION["file"]
+    ]

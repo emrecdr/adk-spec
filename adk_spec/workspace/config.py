@@ -52,7 +52,12 @@ def load_config(path: Path) -> Config:
             raise ConfigError(
                 f"{path} holds `{table}`, which adk-spec does not read. Its tables are {', '.join(KNOWN)}"
             )
-        for key in keys if isinstance(keys, dict) else ():
+        if not isinstance(keys, dict):  # read as no table, `repository = [...]` would keep nothing out
+            raise ConfigError(
+                f"{path} sets `{table}` to a value, and `{table}` is a table: write `[{table}]` on a line of its "
+                "own, and its keys under it"
+            )
+        for key in keys:
             if key not in KNOWN[table]:
                 raise ConfigError(f"{path} holds `{key}` under [{table}], which adk-spec does not read")
     project = held.get("project", {})

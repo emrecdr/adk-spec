@@ -216,6 +216,20 @@ def test_excluded_paths_are_read_from_the_config(tmp_path) -> None:
     assert ws.config().exclude == ("vendor/**", "**/*.pem")
 
 
+@pytest.mark.parametrize("line", ['repository = ["vendor/**"]', "limits = 5"])
+def test_a_table_written_as_a_value_is_refused_and_not_read_as_empty(tmp_path, line) -> None:
+    """`repository = [...]` above the first table is a key, not the table: read as no table, it kept nothing out,
+    and every command listed, read and sent what a person had excluded."""
+    from adk_spec.workspace.config import ConfigError
+    from adk_spec.workspace.files import write_text
+    from adk_spec.workspace.layout import Workspace
+
+    ws = Workspace.init(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", f'{line}\n\n[project]\ndefault_tier = "lean"\n')
+    with pytest.raises(ConfigError, match="is a table"):
+        ws.config()
+
+
 @pytest.mark.parametrize(
     "value", ['"vendor/**"', "[3]", '[""]', '[":(top)secret"]', '["a\\nb"]', '["/vendor/**"]', '["src/../../x/**"]']
 )

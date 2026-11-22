@@ -5,6 +5,7 @@ What a model names is never trusted. A path is used only where it is, to the let
 from __future__ import annotations
 
 import os
+import shutil
 
 import pytest
 from conftest import repository
@@ -148,7 +149,7 @@ def test_a_private_keys_body_is_never_shown_whole_by_range_or_by_search(tmp_path
     found = held.gathered([], [], [KEY_LINE])
     for got in (whole, ranged, found):
         assert "MIIEow" not in got.shown and all("MIIEow" not in text for text in got.texts.values())
-    assert found.shown.startswith(f"=== search: {KEY_LINE} (5 lines)"), "the word is the model's own; no line is shown"
+    assert found.shown.startswith(f"=== search: {KEY_LINE} (0 lines)"), "a hit on a hidden line is not counted"
     lines = whole.texts["deploy/key.py"].split("\n")
     assert lines[0] == "# the deploy key" and lines[10] == "after = 1", "the line after the block keeps its number"
     assert "[REDACTED" in whole.shown
@@ -210,3 +211,65 @@ def test_a_diff_loses_the_part_of_each_file_that_holds_a_private_key(tmp_path) -
     assert held == ("keys/live.pem", "keys/old.pem")
     assert "return passkey(user)" in kept and "MII" not in kept and "keys/" not in kept
     assert Source.of(tmp_path, exclude=()).without_keys(kept) == (kept, ()), "a diff that holds no key is as it was"
+
+
+def test_a_listed_file_whose_folder_became_a_link_is_not_read_through_it(tmp_path) -> None:
+    """git lists a tracked file still after its folder was replaced by a link to another folder. Read through the
+    link, it is the other folder's file: one git ignores, or one a person excluded."""
+    root = tmp_path / "repo"
+    repository(root, {**FILES, "conf/settings.py": "DEBUG = False\n", ".gitignore": "private/\n"})
+    (root / "private").mkdir()
+    (root / "private/settings.py").write_text("IGNORED = 'kept out of git'\n", encoding="utf-8")
+    shutil.rmtree(root / "conf")
+    try:
+        os.symlink("private", root / "conf", target_is_directory=True)
+    except OSError:
+        pytest.skip("this system does not let a test make a symbolic link")
+    held = Source.of(root, exclude=())
+    assert "conf/settings.py" in held.paths, "git lists it still"
+    got = held.gathered(["conf/settings.py"], [], ["IGNORED"])
+    assert got.texts == {} and "kept out of git" not in got.shown
+    assert got.left_out == ("conf/settings.py: a symbolic link is not read",)
+
+
+def test_a_search_does_not_say_whether_a_hidden_value_holds_a_word(tmp_path) -> None:
+    """git searches a file as it stands, and its line is shown as scrubbed. A hit on a hidden value, counted and
+    shown with its line number, tells a model that the value holds the word: asked often enough, the value."""
+    held = made(tmp_path, {**FILES, "settings.py": 'DEBUG = False\nDB_PASSWORD = "winter-otter-4471"\n'})
+    got = held.gathered([], [], ["winter-otter", "winter-badger", "DB_PASSWORD"])
+    assert "=== search: winter-otter (0 lines)" in got.shown and "=== search: winter-badger (0 lines)" in got.shown
+    assert '=== search: DB_PASSWORD (1 line)\nsettings.py:2:DB_PASSWORD = "[REDACTED]"' in got.shown
+
+
+def test_a_search_never_shows_another_line_for_the_one_git_found(tmp_path) -> None:
+    """git counts a file's lines by line feeds alone, and the reader takes a lone carriage return for a line's end
+    too: in such a file git's number names another line. A line that does not hold the word is not the one found."""
+    held = made(tmp_path, {"a.py": "x = 1\ny = 2\nprogress = 'a\rb'\nneedle_here = 2\n"})
+    got = held.gathered([], [], ["needle_here"])
+    assert "a.py:4:b'" not in got.shown and "a.py" not in got.texts
+
+
+def test_two_readings_of_a_line_keep_the_longer_one() -> None:
+    """A search holds the first characters of a long line, and a later reading of the file the whole line: a quote
+    of the line's end is then found in what was kept."""
+    cut, whole = "x = 1\nvalue = compute(a,", "x = 1\nvalue = compute(a, b, c)\nlast = 2"
+    assert source.merged(cut, whole) == whole == source.merged(whole, cut)
+
+
+def test_a_range_no_number_can_hold_is_left_out_and_is_no_error(tmp_path) -> None:
+    held = made(tmp_path)
+    got = held.gathered(["src/app.py:" + "9" * 5000 + "-5"], [], [])
+    assert got.texts == {} and len(got.left_out) == 1 and got.left_out[0].endswith("git lists no such file")
+
+
+def test_what_was_left_out_for_room_is_named_to_the_stage_and_may_be_asked_for_again(tmp_path, monkeypatch) -> None:
+    """A file past what a round reads is not refused for good: the round says so where the stage reads it, and
+    names it among what may be asked for again."""
+    monkeypatch.setattr(source, "ROUND_MAX_CHARS", 120)
+    got = made(tmp_path).gathered(["src/app.py", "src/auth/session.py"], [], [])
+    assert got.read == ("src/app.py (whole)",) and got.deferred == ("src/auth/session.py",)
+    assert got.shown.endswith("=== not shown, for room. Ask again for what is still needed: src/auth/session.py")
+    monkeypatch.setattr(source, "FILES_A_ROUND", 1)
+    assert made(tmp_path / "b").gathered(["src/app.py", "src/auth/session.py"], [], []).deferred == (
+        "src/auth/session.py",
+    )

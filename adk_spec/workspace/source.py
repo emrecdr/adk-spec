@@ -47,7 +47,7 @@ TERM_MAX_CHARS = 100
 #: Why a file that holds a private key is left out, of a reading and of a diff alike.
 HOLDS_A_KEY = "holds a private key, which is never shown"
 #: A file asked for with a range of lines: `src/app.py:120-260`.
-_RANGE = re.compile(r"(?P<path>.+):(?P<first>\d+)-(?P<last>\d+)")
+_RANGE = re.compile(r"(?P<path>.+):(?P<first>[0-9]{1,9})-(?P<last>[0-9]{1,9})")
 
 
 @dataclass(frozen=True)
@@ -64,11 +64,15 @@ class Gathered:
     left_out: tuple[str, ...]
     #: For each file read, the first and the last line shown and how many lines it has.
     reached: dict[str, tuple[int, int, int]]
+    #: What was asked for and left out for room alone, each as it was asked: it may be asked for again.
+    deferred: tuple[str, ...] = ()
 
 
 def merged(one: str, other: str) -> str:
-    """Two readings of one file as one text, each line at its own number: a line either of them holds is kept."""
-    return "\n".join(a or b for a, b in zip_longest(one.split("\n"), other.split("\n"), fillvalue=""))
+    """Two readings of one file as one text, each line at its own number: a line either of them holds is kept, and
+    the longer of the two where both hold it. A search holds the first characters of a long line, and a reading of
+    the file the whole of it: both are of one scrubbed text, so the shorter is the start of the longer."""
+    return "\n".join(max(a, b, key=len) for a, b in zip_longest(one.split("\n"), other.split("\n"), fillvalue=""))
 
 
 @dataclass
@@ -79,6 +83,7 @@ class _Round:
     read: list[str] = field(default_factory=list)
     left_out: list[str] = field(default_factory=list)
     reached: dict[str, tuple[int, int, int]] = field(default_factory=dict)
+    deferred: list[str] = field(default_factory=list)
 
     def shows(self, block: str) -> bool:
         """Whether `block` still fits the round, in which case it is taken."""
@@ -133,7 +138,12 @@ class Source:
                 give(item, got)
             if (over := len(wanted) - cap) > 0:
                 got.left_out.append(f"{over:,} more {one if over == 1 else many} asked for than a round {does}")
-        return Gathered(got.texts, "\n".join(got.parts), tuple(got.read), tuple(got.left_out), got.reached)
+                got.deferred += wanted[cap:]
+        if got.parts and got.deferred:  # said where the stage reads: nothing else tells it that asking again helps
+            named = ", ".join(_named(item, "(nothing)") for item in got.deferred)
+            got.parts.append(f"=== not shown, for room. Ask again for what is still needed: {named}")
+        shown = "\n".join(got.parts)
+        return Gathered(got.texts, shown, tuple(got.read), tuple(got.left_out), got.reached, tuple(got.deferred))
 
     def _asked(self, asked: str) -> tuple[str, int | None, int | None]:
         """The path a model asked for, and the lines of it where it named a range. A path git lists is taken as it
@@ -153,7 +163,7 @@ class Source:
     def _read(self, path: str) -> list[str] | str:
         target = self.root / path  # joined only here, and only for a path that was found in git's list
         try:
-            if target.is_symlink():
+            if self._linked(path):
                 return "a symbolic link is not read"
             if not target.is_file():
                 return "git lists it, and no file is there"
@@ -167,6 +177,17 @@ class Source:
             return "is not text adk-spec reads, which is UTF-8"
         except OSError as exc:
             return f"could not be read: {exc.strerror or exc}"
+
+    def _linked(self, path: str) -> bool:
+        """Whether the file at `path`, or a folder on the way to it from the root, is a symbolic link or a
+        junction. git lists a tracked file still after its folder was replaced by a link, and read through the
+        link the file is another folder's: one git ignores, or one a person excluded."""
+        at = self.root
+        for part in path.split("/"):
+            at = at / part
+            if at.is_symlink() or at.is_junction():
+                return True
+        return False
 
     def without_keys(self, diff: str) -> tuple[str, tuple[str, ...]]:
         """A unified diff less the part of each file that holds a private key, and those files' names. A file is
@@ -205,6 +226,7 @@ class Source:
         text = "\n".join(kept)
         if not got.shows(f"=== {path} ({said})\n{text}"):
             got.left_out.append(f"{path}: past what a round reads")
+            got.deferred.append(asked)
             return
         got.read.append(f"{path} ({said})")
         got.reached[path] = (first, upto, total)
@@ -222,6 +244,7 @@ class Source:
         note += f", the first {len(listed)} listed" if len(listed) < len(under) else ""
         if not got.shows("\n".join([f"=== {'.' if whole else folder}/ ({note})", *listed])):
             got.left_out.append(f"{folder or '.'}/: past what a round reads")
+            got.deferred.append(asked)
 
     def _search(self, asked: str, got: _Round) -> None:
         term = asked.strip()
@@ -233,26 +256,29 @@ class Source:
         except GitError as exc:
             got.left_out.append(f"search for {term}: {exc}")
             return
-        hits: list[tuple[str, int]] = []
+        # git read each file as it stands, and a stage is shown it scrubbed. A hit counts only where the line a
+        # stage is shown still holds the word: one on a hidden value, counted or numbered, would say that the value
+        # holds the word, and asked often enough, the value. A line is opened only until enough are shown.
+        wanted = term.casefold()
+        rows: list[tuple[str, int, str]] = []
+        more = False
         for line in found:
             path, _, rest = line.partition(":")
             number = rest.partition(":")[0]
-            if path in self._listed and number.isdigit():
-                hits.append((path, int(number)))
-        # A line is shown as the file's scrubbed text has it, not as git gave it: only the lines shown are opened.
-        rows: list[tuple[str, int, str]] = []
-        for path, number in hits[:SEARCH_MAX_LINES]:
-            lines = self._lines(path)
-            text = (
-                lines[number - 1][:LINE_MAX_CHARS].rstrip() if isinstance(lines, list) and number <= len(lines) else ""
-            )
-            if text:
-                rows.append((path, number, text))
-        note = _counted(len(hits), "line", "lines")
-        note += f", the first {SEARCH_MAX_LINES} shown" if len(hits) > SEARCH_MAX_LINES else ""
+            lines = self._lines(path) if path in self._listed and number.isascii() and number.isdecimal() else ""
+            at = int(number) if isinstance(lines, list) else 0
+            if not 1 <= at <= len(lines) or wanted not in lines[at - 1].casefold():
+                continue
+            if len(rows) == SEARCH_MAX_LINES:
+                more = True
+                break
+            rows.append((path, at, lines[at - 1][:LINE_MAX_CHARS].rstrip()))
+        note = _counted(len(rows), "line", "lines")
+        note = f"more than {SEARCH_MAX_LINES} lines, the first {SEARCH_MAX_LINES} shown" if more else note
         shown = [f"{path}:{number}:{text}" for path, number, text in rows]
         if not got.shows("\n".join([f"=== search: {term} ({note})", *shown])):
             got.left_out.append(f"search for {term}: past what a round reads")
+            got.deferred.append(asked)
             return
         for path, number, text in rows:
             got.holds(path, number, text)

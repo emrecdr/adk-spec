@@ -193,3 +193,12 @@ def test_the_engines_log_level_is_put_back_after_a_run(monkeypatch) -> None:
     log = logging.getLogger("google_adk")
     log.setLevel(logging.WARNING)
     assert main(["smoke", "--request", REQUEST]) == 0 and log.level == logging.WARNING
+
+
+def test_smoke_sends_no_secret_a_request_holds(monkeypatch, fake_provider) -> None:
+    """Every request of every command is scrubbed. The smoke app was built with no plugin at all."""
+    _on_the_fake(monkeypatch)
+    token = "ghp_" + "a1B2c3D4" * 5
+    assert main(["smoke", "--request", f"Rotate the key {token} for the deploy job."]) == 0
+    sent = str(fake_provider.requests[-1].config.system_instruction)
+    assert token not in sent and "Rotate the key [REDACTED" in sent

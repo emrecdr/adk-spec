@@ -182,3 +182,20 @@ def test_an_excluded_path_is_no_part_of_the_diff_tracked_or_not(tmp_path) -> Non
     whole, kept = diff(tmp_path, commit, exclude=()), diff(tmp_path, commit, exclude=("vendor/**",))
     assert "vendor/lib.py" in whole and "vendor/new.py" in whole
     assert "src/app.py" in kept and "src/new.py" in kept and "vendor" not in kept
+
+
+def test_a_pattern_is_read_as_a_person_means_it_at_any_depth_and_in_either_case(tmp_path) -> None:
+    """Handed to git as written, `*.pem` left out the keys of the top folder alone, and `vendor/**` no file of a
+    `Vendor/` on a system where the two are one folder: what a person asked to keep out was read and sent."""
+    names = ["top.pem", "keys/b.pem", "keys/deep/c.PEM", "Vendor/lib.py", "secrets/a.txt", "src/secrets/c.txt"]
+    repository(tmp_path, {**dict.fromkeys(names, "x\n"), "secretsfile": "x\n", "src/app.py": "x = 1\n"})
+    assert files(tmp_path, exclude=("*.pem",)) == [
+        "Vendor/lib.py",
+        "secrets/a.txt",
+        "secretsfile",
+        "src/app.py",
+        "src/secrets/c.txt",
+    ]
+    assert "Vendor/lib.py" not in files(tmp_path, exclude=("vendor/**",))
+    assert files(tmp_path, exclude=("secrets", "*.pem", "vendor/")) == ["secretsfile", "src/app.py"]
+    assert "src/secrets/c.txt" in files(tmp_path, exclude=("secrets/**",)), "one with a slash is read from the root"

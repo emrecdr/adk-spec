@@ -197,8 +197,14 @@ def head(root: Path) -> str | None:
 
 def _here(exclude: Sequence[str]) -> tuple[str, ...]:
     """What limits a git command to the files under the folder it runs in: none of `.spec/`, and none a person
-    excluded. Each of `exclude` is a pattern from that folder, read as a glob."""
-    return (*_HERE, *(f":(exclude,glob){pattern}" for pattern in exclude))
+    excluded. Each of `exclude` is read as a `.gitignore` reads the common patterns, and never as less: one with no
+    slash, `*.pem` or `secrets`, names a file or a folder at any depth, one with a slash a path from that folder,
+    and letters match in either case. Handed to git as written, `*.pem` kept only the top folder's keys out, and
+    `vendor/**` nothing of a `Vendor/` on a system where the two are one folder."""
+    spelled = (
+        one for pattern in exclude for one in ((pattern,) if "/" in pattern else (f"**/{pattern}", f"**/{pattern}/**"))
+    )
+    return (*_HERE, *(f":(exclude,glob,icase){one}" for one in spelled))
 
 
 def _listed(root: Path, *which: str, exclude: Sequence[str]) -> list[str]:

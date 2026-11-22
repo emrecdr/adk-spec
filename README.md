@@ -104,8 +104,9 @@ rest on what is there and not on file names.
 - **It never stops a plan.** A reading that fails or finds nothing says so in one line, and the plan is drafted
   without it.
 
-To keep paths out of every command, name them in `.spec/config.toml`. Each is a path from the folder that holds
-`.spec/`, as git reads a pattern. An excluded path is never read, never listed among the repository's files, and
+To keep paths out of every command, name them in `.spec/config.toml`. A pattern with no slash, such as `*.pem` or
+`secrets`, names a file or a folder at any depth. One with a slash, such as `vendor/**`, is a path from the folder
+that holds `.spec/`. Letters match in either case. An excluded path is never read, never listed among the repository's files, and
 never part of the diff `verify` sends, so work done only there is no evidence for `verify`. A `context.md` written
 before a path was excluded still holds what it quoted from it: delete the file to read again.
 

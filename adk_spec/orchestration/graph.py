@@ -39,7 +39,7 @@ from ..workspace.context import ContextTooLargeError, living_text
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import SPEC_FILE, SPECS
 from .gate import AGAIN, FAILURE, GIVE_UP, OK, checked, tries_key
-from .plugins import STAGE_ERROR, UsageLedger, roster
+from .plugins import STAGE_ERROR, Scrub, UsageLedger, roster
 from .stages import BRIEF_TEXT, FINDINGS, LIVING, REQUEST, TIER
 from .stages import brief as brief_stage
 from .stages import check as check_stage
@@ -145,7 +145,7 @@ def _app(edges: list[Any], ledger: UsageLedger, recorder: BasePlugin | None = No
 def build_smoke_app() -> App:
     """The triage stage alone: what `adk-spec smoke` runs to prove an arm answers in a schema."""
     edges = [("START", triage_stage.build_triage())]
-    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=[])
+    return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=[Scrub()])
 
 
 # What each gate checks: what is wrong with the stage's answer, a sentence a problem.
