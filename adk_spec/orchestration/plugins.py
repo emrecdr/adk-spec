@@ -38,6 +38,8 @@ MISMATCH = "the answer did not fit its schema"
 CEILING = "CEILING"
 #: How the reason begins where the provider itself ended an answer: cut at the model's output limit, or filtered.
 ENDED = "the provider ended the answer"
+#: What a stage is told where its answer held no text at all: a model that spent its tokens before it wrote, say.
+EMPTY = "the answer was empty"
 #: How the scrub's refusal begins, and its error code: what would be sent could not be scrubbed of secrets.
 REDACTION = "REDACTION_FAILED"
 #: The reasons no second asking can change: the same request would meet the same ceiling, be cut the same way, or
@@ -71,8 +73,13 @@ class SchemaMismatch(BasePlugin):
             )
         schema = self.schemas.get(callback_context.agent_name)
         text = extract_text_from_content(llm_response.content) if schema is not None else ""
-        if schema is None or not text.strip():
+        if schema is None:
             return None  # nothing ADK would validate
+        if not text.strip():  # a model that spent its tokens before it wrote, or one that wrote nothing at all
+            callback_context.state[STAGE_ERROR] = EMPTY
+            return LlmResponse(
+                error_code="EMPTY_ANSWER", error_message=EMPTY, usage_metadata=llm_response.usage_metadata
+            )
         try:
             validate_schema(schema, text)
         except ValidationError as exc:

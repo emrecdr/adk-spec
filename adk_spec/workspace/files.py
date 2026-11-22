@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import os
 import tempfile
+import time
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -18,6 +19,13 @@ from ..domain.text import normalise
 
 class NotTextError(ValueError):
     """A file that is not UTF-8 text."""
+
+
+#: Whether this is Windows, where another program, an antivirus or an indexer, holds a file a moment.
+WINDOWS = os.name == "nt"
+#: How often a move is tried there, and how long the first wait is: each wait doubles, a third of a second in all.
+REPLACE_TRIES = 5
+REPLACE_WAIT_S = 0.02
 
 
 def read_text(path: Path) -> str:
@@ -74,7 +82,7 @@ def write_all(files: Mapping[Path, str]) -> None:
             staged.append((_staged(path, text), path))
         for temporary, path in staged:
             before = path.read_bytes() if path.is_file() else None
-            os.replace(temporary, path)
+            _replace(temporary, path)
             replaced.append((path, before))
     except BaseException:
         for temporary, _path in staged:
@@ -86,3 +94,16 @@ def write_all(files: Mapping[Path, str]) -> None:
                 else:
                     path.write_bytes(before)
         raise
+
+
+def _replace(temporary: Path, path: Path) -> None:
+    """`temporary` moved over `path`. On Windows a PermissionError is tried again a few times, briefly: a file another
+    program holds a moment is free a moment later. Elsewhere it is a refusal, said at once."""
+    for attempt in range(REPLACE_TRIES if WINDOWS else 1):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1 or not WINDOWS:
+                raise
+            time.sleep(REPLACE_WAIT_S * 2**attempt)

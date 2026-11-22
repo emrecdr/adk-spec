@@ -553,3 +553,17 @@ def test_the_brief_and_deltas_stages_revise_what_stands_and_change_only_what_is_
     assert "change only what it asks, and keep every other line as it is" in brief
     assert "## The deltas as they stand" in deltas and f"{{{CURRENT_DELTAS}?}}" in deltas
     assert "keep every other requirement and scenario word for word" in deltas
+
+
+@pytest.mark.parametrize("module", ["brief", "deltas", "design", "tasks", "triage"])
+def test_what_a_gate_found_comes_after_the_material_so_a_retry_keeps_the_prompts_start(module) -> None:
+    """Found by an outside audit: the findings stood before the long material, so a retry changed the prompt near its
+    start and no provider could reuse the rest it had read."""
+    import importlib
+
+    from adk_spec.orchestration.stages import ENDING, RETRY
+
+    stage = importlib.import_module(f"adk_spec.orchestration.stages.{module}")
+    built = next(getattr(stage, name)() for name in dir(stage) if name.startswith("build_"))
+    text = str(built.instruction)
+    assert text.index(RETRY) > text.rindex(">>>") and text.index(RETRY) < text.index(ENDING)

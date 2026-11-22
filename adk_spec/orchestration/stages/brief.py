@@ -56,10 +56,10 @@ def build_brief() -> LlmAgent:
             "## The brief you are replacing",
             fenced("replaces", placeholder(REPLACES, optional=True)),
             "",
-            RETRY,
-            "",
             "## The request",
             fenced("request", placeholder(REQUEST)),
+            "",
+            RETRY,
             ENDING,
         ]
     )

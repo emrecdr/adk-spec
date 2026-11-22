@@ -42,10 +42,10 @@ def build_triage() -> LlmAgent:
             "its purpose:",
             fenced("capabilities", placeholder(CAPABILITIES, optional=True)),
             "",
-            RETRY,
-            "",
             "## The request",
             fenced("request", placeholder(REQUEST)),
+            "",
+            RETRY,
             ENDING,
         ]
     )

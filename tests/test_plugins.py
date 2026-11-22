@@ -97,3 +97,13 @@ def test_adk_keeps_no_message_content_in_its_spans_unless_a_person_asks(monkeypa
     monkeypatch.setenv("ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS", "true")
     importlib.reload(engine)
     assert os.environ["ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS"] == "true"
+
+
+@pytest.mark.asyncio
+async def test_an_empty_answer_is_named_as_such(fake_provider) -> None:
+    """Found by an outside audit: an empty answer, as from a model that spent its tokens thinking, passed as nothing
+    in particular, and the gate said only that it was off its schema."""
+    fake_provider.answers_when("You size a change request", "  ")
+    app = App(name="t", root_agent=Workflow(name="t", edges=[("START", build_triage())]), plugins=roster(UsageLedger()))
+    run = await run_seeded(app, state=dict(STATE), prompt="go")
+    assert run.state[STAGE_ERROR].startswith("the answer was empty")

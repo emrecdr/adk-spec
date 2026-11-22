@@ -355,14 +355,18 @@ def scrub_lines(text: str, *, cut: bool = False) -> tuple[str, int]:
     in. Such text is scrubbed once, whole, before anything is cut out of it, and both uses read the result: a line
     is then the same line to the model and to the code that holds the model to it, at the number the file has it."""
     total = 0
-    for _kind, pattern, replacement in (*_PATTERNS, _OPEN_AT_THE_CUT) if cut else _PATTERNS:
+    unprefixed = not _ANY_PREFIXED.search(text)  # as `scrub` does: measured by an outside audit, 2.5 times as fast
+    for shape in (*_PATTERNS, _OPEN_AT_THE_CUT) if cut else _PATTERNS:
+        if unprefixed and shape in _PREFIXED:
+            continue
 
-        def hidden(found: re.Match[str], replacement: str = replacement) -> str:
+        def hidden(found: re.Match[str], replacement: str = shape[2]) -> str:
             mark = found.expand(replacement)
             return mark + "\n" * max(found.group(0).count("\n") - mark.count("\n"), 0)
 
-        text, count = pattern.subn(hidden, text)
+        text, count = shape[1].subn(hidden, text)
         total += count
+        unprefixed = unprefixed and not count
     return text, total
 
 

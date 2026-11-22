@@ -89,12 +89,13 @@ THE_LESSONS = section(
 
 
 def instruction(opening: str, guide: str, *sections: str) -> str:
-    """A drafting stage's instruction, in the order they share: what the stage is, what to write, what a gate found
-    wrong with its last answer, each section of material, and the ending."""
-    lines = [opening, "", "## What to write", guide, "", RETRY]
+    """A drafting stage's instruction, in the order they share: what the stage is, what to write, each section of
+    material, what a gate found wrong with its last answer, and the ending. What a gate found comes last of all but
+    the ending, so a retry leaves the start of the prompt as it was, for a provider to reuse what it read."""
+    lines = [opening, "", "## What to write", guide]
     for part in sections:
         lines += ["", part]
-    return "\n".join([*lines, ENDING])
+    return "\n".join([*lines, "", RETRY, ENDING])
 
 
 def stage(key: str, description: str, instruction: str, schema: type[BaseModel]) -> LlmAgent:

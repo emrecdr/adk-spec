@@ -430,7 +430,7 @@ class Assessed:
         )
 
 
-def _assessed(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> Assessed:
+def _assessed(workspace: Workspace, change_id: str, living: dict[str, Spec], *, drift: bool = True) -> Assessed:
     loaded = workspace.load_change(change_id)
     unreadable = set(workspace.capabilities()) - set(living)  # a spec that is there and does not read
     found = _from_root(change_id, findings_of(loaded, living, unreadable))
@@ -438,7 +438,7 @@ def _assessed(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> 
     seen = {**files, **_beside(workspace, loaded.change, living)}
     state = loaded.change.state
     unchecked = _from_root(change_id, check_blockers(state, seen))
-    stale, drifted = approval_stale(state, files), _drifted(workspace, state)
+    stale, drifted = approval_stale(state, files), drift and _drifted(workspace, state)  # git is asked for drift
     return Assessed(loaded, found, stale, unchecked, drifted, files, seen)
 
 
@@ -497,7 +497,7 @@ def _validate(args: argparse.Namespace) -> int:
             )
         )
     for change_id in [args.id] if args.id else workspace.changes():
-        assessed = _assessed(workspace, change_id, living)
+        assessed = _assessed(workspace, change_id, living, drift=False)
         if assessed.state.status != "archived":  # an archived change is folded in: its delta has no base now
             found += assessed.findings
     stops = failed(found, strict=args.strict)
@@ -519,10 +519,10 @@ def _status(args: argparse.Namespace) -> int:
     living, _found = workspace.specs()
     rows = []
     for change_id in workspace.changes():
+        if not args.all and workspace.state(change_id).status == "archived":  # history, which is not read
+            continue
         assessed = _assessed(workspace, change_id, living)
         state, step = assessed.state, assessed.step
-        if state.status == "archived" and not args.all:
-            continue
         row = {"id": change_id, "tier": state.tier, "status": state.status, "actor": step.actor, "next": step.phrase}
         rows.append(row)
     if args.json:

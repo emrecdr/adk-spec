@@ -342,6 +342,10 @@ class Workspace:
             )
         return state
 
+    def state(self, change_id: str) -> ChangeState:
+        """A change's state file alone, read before anything else of it is: enough to pass an archived change over."""
+        return self._state(self._folder(change_id), change_id)
+
     def load_change(self, change_id: str) -> LoadedChange:
         """The change read from its folder. `WorkspaceError` where there is none, or its state file does not read."""
         folder = self._folder(change_id)

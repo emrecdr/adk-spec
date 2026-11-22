@@ -414,3 +414,23 @@ def test_a_base_not_yet_recorded_fails_no_strict_validation(tmp_path, capsys) ->
     assert not any(
         f["severity"] in ("ERROR", "WARNING") and f["code"].startswith("delta.base") for f in said["findings"]
     )
+
+
+def test_status_reads_no_archived_change_and_validate_computes_no_drift(tmp_path, monkeypatch) -> None:
+    """Found by an outside audit: `status` read every archived change in full before passing it over, and `validate`
+    ran git for each verified change's drift, which it never reads."""
+    from adk_spec.interfaces import cli
+    from adk_spec.workspace.layout import Workspace
+
+    ws = seeded(tmp_path)
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"status": "archived"}))
+    loaded = []
+    load = Workspace.load_change
+    monkeypatch.setattr(Workspace, "load_change", lambda self, cid: loaded.append(cid) or load(self, cid))
+    assert run(tmp_path, "status") == 0 and loaded == []
+    from adk_spec.domain.model import Verification
+
+    held = Verification(at="t", base="abc", diff="sha256:x", verdicts={})
+    ws.save_state(ws.state("passkeys").model_copy(update={"status": "verified", "verification": held}))
+    monkeypatch.setattr(cli, "_drifted", lambda *_args: (_ for _ in ()).throw(AssertionError("drift computed")))
+    assert run(tmp_path, "validate") in (0, 1)
