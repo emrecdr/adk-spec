@@ -12,59 +12,38 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
-from ..domain.secrets import scrub, scrub_lines
+from ..domain.model import PASSED
+from ..domain.secrets import scrub
+from ..domain.text import normalise
+from ..domain.verify import TestRun
 from .process import TimedOut, on_path, run
 
 #: How much of a run's output, its end, a model and the report are shown.
 TAIL_MAX_CHARS = 6_000
-#: How much of a run's output is scrubbed to find that end: a run that writes more is cut first, at a line.
-OUTPUT_MAX_CHARS = 1_000_000
-
-
-@dataclass(frozen=True)
-class TestRun:
-    """What one run of a project's tests came to."""
-
-    #: The repository it ran in: empty for the workspace's own.
-    name: str
-    argv: tuple[str, ...]
-    #: `passed`, `failed (exit N)`, `timed out after N s`, or `not run: <why>`.
-    outcome: str
-    #: The end of its output, scrubbed.
-    tail: str
-    seconds: float
-
-    @property
-    def passed(self) -> bool:
-        return self.outcome == "passed"
-
-    @property
-    def command(self) -> str:
-        """The command as it is shown, scrubbed: a test command may carry a token of its own."""
-        return scrub(" ".join(self.argv))[0]
+#: How much of a run's output, its last bytes, is scrubbed to find that end: some forty times what is shown, and far
+#: wider than any secret shape, the longest of which, a private key, is some three thousand characters.
+WINDOW_BYTES = 256_000
 
 
 def run_tests(root: Path, argv: Sequence[str], *, timeout: int, name: str = "") -> TestRun:
     """The tests run in `root` by `argv`, stopped past `timeout` seconds. Never an error: a program that cannot be
     found or started is a run that did not pass, and says why."""
     words = tuple(argv)
-    program = _program(words[0]) if words else None
-    if program is None:
+    if (program := _program(words[0])) is None:
         why = "a program is named by its name on PATH or by its absolute path, and this one is neither found"
-        return TestRun(name, words, f"not run: {words[0] if words else '(nothing)'}: {why}", "", 0.0)
+        return TestRun(name, words, f"not run: {words[0]}: {why}", "", None)
     began = time.monotonic()
     try:
         done = run([program, *words[1:]], env=os.environ, timeout=timeout, cwd=root, merged=True)
     except TimedOut as exc:
         output, outcome = exc.output or b"", f"timed out after {timeout} s"
     except OSError as exc:
-        return TestRun(name, words, f"not run: {words[0]} could not start: {exc.strerror or exc}", "", 0.0)
+        return TestRun(name, words, f"not run: {words[0]} could not start: {exc.strerror or exc}", "", None)
     else:
         output = done.stdout or b""
-        outcome = "passed" if done.returncode == 0 else f"failed (exit {done.returncode})"
+        outcome = PASSED if done.returncode == 0 else f"failed (exit {done.returncode})"
     return TestRun(name, words, outcome, _tail(output), time.monotonic() - began)
 
 
@@ -78,12 +57,16 @@ def _program(word: str) -> str | None:
 
 
 def _tail(output: bytes) -> str:
-    """The end of a run's output, scrubbed whole before it is cut, at a line where it can be."""
-    text = output.decode("utf-8", "replace").replace("\r\n", "\n")
-    if len(text) > OUTPUT_MAX_CHARS:
-        text = text[-OUTPUT_MAX_CHARS:].partition("\n")[2]
-    text = scrub_lines(text)[0]
-    if len(text) <= TAIL_MAX_CHARS:
+    """The end of a run's output, scrubbed. Its last bytes are cut first, at a line, far wider than any secret
+    shape, then scrubbed, then cut to what is shown: no quote is ever looked for in it, so no line need keep its
+    number, and a test runner that writes megabytes is never scrubbed whole."""
+    text = normalise(_end(output[-WINDOW_BYTES:].decode("utf-8", "replace"), WINDOW_BYTES))
+    return _end(scrub(text)[0], TAIL_MAX_CHARS)
+
+
+def _end(text: str, most: int) -> str:
+    """The end of `text`, at most `most` characters, cut at a line where it can be."""
+    if len(text) <= most:
         return text
-    cut = text[-TAIL_MAX_CHARS:]
+    cut = text[-most:]
     return cut.partition("\n")[2] or cut

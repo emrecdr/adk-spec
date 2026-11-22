@@ -16,6 +16,9 @@ import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
+#: How long a stopped run's last output is waited for. A process it started in a session of its own, a server a
+#: test left running, can hold the output open as long as it lives.
+DRAIN_S = 5.0
 #: What a run that ended gives back, and what is raised for one past its time: named here for the modules that call
 #: `run`, so that none of them imports `subprocess`.
 Completed = subprocess.CompletedProcess
@@ -56,7 +59,10 @@ def run(
             out, err = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             _stopped(process, windows)
-            out, err = process.communicate()  # the output to its end, which Windows reads on threads
+            try:  # the output to its end, which Windows reads on threads, for as long as a stopped tree takes
+                out, err = process.communicate(timeout=DRAIN_S)
+            except subprocess.TimeoutExpired:  # a process that left the session still holds it: none is waited for
+                out, err = b"", b""
             raise subprocess.TimeoutExpired(argv, timeout, output=out, stderr=err) from None
     return subprocess.CompletedProcess(argv, process.returncode, out, err)
 

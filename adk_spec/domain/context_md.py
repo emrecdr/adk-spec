@@ -12,6 +12,7 @@ import re
 from collections.abc import Mapping, Sequence
 
 from .model import Statement, StatementKind
+from .text import code_span
 
 #: How the line begins that a reading which ended early carries at its top.
 PARTIAL = "This reading is partial: "
@@ -116,7 +117,7 @@ def drafted_rules(statements: Sequence[Statement]) -> str:
     `convention` statement, its note the rule and its quote the evidence. Nothing where none is a convention. Drafted
     by code from statements whose quotes were found, and the person's to keep, edit or delete."""
     rules = [
-        f"- {_first_sentence(one.note)} (`{one.path}:{one.line}`: {_code(one.quote)})"
+        f"- {_first_sentence(one.note)} (`{one.path}:{one.line}`: {code_span(one.quote)})"
         for one in statements
         if one.kind == "convention"
     ]
@@ -126,14 +127,8 @@ def drafted_rules(statements: Sequence[Statement]) -> str:
     return "\n".join([DRAFTED_HEADING, "", said, "", *rules, ""])
 
 
-def _code(text: str) -> str:
-    """`text` as a code span that holds it whole: fenced by more backticks than its longest run of them."""
-    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
-    fence, pad = "`" * (longest + 1), " " if longest else ""
-    return f"{fence}{pad}{text}{pad}{fence}"
-
-
 def _first_sentence(note: str) -> str:
     """A note's first sentence: a rule in a constitution is one. Measured live, a note ran to a paragraph."""
-    found = re.match(r"(.+?[.!?])(?=\s+[A-Z(`\"]|$)", note.strip(), re.DOTALL)
-    return found.group(1) if found else note.strip()
+    said = note.strip()
+    found = re.match(r"(.+?[.!?])(?=\s+[A-Z(`\"]|$)", said, re.DOTALL)
+    return found.group(1) if found else said

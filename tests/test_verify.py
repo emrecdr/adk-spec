@@ -663,3 +663,13 @@ def test_a_secret_the_tests_print_reaches_no_request_recording_or_report(tmp_pat
     )
     sent = " ".join(str(r.config.system_instruction) for r in fake_provider.requests)
     assert key not in sent and key not in recorded and key not in read_text(tmp_path / REPORT)
+
+
+def test_a_model_that_cannot_run_is_refused_before_the_tests_are_run(tmp_path, monkeypatch, capsys) -> None:
+    """A test run can take a quarter of an hour: refused after it, it was paid for and thrown away."""
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    with_tests(tmp_path, "open('ran.flag', 'w').write('ran')")
+    monkeypatch.delenv("GOOGLE_API_KEY")
+    assert run(tmp_path, "verify", "passkeys") == 2
+    assert not (tmp_path / "ran.flag").exists() and "testing" not in capsys.readouterr().out

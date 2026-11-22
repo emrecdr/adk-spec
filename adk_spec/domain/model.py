@@ -151,6 +151,10 @@ class Checked(_Held):
     model: str | None = None
 
 
+#: What a run of a project's tests that passed came to: every other outcome says why it did not.
+PASSED = "passed"
+
+
 class Verification(_Held):
     """What a verification of a change judged and found: the commit the work was compared with, the fingerprint of
     the diff, a verdict for each requirement, and the reason where a person verified it over a verdict."""
@@ -165,6 +169,11 @@ class Verification(_Held):
     bases: dict[str, str] = {}
     #: What each run of the project's tests came to, by repository, `.` for the workspace's own: `passed`, or why not.
     tests: dict[str, str] = {}
+
+    @property
+    def tests_passed(self) -> bool:
+        """Whether every run of the project's tests passed: true where none was run."""
+        return all(outcome == PASSED for outcome in self.tests.values())
 
 
 class ChangeState(_Held):

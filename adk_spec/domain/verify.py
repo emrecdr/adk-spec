@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass
 
 from .drafts import VerdictsDraft
+from .secrets import scrub
 from .text import lines_of, plain, quoted_at
 
 UNGROUNDED = "no quoted line is in the diff"
@@ -115,3 +116,27 @@ def _named(path: str, sides: dict[str, tuple[list[str], list[str]]]) -> str | No
         if candidate in sides:
             return candidate
     return None
+
+
+@dataclass(frozen=True)
+class TestRun:
+    """What one run of a project's tests came to."""
+
+    #: The repository it ran in: empty for the workspace's own.
+    name: str
+    argv: tuple[str, ...]
+    #: `passed`, `failed (exit N)`, `timed out after N s`, or `not run: <why>`.
+    outcome: str
+    #: The end of its output, scrubbed.
+    tail: str
+    #: How long it ran, or nothing where it never started.
+    seconds: float | None
+
+    @property
+    def label(self) -> str:
+        return self.name or "this repository"
+
+    @property
+    def command(self) -> str:
+        """The command as it is shown, scrubbed: a test command may carry a token of its own."""
+        return scrub(" ".join(self.argv))[0]

@@ -6,11 +6,11 @@ needs of a check or a verification is in the change's state file, not here.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 
 from .model import Finding
-from .verify import Verdict
+from .text import code_span, longest_backticks
+from .verify import TestRun, Verdict
 
 _HEADINGS = (("ERROR", "Blocking"), ("WARNING", "Worth a look"), ("INFO", "Notes"))
 
@@ -55,7 +55,7 @@ def render_verify(
     model: str | None,
     override: str | None = None,
     bases: Mapping[str, str] | None = None,
-    tests: Sequence[tuple[str, str, str, str]] | None = None,
+    tests: Sequence[TestRun] | None = None,
 ) -> str:
     """`reports/verify.md`: what the work was compared with, and for each requirement its verdict, the reason, and
     the lines of the diff that show it."""
@@ -82,13 +82,20 @@ def render_verify(
     return "\n".join(lines)
 
 
-def _tests(tests: Sequence[tuple[str, str, str, str]] | None) -> list[str]:
-    """The report's section on the project's tests: each run, by its repository, its command, what it came to and
-    the end of its output; or that no command is set."""
-    if not tests:
+def render_tests(runs: Sequence[TestRun]) -> str:
+    """Each run of a project's tests, as the report and the verify stage read it: its repository, its command, what
+    it came to, and the end of its output. Nothing where no run was made."""
+    blocks = []
+    for run in runs:
+        fence = "`" * max(3, longest_backticks(run.tail) + 1)
+        blocks.append(
+            f"- {run.label}: {code_span(run.command)}: {run.outcome}\n\n{fence}\n{run.tail.rstrip()}\n{fence}"
+        )
+    return "\n\n".join(blocks)
+
+
+def _tests(runs: Sequence[TestRun] | None) -> list[str]:
+    """The report's section on the project's tests, or that no command is set."""
+    if not runs:
         return ["## Tests", "", "No test command is set in .spec/config.toml: the verdicts rest on the diff alone.", ""]
-    lines = ["## Tests", ""]
-    for name, command, outcome, tail in tests:
-        fence = "`" * max(3, max((len(run) for run in re.findall(r"`+", tail)), default=0) + 1)
-        lines += [f"- {name}: `{command}`: {outcome}", "", fence, tail.rstrip("\n"), fence, ""]
-    return lines
+    return ["## Tests", "", render_tests(runs), ""]

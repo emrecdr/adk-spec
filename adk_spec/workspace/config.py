@@ -96,18 +96,13 @@ def _verifying(path: Path, verify: object) -> tuple[tuple[str, ...], int]:
     shell reads the command, and splitting a string into words is a guess on Windows."""
     held = verify if isinstance(verify, dict) else {}
     test = held.get("test", [])
-    if (
-        not isinstance(test, list)
-        or (test and not all(isinstance(one, str) and one.strip() for one in test))
-        or ("test" in held and not test)
-    ):
+    words = isinstance(test, list) and all(isinstance(one, str) and one.strip() for one in test)
+    if not words or ("test" in held and not test):
         raise ConfigError(
             f"{path} sets test to `{test}`: a list of words, the program first, such as "
             '["uv", "run", "pytest", "-q"]. No shell reads it'
         )
-    timeout = held.get("timeout", Config.test_timeout)
-    if type(timeout) is not int or timeout < 1:
-        raise ConfigError(f"{path} sets timeout to `{timeout}`: a whole number of seconds, 1 or more")
+    timeout = _whole(path, held, "timeout", Config.test_timeout, "a whole number of seconds, 1 or more", least=1)
     return tuple(test), timeout
 
 
@@ -133,9 +128,9 @@ def _excluded(path: Path, held: dict[str, object]) -> tuple[str, ...]:
     return tuple(value)
 
 
-def _whole(path: Path, limits: object, key: str, default: int, what: str) -> int:
-    """A whole number of zero or more under `[limits]`, or its default where the key is not set."""
-    value = limits.get(key, default) if isinstance(limits, dict) else default
-    if type(value) is not int or value < 0:
+def _whole(path: Path, table: object, key: str, default: int, what: str, *, least: int = 0) -> int:
+    """A whole number of `least` or more under a table, or its default where the key is not set."""
+    value = table.get(key, default) if isinstance(table, dict) else default
+    if type(value) is not int or value < least:
         raise ConfigError(f"{path} sets {key} to `{value}`: {what}")
     return value

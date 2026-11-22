@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from .model import Approval, ChangeState, Checked, Delta, Finding, GrammarError, Spec, Verification
+from .model import PASSED, Approval, ChangeState, Checked, Delta, Finding, GrammarError, Spec, Verification
 from .spec_md import fingerprint
 from .tasks_md import parse_tasks, render_tasks
 from .text import sha256_of
@@ -114,7 +114,7 @@ def verified(
     needed. Otherwise it is `approved`, also where it was verified before: the newest judgement is the one that
     stands."""
     ran = dict(tests or {})
-    met = all(verdict == "met" for verdict in verdicts.values()) and all(one == "passed" for one in ran.values())
+    met = all(verdict == "met" for verdict in verdicts.values()) and all(one == PASSED for one in ran.values())
     reason = None if met else (override or None)
     held = Verification(
         at=at,
@@ -274,7 +274,7 @@ def _after_approval(
         return Step("run", f"run `adk-spec verify {cid}` again: the work changed since it was verified")
     if state.status == "verified":
         return Step("run", f"run `adk-spec archive {cid}`")
-    if state.verification and any(one != "passed" for one in state.verification.tests.values()):
+    if state.verification and not state.verification.tests_passed:
         return Step("you", f'the tests failed: fix them and run `adk-spec verify {cid}`, or verify --override "<why>"')
     last = "archive" if state.tier == "lean" else "verify"
     return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")

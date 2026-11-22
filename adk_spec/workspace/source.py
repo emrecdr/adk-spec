@@ -140,6 +140,9 @@ class _Repository:
         self.paths = sorted(paths)
         self.listed = frozenset(paths)
         self.exclude = tuple(exclude)
+        #: The command its own config runs its tests with, and for how long: none where it names none.
+        self.test: tuple[str, ...] = ()
+        self.test_timeout = 0
         #: Each file opened so far: its lines as they may be shown, or why it is not read.
         self._opened: dict[str, list[str] | str] = {}
 
@@ -276,10 +279,13 @@ def _other(root: Path, name: str, given: str, folders: set[str], tops: dict[str,
             "from there. Name that folder"
         )
     tops[name] = its_top
-    own = path / ROOT_NAME / CONFIG  # its exclusions are its own, where it is an adk-spec project too
+    own = path / ROOT_NAME / CONFIG  # its exclusions and its test command are its own, where it is an adk-spec project
     try:
-        exclude = load_config(own).exclude if own.is_file() else ()
-        return _Repository(name, path, listed_by_git(path, exclude=exclude, trust=False), exclude)
+        held = load_config(own) if own.is_file() else None
+        exclude = held.exclude if held else ()
+        found = _Repository(name, path, listed_by_git(path, exclude=exclude, trust=False), exclude)
+        found.test, found.test_timeout = (held.test, held.test_timeout) if held else ((), 0)
+        return found
     except (ConfigError, NotTextError, GitError, OSError) as exc:
         return f"{name}: {exc}"
 
@@ -344,6 +350,11 @@ class Source:
                 raise SourceError(f"{self.why_not(name)}: the work cannot be judged on part of it")
             parts.append(diff(one.root, commit, exclude=one.exclude, prefix=one.full(""), trust=False))
         return self.without_keys("".join(parts))
+
+    def tests(self) -> list[tuple[str, Path, tuple[str, ...], int]]:
+        """Each other repository's own test command, by its name, in its folder, with its timeout: the command
+        each one's own `.spec/config.toml` names, read with its exclusions."""
+        return [(one.name, one.root, one.test, one.test_timeout) for one in self._others.values() if one.test]
 
     def commits(self) -> dict[str, str | None]:
         """The commit each other repository has checked out, or nothing where git cannot say."""

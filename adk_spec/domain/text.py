@@ -4,6 +4,7 @@ taken after all three. A file saved on Windows with CRLF line ends then hashes a
 from __future__ import annotations
 
 import hashlib
+import re
 
 BOM = "\ufeff"
 
@@ -69,3 +70,15 @@ def quoted_at(quote: str, text: str) -> int | None:
     if at < 0:
         return None
     return max(number for start, number in starts if start <= at)
+
+
+def longest_backticks(text: str) -> int:
+    """The longest run of backticks in `text`, 0 for none: a fence or a code span one longer holds it whole."""
+    return max((len(run) for run in re.findall(r"`+", text)), default=0)
+
+
+def code_span(text: str) -> str:
+    """`text` as a code span that holds it whole, whatever backticks it holds."""
+    longest = longest_backticks(text)
+    fence, pad = "`" * (longest + 1), " " if longest else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
