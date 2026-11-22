@@ -71,7 +71,7 @@ def test_a_change_that_owes_a_design_and_has_none_is_not_approved_and_plan_is_ne
     ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"needs_design": True}))
     assert run(tmp_path, "approve", "passkeys", "--by", "ana") != 0
     said = capsys.readouterr()
-    assert "ERROR change.missing-design" in said.out and "not approved" in said.err
+    assert "WARNING change.missing-design" in said.out and "not approved" in said.err
     change = ws.load_change("passkeys").change
     found = validate_change(change, ws.specs()[0])
     assert next_step(change.state, found, []).phrase == "run `adk-spec plan passkeys`"
@@ -210,3 +210,75 @@ def test_the_stop_names_plan_with_no_explore_where_the_person_gave_it(tmp_path, 
     capsys.readouterr()
     assert strict_proposed(tmp_path) == 0
     assert "then `adk-spec plan ledger --no-explore`" in capsys.readouterr().out
+
+
+def test_approving_again_a_strict_change_two_names_approved_changes_nothing(tmp_path, capsys, fake_provider) -> None:
+    """Found by the review: a third name approving unchanged files dropped it back to a draft, the second lost."""
+    planned(tmp_path, fake_provider)
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
+    assert run(tmp_path, "approve", "ledger", "--by", "ben") == 0
+    before = state_of(tmp_path, "ledger")
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "ledger", "--by", "carl") != 0
+    assert "approved already, by ana and ben" in capsys.readouterr().err
+    assert state_of(tmp_path, "ledger") == before
+
+
+def test_one_person_is_one_name_whatever_its_case(tmp_path, capsys, fake_provider) -> None:
+    planned(tmp_path, fake_provider)
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "ledger", "--by", " Ana ") != 0
+    assert state_of(tmp_path, "ledger")["status"] == "draft"
+
+
+def test_an_open_point_or_an_error_comes_before_the_design_a_plan_drafts() -> None:
+    """Found by the review: a design owed and missing came first, and hid what `plan` cannot settle."""
+    from adk_spec.domain.lifecycle import next_step
+    from adk_spec.domain.model import ChangeState, Finding
+
+    def held(code: str, severity: str = "WARNING") -> Finding:
+        return Finding(severity=severity, code=code, message="A finding long enough to say something here.")
+
+    state = ChangeState(id="c", tier="strict", needs_design=True)
+    design = held("change.missing-design")
+    assert next_step(state, [design, held("brief.marker-unresolved")], []).phrase == "settle the open point in brief.md"
+    assert next_step(state, [design, held("delta.empty", "ERROR")], []).phrase == "fix what `adk-spec validate c` lists"
+    assert next_step(state, [design], []).phrase == "run `adk-spec plan c`"
+
+
+def test_a_strict_check_report_counts_a_warning_as_blocking() -> None:
+    """Found by the review: the report said nothing blocks, and the approval it pointed to refused."""
+    from adk_spec.domain.model import Finding
+    from adk_spec.domain.report_md import render_check
+
+    warning = Finding(severity="WARNING", code="check.ambiguity", message="Which browsers are in scope is not said.")
+    report = render_check("c", "t", [warning], model="m", warnings_block=True)
+    assert "1 blocking." in report and report.index("## Blocking") < report.index("Which browsers")
+    assert "Nothing blocks" in render_check("c", "t", [warning], model="m")
+
+
+def test_plan_keeps_a_design_a_person_wrote_on_a_strict_change(tmp_path, fake_provider) -> None:
+    """Found by the review: `plan` wrote its own design over the one a person wrote for a strict change."""
+    from samples import BRIEF, DELTA
+
+    seeded(tmp_path)
+    assert run(tmp_path, "new", "ledger", "--tier", "strict") == 0
+    folder = tmp_path / FOLDER
+    write_text(folder / "brief.md", BRIEF)
+    write_text(folder / "specs/auth/spec.md", DELTA)
+    mine = "# Design\n\n## Context\n\nWritten by hand.\n"
+    write_text(folder / "design.md", mine)
+    assert run(tmp_path, "plan", "ledger", "--no-explore") == 0
+    assert (folder / "tasks.md").is_file(), "the plan was drafted"
+    assert read_text(folder / "design.md") == mine and asked(fake_provider, DESIGN) == 0
+
+
+def test_a_strict_revision_with_a_ticked_task_names_the_plan_that_goes_on(tmp_path, capsys, fake_provider) -> None:
+    """Found by the review: the stop named a `plan` that a ticked task refuses, and one that reads the code."""
+    planned(tmp_path, fake_provider)
+    tasks = tmp_path / FOLDER / "tasks.md"
+    write_text(tasks, read_text(tasks).replace("- [ ]", "- [x]", 1))
+    capsys.readouterr()
+    assert run(tmp_path, "propose", "Also keep the old invoice numbers.", "--id", "ledger", "--no-input") == 0
+    assert "then `adk-spec plan ledger --replace --no-explore`" in capsys.readouterr().out

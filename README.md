@@ -205,7 +205,8 @@ adk-spec new <id> --tier lean
 ```
 
 - `plan` drafts a change's tasks again, and its design where one is owed, after you edited the brief or the specs.
-  Where a task is already ticked it replaces nothing unless you add `--replace`. It reads the code first where the
+  Where a task is already ticked it replaces nothing unless you add `--replace`, and it keeps a design you wrote or
+  edited, planning from it, unless you add `--replace`. It reads the code first where the
   change has no `context.md`; `--no-explore` skips that.
 - `check` makes the check `approve` makes, and writes `reports/check.md`, without approving.
 - `rebase` records anew what a change's deltas are written against, after a living spec moved under them.

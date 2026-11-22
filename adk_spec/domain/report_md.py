@@ -12,8 +12,6 @@ from .model import Finding
 from .text import code_span, longest_backticks
 from .verify import TestRun, Verdict
 
-_HEADINGS = (("ERROR", "Blocking"), ("WARNING", "Worth a look"), ("INFO", "Notes"))
-
 
 def place(found: Finding) -> str:
     """Where a finding is: its file, and its line where it has one."""
@@ -31,14 +29,28 @@ def _listed(found: Finding) -> str:
     return f"- `{found.code}`{' ' + where if where else ''}: {found.message}"
 
 
-def render_check(change_id: str, at: str, findings: Sequence[Finding], *, model: str | None, dropped: int = 0) -> str:
-    """`reports/check.md`: when the change was checked and by what, what blocks its approval, and the rest."""
-    blocking = sum(found.severity == "ERROR" for found in findings)
+def render_check(
+    change_id: str,
+    at: str,
+    findings: Sequence[Finding],
+    *,
+    model: str | None,
+    dropped: int = 0,
+    warnings_block: bool = False,
+) -> str:
+    """`reports/check.md`: when the change was checked and by what, what blocks its approval, and the rest. Where
+    `warnings_block`, as on the strict tier, a warning is listed among what blocks."""
+    stops = {"ERROR", "WARNING"} if warnings_block else {"ERROR"}
+    groups = (
+        ("Blocking", [found for found in findings if found.severity in stops]),
+        ("Worth a look", [found for found in findings if found.severity == "WARNING" and not warnings_block]),
+        ("Notes", [found for found in findings if found.severity == "INFO"]),
+    )
+    blocking = len(groups[0][1])
     judge = f"by code and by {model}" if model else "by code alone: the model's pass was not run"
     lines = [f"# Check of `{change_id}`", "", f"Checked {at}, {judge}.", ""]
     lines += [f"{blocking} blocking." if blocking else "Nothing blocks an approval.", ""]
-    for severity, heading in _HEADINGS:
-        held = [found for found in findings if found.severity == severity]
+    for heading, held in groups:
         if held:
             lines += [f"## {heading}", "", *(_listed(found) for found in held), ""]
     if dropped:

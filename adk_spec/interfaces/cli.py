@@ -42,6 +42,7 @@ from ..domain.lifecycle import (
     approval_stale,
     approve,
     approve_blockers,
+    approver_blockers,
     archive_blockers,
     blocking,
     capture_bases,
@@ -55,7 +56,6 @@ from ..domain.lifecycle import (
     next_step,
     owes_design,
     reopened,
-    second_blockers,
     verified,
     verify_blockers,
 )
@@ -610,6 +610,7 @@ def _approve(args: argparse.Namespace) -> int:
     demands = DEMANDS[assessed.state.tier]
     if args.override and not demands.override:
         raise UsageError(f"a {assessed.state.tier} change sets no blocking finding aside: fix it, then approve again")
+    by = _approver(args, assessed)  # a name that cannot approve is refused before anything is spent
     # What the files themselves block comes first: no model is asked about files that are going to change.
     if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
         return _refused(args.id, blockers)
@@ -634,7 +635,6 @@ def _approve(args: argparse.Namespace) -> int:
             )
         return _refused(args.id, blockers)
     files = assessed.files  # as they were read for the assessment that found the check current: no later read
-    by = _approver(args, assessed)
     at = datetime.now(UTC).isoformat(timespec="seconds")
     # A reason is recorded only where it set something aside: a blocking finding of the check.
     reason = args.override if any(held.code == "check.blocking" for held in assessed.unchecked) else None
@@ -659,7 +659,7 @@ def _approver(args: argparse.Namespace, assessed: Assessed) -> str:
         by = args.by or getpass.getuser()
     except OSError as exc:  # an account with no name, as in a container run under a bare user id
         raise UsageError("this account has no name: name the approver with --by") from exc
-    if refused := second_blockers(assessed.state, assessed.stale, by):
+    if refused := approver_blockers(assessed.state, assessed.stale, by):
         raise NotYetError(refused[0])
     return by
 
@@ -1082,7 +1082,9 @@ def _plan_made(
     brief = _plannable(change_id, replace, workspace, assessed, of_specs)
     from ..orchestration.models import require_ready
 
-    roles = ("design", "tasks") if state.needs_design else ("tasks",)
+    # An owed design is drafted, unless a person wrote or edited the one that stands and replacing it was not asked.
+    drafts_design = state.needs_design and (replace or not _persons_design(workspace, change_id, state))
+    roles = ("design", "tasks") if drafts_design else ("tasks",)
     if why := require_ready(roles=roles):
         raise UsageError(why)
     from ..orchestration.graph import build_plan_app
@@ -1104,7 +1106,7 @@ def _plan_made(
         PROFILE_TEXT: _profile(workspace),
         LESSONS_TEXT: lessons_text(workspace),
     }
-    if change.design and not state.needs_design:  # a design a person wrote, where the change owes none
+    if change.design and not drafts_design:  # a design a person wrote, or one the change does not owe
         seed[DESIGN_TEXT] = change.design.strip()
     serves = {"owed": owed(change.deltas), "nameable": nameable(change.deltas, specs)}
     if ledger is None:  # one ceiling for the reading and the drafting: they are one command's
@@ -1114,13 +1116,13 @@ def _plan_made(
     read = [(context, False)] if context else []
 
     def build(ledger: Any, recorder: Any) -> Any:
-        return build_plan_app(design=state.needs_design, ledger=ledger, recorder=recorder, **serves)
+        return build_plan_app(design=drafts_design, ledger=ledger, recorder=recorder, **serves)
 
     run, tasks, ledger, failure = _asked(workspace, "plan", change_id, build, seed, read_tasks, ledger=ledger)
     if failure:
         return _Planned(ledger=ledger, failure=failure, explored=said)
     files = {TASKS_FILE: render_tasks(to_tasks(tasks))}
-    design = read_design(run.state) if state.needs_design else None
+    design = read_design(run.state) if drafts_design else None
     if design is not None and not isinstance(design, str):
         files = {DESIGN_FILE: render_design(design), **files}  # the design first: it is what a person reads first
     folder = workspace.home / CHANGES / change_id
@@ -1128,6 +1130,12 @@ def _plan_made(
     workspace.rewrite_change(state, files)  # the plan and the state as one set, the plan recorded as drafted
     written = [(folder / name, name in there) for name in files]
     return _Planned([*read, *written], ledger, explored=said)
+
+
+def _persons_design(workspace: Workspace, change_id: str, state: ChangeState) -> bool:
+    """Whether a change's design.md is a person's: written by hand, or edited since adk-spec drafted it."""
+    raw = workspace.approval_texts(change_id).get(DESIGN_FILE)
+    return raw is not None and state.drafted.get(DESIGN_FILE) != approval_files({DESIGN_FILE: raw})[DESIGN_FILE]
 
 
 def _read_code(
@@ -1285,7 +1293,10 @@ def _check_made(
         model = serving("check")
     at = datetime.now(UTC).isoformat(timespec="seconds")
     every = [*assessed.findings, *_from_root(change_id, judged)]
-    report = render_check(change_id, at, _inside(change_id, every), model=model, dropped=dropped)
+    warnings_block = DEMANDS[assessed.state.tier].warnings_block
+    report = render_check(
+        change_id, at, _inside(change_id, every), model=model, dropped=dropped, warnings_block=warnings_block
+    )
     path = workspace.write_report(change_id, "check.md", report)
     read = {**approval_files(texts), **_beside(workspace, assessed.loaded.change, specs)}
     workspace.save_state(checked(assessed.state, every, files=read, at=at, model=model))
@@ -1321,7 +1332,7 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
     if made.ledger is not None:
         print(f"tokens    {_spent(made.ledger)}")
     _say_next(workspace, args.id, specs)
-    return EXIT_FINDINGS if any(held.severity == "ERROR" for held in made.findings) else EXIT_OK
+    return EXIT_FINDINGS if blocking(assessed.state, made.findings) else EXIT_OK
 
 
 def _judged(
@@ -1630,10 +1641,16 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     explore = not args.no_explore and change is None
     change_id = kept.change or ""
     # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs.
-    review = (
-        f"`{PROG} plan {change_id}{' --no-explore' if args.no_explore else ''}`" if DEMANDS[tier].read_first else None
-    )
+    review = _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first else None
     return _then_planned(workspace, change_id, specs, of_specs, ledger, explore=explore, keep=keep, review=review)
+
+
+def _plan_command(workspace: Workspace, change_id: str, change: Change | None, no_explore: bool) -> str:
+    """The `plan` that goes on after a stop: with `--replace` where a revised change's task is ticked, and with
+    `--no-explore` where the person gave it or the change is revised, which reads no code again."""
+    flags = [" --replace"] if change is not None and _ticked(workspace, change) else []
+    flags += [" --no-explore"] if no_explore or change is not None else []
+    return f"`{PROG} plan {change_id}{''.join(flags)}`"
 
 
 def _tasks_kept(workspace: Workspace, change: Change, changed: bool) -> str | None:

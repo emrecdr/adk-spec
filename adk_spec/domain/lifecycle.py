@@ -19,7 +19,7 @@ from .text import sha256_of
 
 #: Findings that block an approval whatever their severity: an open point, or no plan. A base that is missing does
 #: not: an approval records it, since it is a function of the delta and the living spec as they stand.
-BLOCKS_APPROVAL = frozenset({"brief.marker-unresolved", "change.missing-tasks"})
+BLOCKS_APPROVAL = frozenset({"brief.marker-unresolved", "change.missing-tasks", "change.missing-design"})
 TASKS_FILE = "tasks.md"
 
 
@@ -92,11 +92,26 @@ def first_of_two(state: ChangeState, stale: Sequence[str]) -> Approval | None:
     return state.approval
 
 
-def second_blockers(state: ChangeState, stale: Sequence[str], by: str) -> list[str]:
-    """Why `by` cannot approve a change now, a sentence; empty where they can: they gave its first approval."""
-    if (first := first_of_two(state, stale)) and first.by == by:
-        return [f"`{state.id}` is approved once already, by {by}: another name approves it next"]
+def approver_blockers(state: ChangeState, stale: Sequence[str], by: str) -> list[str]:
+    """Why `by` cannot approve a change two names approve, a sentence; empty where they can: they gave its first
+    approval, or two names approved it already and nothing changed since. One name is one person, whatever its case."""
+    if (first := first_of_two(state, stale)) and same_name(first.by, by):
+        return [f"`{state.id}` is approved once already, by {first.by}: another name approves it next"]
+    if (held := _approved_by_two(state, stale)) and held.second:
+        return [f"`{state.id}` is approved already, by {held.by} and {held.second.by}, and nothing changed since"]
     return []
+
+
+def same_name(one: str, other: str) -> bool:
+    """Whether two approvers' names are one person's: compared without case and the spaces around them."""
+    return one.strip().casefold() == other.strip().casefold()
+
+
+def _approved_by_two(state: ChangeState, stale: Sequence[str]) -> Approval | None:
+    """The approval two names gave a change, where it still covers its files: approving again changes nothing."""
+    held = state.approval
+    approved = state.status in ("approved", "verified") and not stale
+    return held if approved and held is not None and held.second is not None else None
 
 
 def owes_design(tier: str, said: bool = False) -> bool:
@@ -134,8 +149,11 @@ def approve(
     # A draft a person corrected is named once: the approved fingerprint then stands for what was drafted.
     drafted = {name: files.get(name, mark) for name, mark in state.drafted.items()}
     if DEMANDS[state.tier].approvers > 1:  # the first of two names is recorded, and the change is a draft
-        first = first_of_two(state, approval_stale(state, files))
-        if first is None or first.by == by:
+        stale = approval_stale(state, files)
+        if _approved_by_two(state, stale):  # approved already, and as it stands: nothing to record
+            return state
+        first = first_of_two(state, stale)
+        if first is None or same_name(first.by, by):
             return state.model_copy(update={"status": "draft", "approval": approval, "drafted": drafted})
         approval = first.model_copy(update={"second": Seconded(by=by, at=at)})
     began = state.base_commit or commit
@@ -325,13 +343,13 @@ _ERROR = "an ERROR"
 #: What a person does about a check that found something blocking, in which `{cid}` is the change.
 _FIX_THE_CHECK = "fix what reports/check.md lists, then run `adk-spec approve {cid}`"
 #: What holds a draft, the first that applies first: the code of what holds it, who acts on it, and the phrase, in
-#: which `{cid}` is the change. A design owed and missing comes first, since `plan` drafts it; then an ERROR, since
-#: the files it is in will change; an open point before the plan, since its answer shapes the tasks; and the plan
-#: before the check, which reads it. A check that is missing or stale holds nothing: the approval makes it.
+#: which `{cid}` is the change. An ERROR comes before everything, since the files it is in will change; an open
+#: point before the plan, since its answer shapes the design and the tasks; and the plan before the check, which
+#: reads it. A check that is missing or stale holds nothing: the approval makes it.
 _HOLDS: tuple[tuple[str, Actor, str], ...] = (
-    ("change.missing-design", "run", "run `adk-spec plan {cid}`"),  # an error, which `plan` settles
     (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
     ("brief.marker-unresolved", "you", "settle the open point in brief.md"),
+    ("change.missing-design", "run", "run `adk-spec plan {cid}`"),
     ("change.missing-tasks", "run", "run `adk-spec plan {cid}`"),
     ("check.blocking", "you", _FIX_THE_CHECK),
 )

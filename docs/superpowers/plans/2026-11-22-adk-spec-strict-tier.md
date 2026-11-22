@@ -68,3 +68,13 @@ approvers, and warnings that block with no override.
   - The stop's `plan` keeps a `--no-explore` the person gave. `TIERS` replaces `BUILT_TIERS`, now every tier.
   - Not done: `plan` keeps redrafting an owed design that stands, as on standard today; the finding no longer
     invites writing one by hand.
+- **After the code review.**
+  - Approving again a strict change two names approved, as it stands, is refused: it had dropped the change back
+    to a draft and lost its second approver.
+  - A design owed and missing is a warning that blocks approval, as missing tasks are, so `validate` passes a strict
+    change that stopped on purpose; it comes after an error and an open point in the next line, not before them.
+  - A strict change's check report lists a warning among what blocks, and `check` fails on it.
+  - `plan` keeps a design a person wrote or edited and plans from it, unless `--replace`: the drafted fingerprints
+    of phase 12 tell adk-spec's own design from a person's.
+  - The stop names the `plan` that goes on: `--replace` where a revised change's task is ticked, `--no-explore` for
+    a revision. One name is one person whatever its case, and a name that cannot approve is refused before the check.

@@ -54,7 +54,7 @@ SEVERITY: dict[str, Severity] = {
     "change.missing-brief": "ERROR",
     "change.no-deltas": "ERROR",
     "change.missing-tasks": "WARNING",
-    "change.missing-design": "ERROR",
+    "change.missing-design": "WARNING",
     "check.requirement-no-task": "ERROR",
     "check.task-unknown-requirement": "ERROR",
 }
