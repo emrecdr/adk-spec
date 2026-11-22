@@ -131,8 +131,10 @@ def test_a_provider_that_fails_part_way_leaves_no_folder_and_no_lock(tmp_path, c
 
 
 def test_an_id_that_is_taken_or_unsafe_is_refused_before_anything_is_spent(tmp_path, capsys, fake_provider) -> None:
+    """An ID that names a change revises it (`test_revise.py`); a folder there that is no change is still refused."""
     seeded(tmp_path)
-    assert proposed(tmp_path, "--id", "passkeys") == 2 and "exists already" in capsys.readouterr().err
+    (tmp_path / ".spec/changes/notes").mkdir()
+    assert proposed(tmp_path, "--id", "notes") == 2 and "exists already" in capsys.readouterr().err
     assert proposed(tmp_path, "--id", "con") == 2 and fake_provider.requests == []
 
 

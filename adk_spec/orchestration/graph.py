@@ -15,7 +15,7 @@ here: the command holds the terminal, and nothing of the state's keys.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from google.adk.agents.context import Context
@@ -72,6 +72,8 @@ class Known:
     living: Mapping[str, Spec]
     #: Every requirement ID spoken for, in a living spec or in an open change.
     taken: frozenset[str]
+    #: The IDs a change being revised has given, by capability and requirement name: kept where a name stays.
+    kept: Mapping[tuple[str, str], str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -96,7 +98,7 @@ def drafted(state: Mapping[str, Any], known: Known) -> Drafted:
     """The brief and the deltas a run left in state, converted. The same call gives the same IDs, so what a gate
     checked is what the command writes."""
     draft = BriefDraft.model_validate(state[brief_stage.KEY])
-    deltas = to_deltas(DeltasDraft.model_validate(state[deltas_stage.KEY]), known.living, known.taken)
+    deltas = to_deltas(DeltasDraft.model_validate(state[deltas_stage.KEY]), known.living, known.taken, known.kept)
     return Drafted(to_brief(draft), deltas, draft.design_needed)
 
 

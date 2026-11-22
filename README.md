@@ -46,7 +46,8 @@ to read first. Between `approve` and `verify` you implement the tasks, with the 
 box. `adk-spec` writes specs and plans and judges the result. It does not edit your code.
 
 A small change is `lean`: it owes no check and no verification, so it takes three commands, `propose`, `approve`,
-`archive`. `propose` sizes a request itself; `--tier lean` or `--tier standard` says it by hand.
+`archive`. `propose` sizes a request itself: a short fix is lean and a long feature request standard by rule, with no
+model call, and a model sizes the rest. `--tier lean` or `--tier standard` says it by hand.
 
 ### What each command does
 
@@ -60,6 +61,12 @@ A small change is `lean`: it owes no check and no verification, so it takes thre
 
   In a git repository `propose` reads the code before it drafts the design and the tasks, and writes what it found
   to `context.md` in the change's folder. See "Working in an existing repository" below. `--no-explore` skips it.
+
+  Where `--id` names a change that is open, `propose` revises it by the request, keeping the change's tier and
+  everything the request does not reach, your edits included: `adk-spec propose "also allow backup codes" --id
+  passkeys`. It says which requirements it added, changed and dropped; a requirement that keeps its name keeps its ID.
+  The tasks are drafted again unless one is ticked, and `context.md` is kept. A revised change is a draft again, to
+  be approved again. A verified or archived change is not revised: propose a new one.
 
 - **`approve`** records who approved, when, and the fingerprint of each file. A later edit voids it; ticking a
   task does not. The name is a recorded claim, not an authentication. On a standard change it first makes the

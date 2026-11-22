@@ -118,11 +118,21 @@ def questions_of(draft: BriefDraft) -> list[dict[str, str]]:
     return [{"question": one or NO_QUESTION, "suggested": suggested.get(one, "")} for one in asked]
 
 
-def to_deltas(draft: DeltasDraft, living: Mapping[str, Spec], taken: Iterable[str]) -> dict[str, Delta]:
+def to_deltas(
+    draft: DeltasDraft,
+    living: Mapping[str, Spec],
+    taken: Iterable[str],
+    kept: Mapping[tuple[str, str], str] | None = None,
+) -> dict[str, Delta]:
     """One delta a capability. An added requirement is given the next ID no spec and no open change holds, and each
     one given counts as held; a purpose is kept only for a capability that is not there yet. A requirement given as
-    modified that says what the living spec says is left out: a model restating a spec copies its neighbours."""
+    modified that says what the living spec says is left out: a model restating a spec copies its neighbours.
+
+    `kept` holds the IDs a change being revised has already given, by capability and requirement name: a
+    requirement the revision keeps by its name keeps its ID, once: a second one of that name gets one of its own."""
     held = set(taken)
+    kept = kept or {}
+    given: set[str] = set()
     slots: dict[str, dict] = {}
     for one in draft.deltas:
         capability = one.capability.strip()
@@ -131,8 +141,11 @@ def to_deltas(draft: DeltasDraft, living: Mapping[str, Spec], taken: Iterable[st
             slot["purpose"] = slot["purpose"] or _text(one.purpose) or None
         stands = {req.id: req for req in living[capability].requirements} if capability in living else {}
         for added in one.added:
-            req_id = next_requirement_id(capability, held)
+            req_id = kept.get((capability, named(added.name)))
+            if req_id is None or req_id in given:
+                req_id = next_requirement_id(capability, held)
             held.add(req_id)
+            given.add(req_id)
             slot["added"].append(_requirement(req_id, added))
         restated = [_requirement(changed.id.strip(), changed.requirement) for changed in one.modified]
         slot["modified"] += [req for req in restated if stands.get(req.id) != req]
@@ -257,3 +270,28 @@ def to_statements(draft: SurveyDraft, texts: Mapping[str, str]) -> tuple[list[St
         if (at := pointed_at(one, texts)) is not None
     ]
     return kept, len(draft.statements) - len(kept)
+
+
+def named(name: str) -> str:
+    """A requirement's name as a revision matches it: its words, in one case."""
+    return flat(name).casefold()
+
+
+def kept_ids(deltas: Mapping[str, Delta]) -> dict[tuple[str, str], str]:
+    """The IDs a change has given its added requirements, by capability and name: what a revision keeps."""
+    return {(capability, named(req.name)): req.id for capability, delta in deltas.items() for req in delta.added}
+
+
+def revision(before: Mapping[str, Delta], after: Mapping[str, Delta]) -> tuple[list[str], list[str], list[str]]:
+    """What a revision did to a change's requirements, by ID: added, changed and dropped, each in order."""
+
+    def held(deltas: Mapping[str, Delta]) -> dict[str, object]:
+        found: dict[str, object] = {}
+        for delta in deltas.values():
+            found |= {req.id: req for req in (*delta.added, *delta.modified)}
+            found |= {gone.id: gone for gone in delta.removed}
+        return found
+
+    old, new = held(before), held(after)
+    changed = sorted(req_id for req_id in old.keys() & new.keys() if old[req_id] != new[req_id])
+    return sorted(new.keys() - old.keys()), changed, sorted(old.keys() - new.keys())

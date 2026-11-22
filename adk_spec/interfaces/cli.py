@@ -32,7 +32,7 @@ from ..domain.context_md import (
     render_context,
     unknown_count,
 )
-from ..domain.convert import render_design, slug_of, to_findings, to_tasks
+from ..domain.convert import kept_ids, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
     Step,
@@ -822,14 +822,16 @@ def _spent(ledger: Any) -> str:
 def _propose(args: argparse.Namespace) -> int:
     _load_env()
     workspace = _workspace(args)
-    if args.id:
+    revising = bool(args.id) and args.id in workspace.changes()  # a change that exists is revised, not taken
+    if args.id and not revising:
         workspace.free(args.id)  # a name that cannot be taken is refused before anything is spent
-    # Every role of the whole command, asked before anything is spent. A tier given by hand is not asked of triage.
+    # Every role of the whole command, asked before anything is spent. A tier given by hand, or the tier of the
+    # change being revised, is not asked of triage.
     from ..orchestration.explore import ROLES as READING
     from ..orchestration.models import require_ready
 
     drafting = ("brief", "deltas", "design", "tasks", *(() if args.no_explore else READING))
-    if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
+    if why := require_ready(roles=drafting if args.tier or revising else ("triage", *drafting)):
         raise UsageError(why)
     with lock_held(workspace):
         return _proposed(args, workspace)
@@ -1487,6 +1489,7 @@ def _sized_by_rule(args: argparse.Namespace) -> None:
 
 
 def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
+    """A request drafted into a change, or, where `--id` names an open change, that change revised by it."""
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import Known
     from ..orchestration.plugins import UsageLedger
@@ -1496,19 +1499,21 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     from ..orchestration.stages.deltas import KEY as DELTAS_KEY
     from ..orchestration.stages.triage import read_triage
 
-    repositories = _with_checked(workspace, args.with_, {}, Path(args.root))  # checked before any call
+    revising = _revising(workspace, args)
+    held = revising.state.repositories if revising else {}
+    repositories = _with_checked(workspace, args.with_, held, Path(args.root))  # checked before any call
     specs, of_specs = workspace.specs()
     if of_specs:  # a spec that does not read would pass for a capability not yet there
         _printed(of_specs)
         print(f"{PROG}: nothing was drafted: a living spec does not read. Fix it first", file=sys.stderr)
         return EXIT_FINDINGS
-    known = Known(living=specs, taken=frozenset(workspace.taken(specs)))
+    known = Known(specs, frozenset(workspace.taken(specs)), kept_ids(revising.deltas) if revising else {})
     _sized_by_rule(args)
     # One ledger for every run of this command: the count and the ceiling are the command's.
     ledger = UsageLedger(workspace.config().max_tokens or None)
     seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES: constitution_text(workspace)}
     with _recording(workspace, "propose", args.id) as kept:
-        state = _rounds(args, known, ledger, kept.recorder, seed)
+        state = _rounds(args, known, ledger, kept.recorder, {**seed, **_as_it_stands(workspace, revising)})
         tier = state.get(TIER)
         whole = tier == "none" or (state.get(BRIEF_KEY) and state.get(DELTAS_KEY))
         if tier is None or not whole or state.get(FAILURE):
@@ -1524,15 +1529,31 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
             print(f"tokens    {_spent(ledger)}")
             return EXIT_OK
         try:
-            kept.change = _written(args, workspace, known, state, tier, repositories)
+            if revising is None:
+                kept.change = _written(args, workspace, known, state, tier, repositories)
+            else:
+                kept.change = _rewritten(workspace, known, state, revising, repositories)
         except WorkspaceError as exc:  # the calls are paid for by now: say so beside the refusal
             kept.outcome = f"failed: {exc}"
             print(f"{PROG}: no change was written: {exc}", file=sys.stderr)
             print(f"tokens    {_spent(ledger)}")
             return EXIT_USAGE
         kept.outcome = "written"
-    change_id = kept.change or ""
-    # An open point comes before the plan, since its answer shapes the tasks: none is drafted on a guess.
+    return _then_planned(args, workspace, kept.change or "", specs, of_specs, ledger, revising)
+
+
+def _then_planned(
+    args: argparse.Namespace,
+    workspace: Workspace,
+    change_id: str,
+    specs: dict[str, Spec],
+    of_specs: list[Finding],
+    ledger: Any,
+    revising: Any,
+) -> int:
+    """What `propose` does once its change is written: the plan, in the same command and under the same ceiling.
+    An open point comes before it, since its answer shapes the tasks, and a revised change whose task is ticked keeps
+    its tasks: none is drafted on a guess, and no ticked box is lost."""
     waiting = [held for held in _assessed(workspace, change_id, specs).findings if held.code == _OPEN_POINT]
     if waiting:
         count = len(waiting)
@@ -1540,11 +1561,21 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
         print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
         _say_next(workspace, change_id, specs)
         return EXIT_OK
-    # The plan, in the same command and under the same ceiling. The change is written by now: a plan that does not
-    # end well leaves it a draft, and `plan` finishes it.
+    if revising is not None and any(task.done for group in revising.tasks or () for task in group.tasks):
+        print(f"kept      tasks.md: a task is ticked. `{PROG} plan {change_id} --replace` drafts it again")
+        print(f"tokens    {_spent(ledger)}")
+        _say_next(workspace, change_id, specs)
+        return EXIT_OK
+    # The change is written by now: a plan that does not end well leaves it a draft, and `plan` finishes it.
     try:
         made = _plan_made(
-            workspace, change_id, specs, of_specs, replace=False, ledger=ledger, explore=not args.no_explore
+            workspace,
+            change_id,
+            specs,
+            of_specs,
+            replace=revising is not None,
+            ledger=ledger,
+            explore=not args.no_explore,
         )
     except NotYetError as exc:  # the calls so far are paid for: what stopped the plan is said as any other failure
         made = _Planned(ledger=ledger, failure=str(exc))
@@ -1562,6 +1593,69 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     print(f"read      {_first_reads(workspace, change_id)} first")
     _say_next(workspace, change_id, specs)
     return EXIT_OK
+
+
+def _revising(workspace: Workspace, args: argparse.Namespace) -> Any:
+    """The open change `--id` names, to be revised by the request, or nothing where it names none. Its tier is kept:
+    no sizing is asked. A verified or archived change is refused: its work was judged against what it says."""
+    if not args.id or args.id not in workspace.changes():
+        return None
+    change = workspace.load_change(args.id).change
+    status = change.state.status
+    if status in ("verified", "archived"):
+        raise NotYetError(
+            f"`{args.id}` is {status}: a change whose work was judged is not revised. Propose a new change for "
+            "what is still wanted"
+        )
+    args.tier = change.state.tier
+    print(f"revising  {args.id}, a {args.tier} {status}: its files kept where the request does not reach")
+    return change
+
+
+def _as_it_stands(workspace: Workspace, change: Any) -> dict[str, str]:
+    """A change being revised, as its files stand, a person's edits included: what the brief and deltas stages
+    revise. Nothing for a new change."""
+    if change is None:
+        return {}
+    from ..orchestration.stages import CURRENT_DELTAS
+    from ..orchestration.stages.brief import REPLACES
+
+    texts = workspace.approval_texts(change.state.id)
+    deltas = "\n".join(text for name, text in sorted(texts.items()) if name.startswith(f"{SPECS}/"))
+    return {REPLACES: texts.get(BRIEF_FILE, ""), CURRENT_DELTAS: deltas}
+
+
+def _rewritten(
+    workspace: Workspace, known: Any, state: dict[str, Any], change: Any, repositories: Mapping[str, str]
+) -> str:
+    """A change revised in place: its brief and deltas written over, a delta of a capability it no longer touches
+    removed, and what changed in its requirements said. An approved change goes back to a draft, as after a rebase,
+    and is approved again: what was approved is no longer what it says."""
+    from ..orchestration.graph import drafted, files_of
+
+    made = drafted(state, known)
+    change_id = change.state.id
+    workspace.remove_from(change_id, [f"{SPECS}/{gone}/{SPEC_FILE}" for gone in set(change.deltas) - set(made.deltas)])
+    paths = workspace.write_into(change_id, files_of(made))
+    update = {
+        "bases": capture_bases(made.deltas, known.living),
+        "needs_design": made.needs_design,
+        "repositories": dict(repositories),
+        "status": "draft",
+        "approval": None,
+    }
+    workspace.save_state(change.state.model_copy(update=update))
+    added, changed, dropped = revision(change.deltas, made.deltas)
+    said = "; ".join(
+        f"{verb} {', '.join(ids) or 'nothing'}"
+        for verb, ids in (("added", added), ("changed", changed), ("dropped", dropped))
+    )
+    print(f"revised   {said}")
+    if change.state.approval is not None:
+        print(f"the approval is void: read what changed, then run `{PROG} approve {change_id}` again")
+    for at, path in enumerate(paths):
+        print(f"{'wrote' if at == 0 else '':<10}{workspace.shown(path)}")
+    return change_id
 
 
 #: The finding of a point a brief leaves open, which holds a plan back.
