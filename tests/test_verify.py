@@ -352,3 +352,16 @@ def test_a_change_written_by_hand_needs_only_approve_verify_and_archive(tmp_path
     implemented(tmp_path)
     assert run(tmp_path, "verify", "passkeys") == 0 and run(tmp_path, "archive", "passkeys") == 0
     assert len(fake_provider.requests) == 2, "the check and the verdicts"
+
+
+def test_verify_is_sent_no_excluded_path(tmp_path, fake_provider) -> None:
+    """A path a person excludes is never part of the diff a model reads. Work done only there is no evidence."""
+    approved_in_a_repository(tmp_path)
+    project = '[project]\ndefault_tier = "lean"\n\n[repository]\n'
+    write_text(tmp_path / ".spec/config.toml", project + 'exclude = ["vendor/**"]\n')
+    implemented(tmp_path)
+    (tmp_path / "vendor").mkdir()
+    write_text(tmp_path / "vendor/lib.py", "VENDORED = True\n")
+    assert run(tmp_path, "verify", "passkeys") == 0
+    sent = str(fake_provider.requests[-1].config.system_instruction)
+    assert "return passkey(user)" in sent and "VENDORED" not in sent and "vendor/lib.py" not in sent

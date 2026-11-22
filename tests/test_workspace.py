@@ -203,3 +203,28 @@ def test_a_change_is_written_whole_or_not_at_all(tmp_path, monkeypatch) -> None:
 def test_a_state_file_written_before_a_field_was_added_still_reads(tmp_path) -> None:
     ws = seeded(tmp_path)
     assert ws.load_change("passkeys").change.state.needs_design is False
+
+
+def test_excluded_paths_are_read_from_the_config(tmp_path) -> None:
+    from adk_spec.workspace.files import write_text
+    from adk_spec.workspace.layout import Workspace
+
+    ws = Workspace.init(tmp_path)
+    assert ws.config().exclude == ()
+    project = '[project]\ndefault_tier = "lean"\n\n[repository]\n'
+    write_text(tmp_path / ".spec/config.toml", project + 'exclude = ["vendor/**", "**/*.pem"]\n')
+    assert ws.config().exclude == ("vendor/**", "**/*.pem")
+
+
+@pytest.mark.parametrize("value", ['"vendor/**"', "[3]", '[""]', '[":(top)secret"]', '["a\\nb"]'])
+def test_exclude_must_be_a_list_of_patterns(tmp_path, value) -> None:
+    """A pattern is handed to git as a path to leave out. One that opens with `:` would be read by git as an
+    instruction of its own, so it is refused by name."""
+    from adk_spec.workspace.config import ConfigError
+    from adk_spec.workspace.files import write_text
+    from adk_spec.workspace.layout import Workspace
+
+    ws = Workspace.init(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", f'[project]\ndefault_tier = "lean"\n\n[repository]\nexclude = {value}\n')
+    with pytest.raises(ConfigError, match="sets exclude"):
+        ws.config()

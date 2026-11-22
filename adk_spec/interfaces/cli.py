@@ -355,7 +355,7 @@ def _drifted(workspace: Workspace, state: ChangeState) -> bool:
     if state.status != "verified" or held is None:
         return False
     try:
-        return sha256_of(diff(workspace.root, held.base)) != held.diff
+        return sha256_of(diff(workspace.root, held.base, exclude=workspace.config().exclude)) != held.diff
     except GitError:
         return True
 
@@ -783,7 +783,7 @@ def _of_tasks(found: Finding) -> bool:
 def _tree(workspace: Workspace) -> str:
     """The repository's files as a stage is shown them, or nothing: no repository here, or no git to ask."""
     try:
-        return tree_text(tracked_files(workspace.root))
+        return tree_text(tracked_files(workspace.root, exclude=workspace.config().exclude))
     except GitError:
         return ""
 
@@ -1009,7 +1009,7 @@ def _work(args: argparse.Namespace, workspace: Workspace, state: ChangeState) ->
     base = resolves(root, named)
     if base is None:
         raise UsageError(f"`{named}` names no commit in this repository")
-    text = diff(root, base)
+    text = diff(root, base, exclude=workspace.config().exclude)
     if not text.strip():
         raise NotYetError(f"nothing under {root} changed since {base[:12]}: there is nothing to verify")
     if len(text) > DIFF_MAX_CHARS:

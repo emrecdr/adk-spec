@@ -20,6 +20,7 @@ import functools
 import os
 import shutil
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 
 from .layout import ROOT_NAME
@@ -194,25 +195,31 @@ def head(root: Path) -> str | None:
     return resolves(root, "HEAD")
 
 
-def _listed(root: Path, *which: str) -> list[str]:
-    return sorted(path for path in git(root, "ls-files", "-z", *which, *_HERE).split("\0") if path)
+def _here(exclude: Sequence[str] = ()) -> tuple[str, ...]:
+    """What limits a git command to the files under the folder it runs in: none of `.spec/`, and none a person
+    excluded. Each of `exclude` is a pattern from that folder, read as a glob."""
+    return (*_HERE, *(f":(exclude,glob){pattern}" for pattern in exclude))
 
 
-def files(root: Path) -> list[str]:
-    """Every file under `root` that git tracks or would: nothing it ignores, and nothing of `.spec/`. Paths from
-    `root`, with forward slashes."""
-    return sorted(set(_listed(root, "--cached", "--others", "--exclude-standard")))
+def _listed(root: Path, *which: str, exclude: Sequence[str] = ()) -> list[str]:
+    return sorted(path for path in git(root, "ls-files", "-z", *which, *_here(exclude)).split("\0") if path)
 
 
-def diff(root: Path, base: str) -> str:
+def files(root: Path, *, exclude: Sequence[str] = ()) -> list[str]:
+    """Every file under `root` that git tracks or would: nothing it ignores, nothing of `.spec/`, and nothing a
+    person excluded. Paths from `root`, with forward slashes."""
+    return sorted(set(_listed(root, "--cached", "--others", "--exclude-standard", exclude=exclude)))
+
+
+def diff(root: Path, base: str, *, exclude: Sequence[str] = ()) -> str:
     """`base` against the working tree under `root`, as one unified diff with paths from `root`. A file git does
     not track yet reads as added: new work is new files, and a person may not have added them. `.spec/` is left
     out. `GitError` where `base` names no commit, or too many files are neither tracked nor ignored."""
     commit = resolves(root, base)
     if commit is None:
         raise GitError(f"`{base}` names no commit in {root}")
-    changed = git(root, "diff", *_PLAIN, "--relative", commit, *_HERE)
-    new = _listed(root, "--others", "--exclude-standard")
+    changed = git(root, "diff", *_PLAIN, "--relative", commit, *_here(exclude))
+    new = _listed(root, "--others", "--exclude-standard", exclude=exclude)
     if len(new) > UNTRACKED_MAX:
         raise GitError(
             f"{len(new):,} files under {root} are neither tracked nor ignored. Add them to git, or ignore what is "

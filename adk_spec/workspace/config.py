@@ -32,10 +32,13 @@ class Config:
     max_tokens: int = 0
     #: How many commands' model calls are kept under `.spec/runs/`, the newest ones. 0 keeps none.
     keep_runs: int = 20
+    #: Paths no command lists, reads or sends: each a pattern git reads as a path from the workspace's root, such
+    #: as `vendor/**` or `**/*.pem`.
+    exclude: tuple[str, ...] = ()
 
 
 #: Each table the code reads, and the keys it reads there.
-KNOWN = {"project": ("default_tier",), "limits": ("max_tokens", "keep_runs")}
+KNOWN = {"project": ("default_tier",), "limits": ("max_tokens", "keep_runs"), "repository": ("exclude",)}
 
 
 def load_config(path: Path) -> Config:
@@ -61,7 +64,23 @@ def load_config(path: Path) -> Config:
     limits = held.get("limits", {})
     ceiling = _whole(path, limits, "max_tokens", Config.max_tokens, "a whole number of tokens, 0 for no ceiling")
     keep = _whole(path, limits, "keep_runs", Config.keep_runs, "a whole number of recordings, 0 to keep none")
-    return Config(default_tier=tier, max_tokens=ceiling, keep_runs=keep)
+    return Config(default_tier=tier, max_tokens=ceiling, keep_runs=keep, exclude=_excluded(path, held))
+
+
+def _excluded(path: Path, held: dict[str, object]) -> tuple[str, ...]:
+    """The patterns under `[repository] exclude`, or none. Each is handed to git as a path to leave out, so one
+    that opens with `:` is refused: git would read it as an instruction of its own."""
+    repository = held.get("repository", {})
+    value = repository.get("exclude", []) if isinstance(repository, dict) else []
+    good = isinstance(value, list) and all(
+        isinstance(one, str) and one.strip() and one.isprintable() and not one.startswith(":") for one in value
+    )
+    if not good:
+        raise ConfigError(
+            f"{path} sets exclude to `{value}`: a list of patterns, each a path from the workspace's root as git "
+            'reads one, such as ["vendor/**", "**/*.pem"]'
+        )
+    return tuple(value)
 
 
 def _whole(path: Path, limits: object, key: str, default: int, what: str) -> int:

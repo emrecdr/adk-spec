@@ -216,3 +216,13 @@ def test_the_fakes_default_tasks_serve_what_the_requests_deltas_owe() -> None:
     other += "## MODIFIED Requirements\n\n### REQ-AUTH-002: Lock\n\n## REMOVED Requirements\n\n### REQ-AUTH-001: Old\n"
     assert named(tasks_serving(shown(other))) == {"REQ-BILLING-EXPORT-007", "REQ-AUTH-002"}, "what is removed owes none"
     assert tasks_serving("no deltas are shown here") is CANNED_TASKS
+
+
+def test_the_plan_is_shown_no_excluded_file(tmp_path, fake_provider) -> None:
+    seeded(tmp_path)
+    repository(tmp_path, {"src/app.py": "x = 1\n", "vendor/lib.py": "y = 2\n"})
+    project = '[project]\ndefault_tier = "lean"\n\n[repository]\n'
+    write_text(tmp_path / ".spec/config.toml", project + 'exclude = ["vendor/**"]\n')
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    shown = between(str(fake_provider.requests[0].config.system_instruction), "tree")
+    assert "src/app.py" in shown and "vendor" not in shown

@@ -154,3 +154,27 @@ def test_a_repositorys_own_diff_settings_change_no_path(tmp_path) -> None:
     _git(tmp_path, "config", "diff.mnemonicPrefix", "true")
     changed(tmp_path)
     assert "+++ b/src/app.py" in diff(tmp_path, base)
+
+
+# Paths a person keeps out of every command: `[repository] exclude`.
+
+
+def test_an_excluded_path_is_never_listed(tmp_path) -> None:
+    repository(tmp_path, {"src/app.py": "x = 1\n", "vendor/lib.py": "y = 2\n", "keys/prod.pem": "k\n"})
+    (tmp_path / "vendor/untracked.py").write_text("z = 3\n", encoding="utf-8")
+    assert files(tmp_path) == ["keys/prod.pem", "src/app.py", "vendor/lib.py", "vendor/untracked.py"]
+    assert files(tmp_path, exclude=("vendor/**", "**/*.pem")) == ["src/app.py"]
+
+
+def test_an_excluded_path_is_no_part_of_the_diff_tracked_or_not(tmp_path) -> None:
+    commit = repository(tmp_path, {"src/app.py": "x = 1\n", "vendor/lib.py": "y = 2\n"})
+    for path, text in {
+        "src/app.py": "x = 2\n",
+        "vendor/lib.py": "y = 3\n",
+        "vendor/new.py": "n = 1\n",
+        "src/new.py": "m = 1\n",
+    }.items():
+        (tmp_path / path).write_text(text, encoding="utf-8")
+    whole, kept = diff(tmp_path, commit), diff(tmp_path, commit, exclude=("vendor/**",))
+    assert "vendor/lib.py" in whole and "vendor/new.py" in whole
+    assert "src/app.py" in kept and "src/new.py" in kept and "vendor" not in kept
