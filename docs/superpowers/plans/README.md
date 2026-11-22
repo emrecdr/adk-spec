@@ -32,15 +32,17 @@ How it is applied in every phase below:
 | 2 | Model stages | `2026-11-22-adk-spec-model-stages.md` | `propose` and `plan`, each stage behind a gate; the token ledger; both provider arms. | Done, confirmed live on Copilot |
 | 3 | Check and verify | `2026-11-21-adk-spec-check-and-verify.md` | `check` and `verify`, each finding held to a quote code finds; recordings; the measurement script. | Done, measured live twice. The Gemini arm and a run on Windows are the owner's |
 | 4 | Questions in code | `2026-11-21-adk-spec-questions-in-code.md` | A brief names its open points and code asks them: one model call fewer a round. | Built and merged. Its live proof waits for the owner's go-ahead |
-| 5 | The simple flow | `2026-11-22-adk-spec-simple-flow.md` | See below. | **Being built.** Design `../specs/2026-11-22-simple-flow-design.md`, approved by the owner on 22 November 2026 |
+| 5 | The simple flow | `2026-11-22-adk-spec-simple-flow.md` | A standard change in four commands, a lean one in three: `propose` writes the whole change, `approve` records bases and makes the check. Help in three groups, progress lines, a `next` line. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
+| 6 | Brownfield, part 1 | not written yet | See below. | **Next.** Its design is to be revised for its place inside `propose` |
 
 ## The plan being followed now
 
-**`2026-11-22-adk-spec-simple-flow.md`**, phase 5: four everyday commands.
+Phase 5 is finished. Phase 6, `propose` reading your code, is next: its design
+(`../specs/2026-11-22-brownfield-feature-context-design.md`) is revised first, then its plan is written.
 
 ## How a change flows
 
-| | Today | After phase 5 | After phases 6 and 7 |
+| | Before phase 5 | Now | After phases 6 and 7 |
 |---|---|---|---|
 | Once for a repository | `init` | `init` | `init`, which also describes the repository back to you |
 | One standard change | `propose`, `plan`, `check`, `approve`, `verify`, `archive` | `propose`, `approve`, `verify`, `archive` | the same four, with `propose` reading your code first |
@@ -91,7 +93,9 @@ phase also shows and measures the lengths of what it writes.
 
 **Depends on.** Nothing unbuilt. **Size.** Medium: the work is in some forty tests that pin today's steps.
 
-**Open.** Nothing: the design is approved and the plan is written.
+**State.** Done, on 22 November 2026. One thing differs from the design: where a question is left unanswered,
+`propose` writes the brief and the specs and drafts no plan on a guess; the person settles the point and runs
+`plan`. Its live proof, one standard change through the four commands, waits for the owner's go-ahead.
 
 ### Phase 6. Brownfield, part 1: `propose` reads your code
 
@@ -250,4 +254,6 @@ and a step moves to code only where its output is a function of its input with n
 - A smoke run on the Gemini arm. It needs a `GOOGLE_API_KEY`.
 - The gate on a Windows machine. The CI workflow has a Windows job, and the repository has no remote.
 - Plan 4's live proof: one `propose` and a 25-call measurement, on a go-ahead.
+- Plan 5's live proof: one standard change through the four commands, on a go-ahead. `approve` calls a model
+  now, on a standard change whose check is not current.
 - Every live model call: each needs a go-ahead in so many words.
