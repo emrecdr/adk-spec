@@ -57,15 +57,51 @@ def approval_files(texts: Mapping[str, str]) -> dict[str, str]:
     return {path: sha256_of(_as_approved(path, text)) for path, text in texts.items()}
 
 
-def awaiting_second(state: ChangeState, files: Mapping[str, str]) -> bool:
-    """Whether a strict change holds the first of its two approvals, and it still covers `files` and the bases: the
-    next approval, by another name, approves the change. An edit since voids it, as any approval."""
-    return state.tier == "strict" and state.status == "draft" and not approval_stale(state, files)
+@dataclass(frozen=True)
+class Demands:
+    """What a tier asks of a change: the one place each rule of a tier is written."""
+
+    #: A brief's open points are put to the person as questions; on lean, the brief states what it assumes.
+    asks: bool
+    #: A check is owed before the approval, and a verification before the archive.
+    checked: bool
+    verified: bool
+    #: A design is owed, whatever the brief says.
+    design: bool
+    #: `propose` writes the brief and the specs and stops, for a person to read them before the plan.
+    read_first: bool
+    #: How many different names approve it.
+    approvers: int
+    #: A warning blocks its approval as an error does, and a blocking finding of its check may not be set aside.
+    warnings_block: bool
+    override: bool
+
+
+DEMANDS: Mapping[str, Demands] = {
+    "lean": Demands(False, False, False, False, False, 1, False, True),
+    "standard": Demands(True, True, True, False, False, 1, False, True),
+    "strict": Demands(True, True, True, True, True, 2, True, False),
+}
+
+
+def first_of_two(state: ChangeState, stale: Sequence[str]) -> Approval | None:
+    """The first approval of a change two names approve, where it is given and still covers the files and the
+    bases: the next, by another name, approves the change. None where there is none, or an edit voided it."""
+    if DEMANDS[state.tier].approvers < 2 or state.status != "draft" or stale:
+        return None
+    return state.approval
+
+
+def second_blockers(state: ChangeState, stale: Sequence[str], by: str) -> list[str]:
+    """Why `by` cannot approve a change now, a sentence; empty where they can: they gave its first approval."""
+    if (first := first_of_two(state, stale)) and first.by == by:
+        return [f"`{state.id}` is approved once already, by {by}: another name approves it next"]
+    return []
 
 
 def owes_design(tier: str, said: bool = False) -> bool:
-    """Whether a change owes a design before its tasks: where its brief `said` so, and always on the strict tier."""
-    return said or tier == "strict"
+    """Whether a change owes a design before its tasks: where its brief `said` so, and always where its tier does."""
+    return said or DEMANDS[tier].design
 
 
 def edited_drafts(state: ChangeState, files: Mapping[str, str]) -> list[str]:
@@ -97,10 +133,10 @@ def approve(
     approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override)
     # A draft a person corrected is named once: the approved fingerprint then stands for what was drafted.
     drafted = {name: files.get(name, mark) for name, mark in state.drafted.items()}
-    if state.tier == "strict":  # two names approve it: the first is recorded, and the change stays a draft
-        first = state.approval if awaiting_second(state, files) else None
-        if first is None:
-            return state.model_copy(update={"approval": approval, "drafted": drafted})
+    if DEMANDS[state.tier].approvers > 1:  # the first of two names is recorded, and the change is a draft
+        first = first_of_two(state, approval_stale(state, files))
+        if first is None or first.by == by:
+            return state.model_copy(update={"status": "draft", "approval": approval, "drafted": drafted})
         approval = first.model_copy(update={"second": Seconded(by=by, at=at)})
     began = state.base_commit or commit
     commits = {**(others or {}), **state.base_commits}
@@ -124,8 +160,15 @@ def checked(
     judged records nothing: the model's check stands, with whatever it found."""
     if model is None and check_stands(state, files):
         return state
-    blocking = sum(found.severity == "ERROR" for found in findings)
-    return state.model_copy(update={"check": Checked(at=at, files=dict(files), blocking=blocking, model=model)})
+    stopped = len(blocking(state, findings))
+    return state.model_copy(update={"check": Checked(at=at, files=dict(files), blocking=stopped, model=model)})
+
+
+def blocking(state: ChangeState, findings: Sequence[Finding]) -> list[Finding]:
+    """The findings of a change's check that block its approval: every ERROR, and every WARNING on a tier whose
+    warnings block."""
+    stops = {"ERROR", "WARNING"} if DEMANDS[state.tier].warnings_block else {"ERROR"}
+    return [found for found in findings if found.severity in stops]
 
 
 def verified(
@@ -186,7 +229,7 @@ def check_blockers(state: ChangeState, files: Mapping[str, str]) -> list[Finding
     check that is missing or stale is a signal to the approval, which makes it and is read by its code: no command
     prints those two sentences. A blocking one is printed."""
     cid = state.id
-    if state.tier == "lean":
+    if not DEMANDS[state.tier].checked:
         return []
     if state.check is None:
         why = ("check.missing", f"`{cid}` has not been checked: `adk-spec approve {cid}` checks it first.")
@@ -196,7 +239,7 @@ def check_blockers(state: ChangeState, files: Mapping[str, str]) -> list[Finding
         why = (
             "check.blocking",
             f"The check of `{cid}` found {state.check.blocking} blocking: reports/check.md lists them. Fix them and "
-            "approve again, or approve with --override and your reason.",
+            f"approve again{', or approve with --override and your reason' if DEMANDS[state.tier].override else ''}.",
         )
     else:
         return []
@@ -222,7 +265,9 @@ def approve_blockers(state: ChangeState, findings: Sequence[Finding], *, strict:
     return [
         found
         for found in findings
-        if found.severity == "ERROR" or found.code in BLOCKS_APPROVAL or (strict and found.severity == "WARNING")
+        if found.severity == "ERROR"
+        or found.code in BLOCKS_APPROVAL
+        or ((strict or DEMANDS[state.tier].warnings_block) and found.severity == "WARNING")
     ]
 
 
@@ -232,9 +277,8 @@ def _unready(state: ChangeState, stale: Sequence[str]) -> list[str]:
     cid = state.id
     if state.status == "archived":
         return [f"`{cid}` is archived already"]
-    if state.status == "draft" and state.tier == "strict" and state.approval is not None and not stale:
-        by = state.approval.by
-        return [f"`{cid}` is approved once, by {by}: a strict change owes a second approval, by another name"]
+    if first := first_of_two(state, stale):
+        return [f"`{cid}` is approved once, by {first.by}: it owes a second approval, by another name"]
     if state.approval is None or state.status == "draft":
         return [f"`{cid}` is not approved: run `adk-spec approve {cid}`"]
     if stale:
@@ -256,9 +300,10 @@ def archive_blockers(state: ChangeState, stale: Sequence[str], *, drifted: bool 
     if unready := _unready(state, stale):
         return unready
     cid = state.id
-    if state.tier != "lean" and state.status != "verified":
+    verified = DEMANDS[state.tier].verified
+    if verified and state.status != "verified":
         return [f"`{cid}` is a {state.tier} change and is not verified: run `adk-spec verify {cid}` first"]
-    if state.tier != "lean" and drifted:
+    if verified and drifted:
         return [f"the work changed since `{cid}` was verified: run `adk-spec verify {cid}` again"]
     return []
 
@@ -280,9 +325,9 @@ _ERROR = "an ERROR"
 #: What a person does about a check that found something blocking, in which `{cid}` is the change.
 _FIX_THE_CHECK = "fix what reports/check.md lists, then run `adk-spec approve {cid}`"
 #: What holds a draft, the first that applies first: the code of what holds it, who acts on it, and the phrase, in
-#: which `{cid}` is the change. An ERROR comes before everything, since the files it is in will change; an open
-#: point before the plan, since its answer shapes the tasks; and the plan before the check, which reads it. A
-#: check that is missing or stale holds nothing: the approval makes it.
+#: which `{cid}` is the change. A design owed and missing comes first, since `plan` drafts it; then an ERROR, since
+#: the files it is in will change; an open point before the plan, since its answer shapes the tasks; and the plan
+#: before the check, which reads it. A check that is missing or stale holds nothing: the approval makes it.
 _HOLDS: tuple[tuple[str, Actor, str], ...] = (
     ("change.missing-design", "run", "run `adk-spec plan {cid}`"),  # an error, which `plan` settles
     (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
@@ -305,13 +350,13 @@ def _after_approval(
         return Step("you", f"approve again: {', '.join(stale)} changed since the approval")
     if errors:  # a base that moved, a spec that no longer reads
         return Step("you", f"fix what `adk-spec validate {cid}` lists")
-    if state.status == "verified" and drifted and state.tier != "lean":
+    if state.status == "verified" and drifted and DEMANDS[state.tier].verified:
         return Step("run", f"run `adk-spec verify {cid}` again: the work changed since it was verified")
     if state.status == "verified":
         return Step("run", f"run `adk-spec archive {cid}`")
     if state.verification and not state.verification.tests_passed:
         return Step("you", f'the tests failed: fix them and run `adk-spec verify {cid}`, or verify --override "<why>"')
-    last = "archive" if state.tier == "lean" else "verify"
+    last = "verify" if DEMANDS[state.tier].verified else "archive"
     return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
 
 
@@ -339,8 +384,8 @@ def next_step(
     left = [owed for owed in check if owed.code not in _MADE_BY_APPROVAL]
     if approve_blockers(state, findings) or check_stops(left):
         return Step("you", f"fix what `adk-spec validate {cid}` lists")
-    if state.tier == "strict" and state.approval is not None and not stale:  # the first of two approvals is given
-        return Step("you", f"have someone other than {state.approval.by} run `adk-spec approve {cid}`")
+    if first := first_of_two(state, stale):
+        return Step("you", f"have someone other than {first.by} run `adk-spec approve {cid}`")
     return Step("you", f"run `adk-spec approve {cid}`")
 
 

@@ -329,6 +329,6 @@ def validate_change(change: Change, living: Mapping[str, Spec]) -> list[Finding]
     else:
         about("tasks.md", validate_tasks(groups))
     if change.state.needs_design and change.design is None:
-        owed = "The change owes a design and has none. `adk-spec plan` drafts it, or write design.md."
+        owed = "The change owes a design and has none. `adk-spec plan` drafts it."
         about("design.md", [finding("change.missing-design", owed)])
     return found

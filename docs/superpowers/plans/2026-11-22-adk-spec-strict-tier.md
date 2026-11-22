@@ -55,3 +55,16 @@ approvers, and warnings that block with no override.
   step, and `plan` counts that finding as its own to settle.
 - **Task 3.** The first of the two approvals is recorded in the change's approval and leaves it a draft; the second
   is kept beside the first, as `second`. Where the work began is recorded at the second.
+- **After the cleanup review.**
+  - One table in `lifecycle`, `DEMANDS`, says what each tier asks: questions, a check, a verification, a design, the
+    stop, how many approvers, whether warnings block and whether an override is allowed. Every rule of a tier reads
+    it, the lean ones from before this phase included.
+  - It closed four gaps the reviewers found: a warning of the model's check did not block a strict approval; the
+    next line told a strict change a warning blocks to run `approve`; one name re-approving a strict change after an
+    edit left it approved; and the domain took one name for both approvals.
+  - `first_of_two` is the one test of "approved once, still standing"; `second_blockers` refuses the same name in
+    the domain; the first of two approvals asks no repository; the approval says one line, and who is next is the
+    next line's.
+  - The stop's `plan` keeps a `--no-explore` the person gave. `TIERS` replaces `BUILT_TIERS`, now every tier.
+  - Not done: `plan` keeps redrafting an owed design that stands, as on standard today; the finding no longer
+    invites writing one by hand.

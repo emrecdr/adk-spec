@@ -6,14 +6,14 @@ schema: those are in `drafts.py`, plain and written for the strictest arm.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict
 
 Severity = Literal["ERROR", "WARNING", "INFO"]
 Tier = Literal["lean", "standard", "strict"]
-#: The tiers a person may choose: every one.
-BUILT_TIERS: tuple[Tier, ...] = ("lean", "standard", "strict")
+#: Every tier, as a person names one.
+TIERS: tuple[Tier, ...] = get_args(Tier)
 Status = Literal["draft", "approved", "verified", "archived"]
 
 

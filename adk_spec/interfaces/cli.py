@@ -35,6 +35,7 @@ from ..domain.context_md import (
 from ..domain.convert import kept_ids, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
+    DEMANDS,
     Step,
     approval_checks_first,
     approval_files,
@@ -42,22 +43,24 @@ from ..domain.lifecycle import (
     approve,
     approve_blockers,
     archive_blockers,
-    awaiting_second,
+    blocking,
     capture_bases,
     check_blockers,
     check_stands,
     check_stops,
     checked,
     edited_drafts,
+    first_of_two,
     missing_bases,
     next_step,
     owes_design,
     reopened,
+    second_blockers,
     verified,
     verify_blockers,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import BUILT_TIERS, Brief, Change, ChangeState, Delta, Finding, Spec, Tier
+from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
 from ..domain.secrets import scrub, scrub_lines
 from ..domain.sizing import tier_by_rule
@@ -179,7 +182,7 @@ def _parser() -> _Top:
 
     new = commands.add_parser("new", help="start a change: its folder and its state file")
     new.add_argument("id", help="the change's name: lowercase words joined by hyphens")
-    new.add_argument("--tier", choices=BUILT_TIERS, help="how much ceremony it gets (default: the config's)")
+    new.add_argument("--tier", choices=TIERS, help="how much ceremony it gets (default: the config's)")
     new.set_defaults(handler=_new)
 
     validate = commands.add_parser("validate", help="check the structure of the living specs and of open changes")
@@ -213,7 +216,7 @@ def _parser() -> _Top:
     propose = commands.add_parser("propose", help="draft a whole change from a request: brief, specs and tasks")
     propose.add_argument("request", help="what is wanted, in a sentence or a paragraph")
     propose.add_argument("--id", help="the change's name (default: made from the brief's title)")
-    propose.add_argument("--tier", choices=BUILT_TIERS, help="how much ceremony (default: the model's call)")
+    propose.add_argument("--tier", choices=TIERS, help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
     propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
     propose.add_argument("--with", dest="with_", action="append", default=[], metavar="PATH", help=WITH_HELP)
@@ -604,21 +607,21 @@ def _approve(args: argparse.Namespace) -> int:
         raise NotYetError(f"`{args.id}` is not approved: a living spec does not read. Fix it first")
     _based(workspace, args.id, living)
     assessed = _assessed(workspace, args.id, living)
-    strict = assessed.state.tier == "strict"
-    if strict and args.override:
-        raise UsageError("a strict change sets no blocking finding aside: fix it, then approve again")
+    demands = DEMANDS[assessed.state.tier]
+    if args.override and not demands.override:
+        raise UsageError(f"a {assessed.state.tier} change sets no blocking finding aside: fix it, then approve again")
     # What the files themselves block comes first: no model is asked about files that are going to change.
-    if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict or strict):
+    if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
         return _refused(args.id, blockers)
     first = approval_checks_first(assessed.unchecked)
     if first:
         made = _checked_first(workspace, args.id, living, assessed)
         if made.failure:
             return _unfinished(f"the check did not finish, and nothing was approved: {made.failure}", made.ledger)
-        blocking = [held for held in made.findings if held.severity == "ERROR"]
-        _printed(blocking)
+        stopped = blocking(assessed.state, made.findings)
+        _printed(stopped)
         count = len(made.findings)
-        print(f"checked   {made.report}: {count} finding{'' if count == 1 else 's'}, {len(blocking)} blocking")
+        print(f"checked   {made.report}: {count} finding{'' if count == 1 else 's'}, {len(stopped)} blocking")
         print(f"tokens    {_spent(made.ledger)}")
         assessed = _assessed(workspace, args.id, living)
     # A reason sets aside only what a person was shown: a check recorded before this run, never one it made.
@@ -631,16 +634,12 @@ def _approve(args: argparse.Namespace) -> int:
             )
         return _refused(args.id, blockers)
     files = assessed.files  # as they were read for the assessment that found the check current: no later read
-    try:
-        by = args.by or getpass.getuser()
-    except OSError as exc:  # an account with no name, as in a container run under a bare user id
-        raise UsageError("this account has no name: name the approver with --by") from exc
-    _not_twice(assessed.state, files, by)
+    by = _approver(args, assessed)
     at = datetime.now(UTC).isoformat(timespec="seconds")
     # A reason is recorded only where it set something aside: a blocking finding of the check.
     reason = args.override if any(held.code == "check.blocking" for held in assessed.unchecked) else None
-    began = _began(workspace, assessed.state)
-    held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=_commit(workspace), others=began)
+    began, commit = _where_work_begins(workspace, assessed)
+    held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=commit, others=began)
     edited = edited_drafts(assessed.state, files)
     workspace.save_state(held)
     _said_approved(held, by, len(files))
@@ -653,23 +652,35 @@ def _approve(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _not_twice(state: ChangeState, files: Mapping[str, str], by: str) -> None:
-    """`NotYetError` where the name that gave a strict change its first approval would give the second too."""
-    if awaiting_second(state, files) and state.approval and state.approval.by == by:
-        raise NotYetError(
-            f"`{state.id}` is approved once already, by {by}: a strict change is approved by two names, and another "
-            "name approves it next"
-        )
+def _approver(args: argparse.Namespace, assessed: Assessed) -> str:
+    """Who approves: `--by`, or the account's name. Refused where that name gave the change its first approval and
+    another name owes the second."""
+    try:
+        by = args.by or getpass.getuser()
+    except OSError as exc:  # an account with no name, as in a container run under a bare user id
+        raise UsageError("this account has no name: name the approver with --by") from exc
+    if refused := second_blockers(assessed.state, assessed.stale, by):
+        raise NotYetError(refused[0])
+    return by
+
+
+def _where_work_begins(workspace: Workspace, assessed: Assessed) -> tuple[dict[str, str], str | None]:
+    """What each repository of a change has checked out, where this approval approves it: where its work begins. The
+    first of two names approves nothing yet, and asks no repository."""
+    state = assessed.state
+    if DEMANDS[state.tier].approvers > 1 and first_of_two(state, assessed.stale) is None:
+        return {}, None
+    return _began(workspace, state), _commit(workspace)
 
 
 def _said_approved(held: ChangeState, by: str, count: int) -> None:
-    """What an approval says: the first of a strict change's two, or the approval itself, with its first name where
-    it is the second."""
+    """What an approval says, in one line: the first of two names, or the approval, with the first name where it is
+    the second. Who approves next is the next line's to say."""
     if held.status != "approved":
-        print(f"approved  once, by {by}: a strict change is approved by two names, and another name approves it next")
-        return
-    after = f", after {held.approval.by}" if held.approval and held.approval.second else ""
-    print(f"approved `{held.id}` by {by}{after}: {count} files recorded")
+        said = f"once, by {by}"
+    else:
+        said = f"by {by}" + (f", after {held.approval.by}" if held.approval and held.approval.second else "")
+    print(f"approved `{held.id}` {said}: {count} files recorded")
 
 
 def _began(workspace: Workspace, state: ChangeState) -> dict[str, str]:
@@ -1093,7 +1104,7 @@ def _plan_made(
         PROFILE_TEXT: _profile(workspace),
         LESSONS_TEXT: lessons_text(workspace),
     }
-    if change.design and not state.needs_design:  # a design a person wrote, where the brief owed none
+    if change.design and not state.needs_design:  # a design a person wrote, where the change owes none
         seed[DESIGN_TEXT] = change.design.strip()
     serves = {"owed": owed(change.deltas), "nameable": nameable(change.deltas, specs)}
     if ledger is None:  # one ceiling for the reading and the drafting: they are one command's
@@ -1617,10 +1628,12 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     keep = _tasks_kept(workspace, change, changed) if change else None
     # A revision does not read the code again: its `context.md`, or the lack of one, is kept.
     explore = not args.no_explore and change is None
-    review = tier == "strict"  # a strict change is read by a person before its plan is drafted
-    return _then_planned(
-        workspace, kept.change or "", specs, of_specs, ledger, explore=explore, keep=keep, review=review
+    change_id = kept.change or ""
+    # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs.
+    review = (
+        f"`{PROG} plan {change_id}{' --no-explore' if args.no_explore else ''}`" if DEMANDS[tier].read_first else None
     )
+    return _then_planned(workspace, change_id, specs, of_specs, ledger, explore=explore, keep=keep, review=review)
 
 
 def _tasks_kept(workspace: Workspace, change: Change, changed: bool) -> str | None:
@@ -1643,12 +1656,12 @@ def _then_planned(
     *,
     explore: bool,
     keep: str | None,
-    review: bool = False,
+    review: str | None = None,
 ) -> int:
     """What `propose` does once its change is written: the plan, in the same command and under the same ceiling.
     An open point comes before it, since its answer shapes the tasks: none is drafted on a guess. A revised change
-    keeps its task list where `keep` says why. A strict change, under `review`, stops here for a person to read its
-    brief and specs: `plan` goes on."""
+    keeps its task list where `keep` says why. A change of a tier that reads first stops here for a person to read its
+    brief and specs: `review` is the command that goes on."""
     waiting = [held for held in _assessed(workspace, change_id, specs).findings if held.code == _OPEN_POINT]
     if waiting or keep or review:
         count = len(waiting)
@@ -1656,7 +1669,7 @@ def _then_planned(
         if waiting:
             print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
         elif review:
-            print(f"plan      waits: a strict change is read first. Read brief.md and the specs, then `{PROG} plan`")
+            print(f"plan      waits: a strict change is read first. Read brief.md and the specs, then {review}")
         if keep:
             print(f"kept      tasks.md: {keep}")
         _say_next(workspace, change_id, specs)

@@ -32,7 +32,7 @@ from ..domain.delta_md import parse_delta, render_delta
 from ..domain.drafts import BriefDraft, DeltasDraft, DesignDraft, TasksDraft, Triage, VerdictsDraft
 from ..domain.ids import slug_problem
 from ..domain.lessons_md import coded
-from ..domain.lifecycle import capture_bases
+from ..domain.lifecycle import DEMANDS, capture_bases
 from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.tasks_md import parse_tasks, render_tasks
 from ..domain.validate import validate_brief, validate_delta, validate_tasks
@@ -306,17 +306,14 @@ def _sized(ctx: Context) -> Event:
     return Event(route=NONE if chosen == "none" else GO, state={TIER: chosen})
 
 
-#: The tiers whose open points are put to the person as questions: a lean change states what it assumes instead.
-ASKED_ON = frozenset({"standard", "strict"})
-
-
 def _open_points(ask: bool) -> Callable[[Context], Event]:
     def open_points(ctx: Context) -> Event:
-        """Ask only where the command may, only on the standard tier, only while the rounds last, and only while
+        """Ask only where the command may, only on a tier that asks, only while the rounds last, and only while
         the brief leaves a point open. The questions are read by code from the brief that passed its gate, and the
         run ends on them: the command puts them to the person, and `next_run` starts the run after with what was
         answered."""
-        if not (ask and ctx.state.get(TIER) in ASKED_ON and (ctx.state.get(ROUNDS) or 0) < ROUND_BUDGET):
+        asks = (tier := ctx.state.get(TIER)) in DEMANDS and DEMANDS[tier].asks
+        if not (ask and asks and (ctx.state.get(ROUNDS) or 0) < ROUND_BUDGET):
             return Event(route=NONE)
         questions = questions_of(BriefDraft.model_validate(ctx.state[brief_stage.KEY]))
         return Event(route=SOME, state={ASKING: questions}) if questions else Event(route=NONE)
