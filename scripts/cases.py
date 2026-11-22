@@ -271,6 +271,30 @@ def _integration(root: Path) -> str:
     return CHANGE
 
 
+LOGIN_JS = "export async function signIn(user, password) {\n"
+LOGIN_JS += "  return fetch('/api/sign-in', { method: 'POST', body: JSON.stringify({ user, password }) });\n}\n"
+#: Where a passkey sign-in plugs in when the API is a repository of its own, beside the web app's.
+ACROSS = tuple(f"api/{path}" for path in INTEGRATION)
+
+
+def _across(root: Path) -> str:
+    """A web app in the workspace, which signs in through an API in a repository beside it, named with the change.
+    Where sign-in starts a session is in the API; the web app holds an old file of a similar name that nothing uses.
+    The change has no plan yet: `plan` reads both repositories, and what it states is what is scored."""
+    workspace = _workspace(root, brief=BRIEF, delta=Delta(capability="auth", added=(PASSKEY,)), tasks=())
+    for path, text in {"src/login.js": LOGIN_JS, DECOY: OLD_PY}.items():
+        write_text(root / path, text)
+    _commit_all(root)
+    api = root.parent / f"{root.name}-api"  # beside the workspace, and the run's own
+    sources = {INTEGRATION[0]: PASSWORD_PY, INTEGRATION[1]: SESSION_PY, "tests/test_password.py": "def test(): ...\n"}
+    for path, text in sources.items():
+        write_text(api / path, text)
+    _commit_all(api)
+    state = workspace.load_change(CHANGE).change.state
+    workspace.save_state(state.model_copy(update={"repositories": {"api": f"../{api.name}"}}))
+    return CHANGE
+
+
 def _commit_all(root: Path) -> None:
     """A git repository at `root` with one commit of all it holds, made under settings of this script's own."""
     git = shutil.which("git")
@@ -314,4 +338,5 @@ CASES = (
         (Expected("verdict.met", ("REQ-AUTH-003",)), Expected("verdict.un", ("REQ-AUTH-002",))),
     ),
     Case("integration", _integration, "plan", (Expected(("context.touches", "context.exists"), INTEGRATION),)),
+    Case("across", _across, "plan", (Expected(("context.touches", "context.exists"), ACROSS),)),
 )

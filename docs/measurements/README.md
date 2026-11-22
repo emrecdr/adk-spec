@@ -13,9 +13,10 @@ has none, and one has nothing wrong and a place in the code to be found.
 | `constitution` | The repository's rules ask for a test with every change; the tasks hold none. | the model, in `check` |
 | `clean` | Nothing. A blocking finding here is a false one, or a fault of the set itself: read its wording. | |
 | `half-done` | Two requirements approved, one implemented. | the model, in `verify`, held to the diff by code |
+| `across` | A web app in the workspace that signs in through an API in a repository beside it, named with the change; the place sign-in starts a session is in the API, and the web app holds an old file of a similar name. | the model, in the reading `plan` makes of both repositories: caught where a statement it kept names the planted file in the API |
 | `integration` | A repository with one place where sign-in starts a session, and an old file of a similar name that nothing uses. | the model, in the reading `plan` makes of the code: caught where a statement it kept names the planted file |
 
-A measurement calls a model with the account the environment names: about `5 x runs` calls for the whole set. The
+A measurement calls a model with the account the environment names: about `13 x runs` calls for the whole set. The
 script says the number before the first call. It holds for the model it ran on and for the instructions at that
 commit; a change to a stage's instruction is a reason to measure again.
 

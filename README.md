@@ -94,13 +94,18 @@ rest on what is there and not on file names.
 - **How it reads.** A model names what it wants to see: files, folders to list, words to search for. Code reads
   them, and only where git lists the path: nothing git ignores, nothing outside the repository, never a symbolic
   link. A second model call states what the text shows. It may ask to see more, three rounds at most.
+- **A model checks the reading.** A third call reviews what was kept, statement by statement, and reads no file.
+  It leaves out a statement its quote does not bear out, names what is still unknown, and may send the reading one
+  round further.
 - **What you get.** `context.md` in the change's folder, in four sections: what exists, where the change plugs
-  in, conventions to follow, risks. Every statement names a file and a line and quotes the code, and a statement
-  whose quote is not in that file is left out and counted. The design and the tasks are drafted from it.
+  in, conventions to follow, risks, and then what is still unknown. Every statement names a file and a line, the
+  line that opens the block it stands in, and quotes the code; a statement whose quote is not in that file is left
+  out and counted. The design and the tasks are drafted from it, and do not plan on an unknown as if it were known.
 - **It is yours.** Edit `context.md` as you would any file of the change. One that is there is kept and read as it
   stands; delete it and the next `adk-spec plan <id>` reads the code again. It is no part of an approval.
-- **What it costs.** Up to four model calls and, at its caps, some 30,000 tokens; far less in a small repository.
-  It is the largest part of `propose`. `[limits] max_tokens` holds it, and the `tokens` line shows it.
+- **What it costs.** Up to seven model calls: one to choose, four to state, two to review. Measured live on a
+  repository of 268 files it took some 30,000 tokens; far less in a small repository. It is the largest part of
+  `propose`. `[limits] max_tokens` holds it, and the `tokens` line shows it.
 - **It never stops a plan.** A reading that fails or finds nothing says so in one line, and the plan is drafted
   without it.
 
@@ -117,6 +122,25 @@ A file that holds a private key is treated as an excluded path is, with nothing 
 [repository]
 exclude = ["vendor/**", "**/*.pem", "config/production.yaml"]
 ```
+
+### A feature across repositories
+
+A feature often changes more than one repository: an API and the web app that calls it. Name the others with the
+change, as often as needed:
+
+```
+adk-spec propose "Let users sign in with a passkey." --with ../api --with web=../web-app
+adk-spec plan sign-in-with-a-passkey --with ../mobile
+```
+
+- `--with PATH` names a repository after its folder; `--with NAME=PATH` names it yourself. The names are recorded
+  in the change, and the next change names its own, or none.
+- The reading covers them all, by the same rules: each one's own git list, its own exclusions where it is an
+  adk-spec project too, no file that holds a key. A statement names `api/src/routes.py` for a file of `api`, and
+  `context.md` says at what commit each repository was read.
+- A repository that is not on this machine is said in one line, and the plan goes on without it.
+- `approve` records where the work begins in each, and `verify` judges the work in all of them. Name a repository's
+  starting point by hand with `verify <id> --base api=<commit>`, for one named after the change was approved.
 
 ### To redo one step
 

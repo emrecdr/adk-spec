@@ -20,7 +20,7 @@ def case(name: str):
     return next(one for one in CASES if one.name == name)
 
 
-def test_the_set_holds_seven_cases_one_clean_one_for_verify_and_one_for_the_reading() -> None:
+def test_the_set_holds_eight_cases_one_clean_one_for_verify_and_two_for_the_reading() -> None:
     assert [one.name for one in CASES] == [
         "contradiction",
         "ambiguity",
@@ -29,9 +29,10 @@ def test_the_set_holds_seven_cases_one_clean_one_for_verify_and_one_for_the_read
         "clean",
         "half-done",
         "integration",
+        "across",
     ]
     assert [one.name for one in CASES if one.clean] == ["clean"] and case("clean").expect == ()
-    assert [one.command for one in CASES if one.command != "check"] == ["verify", "plan"]
+    assert [one.command for one in CASES if one.command != "check"] == ["verify", "plan", "plan"]
 
 
 def test_a_planted_fault_is_caught_by_a_finding_on_its_file_that_names_it() -> None:
@@ -87,11 +88,11 @@ def test_the_measurement_runs_whole_on_the_fake(tmp_path, capsys, fake_provider)
     assert measure.main(["--runs", "2", "--out", str(out)]) == 0
     text = out.read_text(encoding="utf-8")
     rows = [line for line in text.split("\n") if line.startswith("| `")]
-    assert len(rows) == 7 and "fake on gemini" in text and "2 runs a case" in text
+    assert len(rows) == 8 and "fake on gemini" in text and "2 runs a case" in text
     assert "| `no-task` | check | 2/2 |" in text and "| `half-done` | verify | 2/2, 2/2 |" in text
     assert "| `clean` | check | nothing planted | 0 |" in text
-    assert "about 18 model calls" in capsys.readouterr().out, "it says what it is about to spend before it starts"
-    assert len(fake_provider.requests) == 18, "five cases of one call, and a plan: scout, survey, review, tasks"
+    assert "about 26 model calls" in capsys.readouterr().out, "it says what it is about to spend before it starts"
+    assert len(fake_provider.requests) == 26, "five cases of one call, and two plans: scout, survey, review, tasks"
 
 
 def test_one_case_can_be_measured_alone(tmp_path, fake_provider) -> None:
@@ -185,3 +186,23 @@ def test_a_model_no_plan_stage_can_run_is_said_before_anything_is_spent(monkeypa
     monkeypatch.setenv("SPEC_SCOUT_MODEL", "gpt-4.1")  # ADK would send it to another provider's class
     assert measure.main(["--runs", "1", "--case", "integration"]) == 2
     assert "SPEC_SCOUT_MODEL" in capsys.readouterr().err and fake_provider.requests == []
+
+
+def test_the_across_case_is_caught_where_a_statement_names_the_planted_file_in_the_other_repository(
+    tmp_path, fake_provider
+) -> None:
+    """Phase 7: a web app in the workspace signs in through an API beside it. Where sign-in starts a session is in
+    the API; the web app holds an old file of a similar name that nothing uses."""
+    scout = {"files": ["api/src/auth/password.py", "src/legacy/auth_session_old.py"], "folders": [], "searches": []}
+    fake_provider.answers_when("You choose what to read", {**scout, "reason": "Where sign-in starts a session."})
+    planted = {"kind": "touches", "file": "api/src/auth/password.py", "quote": "return start_session(user)"}
+    more = {"more_files": [], "more_folders": [], "more_searches": []}
+    fake_provider.answers_when(
+        "You read parts of a repository's code", {"statements": [{**planted, "note": "The API ends here."}], **more}
+    )
+    found = measure.measured(case("across"), runs=1, folder=tmp_path / "found")
+    assert (found.caught, found.failed) == ([1], 0)
+    built = tmp_path / "found" / "across-0"
+    assert "## Where the change plugs in\n\n- `api/src/auth/password.py:7` The API ends here." in (
+        built / ".spec/changes/measured/context.md"
+    ).read_text(encoding="utf-8")
