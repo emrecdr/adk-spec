@@ -235,7 +235,7 @@ def test_the_plan_is_shown_no_excluded_file(tmp_path, fake_provider) -> None:
 # The plan reads the code first: brownfield, part 1.
 
 CONTEXT = ".spec/changes/passkeys/context.md"
-STATED = "- `src/app.py:2` Sign-in is decided here.\n  > return password()"
+STATED = "- `src/app.py:2` Sign-in is decided here.\n  in: def login():\n  > return password()"
 
 
 def stages(fake_provider) -> list[str]:
@@ -403,7 +403,10 @@ def test_the_scout_is_shown_each_repository_and_a_statement_may_name_one(tmp_pat
     assert "=== api (1 file)\napi/src/routes.py" in between(
         str(fake_provider.requests[0].config.system_instruction), "tree"
     )
-    assert "- `api/src/routes.py:2` Here.\n  > return start_session(request.user)" in read_text(root / CONTEXT)
+    assert (
+        "- `api/src/routes.py:2` Here.\n  in: def sign_in(request):\n  > return start_session(request.user)"
+        in read_text(root / CONTEXT)
+    )
 
 
 @pytest.mark.usefixtures("fake_provider")
@@ -436,3 +439,41 @@ def test_plan_with_on_a_change_that_has_a_context_keeps_it_and_says_how_to_read_
     capsys.readouterr()
     assert run(root, "plan", "passkeys", "--replace", "--with", "../api") == 0
     assert "delete it to read again" in capsys.readouterr().out and stages(fake_provider) == ["tasks"]
+
+
+REVIEW_SAYS = {"disputed": [], "more_files": [], "more_folders": [], "more_searches": []}
+
+
+def test_propose_says_how_many_repositories_and_unknowns(tmp_path, capsys, fake_provider) -> None:
+    root = beside(tmp_path)
+    app = {"kind": "touches", "file": "src/app.py", "quote": "return password()", "note": "Sign-in."}
+    invented = {**app, "quote": "return no_such_call()"}
+    fake_provider.answers_when(
+        SCOUT, {"files": ["src/app.py", "api/src/routes.py"], "folders": [], "searches": [], "reason": "Both."}
+    )
+    fake_provider.answers_when(
+        SURVEY, {"statements": [app, ROUTES, invented], "more_files": [], "more_folders": [], "more_searches": []}
+    )
+    fake_provider.answers_when(REVIEW, {**REVIEW_SAYS, "unknown": [{"question": "Who ends a session?", "where": ""}]})
+    capsys.readouterr()
+    assert run(root, "plan", "passkeys", "--replace", "--with", "../api") == 0
+    assert "explored  2 files in 2 repositories: 2 statements kept, 1 left out, 1 unknown\n" in capsys.readouterr().out
+    assert "## What is still unknown\n\n- Who ends a session?\n" in read_text(root / CONTEXT)
+
+
+def test_a_review_that_disputes_every_statement_writes_no_context_and_says_so(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)
+    repository(tmp_path)
+    fake_provider.answers_when(REVIEW, {**REVIEW_SAYS, "unknown": [], "disputed": [{"statement": 1, "reason": "No."}]})
+    capsys.readouterr()
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    assert "explored  nothing: the review disputed every statement\n" in capsys.readouterr().out
+    assert not (tmp_path / CONTEXT).exists()
+
+
+def test_design_and_tasks_are_told_not_to_plan_on_an_unknown(tmp_path, fake_provider) -> None:
+    ws = seeded(tmp_path)
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"needs_design": True}))
+    assert run(tmp_path, "plan", "passkeys", "--replace", "--no-explore") == 0
+    rule = "do not plan on it as if it were known: a task that depends on it says so"
+    assert all(rule in " ".join(str(request.config.system_instruction).split()) for request in fake_provider.requests)

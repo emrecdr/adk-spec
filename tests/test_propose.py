@@ -505,3 +505,16 @@ def test_a_repository_that_cannot_stand_beside_this_one_is_refused_before_any_ca
     repository(tmp_path)
     assert proposed(tmp_path, "--with", "api=.") == 2
     assert "this repository itself" in capsys.readouterr().err and fake_provider.requests == []
+
+
+def test_read_first_names_context_md_where_something_is_unknown(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)
+    repository(tmp_path)
+    unknown = [{"question": "Who ends a session?", "where": "src/"}]
+    fake_provider.answers_when(
+        "You review what a reading",
+        {"disputed": [], "unknown": unknown, "more_files": [], "more_folders": [], "more_searches": []},
+    )
+    capsys.readouterr()
+    assert proposed(tmp_path, "--tier", "lean", "--id", "read") == 0
+    assert "and context.md (1 unknown) first\n" in capsys.readouterr().out

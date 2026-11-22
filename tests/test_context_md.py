@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from adk_spec.domain.context_md import SECTIONS, render_context
+from adk_spec.domain.context_md import SECTIONS, render_context, unknown_count
 from adk_spec.domain.convert import to_statements
 from adk_spec.domain.drafts import SurveyDraft
 from adk_spec.domain.model import Statement
@@ -99,3 +99,41 @@ def test_a_partial_reading_says_so_at_its_top() -> None:
     )
     assert "Read from the repository on 2026-11-22.\n\nThis reading is partial: the token ceiling was spent.\n" in text
     assert "## What was read\n\n- nothing\n" in text
+
+
+def test_a_reading_across_repositories_names_each_commit() -> None:
+    text = render_context(
+        "passkeys",
+        at="2026-11-22T10:00:00+00:00",
+        commit="1a2b3c4d5e6f7a8b9c0d",
+        statements=[],
+        read=(),
+        others={"api": "9f8e7d6c5b4a3f2e1d0c", "web": None},
+    )
+    assert text.startswith(
+        "# Context: passkeys\n\nRead on 2026-11-22: this repository at commit 1a2b3c4d5e6f, api at commit 9f8e7d6c5b4a,"
+        " web.\n"
+    )
+
+
+def test_what_is_still_unknown_has_its_section_and_the_disputed_are_counted() -> None:
+    held = Statement(
+        kind="touches", path="api/src/routes.py", line=2, quote="return x()", note="Here.", within="def a():"
+    )
+    text = render_context(
+        "passkeys",
+        at="2026-11-22T10:00:00+00:00",
+        commit=None,
+        statements=[held],
+        read=("api/src/routes.py (whole)",),
+        dropped=2,
+        disputed=1,
+        unknown=[("Does the mobile app call it too?", "a repository not named here"), ("Who owns sessions?", "")],
+    )
+    assert "- `api/src/routes.py:2` Here.\n  in: def a():\n  > return x()\n" in text
+    assert (
+        "## What is still unknown\n\n- Does the mobile app call it too? Look in: a repository not named here.\n"
+        "- Who owns sessions?\n\n## What was read"
+    ) in text
+    assert "Left out: 2 statements whose quote was not in the file named; 1 the review disputed." in text
+    assert unknown_count(text) == 2 and unknown_count("# Context: x\n") == 0

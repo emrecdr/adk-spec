@@ -23,7 +23,7 @@ from typing import Any, NoReturn
 
 from ..domain.brief_md import render_brief
 from ..domain.check import nameable, owed, removed
-from ..domain.context_md import PARTIAL, render_context
+from ..domain.context_md import PARTIAL, render_context, unknown_count
 from ..domain.convert import render_design, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
@@ -979,6 +979,7 @@ def _read_code(
     found = explored(run.state)
     if not found.statements:
         nothing = "nothing the scout named could be read" if not found.read else "no statement quoted what was read"
+        nothing = "the review disputed every statement" if found.disputed else nothing
         return f"nothing: {failure or nothing}", None
     at = datetime.now(UTC).isoformat(timespec="seconds")
     text = render_context(
@@ -990,12 +991,21 @@ def _read_code(
         left_out=found.left_out,
         dropped=found.dropped,
         partial=failure,
+        others=source.commits(),
+        unknown=found.unknown,
+        disputed=found.disputed,
     )
     (path,) = workspace.write_into(change_id, {CONTEXT_FILE: text})
-    files, kept = len(found.read), len(found.statements)
-    said = f"{files} file{'' if files == 1 else 's'}: {kept} statement{'' if kept == 1 else 's'} kept"
-    said += f", {found.dropped} left out" if found.dropped else ""
-    return said + (f"; it ended early: {failure}" if failure else ""), path
+    return _explored_said(found, len(source.names)) + (f"; it ended early: {failure}" if failure else ""), path
+
+
+def _explored_said(found: Any, others: int) -> str:
+    """What a reading came to, in one line: `9 files in 3 repositories: 14 statements kept, 3 left out, 2 unknown`."""
+    files, kept, dropped = len(found.read), len(found.statements), found.dropped + found.disputed
+    said = f"{files} file{'' if files == 1 else 's'}" + (f" in {others + 1} repositories" if others else "")
+    said += f": {kept} statement{'' if kept == 1 else 's'} kept"
+    said += f", {dropped} left out" if dropped else ""
+    return said + (f", {len(found.unknown)} unknown" if found.unknown else "")
 
 
 def _planned(args: argparse.Namespace, workspace: Workspace) -> int:
@@ -1319,9 +1329,11 @@ def _first_reads(workspace: Workspace, change_id: str) -> str:
     """What a person reads first of a change, each with its length: the brief, and the design where there is one.
     Review counts most there, early and short; the task list follows from the two."""
     texts = workspace.approval_texts(change_id)
-    return " and ".join(
-        f"{name} ({len(lines_of(texts[name]))} lines)" for name in (BRIEF_FILE, DESIGN_FILE) if name in texts
-    )
+    first = [f"{name} ({len(lines_of(texts[name]))} lines)" for name in (BRIEF_FILE, DESIGN_FILE) if name in texts]
+    # What a reading could not establish is read before the plan that was drafted around it.
+    if unknown := unknown_count(context_text(workspace, change_id)):
+        first.append(f"{CONTEXT_FILE} ({unknown} unknown)")
+    return " and ".join(first)
 
 
 def _rounds(args: argparse.Namespace, known: Any, ledger: Any, recorder: Any, seed: dict[str, Any]) -> dict[str, Any]:

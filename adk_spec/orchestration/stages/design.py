@@ -18,7 +18,8 @@ Give each decision with the alternatives you weighed and why this one. Say what 
 Decide only what the requirements leave open. Change no requirement.
 Call existing only what the files or the living specs show.
 Where what the repository already holds is given, build on what it says is there, name the files it names, and
-add nothing to it."""
+add nothing to it. Where it lists something as still unknown, do not plan on it as if it were known: a task that
+depends on it says so."""
 
 
 def build_design() -> LlmAgent:

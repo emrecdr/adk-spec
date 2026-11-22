@@ -33,7 +33,8 @@ Give each task one way its result is checked: a command to run, or what to look 
 Mark a task parallel only where it touches other files than its neighbours and waits on none of them.
 Write no task for anything the brief lists as a non-goal.
 Name files by the paths the repository uses. Where a file is new, put it beside its kind.
-Where what the repository already holds is given, name the files it names and follow the conventions it gives."""
+Where what the repository already holds is given, name the files it names and follow the conventions it gives.
+Where it lists something as still unknown, do not plan on it as if it were known: a task that depends on it says so."""
 
 
 def build_tasks() -> LlmAgent:
