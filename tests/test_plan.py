@@ -34,7 +34,7 @@ def test_plan_writes_tasks_a_person_can_then_approve(tmp_path, capsys, fake_prov
     assert not any(task.done for group in loaded.change.tasks for task in group.tasks)
     assert openings(fake_provider) == [TASKS]
     out = capsys.readouterr().out
-    assert ".spec/changes/passkeys/tasks.md" in out and "120 total" in out and "rebase passkeys" in out
+    assert ".spec/changes/passkeys/tasks.md" in out and "120 total" in out and "approve passkeys" in out
     approved(tmp_path)
 
 

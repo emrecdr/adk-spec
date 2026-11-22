@@ -88,7 +88,7 @@ def test_what_an_archive_waits_for() -> None:
     ("state", "findings", "stale", "said"),
     [
         (DRAFT, [ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
-        (DRAFT, [NO_BASE], ["approval"], "run `adk-spec rebase passkeys`"),
+        (DRAFT, [NO_BASE], ["approval"], "run `adk-spec approve passkeys`"),  # `approve` records it itself
         (DRAFT, [NO_TASKS], ["approval"], "run `adk-spec plan passkeys`"),
         (DRAFT, [NO_TASKS, NO_BASE], ["approval"], "run `adk-spec plan passkeys`"),
         (DRAFT, [NO_TASKS, MARKER], ["approval"], "settle the open point in brief.md"),
@@ -157,7 +157,7 @@ def test_a_draft_with_nothing_else_owed_is_sent_to_its_check_first() -> None:
         (DRAFT, [ERROR], "you"),
         (DRAFT, [MARKER], "you"),
         (DRAFT, [NO_TASKS], "run"),
-        (DRAFT, [NO_BASE], "run"),
+        (DRAFT, [NO_BASE], "you"),
         (DRAFT, [], "you"),  # an approval is a person's decision
         (approved(), [], "you"),  # the work itself
         (approved("standard").model_copy(update={"status": "verified"}), [], "run"),

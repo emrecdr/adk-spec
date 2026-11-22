@@ -71,12 +71,12 @@ def test_status_names_the_next_step_of_each_change(tmp_path, capsys) -> None:
         "id": "passkeys",
         "tier": "lean",
         "status": "draft",
-        "actor": "run",
-        "next": "run `adk-spec rebase passkeys`",
+        "actor": "you",
+        "next": "run `adk-spec approve passkeys`",
     }
     assert json.loads(capsys.readouterr().out) == {"changes": [row]}
     assert run(tmp_path, "status") == 0
-    assert "passkeys" in (line := capsys.readouterr().out.strip()) and "run `adk-spec rebase passkeys`" in line
+    assert "passkeys" in (line := capsys.readouterr().out.strip()) and "run `adk-spec approve passkeys`" in line
 
 
 def test_outside_a_workspace_is_a_sentence_and_exit_2(tmp_path, capsys) -> None:
@@ -98,10 +98,7 @@ def living_bytes(tmp_path, capability: str = "auth") -> bytes:
 def test_the_whole_lean_lifecycle_runs_without_a_model(tmp_path, capsys) -> None:
     seeded(tmp_path)
     assert run(tmp_path, "validate", "passkeys") == 0
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
-    assert "delta.base-missing" in capsys.readouterr().out and state_of(tmp_path)["approval"] is None
-    assert run(tmp_path, "rebase", "passkeys") == 0
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0, "three commands: no `rebase` first"
     state = state_of(tmp_path)
     assert state["status"] == "approved" and state["approval"]["by"] == "reviewer"
     assert set(state["approval"]["files"]) == {"brief.md", "tasks.md", "specs/auth/spec.md"}
@@ -336,7 +333,10 @@ def test_the_installed_command_reads_what_a_person_types_as_utf8(monkeypatch) ->
 def test_status_groups_changes_by_who_acts_next(tmp_path, capsys) -> None:
     """Borrowed from an overview that groups work as waiting on you, ready, and done: a list of every change in one
     column makes a person read each line to find the ones that wait on them."""
-    ws = seeded(tmp_path)  # `passkeys`: a base is not recorded yet, so a command is ready to run
+    ws = seeded(tmp_path)
+    tasks = tmp_path / ".spec/changes/passkeys/tasks.md"
+    planned = read_text(tasks)
+    tasks.unlink()  # `passkeys` has no plan yet, so a command is ready to run
     folder = ws.new_change("needs-you", "lean")
     write_text(
         folder / "brief.md", BRIEF.replace("Browsers in scope support WebAuthn.", "[NEEDS CLARIFICATION: which?]")
@@ -346,9 +346,35 @@ def test_status_groups_changes_by_who_acts_next(tmp_path, capsys) -> None:
     out = capsys.readouterr().out
     assert out.index("Waiting on you") < out.index("needs-you") < out.index("Ready to run") < out.index("passkeys  ")
     assert "Done" not in out, "a group with no change is not printed"
+    write_text(tasks, planned)
     approved(tmp_path)
     assert run(tmp_path, "archive", "passkeys") == 0
     capsys.readouterr()
     assert run(tmp_path, "status", "--all") == 0
     out = capsys.readouterr().out
     assert out.index("Waiting on you") < out.index("Done") < out.index("passkeys  ") and "Ready to run" not in out
+
+
+def test_approve_records_a_base_that_is_missing_and_needs_no_rebase(tmp_path) -> None:
+    """The simple flow: `rebase` was a command a person ran only because `approve` asked for it. What it records
+    is a function of the delta and the living spec, which `approve` has read already."""
+    seeded(tmp_path)
+    assert state_of(tmp_path)["bases"] == {}
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    state = state_of(tmp_path)
+    assert set(state["bases"]) == {"REQ-AUTH-001", "REQ-AUTH-002"}, "what the delta removes and what it modifies"
+    assert state["approval"]["bases"] == state["bases"]
+
+
+def test_approve_never_records_anew_a_base_that_moved(tmp_path, capsys) -> None:
+    """A base that is recorded and no longer true is the one guard against two changes to one requirement: the
+    person must read what the requirement says now. `approve` fills in what is missing and corrects nothing."""
+    seeded(tmp_path)
+    assert run(tmp_path, "rebase", "passkeys") == 0
+    recorded = state_of(tmp_path)["bases"]
+    living = tmp_path / ".spec/specs/auth/spec.md"
+    write_text(living, read_text(living).replace("after five failed attempts", "after four failed attempts"))
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    assert "delta.base-stale" in capsys.readouterr().out
+    assert state_of(tmp_path)["bases"] == recorded and state_of(tmp_path)["approval"] is None

@@ -36,6 +36,7 @@ from ..domain.lifecycle import (
     check_blockers,
     check_stands,
     checked,
+    missing_bases,
     next_step,
     verified,
     verify_blockers,
@@ -410,9 +411,20 @@ def _rebase(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _based(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> None:
+    """A base recorded for each requirement the change modifies or removes that has none: what `rebase` records
+    for a change that was never based, so that an approval needs no command before it. A recorded base is left as
+    it is."""
+    loaded = workspace.load_change(change_id)
+    state = loaded.change.state
+    if state.status != "archived" and (missing := missing_bases(state, loaded.change.deltas, living)):
+        workspace.save_state(state.model_copy(update={"bases": {**state.bases, **missing}}))
+
+
 def _approve(args: argparse.Namespace) -> int:
     workspace = _workspace(args)
     living, _found = workspace.specs()
+    _based(workspace, args.id, living)
     assessed = _assessed(workspace, args.id, living)
     state, unchecked = assessed.state, assessed.unchecked
     blockers = approve_blockers(

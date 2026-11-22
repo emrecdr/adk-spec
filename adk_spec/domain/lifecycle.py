@@ -17,8 +17,9 @@ from .spec_md import fingerprint
 from .tasks_md import parse_tasks, render_tasks
 from .text import sha256_of
 
-#: Findings that block an approval whatever their severity: an open point, no plan, or a delta with no recorded base.
-BLOCKS_APPROVAL = frozenset({"brief.marker-unresolved", "change.missing-tasks", "delta.base-missing"})
+#: Findings that block an approval whatever their severity: an open point, or no plan. A base that is missing does
+#: not: an approval records it, since it is a function of the delta and the living spec as they stand.
+BLOCKS_APPROVAL = frozenset({"brief.marker-unresolved", "change.missing-tasks"})
 TASKS_FILE = "tasks.md"
 
 
@@ -32,6 +33,13 @@ def capture_bases(deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> di
             if target.id in now:
                 held[target.id] = fingerprint(now[target.id])
     return held
+
+
+def missing_bases(state: ChangeState, deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> dict[str, str]:
+    """The base of each requirement a delta modifies or removes that has none recorded, as the living spec holds
+    it now. A base that is recorded is never among them, whether it still holds or not: one that moved is the
+    guard against two changes to one requirement, and a person must read what the requirement says now."""
+    return {req: held for req, held in capture_bases(deltas, living).items() if req not in state.bases}
 
 
 def _as_approved(path: str, text: str) -> str:
@@ -208,13 +216,11 @@ class Step:
 _ERROR = "an ERROR"
 #: What holds a draft, the first that applies first: the code of what holds it, who acts on it, and the phrase, in
 #: which `{cid}` is the change. An ERROR comes before everything, since the files it is in will change; an open
-#: point before the plan, since its answer shapes the tasks; the plan before the base, and the base before the
-#: check, which reads what the two leave.
+#: point before the plan, since its answer shapes the tasks; and the plan before the check, which reads it.
 _HOLDS: tuple[tuple[str, Actor, str], ...] = (
     (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
     ("brief.marker-unresolved", "you", "settle the open point in brief.md"),
     ("change.missing-tasks", "run", "run `adk-spec plan {cid}`"),
-    ("delta.base-missing", "run", "run `adk-spec rebase {cid}`"),
     ("check.blocking", "you", "fix what reports/check.md lists, then run `adk-spec check {cid}`"),
     ("check.missing", "run", "run `adk-spec check {cid}`"),
     ("check.stale", "run", "run `adk-spec check {cid}`"),
