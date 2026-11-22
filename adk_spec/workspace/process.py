@@ -179,5 +179,5 @@ def _stopped(process: subprocess.Popen[bytes], windows: bool) -> None:
         subprocess.run([taskkill, "/F", "/T", "/PID", str(process.pid)], capture_output=True, check=False)
     else:
         with contextlib.suppress(ProcessLookupError):  # it ended on its own meanwhile
-            os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(process.pid, signal.SIGKILL)  # pyrefly: ignore[missing-attribute] - not on Windows, nor run there
     process.kill()

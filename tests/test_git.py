@@ -142,8 +142,11 @@ def test_a_refusal_of_gits_that_is_no_missing_repository_is_said_and_never_read_
     own = layer._environment
 
     def distrusted(root, trust=True):
+        # Only the settings adk-spec passes go, its trust of the folder with them: the machine's own config stays
+        # unread, as adk-spec leaves it. GitHub's runners trust every folder in theirs, and read it, git opened all.
         env = {**own(root, trust), "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}
-        return {name: value for name, value in env.items() if not name.startswith("GIT_CONFIG_")}
+        passed = ("GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
+        return {name: value for name, value in env.items() if not name.startswith(passed)}
 
     monkeypatch.setattr(layer, "_environment", distrusted)
     with pytest.raises(GitError, match="dubious ownership"):
