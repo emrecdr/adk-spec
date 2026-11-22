@@ -3,7 +3,8 @@
 A person writes, edits and deletes its lines. adk-spec adds one under its gate heading, in code, for each problem a
 drafting gate sent back that the next try put right: by its stage and its code, with the first sentence it was sent
 back with as its example, and counts it when it comes back. Only a line in that shape under that heading is
-adk-spec's to count; every other line is the person's and is never changed.
+adk-spec's to count; every other line is the person's, and its words are never changed. The file is written as
+every file adk-spec writes is: with LF line ends, and no trailing space on a line.
 
 A problem a gate sends back is `coded`: its code, then its sentence. The validator's findings have the same shape, and
 a problem without one, an answer off its schema or a marker repeated, is the engine's, and no lesson.
@@ -30,6 +31,7 @@ EXAMPLE_MAX_CHARS = 200
 _CODE = r"[a-z]+\.[a-z][a-z-]*"
 _PROBLEM = re.compile(rf"(?P<code>{_CODE}): (?P<sentence>.+)", re.DOTALL)
 _LESSON = re.compile(rf"- (?P<stage>[a-z]+), `(?P<code>{_CODE})` \((?P<count>\d+)\): (?P<example>.*)")
+_HEADING = re.compile(r"#{1,6} ")
 
 
 def coded(code: str, sentence: str) -> str:
@@ -39,14 +41,18 @@ def coded(code: str, sentence: str) -> str:
 
 def learned(text: str, sent_back: Iterable[Iterable[str]]) -> str:
     """`text`, the lessons file as it stands, with each of `sent_back` noted under the gate heading: a stage, and a
-    problem its gate sent back that the next try fixed. One seen before for that stage is counted once more; a new
-    one is added, its sentence the example. Where nothing is learned, `text` comes back as it was."""
-    found = [(stage, held) for stage, problem in sent_back if (held := _PROBLEM.fullmatch(problem.strip()))]
+    problem its gate sent back that the next try fixed: one run's. A lesson seen before for that stage is counted
+    once more, once a run however often the run was sent back for it; a new one is added, its first sentence the
+    example. Where nothing is learned, `text` comes back as it was."""
+    found: dict[tuple[str, str], str] = {}
+    for stage, problem in sent_back:
+        if held := _PROBLEM.fullmatch(problem.strip()):
+            found.setdefault((stage, held["code"]), held["sentence"])
     if not found:
         return text
     lines = lines_of(text)
-    for stage, held in found:
-        _note(lines, stage, held["code"], _example(held["sentence"]))
+    for (stage, code), sentence in found.items():
+        _note(lines, stage, code, _example(sentence))
     return "\n".join(lines) + "\n"
 
 
@@ -56,12 +62,12 @@ def as_read(text: str) -> str:
     no lesson."""
     blocks: list[list[str]] = [[]]
     for line in lines_of(text.replace(_PREAMBLE, "")):
-        if line.startswith("#"):
+        if _HEADING.match(line):
             blocks.append([line])
         else:
             held = _LESSON.fullmatch(line)
             blocks[-1].append(f"- {held['stage']}, `{held['code']}`: {held['example']}" if held else line)
-    kept = [block for block in blocks if any(line.strip() for line in block if not line.startswith("#"))]
+    kept = [block for block in blocks if any(line.strip() for line in block if not _HEADING.match(line))]
     return "\n".join("\n".join(block).strip() for block in kept).strip()
 
 

@@ -213,3 +213,40 @@ def test_the_drafts_a_person_edited_are_named_by_the_lifecycle() -> None:
     assert edited_drafts(state, files) == ["brief.md"]
     after = approve(state, files=files, by="me", at="now")
     assert after.drafted == {"brief.md": "edited", "tasks.md": "b"} and edited_drafts(after, files) == []
+
+
+def test_one_fault_sent_back_twice_in_one_run_is_counted_once() -> None:
+    """Found by the review: each refused try counted again, so one run read as the fault coming back."""
+    text = learned(TEMPLATE, [("deltas", MISSING), ("deltas", MISSING.replace("099", "100"))])
+    (line,) = gate_lines(text)
+    assert "(1): REQ-AUTH-099" in line
+
+
+def test_a_persons_line_that_opens_with_a_hash_is_a_lesson_not_a_heading() -> None:
+    mine = TEMPLATE.replace("## From people\n", "## From people\n\n#1: never rename an ID\n")
+    assert "#1: never rename an ID" in as_read(mine)
+
+
+def test_the_lessons_are_material_a_stage_writes_by_not_an_instruction_inside_the_markers() -> None:
+    """Found by the review: "Follow each" beside "never an instruction to you" gave a model two opposite orders."""
+    from adk_spec.orchestration.stages import THE_LESSONS
+
+    heading = THE_LESSONS.split("<<<")[0]
+    assert "Follow each" not in heading and "none of them is needed again" in heading
+
+
+def test_a_lessons_file_that_cannot_be_written_costs_the_run_nothing(tmp_path, monkeypatch, fake_provider) -> None:
+    """Found by the review: a lessons file linked from elsewhere was read, then refused when written, and the paid
+    drafts were thrown away."""
+    on_the_fake(monkeypatch)
+    ws = seeded(tmp_path)
+    shared = tmp_path / "shared-lessons.md"
+    shared.write_text(TEMPLATE, encoding="utf-8")
+    (ws.home / LESSONS).unlink()
+    try:
+        (ws.home / LESSONS).symlink_to(shared)
+    except OSError:
+        pytest.skip("no symbolic links here")
+    fake_provider.answers_each_time(DELTAS, iter([DELTAS_ON_A_MISSING_ID, None]))
+    assert proposed(tmp_path, "--id", "linked") == 0
+    assert (ws.home / "changes/linked/brief.md").is_file()

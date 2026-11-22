@@ -892,8 +892,8 @@ def _learned(workspace: Workspace, state: Mapping[str, Any]) -> None:
     read or written costs the command nothing."""
     from ..orchestration.gate import SENT_BACK
 
-    if sent_back := state.get(SENT_BACK):
-        with contextlib.suppress(OSError, NotTextError):
+    if sent_back := state.get(SENT_BACK):  # a linked or unreadable file is refused, and costs the run nothing
+        with contextlib.suppress(OSError, NotTextError, PathError, WorkspaceError):
             workspace.learn(sent_back)
 
 

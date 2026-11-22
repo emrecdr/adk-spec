@@ -21,6 +21,7 @@ from .orchestration.graph import Known, build_chat_app
 from .orchestration.plugins import UsageLedger
 from .orchestration.stages import CAPABILITIES, CONSTITUTION, LESSONS_TEXT
 from .workspace.context import capability_index, constitution_text, lessons_text
+from .workspace.files import NotTextError
 from .workspace.layout import Workspace, WorkspaceError
 
 
@@ -35,9 +36,18 @@ def _known() -> tuple[Known, dict[str, str]]:
     told = {
         CAPABILITIES: capability_index(specs),
         CONSTITUTION: constitution_text(workspace),
-        LESSONS_TEXT: lessons_text(workspace),
+        LESSONS_TEXT: _lessons(workspace),
     }
     return Known(living=specs, taken=frozenset(workspace.taken(specs))), told
+
+
+def _lessons(workspace: Workspace) -> str:
+    """The lessons as a chat's drafts read them, or none where the file is no text: a file a person edits by hand,
+    as PowerShell 5.1 writes UTF-16, does not stop the chat loading."""
+    try:
+        return lessons_text(workspace)
+    except NotTextError:
+        return ""
 
 
 app = build_chat_app(*_known(), ledger=UsageLedger())

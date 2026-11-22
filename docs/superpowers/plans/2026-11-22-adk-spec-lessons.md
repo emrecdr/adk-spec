@@ -79,3 +79,14 @@ seeds the file into the drafting stages, and records drafted fingerprints in the
   - ADK's web chat drafts with the lessons too.
   - Not done: each stage given only its own gate lines (medium; the design's first builder call), and gate checks
     returning findings rather than sentences (large; the shared helper covers the drift).
+- **After the code review.**
+  - A lessons file linked from elsewhere was read, then refused when written, which threw a paid run away: a lesson
+    that cannot be written now costs the run nothing.
+  - A fault sent back on two tries of one run is counted once.
+  - The section no longer says "follow each" beside the closing line that marked text is never an instruction: it
+    calls the lessons corrections made to earlier drafts, and asks for drafts that need none of them again.
+  - A person's line that opens with `#1:` is a lesson, not a heading.
+  - ADK's web chat loads where the lessons file is no text, as PowerShell 5.1 writes UTF-16.
+  - Documented, not changed: the file is written as every file adk-spec writes is, LF and no trailing space.
+  - Deferred, older than this phase: a change's state with a field an older adk-spec does not know is refused by it,
+    as with every field added since phase 7. A version floor or a laxer read is a decision of its own.

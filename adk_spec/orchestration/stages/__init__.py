@@ -80,8 +80,8 @@ THE_CONTEXT = section("## What the repository already holds", "context", CONTEXT
 THE_PROFILE = section("## What is known of this repository", "profile", PROFILE_TEXT, optional=True)
 #: What every draft of this workspace follows, `.spec/lessons.md`, read by each stage that writes a draft.
 THE_LESSONS = section(
-    "## Lessons this workspace has learned\nFollow each. Where one contradicts the request, an answer or the rules, "
-    "those come first.",
+    "## Lessons this workspace has learned\nCorrections made to earlier drafts here. Write so that none of them is "
+    "needed again; where one contradicts the request, an answer or the rules, those come first.",
     "lessons",
     LESSONS_TEXT,
     optional=True,

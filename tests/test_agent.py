@@ -115,3 +115,10 @@ async def test_the_chat_drafts_with_the_lessons_as_propose_does(tmp_path, monkey
         str(r.config.system_instruction) for r in fake_provider.requests if DELTAS in str(r.config.system_instruction)
     )
     assert "- Mine." in deltas
+
+
+def test_the_chat_loads_where_the_lessons_file_is_no_text(tmp_path, monkeypatch) -> None:
+    """Found by the review: a lessons file written as UTF-16, as PowerShell 5.1 writes, stopped the chat loading."""
+    ws = seeded(tmp_path)
+    (ws.home / "lessons.md").write_bytes("- a lesson\n".encode("utf-16"))
+    assert loaded(tmp_path, monkeypatch).root_agent is not None
