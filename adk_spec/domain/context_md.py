@@ -76,11 +76,12 @@ def _read_from(at: str, commit: str | None, others: Mapping[str, str | None]) ->
 
 def _left_out(dropped: int, disputed: int) -> str:
     """What was left out of the statements, and why, or nothing."""
-    said = (
-        [f"{dropped} statement{'' if dropped == 1 else 's'} whose quote was not in the file named"] if dropped else []
-    )
+    said = []
+    if dropped:
+        said.append(f"{dropped} statement{'' if dropped == 1 else 's'} whose quote was not in the file named")
     if disputed:
-        said.append(f"{disputed}{'' if said else ' statement' + ('' if disputed == 1 else 's')} the review disputed")
+        noun = "" if said else f" statement{'' if disputed == 1 else 's'}"
+        said.append(f"{disputed}{noun} the review disputed")
     return f"Left out: {'; '.join(said)}." if said else ""
 
 

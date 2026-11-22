@@ -288,7 +288,7 @@ def two(tmp_path, api: dict[str, str] | None = None) -> Source:
     """A workspace repository and an API repository beside it, read as one source."""
     repository(tmp_path / "app", FILES)
     repository(tmp_path / "api", api or API)
-    return Source.of(tmp_path / "app", exclude=(), others=[("api", "../api")])
+    return Source.of(tmp_path / "app", exclude=(), others={"api": "../api"})
 
 
 def test_another_repository_is_read_under_its_name(tmp_path) -> None:
@@ -330,7 +330,7 @@ def test_every_rule_of_phase_6_holds_in_another_repository(tmp_path) -> None:
         os.symlink("private", tmp_path / "api/conf", target_is_directory=True)
     except OSError:
         pytest.skip("this system does not let a test make a symbolic link")
-    held = Source.of(tmp_path / "app", exclude=(), others=[("api", "../api")])
+    held = Source.of(tmp_path / "app", exclude=(), others={"api": "../api"})
     assert not [path for path in held.paths if path.startswith(("api/fixtures/", "api/private/", "api/.spec/"))]
     got = held.gathered(["api/keys/live.pem", "api/conf/settings.py", "api/fixtures/big.json"], [], ["PRIVATE = 1"])
     assert got.texts == {} and "=== search: PRIVATE = 1 (0 lines)" in got.shown, "the word is the model's; no line"
@@ -345,7 +345,7 @@ def test_a_missing_repository_or_one_whose_config_does_not_load_is_named_and_lef
     repository(tmp_path / "app", FILES)
     repository(tmp_path / "api", {**API, ".spec/config.toml": "[project]\n"})
     (tmp_path / "plain").mkdir()
-    others = [("api", "../api"), ("web", "../web"), ("plain", "../plain")]
+    others = {"api": "../api", "web": "../web", "plain": "../plain"}
     held = Source.of(tmp_path / "app", exclude=(), others=others)
     assert held.names == () and held.paths == ["src/app.py", "src/auth/session.py"]
     assert held.missing[0].startswith("api: ") and "default_tier" in held.missing[0]
@@ -364,14 +364,14 @@ def test_this_repository_by_another_spelling_is_refused(tmp_path, spelled) -> No
             pytest.skip("this system does not let a test make a symbolic link")
         spelled = "../again"
     with pytest.raises(SourceError, match="this repository itself"):
-        Source.of(tmp_path / "app", exclude=(), others=[("api", spelled)])
+        Source.of(tmp_path / "app", exclude=(), others={"api": spelled})
 
 
 def test_a_name_that_is_a_folder_here_is_refused(tmp_path) -> None:
     repository(tmp_path / "app", FILES)
     repository(tmp_path / "api", API)
     with pytest.raises(SourceError, match="`src` is also a folder of this repository"):
-        Source.of(tmp_path / "app", exclude=(), others=[("src", "../api")])
+        Source.of(tmp_path / "app", exclude=(), others={"src": "../api"})
 
 
 def test_each_repository_folds_its_own_files_and_one_repository_reads_as_before(tmp_path, monkeypatch) -> None:
@@ -423,3 +423,18 @@ def test_a_putty_key_file_is_never_shown_and_its_part_of_a_diff_is_left_out(tmp_
     )
     kept, omitted = held.without_keys(diff(tmp_path, commit, exclude=()))
     assert omitted == ("keys/deploy.ppk",) and "AAAAQQ" not in kept
+
+
+def test_finding_the_key_files_of_a_diff_scrubs_no_file(tmp_path, monkeypatch) -> None:
+    """Whether a file holds a key is all a diff's filter asks: scrubbing each changed file whole for it, and throwing
+    the scrubbed text away, cost a second on a large working tree, on every status of a verified change."""
+    commit = repository(tmp_path, FILES)
+    (tmp_path / "src/app.py").write_text(APP.replace("password", "passkey"), encoding="utf-8", newline="\n")
+    held = Source.of(tmp_path, exclude=())
+
+    def refused(*_args, **_kwargs):
+        raise AssertionError("a file was scrubbed to learn whether it holds a key")
+
+    monkeypatch.setattr(source, "scrub_lines", refused)
+    text = diff(tmp_path, commit, exclude=())
+    assert held.without_keys(text) == (text, ())

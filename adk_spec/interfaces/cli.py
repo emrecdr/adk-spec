@@ -45,7 +45,7 @@ from ..domain.lifecycle import (
     verify_blockers,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import Brief, ChangeState, Finding, Spec, Tier
+from ..domain.model import BUILT_TIERS, Brief, ChangeState, Finding, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_verify
 from ..domain.secrets import scrub_lines
 from ..domain.spec_md import render_spec
@@ -53,7 +53,7 @@ from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import failed, finding, validate_spec
 from ..domain.verify import Verdict, grounded
-from ..workspace.config import BUILT_TIERS, ConfigError
+from ..workspace.config import ConfigError
 from ..workspace.context import (
     CONSTITUTION_MAX_CHARS,
     ContextTooLargeError,
@@ -64,7 +64,7 @@ from ..workspace.context import (
     living_text,
 )
 from ..workspace.files import NotTextError
-from ..workspace.git import DIFF_MAX_CHARS, GitError, diff, head, is_repository, resolves
+from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGES,
@@ -84,7 +84,7 @@ from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
-from ..workspace.source import NAME, Source, SourceError
+from ..workspace.source import NAME, Source, SourceError, repositories_named
 
 EXIT_OK = 0
 #: A gate refused, or findings at the bar.
@@ -193,7 +193,7 @@ def _parser() -> _Top:
     propose = commands.add_parser("propose", help="draft a whole change from a request: brief, specs and tasks")
     propose.add_argument("request", help="what is wanted, in a sentence or a paragraph")
     propose.add_argument("--id", help="the change's name (default: made from the brief's title)")
-    propose.add_argument("--tier", choices=("lean", "standard"), help="how much ceremony (default: the model's call)")
+    propose.add_argument("--tier", choices=BUILT_TIERS, help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
     propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
     propose.add_argument("--with", dest="with_", action="append", default=[], metavar="PATH", help=WITH_HELP)
@@ -368,8 +368,7 @@ def _drifted(workspace: Workspace, state: ChangeState) -> bool:
     if state.status != "verified" or held is None:
         return False
     try:
-        source = _change_source(workspace, state)
-        return sha256_of(_work_diff(workspace, state, source, held.base, held.bases)[0]) != held.diff
+        return sha256_of(_sources(workspace, state.repositories).work(held.base, held.bases)[0]) != held.diff
     except GitError, SourceError:  # a repository gone, or no longer readable beside this one: not what was judged
         return True
 
@@ -551,7 +550,7 @@ def _approve(args: argparse.Namespace) -> int:
     at = datetime.now(UTC).isoformat(timespec="seconds")
     # A reason is recorded only where it set something aside: a blocking finding of the check.
     reason = args.override if any(held.code == "check.blocking" for held in assessed.unchecked) else None
-    began = _commits(workspace, assessed.state)
+    began = _began(workspace, assessed.state)
     held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=_commit(workspace), others=began)
     workspace.save_state(held)
     print(f"approved `{args.id}` by {by}: {len(files)} files recorded")
@@ -559,10 +558,13 @@ def _approve(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _commits(workspace: Workspace, state: ChangeState) -> dict[str, str]:
-    """The commit checked out in each other repository of a change that is here: where its work begins."""
-    source = _source(workspace, state.repositories) if state.repositories else None
-    return {name: commit for name, commit in (source.commits() if source else {}).items() if commit}
+def _began(workspace: Workspace, state: ChangeState) -> dict[str, str]:
+    """Where the work begins in each other repository of a change that has no starting point recorded yet and is
+    here: the commit it has checked out. A recorded one is never moved, so none is asked after."""
+    unrecorded = {name: path for name, path in state.repositories.items() if name not in state.base_commits}
+    if not unrecorded or (source := _source(workspace, unrecorded)) is None:
+        return {}
+    return {name: commit for name, commit in source.commits().items() if commit}
 
 
 def _commit(workspace: Workspace) -> str | None:
@@ -735,10 +737,11 @@ def _propose(args: argparse.Namespace) -> int:
     workspace = _workspace(args)
     if args.id:
         workspace.free(args.id)  # a name that cannot be taken is refused before anything is spent
+    # Every role of the whole command, asked before anything is spent. A tier given by hand is not asked of triage.
+    from ..orchestration.explore import ROLES as READING
     from ..orchestration.models import require_ready
 
-    # Every role of the whole command, asked before anything is spent. A tier given by hand is not asked of triage.
-    drafting = ("brief", "deltas", "design", "tasks", *(() if args.no_explore else ("scout", "survey")))
+    drafting = ("brief", "deltas", "design", "tasks", *(() if args.no_explore else READING))
     if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
         raise UsageError(why)
     with lock_held(workspace):
@@ -806,45 +809,26 @@ def _of_tasks(found: Finding) -> bool:
 WITH_HELP = "another repository the change spans, read with it: PATH, or NAME=PATH (as often as needed)"
 
 
-def _source(workspace: Workspace, repositories: Mapping[str, str] | None = None) -> Source | None:
+def _sources(workspace: Workspace, repositories: Mapping[str, str]) -> Source:
     """The repository's files, as git lists them once for a command, less what a person excluded, and those of the
-    other repositories a change names: what a stage is shown the names of, and what a reading of the code is made
-    through. None where there is no repository here, or no git to ask. `SourceError` for a repository that can
-    never be read beside this one."""
-    others = list((repositories or {}).items())
+    other repositories a change names: what a stage is shown the names of, what a reading of the code is made
+    through, and what the work is read from. `GitError` where git cannot list them; `SourceError` for a repository
+    that can never be read beside this one."""
+    return Source.of(workspace.root, exclude=workspace.config().exclude, others=repositories)
+
+
+def _source(workspace: Workspace, repositories: Mapping[str, str]) -> Source | None:
+    """`_sources`, or None where there is no repository here, or no git to ask: a plan is drafted without it."""
     try:
-        return Source.of(workspace.root, exclude=workspace.config().exclude, others=others)
+        return _sources(workspace, repositories)
     except GitError:
         return None
 
 
-def _named(given: Sequence[str], held: Mapping[str, str]) -> dict[str, str]:
-    """A change's repositories, `held`, with each `--with` added: `PATH`, named after its folder, or `NAME=PATH`. A
-    name given again takes its new path. `UsageError` for a name that cannot be made, or one named twice at once."""
-    named = dict(held)
-    this_time: set[str] = set()
-    for one in given:
-        name, sep, path = one.partition("=")
-        if not sep or "/" in name or "\\" in name:  # a path alone, which may hold an `=` of its own
-            name, path = "", one
-        path = path.strip().replace("\\", "/")
-        name = name.strip() or re.sub(r"[^a-z0-9-]+", "-", path.rstrip("/").rpartition("/")[2].lower()).strip("-")
-        if not path or not NAME.fullmatch(name):
-            raise UsageError(
-                f"`--with {one}` names no repository adk-spec can name: a to z, digits and `-`, from a letter on. "
-                "Name it as --with NAME=PATH"
-            )
-        if name in this_time:
-            raise UsageError(f"`{name}` is named twice: name each repository once")
-        this_time.add(name)
-        named[name] = path
-    return named
-
-
 def _with_checked(workspace: Workspace, given: Sequence[str], held: Mapping[str, str]) -> dict[str, str]:
-    """`_named`, and each repository named now checked before anything is spent: `SourceError` for one that can
-    never be read beside this one."""
-    named = _named(given, held)
+    """`repositories_named`, and each repository named now checked before anything is spent: `SourceError` for one
+    that can never be read beside this one."""
+    named = repositories_named(given, held)
     if given:
         _source(workspace, named)
     return named
@@ -975,12 +959,12 @@ def _read_code(
         return ("kept: context.md is of a reading that ended early. Delete it to read again" if early else ""), None
     if source is None or not source.paths:
         return "", None
-    from ..orchestration.explore import build_explore_app, explored
+    from ..orchestration.explore import ROLES, build_explore_app, explored
     from ..orchestration.models import require_ready
     from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, TREE
     from ..orchestration.stages import CONSTITUTION as RULES
 
-    if why := require_ready(roles=("scout", "survey", "review")):
+    if why := require_ready(roles=ROLES):
         raise UsageError(why)
 
     def build(ledger: Any, recorder: Any) -> Any:
@@ -1148,50 +1132,49 @@ def _judged(
     return *to_findings(answer, texts), ledger, None
 
 
-def _change_source(workspace: Workspace, state: ChangeState) -> Source:
-    """The source of a change: this repository's files and those of every other repository it names."""
-    return Source.of(workspace.root, exclude=workspace.config().exclude, others=list(state.repositories.items()))
+def _key_files(held: Sequence[str], then: str) -> str:
+    """What is said of the files a diff was shown without: `a.pem: holds a private key, which is never shown`."""
+    return f"{', '.join(held)}{then}{'holds' if len(held) == 1 else 'hold'} a private key, which is never shown"
 
 
-def _work_diff(
-    workspace: Workspace, state: ChangeState, source: Source, base: str, bases: Mapping[str, str]
-) -> tuple[str, tuple[str, ...]]:
-    """The diff of the work, from `base` here and from each of `bases` in the repository it names, as a stage is
-    shown it, and the files left out of it for holding a private key. One function for `verify` and for drift: the
-    fingerprint `verify` records and the one drift is read from must be of the same text, or a change reads as
-    drifted the moment it is verified. `GitError` for a repository that is not here."""
-    parts = [diff(workspace.root, base, exclude=workspace.config().exclude)]
-    for name, commit in bases.items():
-        if (held := source.repository(name)) is None:
-            path = state.repositories.get(name, "a path no longer named")
-            raise GitError(f"{name}: no git repository at {path}: the work cannot be judged on part of it")
-        parts.append(diff(held[0], commit, exclude=held[1], prefix=f"{name}/"))
-    return source.without_keys("".join(parts))
+def _bases(given: Sequence[str], state: ChangeState) -> tuple[str | None, dict[str, str]]:
+    """`--base` read once: the commit of this repository, where one is named, and another repository's by its name.
+    `UsageError` for a name the change does not hold, for one named twice, and for two commits of this one."""
+    here: list[str] = []
+    named: dict[str, str] = {}
+    for one in given:
+        name, sep, ref = one.partition("=")
+        if not (sep and NAME.fullmatch(name)):
+            here.append(one)
+        elif name not in state.repositories:
+            held = ", ".join(state.repositories) or "none"
+            raise UsageError(f"`{name}` is no repository of `{state.id}`. Its repositories: {held}")
+        elif name in named:
+            raise UsageError(f"--base names the starting point of {name} twice")
+        else:
+            named[name] = ref
+    if len(here) > 1:
+        raise UsageError("--base names the commit of this repository once; NAME=REF names another repository's")
+    return (here[0] if here else None), named
 
 
-def _starts(args: argparse.Namespace, source: Source, state: ChangeState) -> dict[str, str]:
+def _starts(named: Mapping[str, str], source: Source, state: ChangeState) -> dict[str, str]:
     """Where the work began in each other repository of a change: as `--base NAME=REF` names it, or as an approval
     recorded it. `UsageError` for one that is not here, or has no starting point: the work cannot be judged on part
     of it."""
-    named = {name: ref for name, _, ref in (one.partition("=") for one in args.base) if name in state.repositories}
     bases: dict[str, str] = {}
-    for name, path in state.repositories.items():
-        if (held := source.repository(name)) is None:
-            raise UsageError(f"{name}: no git repository at {path}: the work cannot be judged on part of it")
+    for name in state.repositories:
+        if (root := source.root_of(name)) is None:
+            raise UsageError(f"{source.why_not(name)}: the work cannot be judged on part of it")
         if not (ref := named.get(name) or state.base_commits.get(name)):
             raise UsageError(
                 f"{name} has no starting point: it was named after `{state.id}` was first approved. Name where its "
                 f"work began with --base {name}=REF"
             )
-        if (commit := resolves(held[0], ref)) is None:
+        if (commit := resolves(root, ref)) is None:
             raise UsageError(f"`{ref}` names no commit in {name}")
         bases[name] = commit
     return bases
-
-
-def _key_files(held: Sequence[str], then: str) -> str:
-    """What is said of the files a diff was shown without: `a.pem: holds a private key, which is never shown`."""
-    return f"{', '.join(held)}{then}{'holds' if len(held) == 1 else 'hold'} a private key, which is never shown"
 
 
 def _work(
@@ -1203,10 +1186,8 @@ def _work(
     cid, root = state.id, workspace.root
     if not is_repository(root):
         raise UsageError(f"{root} is in no git repository: verify reads what changed since the approval")
-    here = [one for one in args.base if one.partition("=")[0] not in state.repositories]
-    if len(here) > 1:
-        raise UsageError("--base names the commit of this repository once; NAME=REF names another repository's")
-    named = (here[0] if here else None) or state.base_commit
+    here, others = _bases(args.base, state)
+    named = here or state.base_commit
     if not named:
         raise UsageError(
             f"no commit was recorded when `{cid}` was first approved. Name the commit the work started from with --base"
@@ -1214,10 +1195,10 @@ def _work(
     base = resolves(root, named)
     if base is None:
         raise UsageError(f"`{named}` names no commit in this repository")
-    source = _change_source(workspace, state)
-    bases = _starts(args, source, state)
+    source = _sources(workspace, state.repositories)
+    bases = _starts(others, source, state)
     # A file that holds a private key is no part of the work a model is shown, as an excluded path is none.
-    text, held = _work_diff(workspace, state, source, base, bases)
+    text, held = source.work(base, bases)
     if not text.strip():
         beside = f"{_key_files(held, ' ')}, and nothing else" if held else "nothing"
         raise NotYetError(f"{beside} under {root} changed since {base[:12]}: there is nothing to verify")
@@ -1311,7 +1292,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
     from ..orchestration.stages.deltas import KEY as DELTAS_KEY
     from ..orchestration.stages.triage import read_triage
 
-    _with_checked(workspace, args.with_, {})  # refused before any call, where it can never be read
+    repositories = _with_checked(workspace, args.with_, {})  # refused before any call, where it can never be read
     specs, of_specs = workspace.specs()
     if of_specs:  # a spec that does not read would pass for a capability not yet there
         _printed(of_specs)
@@ -1338,7 +1319,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace) -> int:
             print(f"tokens    {_spent(ledger)}")
             return EXIT_OK
         try:
-            kept.change = _written(args, workspace, known, state, tier)
+            kept.change = _written(args, workspace, known, state, tier, repositories)
         except WorkspaceError as exc:  # the calls are paid for by now: say so beside the refusal
             kept.outcome = f"failed: {exc}"
             print(f"{PROG}: no change was written: {exc}", file=sys.stderr)
@@ -1413,7 +1394,14 @@ def _rounds(args: argparse.Namespace, known: Any, ledger: Any, recorder: Any, se
         entry, seed = next_run(seed, state, _answered(state[ASKING]))
 
 
-def _written(args: argparse.Namespace, workspace: Workspace, known: Any, state: dict[str, Any], tier: Tier) -> str:
+def _written(
+    args: argparse.Namespace,
+    workspace: Workspace,
+    known: Any,
+    state: dict[str, Any],
+    tier: Tier,
+    repositories: Mapping[str, str],
+) -> str:
     """The change a run drafted, written whole: its id."""
     from ..orchestration.graph import drafted, files_of
 
@@ -1424,7 +1412,7 @@ def _written(args: argparse.Namespace, workspace: Workspace, known: Any, state: 
         tier=tier,
         bases=capture_bases(made.deltas, known.living),
         needs_design=made.needs_design,
-        repositories=_named(args.with_, {}),
+        repositories=dict(repositories),
     )
     files = files_of(made)
     folder = workspace.write_change(held, files)

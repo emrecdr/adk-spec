@@ -32,6 +32,8 @@ from .stages import scout as scout_stage
 from .stages import survey as survey_stage
 from .stages.survey import MATERIAL, READ, STATED
 
+#: The roles of the reading's stages, each one's model asked after before a command spends anything.
+ROLES = (scout_stage.KEY, survey_stage.KEY, review_stage.KEY)
 #: How many rounds of reading one change gets, and how many statements are kept of it.
 LOOK_BUDGET = 3
 STATEMENT_BUDGET = 40
@@ -88,6 +90,11 @@ def _said(statements: Sequence[Statement]) -> str:
         f"- {one.kind}: {one.path}:{one.line} {one.note}" + (f" (in: {one.within})" if one.within else "")
         for one in statements
     )
+
+
+def _holding(statements: Sequence[Statement]) -> dict[str, Any]:
+    """The statements kept, as state holds them: the records, and the same as the next survey reads them."""
+    return {KEPT: [one.model_dump() for one in statements], STATED: _said(statements)}
 
 
 def _numbered(statements: Sequence[Statement]) -> str:
@@ -194,7 +201,7 @@ def _grounded(ctx: Context, source: Source) -> Event:
     held = {(one.path, one.line, one.kind) for one in before.statements}
     kept = [*before.statements, *(one for one in fresh if (one.path, one.line, one.kind) not in held)]
     kept = kept[:STATEMENT_BUDGET]
-    update = {KEPT: [one.model_dump() for one in kept], STATED: _said(kept), DROPPED: before.dropped + dropped}
+    update = {**_holding(kept), DROPPED: before.dropped + dropped}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
     on = more and (state.get(LOOKS) or 0) < LOOK_BUDGET and len(kept) < STATEMENT_BUDGET
     return Event(route=SOME if on else NONE, state=update)
@@ -223,12 +230,7 @@ def _weighed(ctx: Context) -> Event:
     kept = [one for number, one in enumerate(found.statements, 1) if number not in numbers]
     asked = ((plain(one.question)[:QUESTION_MAX_CHARS], plain(one.where)[:WHERE_MAX_CHARS]) for one in answer.unknown)
     unknown = [[question, where] for question, where in asked if question][:UNKNOWN_BUDGET]
-    update = {
-        KEPT: [one.model_dump() for one in kept],
-        STATED: _said(kept),
-        DISPUTED: found.disputed + len(found.statements) - len(kept),
-        UNKNOWN: unknown,
-    }
+    update = {**_holding(kept), DISPUTED: found.disputed + len(found.statements) - len(kept), UNKNOWN: unknown}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
     on = more and (state.get(REVIEWS) or 0) < REVIEW_BUDGET and 0 < len(kept) < STATEMENT_BUDGET
     return Event(route=SOME if on else NONE, state=update)

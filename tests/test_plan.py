@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 import pytest
-from conftest import CANNED_TASKS, approved, between, on_the_fake, repository, run, seeded, state_of
+from conftest import (
+    API,
+    CANNED_REVIEW,
+    CANNED_TASKS,
+    approved,
+    beside,
+    between,
+    on_the_fake,
+    repository,
+    run,
+    seeded,
+    state_of,
+)
 from samples import DELTA, SPEC, tasks_for
 
 from adk_spec.domain.spec_md import parse_spec
-from adk_spec.interfaces import cli
 from adk_spec.workspace.files import read_text, write_text
+from adk_spec.workspace.source import repositories_named
 
 DESIGN, TASKS = "You write the design of a change", "You break a change into tasks"
 SCOUT, SURVEY = "You choose what to read", "You read parts of a repository's code"
@@ -365,22 +377,12 @@ def test_a_context_that_is_no_text_is_said_and_not_read_as_none(tmp_path, capsys
 
 # The other repositories a change spans: phase 7.
 
-API = {"src/routes.py": "def sign_in(request):\n    return start_session(request.user)\n"}
 ROUTES = {
     "kind": "touches",
     "file": "api/src/routes.py",
     "quote": "return start_session(request.user)",
     "note": "Here.",
 }
-
-
-def beside(tmp_path):
-    """A workspace and its change in a repository, and an API repository beside it: the workspace's root."""
-    root = tmp_path / "app"
-    seeded(root)
-    repository(root)
-    repository(tmp_path / "api", API)
-    return root
 
 
 @pytest.mark.usefixtures("fake_provider")
@@ -428,7 +430,7 @@ def test_a_with_whose_name_cannot_be_made_is_refused(tmp_path, fake_provider, gi
 
 
 def test_a_path_typed_with_backslashes_is_recorded_with_slashes() -> None:
-    assert cli._named(["..\\api"], {}) == {"api": "../api"}
+    assert repositories_named(["..\\api"], {}) == {"api": "../api"}
 
 
 def test_plan_with_on_a_change_that_has_a_context_keeps_it_and_says_how_to_read_again(
@@ -441,9 +443,6 @@ def test_plan_with_on_a_change_that_has_a_context_keeps_it_and_says_how_to_read_
     assert "delete it to read again" in capsys.readouterr().out and stages(fake_provider) == ["tasks"]
 
 
-REVIEW_SAYS = {"disputed": [], "more_files": [], "more_folders": [], "more_searches": []}
-
-
 def test_propose_says_how_many_repositories_and_unknowns(tmp_path, capsys, fake_provider) -> None:
     root = beside(tmp_path)
     app = {"kind": "touches", "file": "src/app.py", "quote": "return password()", "note": "Sign-in."}
@@ -454,7 +453,7 @@ def test_propose_says_how_many_repositories_and_unknowns(tmp_path, capsys, fake_
     fake_provider.answers_when(
         SURVEY, {"statements": [app, ROUTES, invented], "more_files": [], "more_folders": [], "more_searches": []}
     )
-    fake_provider.answers_when(REVIEW, {**REVIEW_SAYS, "unknown": [{"question": "Who ends a session?", "where": ""}]})
+    fake_provider.answers_when(REVIEW, {**CANNED_REVIEW, "unknown": [{"question": "Who ends a session?", "where": ""}]})
     capsys.readouterr()
     assert run(root, "plan", "passkeys", "--replace", "--with", "../api") == 0
     assert "explored  2 files in 2 repositories: 2 statements kept, 1 left out, 1 unknown\n" in capsys.readouterr().out
@@ -464,7 +463,9 @@ def test_propose_says_how_many_repositories_and_unknowns(tmp_path, capsys, fake_
 def test_a_review_that_disputes_every_statement_writes_no_context_and_says_so(tmp_path, capsys, fake_provider) -> None:
     seeded(tmp_path)
     repository(tmp_path)
-    fake_provider.answers_when(REVIEW, {**REVIEW_SAYS, "unknown": [], "disputed": [{"statement": 1, "reason": "No."}]})
+    fake_provider.answers_when(
+        REVIEW, {**CANNED_REVIEW, "unknown": [], "disputed": [{"statement": 1, "reason": "No."}]}
+    )
     capsys.readouterr()
     assert run(tmp_path, "plan", "passkeys", "--replace") == 0
     assert "explored  nothing: the review disputed every statement\n" in capsys.readouterr().out

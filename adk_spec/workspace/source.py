@@ -24,7 +24,7 @@ What cannot be given is left out and named, and is never an error: a reading goe
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from itertools import zip_longest
 from pathlib import Path
@@ -35,7 +35,7 @@ from ..domain.verify import parts_of_diff
 from .config import ConfigError, load_config
 from .context import tree_text
 from .files import NotTextError, read_text
-from .git import GitError, grep, head, is_repository, top
+from .git import GitError, diff, grep, head, is_repository, top
 from .git import files as listed_by_git
 from .layout import CONFIG, ROOT_NAME
 
@@ -170,6 +170,20 @@ class _Repository:
         except OSError as exc:
             return f"could not be read: {exc.strerror or exc}"
 
+    def keyed(self, path: str) -> bool:
+        """Whether a file git lists holds a private key, as `lines` would find: asked of a diff's files, which are
+        not shown, so none is scrubbed for it. Scrubbed whole and thrown away, a large working tree cost a second on
+        every status of a verified change."""
+        if path in self._opened:
+            return self._opened[path] == HOLDS_A_KEY
+        target = self.root / path
+        try:
+            if self._linked(path) or not target.is_file() or target.stat().st_size > FILE_MAX_BYTES:
+                return False
+            return target.resolve().is_relative_to(self.root.resolve()) and holds_a_key(normalise(read_text(target)))
+        except NotTextError, OSError:
+            return False
+
     def _linked(self, path: str) -> bool:
         """Whether the file at `path`, or a folder on the way to it from the root, is a symbolic link or a
         junction. git lists a tracked file still after its folder was replaced by a link, and read through the
@@ -203,6 +217,30 @@ class _Repository:
         return rows, False
 
 
+def repositories_named(given: Sequence[str], held: Mapping[str, str]) -> dict[str, str]:
+    """A change's repositories, `held`, with each one a person names added: `PATH`, named after its folder, or
+    `NAME=PATH`, with forward slashes. A name given again takes its new path. `SourceError` for a name that cannot be
+    made, or one named twice at once."""
+    named = dict(held)
+    this_time: set[str] = set()
+    for one in given:
+        name, sep, path = one.partition("=")
+        if not sep or "/" in name or "\\" in name:  # a path alone, which may hold an `=` of its own
+            name, path = "", one
+        path = path.strip().replace("\\", "/")
+        name = name.strip() or re.sub(r"[^a-z0-9-]+", "-", path.rstrip("/").rpartition("/")[2].lower()).strip("-")
+        if not path or not NAME.fullmatch(name):
+            raise SourceError(
+                f"`--with {one}` names no repository adk-spec can name: a to z, digits and `-`, from a letter on. "
+                "Name it as --with NAME=PATH"
+            )
+        if name in this_time:
+            raise SourceError(f"`{name}` is named twice: name each repository once")
+        this_time.add(name)
+        named[name] = path
+    return named
+
+
 def _other(root: Path, name: str, given: str, folders: set[str]) -> _Repository | str:
     """Another repository a change names, read as git lists it with its own exclusions; or why it is left out,
     where it is not on this machine, or cannot be read. `SourceError` where it can never stand beside this one."""
@@ -232,7 +270,6 @@ class Source:
 
     def __init__(self, repositories: Sequence[_Repository], missing: Sequence[str] = ()) -> None:
         here, *others = repositories
-        self.root = here.root
         self._here = here
         self._others = {one.name: one for one in others}
         #: Every path a stage may name: this repository's, then each other's under its name.
@@ -243,16 +280,14 @@ class Source:
         self.missing = tuple(missing)
 
     @classmethod
-    def of(cls, root: Path, *, exclude: Sequence[str], others: Sequence[tuple[str, str]] = ()) -> Source:
+    def of(cls, root: Path, *, exclude: Sequence[str], others: Mapping[str, str] | None = None) -> Source:
         """The source of the repository at `root`, as git lists it now, less what a person excluded; and of each of
-        `others`, a name and a path from `root` or an absolute one. `SourceError` for one that can never be read
+        `others`, by its name a path from `root` or an absolute one. `SourceError` for one that can never be read
         beside this one; one that is not here now is named in `missing`."""
         here = _Repository("", root, listed_by_git(root, exclude=exclude), exclude)
         folders = {path.split("/", 1)[0] for path in here.paths if "/" in path}
         repositories, missing = [here], []
-        for name, given in others:
-            if name in (one.name for one in repositories):
-                raise SourceError(f"`{name}` names two repositories")
+        for name, given in (others or {}).items():
             found = _other(root, name, given, folders)
             if isinstance(found, str):
                 missing.append(found)
@@ -269,10 +304,25 @@ class Source:
             blocks.append(f"=== {one.name} ({_counted(len(one.paths), 'file', 'files')})\n{listed}")
         return "\n".join(blocks)
 
-    def repository(self, name: str) -> tuple[Path, tuple[str, ...]] | None:
-        """Another repository's root and its own exclusions, or nothing where it was not read."""
+    def root_of(self, name: str) -> Path | None:
+        """Another repository's root, or nothing where it was not read."""
         one = self._others.get(name)
-        return None if one is None else (one.root, one.exclude)
+        return None if one is None else one.root
+
+    def why_not(self, name: str) -> str:
+        """Why another repository was not read, as `missing` says it."""
+        return next((line for line in self.missing if line.startswith(f"{name}: ")), f"{name}: it was not read")
+
+    def work(self, base: str, bases: Mapping[str, str]) -> tuple[str, tuple[str, ...]]:
+        """The diff of the work, from `base` here and from each of `bases` in the repository it names, under its
+        name, as a stage is shown it; and the files left out for holding a private key. `SourceError` for a
+        repository that was not read: the work is never judged on part of it."""
+        parts = [diff(self._here.root, base, exclude=self._here.exclude)]
+        for name, commit in bases.items():
+            if (one := self._others.get(name)) is None:
+                raise SourceError(f"{self.why_not(name)}: the work cannot be judged on part of it")
+            parts.append(diff(one.root, commit, exclude=one.exclude, prefix=one.full("")))
+        return self.without_keys("".join(parts))
 
     def commits(self) -> dict[str, str | None]:
         """The commit each other repository has checked out, or nothing where git cannot say."""
@@ -315,7 +365,7 @@ class Source:
         kept: list[str] = []
         held: list[str] = []
         for path, part in parts_of_diff(diff):
-            if holds_a_key(part) or (path is not None and self._lines(path) == HOLDS_A_KEY):
+            if holds_a_key(part) or (path is not None and self._keyed(path)):
                 held.append(path or "(a file with no name)")
             else:
                 kept.append(part)
@@ -344,6 +394,10 @@ class Source:
     def _lines(self, path: str) -> list[str] | str:
         where, inner = self._where(path)
         return where.lines(inner)
+
+    def _keyed(self, path: str) -> bool:
+        where, inner = self._where(path)
+        return where.keyed(inner)
 
     def _asked(self, asked: str) -> tuple[str, int | None, int | None]:
         """The path a model asked for, and the lines of it where it named a range. A path git lists is taken as it

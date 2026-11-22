@@ -248,10 +248,6 @@ def test_exclude_must_be_a_list_of_patterns(tmp_path, value) -> None:
 
 def test_the_strict_tier_is_refused_until_it_is_built(tmp_path) -> None:
     """`strict` was taken and read as `standard`, with nothing said: a person who chose it got less than asked."""
-    from adk_spec.workspace.config import ConfigError
-    from adk_spec.workspace.files import write_text
-    from adk_spec.workspace.layout import Workspace
-
     ws = Workspace.init(tmp_path)
     write_text(tmp_path / ".spec/config.toml", '[project]\ndefault_tier = "strict"\n')
     with pytest.raises(ConfigError, match="strict is not built yet"):

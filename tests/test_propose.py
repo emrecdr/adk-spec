@@ -3,7 +3,18 @@
 from __future__ import annotations
 
 import pytest
-from conftest import CANNED_TRIAGE, DELTAS_ON_A_MISSING_ID, approved, on_the_fake, repository, run, seeded, state_of
+from conftest import (
+    CANNED_REVIEW,
+    CANNED_TRIAGE,
+    DELTAS_ON_A_MISSING_ID,
+    approved,
+    beside,
+    on_the_fake,
+    repository,
+    run,
+    seeded,
+    state_of,
+)
 
 from adk_spec.interfaces import cli
 from adk_spec.orchestration.stages import BOUNDARY
@@ -484,15 +495,10 @@ def test_propose_reads_the_code_once_the_change_is_written(tmp_path, capsys, fak
 
 # The other repositories a change spans, named with it.
 
-API = {"src/routes.py": "def sign_in(request):\n    return start_session(request.user)\n"}
-
 
 @pytest.mark.usefixtures("fake_provider")
 def test_propose_records_the_repositories_named_with_the_change(tmp_path) -> None:
-    root = tmp_path / "app"
-    seeded(root)
-    repository(root)
-    repository(tmp_path / "api", API)
+    root = beside(tmp_path)
     repository(tmp_path / "web-app", {"index.js": "export const x = 1;\n"})
     assert proposed(root, "--id", "passkey-sign-in", "--with", "../api", "--with", "web=../web-app") == 0
     assert state_of(root, "passkey-sign-in")["repositories"] == {"api": "../api", "web": "../web-app"}
@@ -511,10 +517,19 @@ def test_read_first_names_context_md_where_something_is_unknown(tmp_path, capsys
     seeded(tmp_path)
     repository(tmp_path)
     unknown = [{"question": "Who ends a session?", "where": "src/"}]
-    fake_provider.answers_when(
-        "You review what a reading",
-        {"disputed": [], "unknown": unknown, "more_files": [], "more_folders": [], "more_searches": []},
-    )
+    fake_provider.answers_when("You review what a reading", {**CANNED_REVIEW, "unknown": unknown})
     capsys.readouterr()
     assert proposed(tmp_path, "--tier", "lean", "--id", "read") == 0
     assert "and context.md (1 unknown) first\n" in capsys.readouterr().out
+
+
+def test_a_model_the_review_cannot_run_on_is_refused_before_any_call(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    """Every role of the whole command is asked after before anything is spent: the review's too, which the list of
+    the reading's roles had missed."""
+    seeded(tmp_path)
+    repository(tmp_path)
+    monkeypatch.setenv("SPEC_REVIEW_MODEL", "gpt-4.1")  # ADK would send it to another provider's class
+    assert proposed(tmp_path) == 2
+    assert "SPEC_REVIEW_MODEL" in capsys.readouterr().err and fake_provider.requests == []

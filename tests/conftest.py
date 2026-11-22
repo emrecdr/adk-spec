@@ -503,6 +503,20 @@ def repository(root: Path, files: dict[str, str] | None = None) -> str:
     return repository_commit(root, "first")
 
 
+#: An API repository's files, for a change that spans the workspace's repository and an API beside it.
+API = {"src/routes.py": "def sign_in(request):\n    return start_session(request.user)\n"}
+
+
+def beside(tmp_path: Path) -> Path:
+    """A workspace and its change in a repository at `tmp_path / "app"`, and an API repository beside it at
+    `tmp_path / "api"`: the workspace's root."""
+    root = tmp_path / "app"
+    seeded(root)
+    repository(root)
+    repository(tmp_path / "api", API)
+    return root
+
+
 def between(text: str, label: str) -> str:
     """What an instruction holds between the two markers of `label`."""
     from adk_spec.orchestration.stages import BOUNDARY

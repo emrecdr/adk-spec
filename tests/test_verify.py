@@ -54,10 +54,12 @@ def _fake_arm(monkeypatch) -> None:
     on_the_fake(monkeypatch)
 
 
-def approved_in_a_repository(root, tier: str = "standard"):
-    """A repository holding the seeded change, approved at its one commit: where an implementation starts."""
+def approved_in_a_repository(root, tier: str = "standard", repositories: dict[str, str] | None = None):
+    """A repository holding the seeded change, approved at its one commit: where an implementation starts. The
+    change names `repositories` beside it, where given."""
     ws = seeded(root)
-    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"tier": tier}))
+    update = {"tier": tier, "repositories": repositories or {}}
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update=update))
     commit = repository(root, {"src/auth.py": BEFORE})
     assert tier == "lean" or run(root, "check", "passkeys", "--no-model") == 0
     assert run(root, "approve", "passkeys", "--by", "reviewer") == 0
@@ -453,12 +455,7 @@ def across(tmp_path, tier: str = "lean"):
     """An approved change whose work spans the workspace's repository and an API repository beside it."""
     root, api = tmp_path / "app", tmp_path / "api"
     repository(api, {"src/routes.py": ROUTES_BEFORE})
-    ws = seeded(root)
-    state = ws.load_change("passkeys").change.state
-    ws.save_state(state.model_copy(update={"tier": tier, "repositories": {"api": "../api"}}))
-    repository(root, {"src/auth.py": BEFORE})
-    assert tier == "lean" or run(root, "check", "passkeys", "--no-model") == 0
-    assert run(root, "approve", "passkeys", "--by", "reviewer") == 0
+    ws, _commit = approved_in_a_repository(root, tier, repositories={"api": "../api"})
     return ws, root, api
 
 
@@ -533,3 +530,22 @@ def test_a_verified_change_whose_other_repository_is_gone_reads_as_drifted(tmp_p
     capsys.readouterr()
     assert run(root, "status") == 0
     assert "verify passkeys` again: the work changed since it was verified" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("given", "said"),
+    [
+        (["--base", "web=HEAD"], "`web` is no repository of `passkeys`"),
+        (["--base", "api=HEAD", "--base", "api=HEAD~1"], "names the starting point of api twice"),
+    ],
+)
+def test_a_base_for_another_repository_names_one_of_the_change_once(
+    tmp_path, capsys, fake_provider, given, said
+) -> None:
+    """`--base web=REF` for a repository the change does not name was taken for a commit of this one, and failed as
+    one; two for one repository kept the last with nothing said."""
+    _ws, root, _api = across(tmp_path)
+    implemented(root)
+    capsys.readouterr()
+    assert run(root, "verify", "passkeys", *given) == 2
+    assert said in capsys.readouterr().err and fake_provider.requests == []

@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict
 
 Severity = Literal["ERROR", "WARNING", "INFO"]
 Tier = Literal["lean", "standard", "strict"]
+#: The tiers a person may choose now. `strict` is planned; taken and read as `standard`, it gave less than asked.
+BUILT_TIERS: tuple[Tier, ...] = ("lean", "standard")
 Status = Literal["draft", "approved", "verified", "archived"]
 
 
