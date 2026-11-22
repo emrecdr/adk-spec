@@ -282,3 +282,23 @@ def test_a_strict_revision_with_a_ticked_task_names_the_plan_that_goes_on(tmp_pa
     capsys.readouterr()
     assert run(tmp_path, "propose", "Also keep the old invoice numbers.", "--id", "ledger", "--no-input") == 0
     assert "then `adk-spec plan ledger --replace --no-explore`" in capsys.readouterr().out
+
+
+def test_an_error_that_plan_settles_comes_after_an_open_point() -> None:
+    """Measured live: a revision added a requirement and left a point open; its old task list then lacked a task for
+    the new requirement, and the next line said to fix what validate lists, which `plan` itself does once the point
+    is settled."""
+    from adk_spec.domain.lifecycle import next_step
+    from adk_spec.domain.model import ChangeState, Finding
+
+    def held(code: str, severity: str) -> Finding:
+        return Finding(severity=severity, code=code, message="A finding long enough to say something here.")
+
+    state = ChangeState(id="c", tier="lean")
+    no_task = held("check.requirement-no-task", "ERROR")
+    point = held("brief.marker-unresolved", "WARNING")
+    assert next_step(state, [no_task, point], []).phrase == "settle the open point in brief.md"
+    assert next_step(state, [no_task], []).phrase == "run `adk-spec plan c`"
+    assert (
+        next_step(state, [no_task, held("delta.empty", "ERROR")], []).phrase == "fix what `adk-spec validate c` lists"
+    )

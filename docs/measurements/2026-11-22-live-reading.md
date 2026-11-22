@@ -103,3 +103,26 @@ Measured the same day, on the owner's go-ahead, at commit `cf1b5a3` (phase 9 mer
 13 calls in all, one over the estimate. One fault, seen in the output: the test run was given adk-spec's own
 environment, its virtual environment first on `PATH` and in `VIRTUAL_ENV`. `uv` ignored it; a plain `["pytest"]`
 would have found adk-spec's own pytest and run the project's tests in the wrong environment.
+
+## Phases 10 to 13: sizing, a revision, lessons and a strict change
+
+Measured the same day, on the owner's go-ahead, at commit `98ba81e` (phase 13 merged), on gpt-4.1 on Copilot, on a
+fresh copy of adk-spec after `init --no-explore`. 19 model calls and 79,262 tokens in all, against about 25 estimated.
+
+- **Sizing by rule.** "Fix the error when status --json runs in a workspace that holds no change yet." was sized
+  `lean, by rule: a short bug fix`, and no sizing call was made. `propose --no-explore`: 4 calls, 10,812 tokens; the
+  deltas stage was sent back once.
+- **A lesson, by code.** That send-back became the file's first lesson: ``- deltas, `delta.purpose-missing` (1)``.
+  The same fault came back in the strict change below, with the lesson in the deltas stage's instruction, and was
+  counted, `(2)`: one run is no measure, but in this one the lesson did not prevent the fault.
+- **A revision.** `propose "Also say what status --json prints when one change's state file does not read." --id
+  status-empty`: `revised added REQ-STATUS-JSON-OUTPUT-002; changed nothing; dropped nothing`, the first requirement
+  kept word for word under its ID. 2 calls, 3,454 tokens. The lean brief left a point open all the same, the question
+  being a real one; the plan waited for it.
+- **A fault, fixed.** The next line then said to fix what `validate` lists: the old task list had no task for the
+  new requirement, an error `plan` settles once the point is settled. An error of the task list alone now holds a
+  draft after an open point, with `plan` as its step.
+- **A strict change.** `propose ... --tier strict`: the brief and two deltas, then `plan waits: a strict change is read
+  first`, 3 calls, 4,604 tokens. `plan` read the code (15 files, 10 statements kept, 2 unknown) and drafted the design
+  it owes and the tasks: 9 calls, 57,749 tokens. `approve --by ana` made the check, 0 findings, 1 call, 2,643 tokens,
+  and approved it once; `--by Ana` was refused as the same name; `--by ben` approved it, "after ana".
