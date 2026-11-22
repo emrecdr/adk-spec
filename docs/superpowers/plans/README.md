@@ -37,7 +37,7 @@ How it is applied in every phase below:
 | 7 | Brownfield, part 2 | `2026-11-22-adk-spec-across-repositories.md` | A change names the repositories it spans (`--with`); one reading covers them, a model reviews it, `context.md` says what is unknown; `verify` judges the work in all of them. | Built, cleaned up, reviewed and merged. Measured live: `across` caught 5/5 |
 | 8 | Brownfield, part 3 | `2026-11-22-adk-spec-init-profile.md` | `init` reads the code, writes `.spec/profile.md`, drafts rules already true of the code into the template constitution; every change's reading starts from the profile. | Built, cleaned up, reviewed and merged. Measured live: `profile` 3/5 and 5/5, then a fix |
 | 9 | Tests as evidence | `2026-11-22-adk-spec-verify-tests.md` | `verify` runs the test command a person wrote in `.spec/config.toml`, in every repository of the change; a failing run blocks "verified" unless overridden. | Built, cleaned up, reviewed and merged. Its live proof needs a test command in a real repository |
-| 10 and 11 | Sizing by rule; revising by instruction | `2026-11-22-adk-spec-sizing-and-revising.md` | A short bug fix that names no risk is lean with no model call; the model sizes the rest, strict included. `propose "<instruction>" --id <id>` revises an open change, keeping its tier, its IDs by name and what the instruction does not reach, and says what it added, changed and dropped. | Built, cleaned up, reviewed and merged. Measured live: sized by rule, revised with its IDs kept |
+| 10 and 11 | Sizing by rule; revising by instruction | `2026-11-22-adk-spec-sizing-and-revising.md` | The sizing rule was removed by the owner after review: the model sizes every request. `propose "<instruction>" --id <id>` revises an open change, keeping its tier, its IDs by name and what the instruction does not reach, and says what it added, changed and dropped. | Built, cleaned up, reviewed and merged. Measured live: sized by rule, revised with its IDs kept |
 | 12 | A lessons file | `2026-11-22-adk-spec-lessons.md` | `.spec/lessons.md`, shared through git and read by every drafting stage: a person's corrections, and a line adk-spec adds in code for each fault a gate sent back that the next try fixed. `approve` names a drafted file a person edited, once. No model call. | Built, cleaned up, reviewed and merged. Measured live: a lesson written and counted |
 | 13 | The `strict` tier | `2026-11-22-adk-spec-strict-tier.md` | A design always owed; `propose` stops after the brief and specs for a person to read, and `plan` goes on; two different names approve; a warning blocks, with no override. What each tier demands is one table in the domain. | Built, cleaned up, reviewed and merged. Measured live: the stop, a design, two names |
 
@@ -276,6 +276,11 @@ is small. **Size.** Small.
 **State.** Done, on 22 November 2026, built with phase 11 as the owner asked. The code review found the first rule
 took a typo fix, which the sizing stage itself calls `none`: a request that may owe no spec is now never sized by a
 rule, and lean by rule needs a fix verb, a word of a fault and no feature word.
+
+**Removed**, on 22 November 2026, on the owner's decision, after an outside review and two reviews of the follow-up:
+the list of risk words that kept a risky fix off the lean path missed some in every review ("data loss", "refund",
+"sign-in", "OAuth"), and a miss sized a risky fix lean, with no check and no verification, to save one sizing call.
+`propose` asks the model for the tier unless `--tier` names one.
 
 ### Phase 11. Revising a change by instruction
 

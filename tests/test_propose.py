@@ -533,23 +533,13 @@ def test_a_model_the_review_cannot_run_on_is_refused_before_any_call(
     assert "SPEC_REVIEW_MODEL" in capsys.readouterr().err and fake_provider.requests == []
 
 
-def test_a_short_fix_is_sized_by_rule_and_the_model_is_not_asked(tmp_path, capsys, fake_provider) -> None:
+def test_a_short_bug_fix_is_sized_by_the_model_as_every_request_is(tmp_path, capsys, fake_provider) -> None:
+    """The owner deleted phase 10's sizing rule: its list of risk words kept missing some, and a miss sized a risky
+    fix lean, with no check and no verification, to save one sizing call."""
     seeded(tmp_path)
-    assert (
-        proposed(
-            tmp_path, "--no-input", "--id", "typo", request="Fix the crash when the export runs on an empty month."
-        )
-        == 0
-    )
-    assert asked(fake_provider, TRIAGE) == 0 and state_of(tmp_path, "typo")["tier"] == "lean"
-    assert "sized     lean, by rule: a short bug fix" in capsys.readouterr().out
-
-
-@pytest.mark.usefixtures("fake_provider")
-def test_a_tier_given_by_hand_wins_over_a_rule(tmp_path) -> None:
-    seeded(tmp_path)
-    assert proposed(tmp_path, "--tier", "standard", "--no-input", "--id", "t", request="Fix the crash in help.") == 0
-    assert state_of(tmp_path, "t")["tier"] == "standard"
+    request = "Fix the crash when the export runs on an empty month."
+    assert proposed(tmp_path, "--no-input", "--id", "fix", request=request) == 0
+    assert asked(fake_provider, TRIAGE) == 1 and "by rule" not in capsys.readouterr().out
 
 
 def test_the_brief_and_deltas_stages_revise_what_stands_and_change_only_what_is_asked() -> None:

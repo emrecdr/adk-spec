@@ -35,7 +35,7 @@ OpenSpec started with a sprawling multi-command workflow before simplifying, and
                              │
                              ▼
   1. PROPOSE          adk-spec propose "<request>" [--with ../other-repo] [--tier lean|standard|strict]
-     (Decision 1:     ├─ Triage (Phase 10 [Built]: a short bug fix naming no risk is lean by rule; LLM sizes the rest)
+     (Decision 1:     ├─ Triage: the model sizes the request (Phase 10's rules were removed by the owner)
       What to build?) │   └─ tier == none ──▶ exits cleanly (no change folder for trivial typos)
                       ├─ Clarify: <=3 open points/round, <=3 rounds, `=` takes suggestion (or --no-input)
                       ├─ (Phase 13 [Built] strict: stops after brief.md and the specs; `plan` goes on)
@@ -78,7 +78,7 @@ If you have used **OpenSpec**, **GitHub Spec Kit**, **AWS Kiro**, or **Claude Pr
 | **Brownfield Code Reading** | **OpenSpec** reads implementation/tests ad hoc in prompts; **Claude Projects** relies on uploaded/synced repo context. | **`[Built: P6–P7]`** Built into `propose` & `plan` (across `--with` multi-repo workspaces): Scout → Python Git Source → Survey → LLM Review writes `.spec/changes/<id>/context.md`. | Reads strictly via `git ls-files` + `git grep` (never outside repo, never symlinks/junctions, never `[repository] exclude`), strips private-key files, scrubs secrets, annotates enclosing code block (`within`), and **drops any statement whose quote is missing from the file**. |
 | **Cross-Artifact Consistency Audit** | **Spec Kit** `/speckit.analyze` checks alignment across spec, plan, and tasks in chat. | **`[Built: P3, P5]`** Runs automatically inside `approve` (or standalone via `adk-spec check <id>` / `--no-model`). Writes `.spec/changes/<id>/reports/check.md`. | Deterministic Python verifies 100% requirement-to-task ID coverage (`coverage_of`) and valid structure; LLM findings without real file quotes are dropped; `--override` only waives findings you were already shown. |
 | **Conditional Design & Task Slicing** | **OpenSpec** creates `design.md` only when risky/cross-cutting; **Spec Kit** breaks work into `T### [P]` tasks. | **`[Built: P1–P5]`** `design.md` generated only when cross-cutting, new dep, security/migration risk, or tech decision is owed (always in `strict`); test-first `tasks.md` with `T### [P] [REQ-...]` + `files` + `verify`. | Approval fingerprints `tasks.md` with **all `- [ ]` boxes cleared** (`_as_approved`), so coding agents ticking `- [x]` never break your approval—while any real text edit voids approval automatically. |
-| **Right-Sized Workflow Tiers** | **Spec Kit** `lean` preset; **Kiro** bugfix vs. spec-first mode. | **`[Built: P5, P10, P13]`** `none`, `lean` (3 commands: `propose`, `approve`, `archive`), `standard` (4 commands + check + verify), `strict` (a stop after the brief and specs, a design always owed, warnings that block, two approvers). A short bug fix naming no risk is sized lean by rule (`P10`); the model sizes the rest. | One table in the domain (`DEMANDS`) says what each tier asks, and every rule reads it: `lean` skips `check` and `verify`; `standard`/`strict` cannot archive without a non-drifted `verify`; `strict` refuses `approve --override` and the same name twice. |
+| **Right-Sized Workflow Tiers** | **Spec Kit** `lean` preset; **Kiro** bugfix vs. spec-first mode. | **`[Built: P5, P10, P13]`** `none`, `lean` (3 commands: `propose`, `approve`, `archive`), `standard` (4 commands + check + verify), `strict` (a stop after the brief and specs, a design always owed, warnings that block, two approvers). The model sizes each request; `--tier` names one by hand. | One table in the domain (`DEMANDS`) says what each tier asks, and every rule reads it: `lean` skips `check` and `verify`; `standard`/`strict` cannot archive without a non-drifted `verify`; `strict` refuses `approve --override` and the same name twice. |
 | **Implementation Verification** | **OpenSpec** `/opsx:verify` & **Spec Kit** `/speckit.converge` review changes via chat prompts. | **`[Built: P3, P7, P9]`** `adk-spec verify <id>` runs the test command you wrote in `.spec/config.toml` in every repo of the change, then judges the diffs (`--base` supported), and writes `reports/verify.md`. | Code refuses to accept any `met` verdict unless the model quotes an **actual added line (or removed line for `REMOVED` requirements)** from the real working-tree diff. Missing or hallucinated quotes downgrade to `unclear`. |
 | **Iterating Scope After Drafting** | **OpenSpec** update skill & mid-feature corrections. | **`[Built: P1, P5, P11]`** Edit any file by hand + `adk-spec plan <id>` / `adk-spec rebase <id>`, or `adk-spec propose "<instruction>" --id <id>`, which revises an open change's brief, deltas and tasks and lists the requirements it added, changed and dropped. | `approve` detects any edit automatically via file hashes; a revision keeps each requirement's ID by its name; `rebase` updates stale requirement bases; `plan` refuses to overwrite ticked tasks, or a design you wrote or edited, unless `--replace` is passed. |
 | **Workspace Memory & Guardrails** | **Claude Projects** durable Project Memory / Knowledge Base across chats. | **`[Built: P1–P8, P12]`** `.spec/specs/`, `constitution.md`, editable `context.md`, `[repository] exclude`, the repository's `.spec/profile.md` (`P8`), and `.spec/lessons.md` (`P12`), shared through git, which every drafting stage reads. | Runs under `.spec/.gitignore` local run logs (`.spec/runs/`), fail-closed regex secret scrubbing across 40+ vendor/header/URL patterns, `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false`, and OS-trusted TLS (`truststore`). |
@@ -101,7 +101,7 @@ Every phase from [plans/README.md](superpowers/plans/README.md) contributes to t
 | **7** | Brownfield Part 2 (Multi-Repo) | **Built** (`across-repositories`) | `propose`, `plan`, `approve`, `verify` | `--with PATH`/`NAME=PATH` across N repos, search-first round order, block context (`in: ...`), LLM `review` + `"## What is still unknown"`, cross-repo `verify` |
 | **8** | Brownfield Part 3 (`init` Profile) | **Built**, measured live | `init`, `propose`, `plan` | `init` reads the code (saying so first; `--no-explore` skips, `--refresh` reads again), writes `.spec/profile.md`, and drafts rules already true of the code into the template constitution, with evidence; every reading starts from the profile |
 | **9** | Tests as Evidence | **Built**, measured live | `verify` (via `.spec/config.toml`) | The test command you write as a list (`[verify] test`) runs in every repository of the change before the model judges; a failing run blocks "verified" unless `--override` |
-| **10** | Triage by Rules | **Built**, measured live | `propose` | A short bug fix that names no risk is sized `lean` by rule, with no sizing call; a long request, a risky fix, or one that may owe no spec goes to the model |
+| **10** | Triage by Rules | **Removed** by the owner | `propose` | Built and measured live, then removed on 22 November 2026: its list of risk words kept missing some, and a miss sized a risky fix lean, with no check and no verification, to save one sizing call. The model sizes every request |
 | **11** | Revising by Instruction | **Built**, measured live | `propose "..." --id <id>` | Revises an open change in place: keeps its tier and each requirement's ID by name, lists what was added, changed and dropped, and makes an approved change a draft again where a file changed |
 | **12** | Lessons File | **Built**, measured live | `propose`, `plan`, `approve` | `.spec/lessons.md`, shared through git: a person's corrections, and a line adk-spec adds in code for each fault a gate sent back that the next try fixed; `approve` names a drafted file you edited |
 | **13** | Strict Tier | **Built**, measured live | `propose`, `plan`, `approve`, `new` | `strict`: a design always owed; `propose` stops after the brief and specs, and `plan` goes on; two different names approve; a warning of the check blocks, with no `--override` |
@@ -177,7 +177,7 @@ Version: 1
 adk-spec propose "Let users sign in with a passkey alongside existing password login."
 ```
 What happens inside `propose`:
-1. **Triage:** Picks `standard` (`--tier standard` skips triage; a short bug fix naming no risk is sized `lean` by rule, with no call `[Built]`).
+1. **Triage:** Picks `standard` (`--tier standard` skips triage `[Built]`).
 2. **Brief & Interactive Clarification `[Built]`:** If the request has open questions (up to 3 per round, max 3 rounds), `adk-spec` asks interactively:
    ```text
    The brief leaves 2 points open. A line answers. `=` takes the suggestion.
@@ -264,9 +264,7 @@ What `adk-spec` does across repos `[Built: P7]`:
 
 **Scenario A — Small focused bug fix inside one capability (`lean`):**
 ```bash
-# A short bug fix that names no risk is sized lean by rule, with no sizing call [Built: P10].
-# A fix naming security, money or data (auth, token, password, payment, migration...) goes to the model,
-# which may call it strict; --tier lean says it by hand:
+# The model sizes it, and may call a fix that touches security, money or data strict; --tier lean says it by hand:
 adk-spec propose "Fix the crash when the export runs on an empty month."
 
 # Fast 3-command loop (no design, no check, no verify owed):

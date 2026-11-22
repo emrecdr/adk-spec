@@ -64,7 +64,6 @@ from ..domain.merge import MergeError, apply_delta
 from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
 from ..domain.secrets import scrub, scrub_lines
-from ..domain.sizing import tier_by_rule
 from ..domain.spec_md import render_spec
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
@@ -1557,21 +1556,15 @@ def _verdicts(
 
 
 def _tier_of(args: argparse.Namespace, change: Change | None) -> Tier | None:
-    """The tier of a request, decided once and said where no person gave it: a change being revised keeps its own,
-    then a person's `--tier` is taken, then a rule's, so that `--tier` can overrule it next time. Nothing where the
-    model is to size it."""
+    """The tier of a request, decided once: a change being revised keeps its own, and a person's `--tier` is taken
+    next. Nothing where the model is to size it."""
     if change is not None:
         state = change.state
         print(f"revising  {state.id}, a {state.tier} {state.status}: its files kept where the request does not reach")
         if args.tier and args.tier != state.tier:
             print(f"          `--tier {args.tier}` is not used: a change keeps its tier")
         return state.tier
-    if args.tier:
-        return args.tier
-    if by_rule := tier_by_rule(args.request):
-        print(f"sized     {by_rule[0]}, by rule: {by_rule[1]}")
-        return by_rule[0]
-    return None
+    return args.tier
 
 
 def _revising(workspace: Workspace, change_id: str | None) -> Change | None:
