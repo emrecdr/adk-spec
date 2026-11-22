@@ -50,3 +50,17 @@ definition of `propose`, `_propose`, and how options are added.
   `in: def _approve(args: argparse.Namespace) -> int:`. The review is shown it, and can then dispute a note that
   names the wrong function. The design and tasks stages read it in `context.md`.
 - The review's extra round is the room the reading needs where it ran short, as here.
+
+## Phase 7's `across` case
+
+Measured the same day, on the owner's go-ahead, at commit `a81dc0c` (phase 7 merged): a web app in the workspace
+signs in through an API in a repository beside it, named with the change; the place sign-in starts a session is in
+the API, and the web app holds an old file of a similar name that nothing uses.
+
+| Case | Command | Caught | Blocking on nothing planted | Left out, no such quote | Tokens a run | Seconds a run | Failed |
+|---|---|---|---|---|---|---|---|
+| `across` | plan | 5/5 | 0 | 0 | 11,335 | 55.6 | 0 |
+
+In every run a kept statement named the planted file in the other repository, under its name. No statement quoted
+text that is not in its file. About 20 model calls, as estimated; a run costs some twice the `integration` case's,
+which reads one repository and has no review.
