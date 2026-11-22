@@ -48,7 +48,9 @@ import except `adk_spec/agent.py`, the shape `adk web` loads.
 - **orchestration**: ADK `Workflow` graphs (`graph.py`), one schema-bound `LlmAgent` per stage (`stages/`), the gate
   after each stage (`gate.py`), the code reading (`explore.py`), plugins every app carries (`plugins.py`: schema
   mismatch, token ledger, scrub), the two provider arms (`models.py`, `settings.py`).
-- **interfaces**: `cli.py` (argparse, the commands and their printing), `login.py` (Copilot device flow).
+- **interfaces**: `cli.py` (argparse, the commands and their printing), `login.py` (Copilot device flow),
+  `mcp_server.py` (`adk-spec-mcp`: six commands as MCP tools, each running `python -m adk_spec` in its own process;
+  no tool approves, archives or overrides, which stay the person's).
 
 Rules that span files and are easy to break:
 

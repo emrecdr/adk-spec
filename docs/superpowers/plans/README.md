@@ -40,11 +40,11 @@ How it is applied in every phase below:
 | 10 and 11 | Sizing by rule; revising by instruction | `2026-11-22-adk-spec-sizing-and-revising.md` | The sizing rule was removed by the owner after review: the model sizes every request. `propose "<instruction>" --id <id>` revises an open change, keeping its tier, its IDs by name and what the instruction does not reach, and says what it added, changed and dropped. | Built, cleaned up, reviewed and merged. Measured live: sized by rule, revised with its IDs kept |
 | 12 | A lessons file | `2026-11-22-adk-spec-lessons.md` | `.spec/lessons.md`, shared through git and read by every drafting stage: a person's corrections, and a line adk-spec adds in code for each fault a gate sent back that the next try fixed. `approve` names a drafted file a person edited, once. No model call. | Built, cleaned up, reviewed and merged. Measured live: a lesson written and counted |
 | 13 | The `strict` tier | `2026-11-22-adk-spec-strict-tier.md` | A design always owed; `propose` stops after the brief and specs for a person to read, and `plan` goes on; two different names approve; a warning blocks, with no override. What each tier demands is one table in the domain. | Built, cleaned up, reviewed and merged. Measured live: the stop, a design, two names |
+| 14 | Inside a coding assistant | `2026-11-22-adk-spec-mcp-server.md` | `adk-spec-mcp` serves six commands as MCP tools to a coding assistant (`propose`, revising too, `plan`, `check`, `verify`, `status`, `validate`), each run as the terminal runs it; approving and archiving stay the person's. | Built, cleaned up, reviewed and merged. Its live proof, in VS Code and in Claude Code, waits for the owner |
 
 ## The plan being followed now
 
-**`2026-11-22-adk-spec-mcp-server.md`**, phase 14: adk-spec inside a coding assistant, as an MCP server, as the
-owner chose. Design `../specs/2026-11-22-mcp-server-design.md`.
+None: phases 1 to 14 are done, phase 10's rule since removed. What is left is the owner's, below.
 
 ## How a change flows
 
@@ -342,19 +342,25 @@ the stop, a design drafted by `plan`, the same name refused, and two names appro
 
 The owner's choice, on 22 November 2026, of the second way to use adk-spec.
 
-**Goal.** A person drafts, approves, verifies and archives a change from inside the coding assistant they already
-use, GitHub Copilot in VS Code or Claude Code, on the assistant's own models where they choose.
+**Goal.** A person drafts, checks and verifies a change from inside the coding assistant they already use, GitHub
+Copilot in VS Code or Claude Code.
 
-**Features it adds.** An MCP server that offers adk-spec's everyday commands as tools, with the same files, the same
-checks and the same approvals as the terminal; `cli.py` split first into the commands and their printing, so that the
-terminal and the server share one set of commands.
+**Features it adds.** `adk-spec-mcp`, an MCP server over stdio, whose tools run six of the commands as the terminal
+runs them, asking no question, on adk-spec's own models: `propose` (revising an open change too), `plan`, `check`,
+`verify`, `status`, `validate`. `approve`, `archive` and `--override` are no tools: they record a person's decision,
+and the server's instructions tell the assistant so. `cli.py` is not split: each tool runs `python -m adk_spec` in a
+process of its own.
 
 **By the end of this phase, you can:** ask your coding assistant to propose a change, read its brief and specs in the
-editor, approve it, implement the tasks with the same assistant, and verify and archive the work, without leaving the
-editor.
+editor, implement the tasks with the same assistant, and verify the work, approving and archiving in the editor's
+terminal.
 
 **From the research.** Both parent projects live inside coding assistants, and the outside review of 22 November
-2026 named it the biggest gain in daily use on Windows. **Size.** Large.
+2026 named it the biggest gain in daily use on Windows. **Size.** Small, as the owner chose it thin.
+
+**State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged, as the owner chose. Its live proof, the
+server in VS Code with Copilot and in Claude Code, waits for the owner. The `mcp` package it brought may also let
+Copilot's GPT models answer through LiteLLM, which one live call should show before it is claimed.
 
 ### Not planned unless a measurement asks for it
 
