@@ -10,11 +10,33 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping
+from typing import Protocol
 
 from .brief_md import asked_in, marker_of, render_brief, worded
-from .drafts import BriefDraft, DeltasDraft, DesignDraft, FindingDraft, FindingsDraft, RequirementDraft, TasksDraft
+from .drafts import (
+    BriefDraft,
+    DeltasDraft,
+    DesignDraft,
+    FindingsDraft,
+    RequirementDraft,
+    SurveyDraft,
+    TasksDraft,
+)
 from .ids import SLUG_MAX, next_requirement_id, slug_problem
-from .model import Brief, Delta, Finding, GrammarError, Removal, Requirement, Scenario, Severity, Spec, Task, TaskGroup
+from .model import (
+    Brief,
+    Delta,
+    Finding,
+    GrammarError,
+    Removal,
+    Requirement,
+    Scenario,
+    Severity,
+    Spec,
+    Statement,
+    Task,
+    TaskGroup,
+)
 from .spec_md import fenced_lines, paragraphs
 from .text import flat, lines_of, normalise, plain, quoted_at
 
@@ -187,9 +209,16 @@ def slug_of(title: str, held: Iterable[str]) -> str:
 _SEVERITY: dict[str, Severity] = {"critical": "ERROR", "warning": "WARNING", "note": "INFO"}
 
 
-def pointed_at(one: FindingDraft, texts: Mapping[str, str]) -> tuple[str, int] | None:
-    """The file a model's finding is about and the line its quote starts at, or nothing where it points at nothing:
-    the file it names is none of `texts`, or does not hold the text it quotes."""
+class Pointing(Protocol):
+    """What a model says of a text it was shown: the file it means, and the words it copied from it."""
+
+    file: str
+    quote: str
+
+
+def pointed_at(one: Pointing, texts: Mapping[str, str]) -> tuple[str, int] | None:
+    """The file a model's finding or statement is about and the line its quote starts at, or nothing where it
+    points at nothing: the file it names is none of `texts`, or does not hold the text it quotes."""
     path = one.file.strip()
     line = quoted_at(one.quote, texts[path]) if path in texts else None
     return None if line is None else (path, line)
@@ -210,3 +239,21 @@ def to_findings(draft: FindingsDraft, texts: Mapping[str, str]) -> tuple[list[Fi
         if (at := pointed_at(one, texts)) is not None
     ]
     return kept, len(draft.findings) - len(kept)
+
+
+#: How much of a quote a statement keeps: the line a person is shown under it.
+QUOTE_SHOWN_CHARS = 200
+
+
+def to_statements(draft: SurveyDraft, texts: Mapping[str, str]) -> tuple[list[Statement], int]:
+    """The statements a model made of the code that point at something, and how many did not. Each is held to the
+    text it was shown, as a finding of a check is: a statement that quotes nothing real is no statement, whatever
+    a file it read told it to write."""
+    kept = [
+        Statement(
+            kind=one.kind, path=at[0], line=at[1], quote=plain(one.quote)[:QUOTE_SHOWN_CHARS], note=plain(one.note)
+        )
+        for one in draft.statements
+        if (at := pointed_at(one, texts)) is not None
+    ]
+    return kept, len(draft.statements) - len(kept)

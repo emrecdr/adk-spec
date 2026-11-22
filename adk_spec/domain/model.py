@@ -101,6 +101,21 @@ class Brief(_Held):
     assumptions: str
 
 
+#: What a statement about a repository's code says of it, for a change: that something is there already, that the
+#: change plugs in there, that the repository does a thing a certain way, or that something is unclear or at risk.
+StatementKind = Literal["exists", "touches", "convention", "risk"]
+
+
+class Statement(_Held):
+    """One thing a reading of the code found, with the line it rests on: the quote was found in that file."""
+
+    kind: StatementKind
+    path: str
+    line: int
+    quote: str
+    note: str
+
+
 class Finding(_Held):
     severity: Severity
     code: str

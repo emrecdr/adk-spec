@@ -154,7 +154,7 @@ def _objects(schema: Any) -> list[dict]:
     return here + [found for held in schema.values() for found in _objects(held)]
 
 
-DRAFTS = ("Triage", "BriefDraft", "DeltasDraft", "TasksDraft", "DesignDraft")
+DRAFTS = ("Triage", "BriefDraft", "DeltasDraft", "TasksDraft", "DesignDraft", "ScoutDraft", "SurveyDraft")
 
 
 @pytest.mark.parametrize("name", DRAFTS)

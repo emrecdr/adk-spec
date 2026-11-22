@@ -186,3 +186,50 @@ class VerdictsDraft(BaseModel):
     """One verdict for each requirement to judge."""
 
     verdicts: list[VerdictDraft] = Field(description="One verdict for each requirement listed, and for no other.")
+
+
+class ScoutDraft(BaseModel):
+    """What a scout asks to see of a repository, before a plan is drafted from it."""
+
+    files: list[str] = Field(
+        description=(
+            "Paths of files to read, each as the list of the repository's files spells it. A range of lines may "
+            "follow one: src/app.py:120-260. Twelve at most. Empty where the list shows folders and no file."
+        )
+    )
+    folders: list[str] = Field(
+        description="Folders whose files to list, where the list shows a folder and not what is in it. Four at most."
+    )
+    searches: list[str] = Field(
+        description="Words or phrases to search the repository for, each as it would stand in the code. Six at most."
+    )
+    reason: str = Field(description="One sentence: what you expect to find there.")
+
+
+class StatementDraft(BaseModel):
+    """One thing the code shows that matters for the change, with the text it rests on."""
+
+    kind: Literal["exists", "touches", "convention", "risk"] = Field(
+        description=(
+            "exists: behaviour or code already there that the change builds on, or must not write a second time. "
+            "touches: where the change plugs in, code that would be called, extended or changed. convention: how "
+            "this repository does a thing that new code should follow. risk: what the code leaves unclear, or what "
+            "the change could break."
+        )
+    )
+    file: str = Field(description="The path of the file the statement is about, as written above its text.")
+    quote: str = Field(description="Text copied from that file word for word: the line or the phrase that shows it.")
+    note: str = Field(description="What it means for the change, in one or two sentences.")
+
+
+class SurveyDraft(BaseModel):
+    """What a reading of the code found for a change, and what is still worth a look."""
+
+    statements: list[StatementDraft] = Field(
+        description="Each thing the text above shows that matters for the change. Empty where it shows none."
+    )
+    more_files: list[str] = Field(
+        description="Files still worth reading, as for a first look. Empty where enough was read."
+    )
+    more_folders: list[str] = Field(description="Folders still worth listing. Empty where none is.")
+    more_searches: list[str] = Field(description="Words still worth searching for. Empty where none is.")
