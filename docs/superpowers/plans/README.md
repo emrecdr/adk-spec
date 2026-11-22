@@ -34,10 +34,11 @@ How it is applied in every phase below:
 | 4 | Questions in code | `2026-11-21-adk-spec-questions-in-code.md` | A brief names its open points and code asks them: one model call fewer a round. | Built and merged. Its live proof waits for the owner's go-ahead |
 | 5 | The simple flow | `2026-11-22-adk-spec-simple-flow.md` | A standard change in four commands, a lean one in three: `propose` writes the whole change, `approve` records bases and makes the check. Help in three groups, progress lines, a `next` line. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 | 6 | Brownfield, part 1 | `2026-11-22-adk-spec-brownfield-context.md` | `propose` reads the code that matters before it plans, and writes `context.md`, every statement with a quote code found. Secrets scrubbed from every request; `[repository] exclude`. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
+| 7 | Brownfield, part 2 | `2026-11-22-adk-spec-across-repositories.md` | A change names the repositories it spans (`--with`); one reading covers them, a model reviews it, `context.md` says what is unknown; `verify` judges the work in all of them. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner's go-ahead |
 
 ## The plan being followed now
 
-**`2026-11-22-adk-spec-across-repositories.md`**, phase 7: context across repositories, checked by a model.
+None: phase 7 is done. Phase 8, `init` describing an existing repository, starts with its design.
 
 ## How a change flows
 
@@ -182,6 +183,11 @@ repositories are named with each change, not in a project's config.
 **Design.** `../specs/2026-11-22-brownfield-across-repositories-design.md`.
 
 **Depends on.** Phase 6. **Size.** Medium to large.
+
+**State.** Done, on 22 November 2026: built, cleaned up, reviewed and merged. Its reviews found and fixed real faults,
+among them git trusting every repository it ran in; the plan's "What changed" section lists them. The first live
+reading, of adk-spec's own code, came before it and shaped it. Its own live proof, the `across` case, waits for the
+owner's go-ahead.
 
 ### Phase 8. Brownfield, part 3: `init` describes the repository
 

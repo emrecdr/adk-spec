@@ -270,3 +270,28 @@ Each step waits for a go-ahead in so many words; a general "proceed" does not co
 ## What this plan leaves
 
 Paths per machine, an unknown asked of the person, `check` reading `context.md`, room as a setting.
+
+## What changed while this plan was executed
+
+Tasks 1 to 6 were built as written, with the rulings in the ledger. Task 7, the live steps, waits for the owner's
+go-ahead. Before Task 1, six findings of an outside review of `main` were fixed, and on the owner's go-ahead the
+reading was measured live once (`docs/measurements/2026-11-22-live-reading.md`); that run added two things to this
+plan: a round makes its searches first, and a statement carries the line that opens its block.
+
+The cleanup review and the code review found real faults, each fixed test first. The ones that change what the plan
+says:
+
+- **Git trusts the workspace's repository alone.** It had trusted the top of every repository it ran in, so a
+  committed change file could make it open another account's repository and run its config on a shared machine.
+  Another repository now gets git's own check of who owns it.
+- **Every command names each other repository it reads**, and a reading made without one is marked partial.
+- **What `--with` accepts.** A path is read from the folder the command runs in. Refused: a path that is no
+  repository, this repository by another spelling or letter case, two names for one repository, and a folder inside
+  another adk-spec project, whose exclusions would not hold.
+- **`plan --with` changes nothing when the plan is refused**, and a repository given a new path loses its old
+  starting point. A repository missing at approval, or recorded at a later one, is said.
+- **The diff across repositories is built by the reader** (`Source.work`), beside the path rule its key filter must
+  agree with; `--base` is read once and refuses an unknown name, a name given twice and an empty commit.
+- **Whether a changed file holds a key is asked without scrubbing it**: on a large tree, a second on every `status`
+  of a verified change.
+- `propose`'s check of every model before anything is spent covers the review stage.
