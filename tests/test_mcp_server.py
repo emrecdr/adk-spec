@@ -5,13 +5,50 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
+import subprocess
 import sys
+import textwrap
+from pathlib import Path
 
+import anyio
 import pytest
 from conftest import seeded
+from mcp.server.mcpserver.exceptions import ToolError
 
 from adk_spec.interfaces import cli, mcp_server
 from adk_spec.interfaces.mcp_server import INSTRUCTIONS, build_server
+from adk_spec.workspace.lock import _alive
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _sleeper(marker: Path) -> str:
+    """A program that writes its pid to `marker` and then waits a minute: a command that runs long."""
+    return f"import os, time\nopen({str(marker)!r}, 'w').write(str(os.getpid()))\ntime.sleep(60)\n"
+
+
+async def _its_pid(marker: Path) -> int:
+    written = anyio.Path(marker)
+    for _ in range(200):
+        if await written.exists() and (text := await written.read_text()):
+            return int(text)
+        await asyncio.sleep(0.05)
+    pytest.fail("the command never started")
+
+
+async def _ended(pid: int) -> bool:
+    """Whether process `pid` ends within five seconds, asked as the lock asks it: on Windows too, where `os.kill`
+    would end the process it asks about."""
+    for _ in range(100):
+        if not _alive(pid):
+            return True
+        await asyncio.sleep(0.05)
+    return False
+
+
+def _run_python(monkeypatch, code: str) -> None:
+    monkeypatch.setattr(mcp_server, "command", lambda _root, *_args: [sys.executable, "-c", code])
 
 
 @pytest.mark.asyncio
@@ -82,21 +119,86 @@ async def test_a_module_in_the_repository_never_stands_in_for_one_the_command_im
 async def test_a_call_the_assistant_cancels_stops_the_command(tmp_path, monkeypatch) -> None:
     """Found by review: a cancelled call left its command running for up to an hour, spending tokens."""
     marker = tmp_path / "pid"
-    sleeper = f"import os, time\nopen({str(marker)!r}, 'w').write(str(os.getpid()))\ntime.sleep(60)\n"
-    monkeypatch.setattr(mcp_server, "command", lambda _root, *_args: [sys.executable, "-c", sleeper])
+    _run_python(monkeypatch, _sleeper(marker))
     call = asyncio.create_task(mcp_server.ran(tmp_path, ["status"]))
-    for _ in range(100):
-        if marker.exists() and marker.read_text():
-            break
-        await asyncio.sleep(0.05)
+    pid = await _its_pid(marker)
     call.cancel()
     with pytest.raises(asyncio.CancelledError):
         await call
-    pid = int(marker.read_text())
-    for _ in range(100):
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return
-        await asyncio.sleep(0.05)
-    pytest.fail("the command still runs after its call was cancelled")
+    assert await _ended(pid), "the command still runs after its call was cancelled"
+    assert not mcp_server.RUNNING
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows ends a process with no signal it could hear")
+@pytest.mark.asyncio
+async def test_a_server_the_editor_stops_stops_the_commands_it_runs(tmp_path) -> None:
+    """Found by review: each command runs in a session of its own, which hears no signal sent to the server, and an
+    editor reloading its window stopped the server and left its command running, spending and holding the lock."""
+    marker = tmp_path / "pid"
+    server = textwrap.dedent(f"""
+        import asyncio, sys
+        from pathlib import Path
+        from adk_spec.interfaces import mcp_server
+        mcp_server.command = lambda _root, *_args: [sys.executable, "-c", {_sleeper(marker)!r}]
+        mcp_server.stop_on_signals()
+        asyncio.run(mcp_server.ran(Path("."), ["propose"]))
+    """)
+    running = subprocess.Popen([sys.executable, "-c", server], cwd=ROOT)  # noqa: ASYNC220 - the server, at once
+    try:
+        pid = await _its_pid(marker)
+        running.send_signal(signal.SIGTERM)
+        assert running.wait(timeout=10) != 0
+        assert await _ended(pid), "the command still runs after its server was stopped"
+    finally:
+        running.kill()
+
+
+@pytest.mark.asyncio
+async def test_a_command_that_fails_is_a_failed_call_and_says_how_it_ended(tmp_path, monkeypatch) -> None:
+    """Found by review: a failed command came back as a call that succeeded, its end only a parenthesis an assistant
+    could pass over. It is now a failed call, with all the command said."""
+    _run_python(monkeypatch, "print('two findings block it')\nraise SystemExit(1)")
+    with pytest.raises(ToolError) as failed:
+        await mcp_server.ran(tmp_path, ["check", "--", "pk"])
+    assert "two findings block it" in str(failed.value) and "ended with exit 1" in str(failed.value)
+
+
+@pytest.mark.asyncio
+async def test_a_command_stopped_at_its_time_keeps_what_it_had_printed(tmp_path, monkeypatch) -> None:
+    """Found by review: a command's standard out, to a pipe, waited in its buffer, and a stop at the time limit lost
+    it; standard error, written at once, came out ahead of it."""
+    _run_python(monkeypatch, "print('drafted the brief')\nimport time\ntime.sleep(60)")
+    monkeypatch.setattr(mcp_server, "TOOL_TIMEOUT_S", 2.0)
+    with pytest.raises(ToolError) as failed:
+        await mcp_server.ran(tmp_path, ["propose", "--", "x"])
+    assert "drafted the brief" in str(failed.value) and "did not finish" in str(failed.value)
+
+
+@pytest.mark.asyncio
+async def test_a_command_that_printed_nothing_still_says_it_finished(tmp_path, monkeypatch) -> None:
+    """Found by review: a quiet success returned nothing, and an assistant could only guess how it ended."""
+    _run_python(monkeypatch, "pass")
+    assert "finished" in await mcp_server.ran(tmp_path, ["validate"])
+
+
+@pytest.mark.asyncio
+async def test_a_command_that_cannot_be_started_says_why(tmp_path, monkeypatch) -> None:
+    """Found by review: on Windows a request past the command line's 32,767 characters fails to start, and the SDK
+    shows an assistant an unforeseen error only as its tool's name."""
+
+    def too_long(*_args, **_kwargs):
+        raise OSError(206, "The filename or extension is too long")
+
+    monkeypatch.setattr(mcp_server, "started", too_long)
+    with pytest.raises(ToolError, match=r"could not be started.*too long"):
+        await mcp_server.ran(tmp_path, ["propose", "--", "x" * 40_000])
+
+
+def test_importing_the_packages_main_runs_no_command(monkeypatch) -> None:
+    """Found by review: a process that imports it, as multiprocessing's spawn does the main module, ran the command
+    and exited."""
+    import importlib
+
+    monkeypatch.setattr(sys, "argv", ["adk-spec", "--help"])
+    monkeypatch.delitem(sys.modules, "adk_spec.__main__", raising=False)
+    importlib.import_module("adk_spec.__main__")

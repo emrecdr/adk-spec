@@ -221,3 +221,13 @@ def test_on_windows_a_run_that_ended_is_not_stopped_again(tmp_path, monkeypatch)
 def test_a_path_entry_that_cannot_be_resolved_is_kept_as_it_was(tmp_path) -> None:
     """Found by an outside review: an entry `resolve` cannot read, as an unmounted drive on Windows, stopped verify."""
     assert tests._not_own("/a\0b", tmp_path / ".venv")
+
+
+def test_a_program_that_ended_and_was_waited_for_is_not_stopped(monkeypatch) -> None:
+    """Found by review: its number may already be another process's, which a stop would end."""
+    stopped = []
+    monkeypatch.setattr(process, "_stopped", lambda _proc, windows: stopped.append(windows))
+    started = process.started([sys.executable, "-c", "pass"], env=os.environ)
+    process.waited(started, 60)
+    process.stop(started)
+    assert stopped == []

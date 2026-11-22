@@ -57,9 +57,11 @@ def run(
         return waited(process, timeout)
 
 
-def started(
-    argv: list[str], *, env: Mapping[str, str], cwd: Path | None = None, merged: bool = False
-) -> subprocess.Popen[bytes]:
+#: A program `started` returns, as one outside this module names it.
+type Started = subprocess.Popen[bytes]
+
+
+def started(argv: list[str], *, env: Mapping[str, str], cwd: Path | None = None, merged: bool = False) -> Started:
     """One program started, in a session of its own so that its whole tree can be stopped, for a caller that waits on
     it with `waited`, and may `stop` it first: a call an assistant cancelled, say."""
     return subprocess.Popen(
@@ -93,8 +95,10 @@ def waited(process: subprocess.Popen[bytes], timeout: float) -> subprocess.Compl
 
 
 def stop(process: subprocess.Popen[bytes]) -> None:
-    """A started program and every process it started, stopped."""
-    _stopped(process, WINDOWS)
+    """A started program and every process it started, stopped. One that ended and was waited for is not: its number
+    may already be another process's."""
+    if process.poll() is None:
+        _stopped(process, WINDOWS)
 
 
 @dataclass(frozen=True)

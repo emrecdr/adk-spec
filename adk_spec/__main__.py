@@ -7,4 +7,5 @@ import sys
 
 from .interfaces.cli import run
 
-sys.exit(run())
+if __name__ == "__main__":  # imported, as multiprocessing's spawn imports the main module, it runs nothing
+    sys.exit(run())
