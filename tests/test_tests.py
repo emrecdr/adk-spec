@@ -169,7 +169,21 @@ def test_a_cut_window_starts_at_a_whole_line() -> None:
 def test_a_run_is_given_the_persons_environment_not_adk_specs_own(tmp_path, monkeypatch) -> None:
     """Measured live: run from its checkout by `uv run`, adk-spec's own virtual environment stood first on PATH and in
     VIRTUAL_ENV, and a plain `pytest` would have been adk-spec's, not the project's."""
-    own = tmp_path / "adk-spec-venv"
+    own, project = tmp_path / "adk-spec/.venv", tmp_path / "project"  # adk-spec's own, outside the project
+    (own / "bin").mkdir(parents=True)
+    project.mkdir()
+    monkeypatch.setattr(sys, "prefix", str(own))
+    monkeypatch.setattr(sys, "base_prefix", "/usr")
+    monkeypatch.setenv("VIRTUAL_ENV", str(own))
+    monkeypatch.setenv("PATH", os.pathsep.join([str(own / "bin"), os.environ["PATH"]]))
+    code = "import os\nprint('venv', os.environ.get('VIRTUAL_ENV'))\nprint('path', os.environ['PATH'])"
+    run = run_tests(project, program(tmp_path, code), timeout=60)
+    assert "venv None" in run.tail and str(own / "bin") not in run.tail
+
+
+def test_a_virtual_environment_inside_the_project_is_the_projects_own_and_is_kept(tmp_path, monkeypatch) -> None:
+    """Found by the cleanup review: adk-spec installed in the project's own `.venv` took the project's pytest away."""
+    own = tmp_path / ".venv"
     (own / "bin").mkdir(parents=True)
     monkeypatch.setattr(sys, "prefix", str(own))
     monkeypatch.setattr(sys, "base_prefix", "/usr")
@@ -177,4 +191,4 @@ def test_a_run_is_given_the_persons_environment_not_adk_specs_own(tmp_path, monk
     monkeypatch.setenv("PATH", os.pathsep.join([str(own / "bin"), os.environ["PATH"]]))
     code = "import os\nprint('venv', os.environ.get('VIRTUAL_ENV'))\nprint('path', os.environ['PATH'])"
     run = run_tests(tmp_path, program(tmp_path, code), timeout=60)
-    assert "venv None" in run.tail and str(own / "bin") not in run.tail
+    assert f"venv {own}" in run.tail and str(own / "bin") in run.tail

@@ -38,7 +38,7 @@ def run_tests(root: Path, argv: Sequence[str], *, timeout: int, name: str = "") 
     """The tests run in `root` by `argv`, judged by their own exit and stopped past `timeout` seconds. Never an
     error: a program that cannot be found or started is a run that did not pass, and says why."""
     words = tuple(argv)
-    env = _environment()
+    env = _environment(root)
     program, why = _program(words[0], env.get("PATH", ""))
     if program is None:
         return TestRun(name, words, f"not run: {words[0]}: {why}", "", None)
@@ -54,14 +54,15 @@ def run_tests(root: Path, argv: Sequence[str], *, timeout: int, name: str = "") 
     return TestRun(name, words, outcome, _tail(kept.output, cut=kept.cut), time.monotonic() - began)
 
 
-def _environment() -> dict[str, str]:
+def _environment(root: Path) -> dict[str, str]:
     """The person's environment, less adk-spec's own virtual environment. Run from its checkout by `uv run`, or as an
     installed tool, adk-spec's interpreter stands first on PATH and in VIRTUAL_ENV, and a plain `pytest` in a test
-    command would be adk-spec's own, not the project's."""
+    command would be adk-spec's own, not the project's. A virtual environment inside the project is the project's
+    own, adk-spec installed in it, and stays."""
     env = dict(os.environ)
-    if sys.prefix == sys.base_prefix:  # not in a virtual environment of its own
-        return env
     own = Path(sys.prefix).resolve()
+    if sys.prefix == sys.base_prefix or own.is_relative_to(root.resolve()):
+        return env
     if env.get("VIRTUAL_ENV") and Path(env["VIRTUAL_ENV"]).resolve() == own:
         del env["VIRTUAL_ENV"]
     entries = env.get("PATH", "").split(os.pathsep)

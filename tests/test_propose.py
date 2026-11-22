@@ -8,6 +8,7 @@ from conftest import (
     CANNED_TRIAGE,
     DELTAS_ON_A_MISSING_ID,
     approved,
+    asked,
     beside,
     on_the_fake,
     repository,
@@ -31,11 +32,6 @@ TRIAGE, BRIEF, DELTAS = (
 
 def proposed(root, *argv: str, request: str = REQUEST) -> int:
     return run(root, "propose", request, *argv)
-
-
-def asked(fake_provider, opening: str) -> int:
-    """How many requests the fake was sent whose instruction opens with `opening`."""
-    return sum(str(r.config.system_instruction).startswith(opening) for r in fake_provider.requests)
 
 
 @pytest.fixture(autouse=True)

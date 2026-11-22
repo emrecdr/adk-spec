@@ -56,3 +56,35 @@ Measured live in phase 9: the run inherited adk-spec's virtual environment first
 `tests/test_revise.py` (new).
 
 - [ ] Failing tests from the design's "How it is proven"; implement; gate; commit.
+
+---
+
+## What changed in the build
+
+- **Task 1.** The fix verbs are fix, correct, rename, reword and bump, and the word typo anywhere; "remove" and
+  "adjust" from the design are left out, since removing a feature can be large and "adjust" says nothing of size.
+- **Task 2.** The brief stage's existing "brief you are replacing" section carries the brief as it stands; no new
+  key. The deltas stage gains `## The deltas as they stand`.
+- **Task 3.**
+  - `propose` no longer refuses an ID that names a change: it revises it. A folder under `changes/` that is no
+    change is still refused.
+  - A revised approved change goes back to a draft with its approval cleared, as `rebase` does, and says "the
+    approval is void"; the design had the approval left recorded and stale.
+  - A person's `--tier` beside an `--id` that names an open change is ignored: the change keeps its tier.
+  - A kept ID is given once: a second requirement of the same name gets an ID of its own.
+  - A delta of a capability the revision no longer touches is removed, through `Workspace.remove_from`.
+  - Hand edits are kept as far as the model restates them. What code guarantees is the list of requirements
+    changed, compared before and after; an edit lost from the brief is not listed.
+- **After the cleanup review.**
+  - A ticked box is counted as `plan` counts it, in a list off its grammar too: three reviewers found the first
+    count missed that, and a revision could have lost a ticked task.
+  - The tier is decided once, before the readiness check: the change's own for a revision, then a person's, then a
+    rule's. A request a rule sizes no longer needs the sizing model to be set up.
+  - A revision that changes no requirement keeps `tasks.md` and drafts none, and a revision never reads the code
+    again: up to one tasks call and up to seven reading calls saved each time.
+  - `lifecycle.reopened` is the one place a change goes back to a draft, for `rebase` and a revision alike. A
+    revision writes its files and state as one set, through `Workspace.rewrite_change`.
+  - The deltas as they stand are shown each under its path, within the limit every stage input has.
+  - A test run keeps a virtual environment inside the project: adk-spec installed in the project's own `.venv`.
+  - Not done: moving the retry section after the long inputs in every stage (older than this phase), a revision
+    schema that returns only what changed (large), and the sizing rule in ADK's web chat (outside this phase).

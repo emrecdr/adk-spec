@@ -130,9 +130,8 @@ def to_deltas(
 
     `kept` holds the IDs a change being revised has already given, by capability and requirement name: a
     requirement the revision keeps by its name keeps its ID, once: a second one of that name gets one of its own."""
-    held = set(taken)
-    kept = kept or {}
-    given: set[str] = set()
+    kept = dict(kept or {})  # each kept ID given once: taken out as it is
+    held = set(taken) | set(kept.values())
     slots: dict[str, dict] = {}
     for one in draft.deltas:
         capability = one.capability.strip()
@@ -141,11 +140,8 @@ def to_deltas(
             slot["purpose"] = slot["purpose"] or _text(one.purpose) or None
         stands = {req.id: req for req in living[capability].requirements} if capability in living else {}
         for added in one.added:
-            req_id = kept.get((capability, named(added.name)))
-            if req_id is None or req_id in given:
-                req_id = next_requirement_id(capability, held)
+            req_id = kept.pop((capability, named(added.name)), None) or next_requirement_id(capability, held)
             held.add(req_id)
-            given.add(req_id)
             slot["added"].append(_requirement(req_id, added))
         restated = [_requirement(changed.id.strip(), changed.requirement) for changed in one.modified]
         slot["modified"] += [req for req in restated if stands.get(req.id) != req]
@@ -282,16 +278,13 @@ def kept_ids(deltas: Mapping[str, Delta]) -> dict[tuple[str, str], str]:
     return {(capability, named(req.name)): req.id for capability, delta in deltas.items() for req in delta.added}
 
 
+def _by_id(deltas: Mapping[str, Delta]) -> dict[str, Requirement | Removal]:
+    """Every requirement a change's deltas add, modify or remove, by its ID."""
+    return {req.id: req for delta in deltas.values() for req in (*delta.added, *delta.modified, *delta.removed)}
+
+
 def revision(before: Mapping[str, Delta], after: Mapping[str, Delta]) -> tuple[list[str], list[str], list[str]]:
     """What a revision did to a change's requirements, by ID: added, changed and dropped, each in order."""
-
-    def held(deltas: Mapping[str, Delta]) -> dict[str, object]:
-        found: dict[str, object] = {}
-        for delta in deltas.values():
-            found |= {req.id: req for req in (*delta.added, *delta.modified)}
-            found |= {gone.id: gone for gone in delta.removed}
-        return found
-
-    old, new = held(before), held(after)
+    old, new = _by_id(before), _by_id(after)
     changed = sorted(req_id for req_id in old.keys() & new.keys() if old[req_id] != new[req_id])
     return sorted(new.keys() - old.keys()), changed, sorted(old.keys() - new.keys())

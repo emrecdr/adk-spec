@@ -14,6 +14,7 @@ from conftest import (
     repository,
     run,
     seeded,
+    sent_to,
     state_of,
 )
 from samples import DELTA, SPEC, tasks_for
@@ -542,15 +543,6 @@ def test_a_with_that_names_no_repository_is_refused_before_any_call(tmp_path, ca
 
 
 # Phase 8: every change's reading starts from the repository's profile.
-
-
-def sent_to(fake_provider, opening: str) -> str:
-    (instruction,) = [
-        str(r.config.system_instruction)
-        for r in fake_provider.requests
-        if str(r.config.system_instruction).startswith(opening)
-    ]
-    return instruction
 
 
 def test_the_scout_and_the_plan_are_shown_the_profile(tmp_path, fake_provider) -> None:

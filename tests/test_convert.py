@@ -58,6 +58,13 @@ def test_an_added_requirement_is_given_the_next_free_id_and_each_one_counts() ->
     assert delta.added[0].scenarios[0].steps == ("WHEN the user presents a passkey", "THEN the system starts a session")
 
 
+def test_a_kept_id_is_given_once_and_a_second_requirement_of_its_name_gets_its_own() -> None:
+    """A revision keeps a requirement's ID by its name: once, so two of one name are never given one ID."""
+    kept = {("auth", "sign in with a passkey"): "REQ-AUTH-004"}
+    delta = to_deltas(one(added=[ADD, ADD]), LIVING, {"REQ-AUTH-004"}, kept)["auth"]
+    assert [r.id for r in delta.added] == ["REQ-AUTH-004", "REQ-AUTH-005"]
+
+
 def test_a_modified_draft_keeps_its_id_and_a_removed_one_takes_the_living_name() -> None:
     draft = one(
         modified=[ModifiedDraft(id="REQ-AUTH-002", requirement=ADD)],

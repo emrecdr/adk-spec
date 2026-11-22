@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from .model import PASSED, Approval, ChangeState, Checked, Delta, Finding, GrammarError, Spec, Verification
 from .spec_md import fingerprint
@@ -55,6 +55,12 @@ def _as_approved(path: str, text: str) -> str:
 def approval_files(texts: Mapping[str, str]) -> dict[str, str]:
     """The fingerprint of each file an approval covers, by its path in the change's folder."""
     return {path: sha256_of(_as_approved(path, text)) for path, text in texts.items()}
+
+
+def reopened(state: ChangeState, **update: Any) -> ChangeState:
+    """`state` a draft again, with `update`, and its approval void: a command wrote its files anew, a rebase or a
+    revision, and what was approved is no longer what it says. It is approved again."""
+    return state.model_copy(update={**update, "status": "draft", "approval": None})
 
 
 def approve(

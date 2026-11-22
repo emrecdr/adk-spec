@@ -258,21 +258,25 @@ class Workspace:
             raise
         return folder
 
+    def rewrite_change(self, state: ChangeState, files: Mapping[str, str], gone: Iterable[str] = ()) -> Path:
+        """An existing change written anew: each of `files` by its path in its folder, and its state, as one set;
+        then each of `gone` taken out, and its folder with it where nothing else is left in it, a delta of a
+        capability a revision no longer touches. Its folder."""
+        folder = self._folder(state.id)
+        texts = self._placed(folder, files)
+        texts[folder / STATE] = state.model_dump_json(indent=2)
+        write_all(texts)
+        for path in self._placed(folder, dict.fromkeys(gone, "")):
+            path.unlink(missing_ok=True)
+            with contextlib.suppress(OSError):  # a folder that holds something else stays
+                path.parent.rmdir()
+        return folder
+
     def write_into(self, change_id: str, files: Mapping[str, str]) -> list[Path]:
         """Each of `files` written into an existing change's folder, by its path there, as one set."""
         texts = self._placed(self._folder(change_id), files)
         write_all(texts)
         return list(texts)
-
-    def remove_from(self, change_id: str, names: Iterable[str]) -> None:
-        """Each file of `names` taken out of an existing change's folder, by its path there, and its folder with it
-        where nothing else is left in it: a delta of a capability a revision no longer touches."""
-        folder = self._folder(change_id)
-        for name in names:
-            path = inside(folder, *Path(name).parts)
-            path.unlink(missing_ok=True)
-            with contextlib.suppress(OSError):  # a folder that holds something else stays
-                path.parent.rmdir()
 
     def write_report(self, change_id: str, name: str, text: str) -> Path:
         """A generated report of a change, under its `reports/` folder: written whole, replacing the one before."""

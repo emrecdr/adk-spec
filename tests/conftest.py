@@ -523,3 +523,18 @@ def between(text: str, label: str) -> str:
 
     opened, closed = f"<<< {label} {BOUNDARY}\n", f"\n>>> {label} {BOUNDARY}"
     return text[text.index(opened) + len(opened) : text.index(closed)]
+
+
+def asked(fake_provider, opening: str) -> int:
+    """How many requests the fake was sent whose instruction opens with `opening`."""
+    return sum(str(r.config.system_instruction).startswith(opening) for r in fake_provider.requests)
+
+
+def sent_to(fake_provider, opening: str) -> str:
+    """The instruction of the one request the fake was sent that opens with `opening`."""
+    (instruction,) = [
+        str(r.config.system_instruction)
+        for r in fake_provider.requests
+        if str(r.config.system_instruction).startswith(opening)
+    ]
+    return instruction

@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 
 from .model import Tier
+from .text import flat
 
 #: How long a request a rule calls a fix may be, and how long one it calls a feature must be.
 LEAN_MAX_CHARS = 240
@@ -21,9 +22,9 @@ _FIX = re.compile(r"^(fix|correct|rename|reword|bump)\b|\btypos?\b", re.IGNORECA
 _FEATURE_WORDS = frozenset({"add", "support", "integrate", "migrate", "introduce", "new", "replace", "redesign"})
 
 
-def sized(request: str) -> tuple[Tier, str] | None:
+def tier_by_rule(request: str) -> tuple[Tier, str] | None:
     """The tier rules give `request`, and why; nothing where the model should size it."""
-    text = " ".join(request.split())
+    text = flat(request)
     if len(text) <= LEAN_MAX_CHARS and _FIX.search(text):
         return "lean", "a short fix"
     named = _FEATURE_WORDS & set(re.findall(r"[a-z]+", text.lower()))

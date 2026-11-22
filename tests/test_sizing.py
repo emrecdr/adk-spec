@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from adk_spec.domain.sizing import sized
+from adk_spec.domain.sizing import tier_by_rule as sized
 
 FEATURE = "Add passkey sign-in, support backup codes and replace the old password reset flow. " * 3
 
