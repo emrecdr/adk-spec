@@ -1848,8 +1848,9 @@ def _drafts(
     what the reading kept and what the profile says. Facts are adk-spec's to find; decisions are the person's. A
     revision is drafted from the `context.md` its change keeps."""
     from ..orchestration.gate import FAILURE
-    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, PROFILE_TEXT, REQUEST, TIER
+    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, PROFILE_TEXT, REQUEST, SIZED, TIER
     from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages.triage import read_triage
 
     tier = args.tier
     if tier is None:
@@ -1857,6 +1858,10 @@ def _drafts(
         tier = sized.get(TIER)
         if sized.get(FAILURE) or tier in (None, "none"):
             return sized, None
+        # The brief starts from the capabilities triage found. Found live: told nothing of them, a brief named three
+        # for a two-function change triage had sized as one, and the deltas stage could not fill them.
+        if not isinstance(found := read_triage(sized), str):
+            seed = {**seed, SIZED: ", ".join(found.capabilities)}
     profile = _optional(workspace, profile_text, PROFILE) or ""
     read = None
     if explore:  # aimed by the request, the brief to come

@@ -38,3 +38,11 @@ def test_the_check_finds_a_requirement_that_softens_the_brief_or_could_never_fai
     told = str(build_check().instruction)
     assert "softens a number, an order or a negative the brief gives" in told
     assert "a THEN no run could show false" in told
+
+
+def test_the_brief_names_as_few_capabilities_as_hold_the_change() -> None:
+    """Found live, phase 15: a brief that named three capabilities for one small change left the deltas stage
+    unable to give each a requirement."""
+    told = str(build_brief().instruction)
+    assert "Name as few capabilities as hold the change" in told
+    assert "Each capability you name gets one requirement at least." in told

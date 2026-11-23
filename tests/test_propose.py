@@ -10,6 +10,7 @@ from conftest import (
     approved,
     asked,
     beside,
+    between,
     on_the_fake,
     repository,
     run,
@@ -631,3 +632,12 @@ def test_a_context_that_cannot_be_written_says_the_change_was(tmp_path, monkeypa
     err = capsys.readouterr().err
     assert "the change is written, and its context.md is not: context.md is a link" in err
     assert (tmp_path / ".spec/changes/kept/brief.md").is_file()
+
+
+def test_the_brief_is_told_the_capabilities_triage_sized_the_request_as_touching(tmp_path, fake_provider) -> None:
+    """Found live, phase 15: triage named one capability, the brief three for a two-function change, and the deltas
+    stage could not fill them. The brief starts from what triage found."""
+    seeded(tmp_path)
+    assert proposed(tmp_path, "--id", "sized", "--no-explore") == 0
+    brief = sent_to(fake_provider, BRIEF)
+    assert between(brief, "sized") == "auth"

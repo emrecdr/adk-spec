@@ -25,6 +25,8 @@ FINDINGS = "findings"
 #: as its canonical file, the living specs a change touches, whole, and the change's deltas, each as its file.
 REQUEST = "request"
 CAPABILITIES = "capabilities"
+#: The capabilities triage sized a request as touching, for the brief to start from: none where a person named the tier.
+SIZED = "sized"
 CONSTITUTION = "constitution"
 BRIEF_TEXT = "brief_text"
 LIVING = "living"
