@@ -114,3 +114,12 @@ def test_a_full_profile_reaches_a_stage_with_its_risks_and_unknowns(tmp_path) ->
     write_text(ws.home / PROFILE, text)
     shown = profile_text(ws)
     assert "## Risks and what is unclear" in shown and "- Who owns sessions?" in shown
+
+
+def test_a_readings_text_given_to_the_brief_is_cut_as_context_md_would_be() -> None:
+    """Found by review of phase 15: the reading before the brief handed its text on whole, past the cap every stage
+    is held to through this module."""
+    from adk_spec.workspace.context import CONTEXT_FILE_MAX_CHARS, context_of
+
+    held = context_of("# Context\n\n" + "x" * (CONTEXT_FILE_MAX_CHARS * 2))
+    assert len(held) < CONTEXT_FILE_MAX_CHARS + 100 and held.endswith("is longer than a stage is given)")

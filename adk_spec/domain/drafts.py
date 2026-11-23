@@ -89,8 +89,9 @@ class OpenPointDraft(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _waits_on_none_where_unsaid(cls, data: Any) -> Any:
-        """An answer drafted before points named what they wait on, a recording's, waits on none. The field stays
-        required in the schema: Copilot's strict schemas require every property."""
+        """An answer that names no wait, an arm's that left the field out or one drafted before points named what
+        they wait on, waits on none. The field stays required in the schema: Copilot's strict schemas require every
+        property."""
         if isinstance(data, dict) and "depends_on" not in data:
             return {**data, "depends_on": []}
         return data

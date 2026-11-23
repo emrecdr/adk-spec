@@ -572,3 +572,20 @@ def test_a_profile_that_is_no_text_is_said_and_the_plan_goes_on(tmp_path, capsys
     capsys.readouterr()
     assert run(tmp_path, "plan", "passkeys", "--replace") == 0
     assert "left out  .spec/profile.md is not UTF-8: no stage reads it" in capsys.readouterr().out
+
+
+def test_plans_own_reading_looks_into_the_installed_libraries_as_proposes_does(tmp_path, fake_provider) -> None:
+    """Found by review of phase 15: a change with no context.md, read by `plan`, was read without the installed
+    libraries `propose` reads: one reading, one scope."""
+    from conftest import python_environment, repository
+
+    seeded(tmp_path)
+    repository(tmp_path, {".gitignore": ".venv/\n", "src/app.py": "import httpx\n"})
+    python_environment(tmp_path)
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+    scout = next(
+        str(r.config.system_instruction)
+        for r in fake_provider.requests
+        if str(r.config.system_instruction).startswith("You choose what to read")
+    )
+    assert "httpx 0.28.1" in scout

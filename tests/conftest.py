@@ -565,3 +565,23 @@ def held_open_from(monkeypatch: pytest.MonkeyPatch, nth: int = 2) -> None:
         real(source, target)
 
     monkeypatch.setattr(os, "replace", replace)
+
+
+#: An installed library's file, for the tests of a reading that may look into a project's environment.
+CLIENT = 'class Client:\n    def send(self, request, *, timeout=5.0):\n        """Send one request."""\n'
+
+
+def python_environment(root: Path, files: dict[str, str] | None = None, *, windows: bool = False) -> Path:
+    """A `.venv` at `root` holding httpx 0.28.1: its files, its `METADATA` and the `RECORD` listing them, with a line
+    that climbs out of `site-packages` and a compiled file, as a real record holds. Its `site-packages`."""
+    site = root / ".venv" / ("Lib" if windows else "lib/python3.14") / "site-packages"
+    held = files or {"httpx/__init__.py": "from ._client import Client\n", "httpx/_client.py": CLIENT}
+    for path, text in held.items():
+        (site / path).parent.mkdir(parents=True, exist_ok=True)
+        (site / path).write_text(text, encoding="utf-8", newline="\n")
+    info = site / "httpx-0.28.1.dist-info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "METADATA").write_text("Metadata-Version: 2.4\nName: httpx\nVersion: 0.28.1\n", encoding="utf-8")
+    listed = [*held, "httpx-0.28.1.dist-info/METADATA", "httpx/__pycache__/x.cpython-314.pyc", "../../bin/httpx"]
+    (info / "RECORD").write_text("".join(f"{path},sha256=x,1\n" for path in listed), encoding="utf-8")
+    return site

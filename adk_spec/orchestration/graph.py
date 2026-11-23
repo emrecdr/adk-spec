@@ -148,13 +148,7 @@ def _app(edges: list[Any], ledger: UsageLedger, recorder: BasePlugin | None = No
 def build_triage_app(*, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:
     """Triage alone, behind its gate: the tier under `TIER`, `none` among them. `propose` sizes a request first, so
     that one owing no spec spends no reading of the code, and the brief is drafted after the reading, from it."""
-    triage, triage_gate = triage_stage.build_triage(), checked(triage_stage.KEY, lambda _state: [])
-    edges = [
-        ("START", triage, triage_gate),
-        (triage_gate, {OK: _sized, AGAIN: triage, GIVE_UP: _ended}),
-        (_sized, {GO: _ended, NONE: _ended}),
-    ]
-    return _app(edges, ledger, recorder)
+    return _app(_opening(_ended, "triage", "START", _ended), ledger, recorder)
 
 
 def build_smoke_app() -> App:
@@ -419,8 +413,8 @@ _NOTHING_YET: dict[str, None] = dict.fromkeys(
 
 def build_chat_app(known: Known, told: Mapping[str, Any], *, ledger: UsageLedger) -> App:
     """The shape ADK's own interface loads: one message typed is one request. It is drafted as `propose` drafts it
-    with no question asked, and the run ends on one message that holds the drafts as their files, or the reason
-    there are none. Nothing is written: a chat is for watching a run, and `adk-spec propose` is what writes.
+    with no question asked and no code read, and the run ends on one message that holds the drafts as their files, or
+    the reason there are none. Nothing is written: a chat is for watching a run, and `adk-spec propose` is what writes.
 
     `told` is what every run is seeded with of the workspace: the capability index and the repository's rules."""
 

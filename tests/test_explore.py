@@ -4,7 +4,7 @@ list, a survey states what it shows, and code keeps a statement only where its q
 from __future__ import annotations
 
 import pytest
-from conftest import between, on_the_fake, repository
+from conftest import between, on_the_fake, python_environment, repository
 
 from adk_spec.orchestration import explore
 from adk_spec.orchestration.explore import build_explore_app, explored
@@ -288,12 +288,7 @@ async def test_a_statement_quoting_an_installed_library_is_kept(tmp_path, fake_p
     """Phase 15: a reading may look into the project's installed libraries, offline, at the versions it runs; a
     statement about one counts where its quote is in the library's file, as for code."""
     repository(tmp_path, {".gitignore": ".venv/\n", "src/app.py": "import httpx\n"})
-    site = tmp_path / ".venv/lib/python3.14/site-packages"
-    (site / "httpx").mkdir(parents=True)
-    (site / "httpx/_client.py").write_text("def send(request, *, timeout=5.0):\n    pass\n", encoding="utf-8")
-    (site / "httpx-0.28.1.dist-info").mkdir()
-    (site / "httpx-0.28.1.dist-info/METADATA").write_text("Name: httpx\nVersion: 0.28.1\n", encoding="utf-8")
-    (site / "httpx-0.28.1.dist-info/RECORD").write_text("httpx/_client.py,sha256=x,1\n", encoding="utf-8")
+    python_environment(tmp_path)
     fake_provider.answers_when(
         SCOUT, {"files": ["python:httpx/_client.py"], "folders": [], "searches": [], "reason": "Its timeout."}
     )
@@ -303,7 +298,7 @@ async def test_a_statement_quoting_an_installed_library_is_kept(tmp_path, fake_p
     seed = {BRIEF_TEXT: "# Time out slow calls\n", DELTAS_TEXT: "", CONSTITUTION: "", TREE: held.tree()}
     run = await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
     found = explored(run.state)
-    assert [(one.path, one.line) for one in found.statements] == [("python:httpx/_client.py", 1)]
+    assert [(one.path, one.line) for one in found.statements] == [("python:httpx/_client.py", 2)]
     (scout,) = sent(fake_provider, SCOUT)
     assert "httpx 0.28.1" in between(scout, "tree") and "python:<path>" in scout, "the scout is told how to name one"
     assert "worth a file only where the change depends on how it behaves" in scout, "and when one is worth a file"

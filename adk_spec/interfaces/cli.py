@@ -75,6 +75,7 @@ from ..workspace.context import (
     ContextTooLargeError,
     capability_index,
     constitution_text,
+    context_of,
     context_text,
     files_text,
     lessons_text,
@@ -1112,7 +1113,7 @@ def _plan_made(
     serves = {"owed": owed(change.deltas), "nameable": nameable(change.deltas, specs)}
     if ledger is None:  # one ceiling for the reading and the drafting: they are one command's
         ledger = UsageLedger(workspace.config().max_tokens or None)
-    said, context = _read_code(workspace, change_id, seed, ledger, source) if explore else ("", None)
+    said, context = _read_code(workspace, change_id, seed, ledger, held) if explore else ("", None)
     seed[CONTEXT_TEXT] = context_text(workspace, change_id)
     read = [(context, False)] if context else []
 
@@ -1140,11 +1141,11 @@ def _persons_design(workspace: Workspace, change_id: str, state: ChangeState) ->
 
 
 def _read_code(
-    workspace: Workspace, change_id: str, seed: dict[str, Any], ledger: Any, source: Source | None
+    workspace: Workspace, change_id: str, seed: dict[str, Any], ledger: Any, repositories: Mapping[str, str]
 ) -> tuple[str, Path | None]:
-    """The repository's code read for a change, through `source`, and `context.md` written from what was kept:
-    what to say of it, and the file where one was written. Nothing is read where the change has a `context.md`
-    already, which is then a person's to keep, or where there is no repository or no file in it.
+    """The repository's code read for a change, and `context.md` written from what was kept: what to say of it, and
+    the file where one was written. Nothing is read where the change has a `context.md` already, which is then a
+    person's to keep, or where there is no repository or no file in it.
 
     A reading never stops a plan: one that fails, or keeps nothing, is said in a line, and the plan is drafted
     without it. One that ends early writes what it kept and says that it is partial."""
@@ -1153,24 +1154,65 @@ def _read_code(
         # A reading that ended early is said each time it is used: nothing else would show that it is no whole one.
         early = PARTIAL in context_text(workspace, change_id)
         return ("kept: context.md is of a reading that ended early. Delete it to read again" if early else ""), None
-    if source is None or not source.paths:
-        return "", None
     from ..orchestration.explore import ROLES
     from ..orchestration.models import require_ready
-    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT, TREE
+    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT
     from ..orchestration.stages import CONSTITUTION as RULES
 
     if why := require_ready(roles=ROLES):
         raise UsageError(why)
-    reading = {key: seed[key] for key in (RULES, BRIEF_TEXT, DELTAS_TEXT, TREE, PROFILE_TEXT)}
-    found, failure = _reading(workspace, "explore", change_id, reading, ledger, source)
+    read = _code_read(
+        workspace,
+        change_id,
+        {key: seed[key] for key in (RULES, BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT)},
+        ledger,
+        repositories,
+    )
+    if read is None:
+        return "", None
+    return read.said, _context_written(workspace, change_id, read)
+
+
+@dataclass(frozen=True)
+class _Read:
+    """What a reading of the code came to, in a line, and what it kept as `context.md` holds it: nothing where it
+    kept nothing. Rendered once, at the reading, so the file says when the code was read."""
+
+    said: str
+    text: str
+
+
+#: The heading a reading's text opens with, the change's id set after it once the change has one.
+_CONTEXT_TITLE = "Context"
+
+
+def _code_read(
+    workspace: Workspace, change_id: str | None, seed: dict[str, Any], ledger: Any, repositories: Mapping[str, str]
+) -> _Read | None:
+    """One reading of the repository's code, of its installed libraries and of the repositories a change names,
+    seeded with `seed` and the files a stage may name: what it came to. Nothing where there is no repository or no
+    file in it. `propose` reads before the brief, `plan` where a change has no `context.md`: one reading, one scope."""
+    from ..orchestration.stages import TREE
+
+    source = _source(workspace, repositories, installed=True)
+    if source is None or not source.paths:
+        return None
+    found, failure = _reading(workspace, "explore", change_id, {**seed, TREE: source.tree()}, ledger, source)
     said = _explored_said(found, len(source.names), failure)
     if not found.statements:
-        return said, None
+        return _Read(said, "")
     partial = "; ".join(part for part in (failure, *source.missing) if part) or None
-    text = _found_text(workspace, f"Context: {change_id}", found, partial=partial, others=source.commits())
-    (path,) = workspace.write_into(change_id, {CONTEXT_FILE: text})
-    return said, path
+    return _Read(said, _found_text(workspace, _CONTEXT_TITLE, found, partial=partial, others=source.commits()))
+
+
+def _context_written(workspace: Workspace, change_id: str, read: _Read | None) -> Path | None:
+    """What a reading kept, written as the change's `context.md` under the change's id: nothing where it kept
+    nothing."""
+    if read is None or not read.text:
+        return None
+    titled = read.text.replace(f"# {_CONTEXT_TITLE}\n", f"# {_CONTEXT_TITLE}: {change_id}\n", 1)
+    (path,) = workspace.write_into(change_id, {CONTEXT_FILE: titled})
+    return path
 
 
 def _reading(
@@ -1611,7 +1653,9 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     # A new change's code is read before its brief, and once: the plan keeps what this reading found.
     explore = not args.no_explore and change is None
     with _recording(workspace, "propose", args.id) as kept:
-        state, read = _drafts(args, workspace, known, ledger, kept.recorder, seed, change, repositories)
+        state, read = _drafts(
+            args, workspace, known, ledger, kept.recorder, seed, change, repositories, explore=explore
+        )
         tier = state.get(TIER)
         whole = tier == "none" or (state.get(BRIEF_KEY) and state.get(DELTAS_KEY))
         if tier is None or not whole or state.get(FAILURE):
@@ -1628,7 +1672,8 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
             return EXIT_OK
         try:
             kept.change, changed = _written(args, workspace, known, state, tier, repositories, change)
-            _context_written(workspace, kept.change, read)
+            if context := _context_written(workspace, kept.change, read):
+                print(f"          {workspace.shown(context)}")
         except WorkspaceError as exc:  # the calls are paid for by now: say so beside the refusal
             kept.outcome = f"failed: {exc}"
             print(f"{PROG}: no change was written: {exc}", file=sys.stderr)
@@ -1637,21 +1682,18 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
         kept.outcome = "written"
     keep = _tasks_kept(workspace, change, changed) if change else None
     change_id = kept.change or ""
-    # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs. It reads
-    # no code: this run read it, or the person said not to, or the change is revised and keeps its context.
-    review = (
-        _plan_command(workspace, change_id, change, args.no_explore or explore) if DEMANDS[tier].read_first else None
-    )
+    # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs.
+    review = _plan_command(workspace, change_id, change) if DEMANDS[tier].read_first else None
     # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
-    planned = {"explore": False, "keep": keep, "review": review, "lessons": "" if lessons is None else None}
+    planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None}
     return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned)
 
 
-def _plan_command(workspace: Workspace, change_id: str, change: Change | None, no_explore: bool) -> str:
+def _plan_command(workspace: Workspace, change_id: str, change: Change | None) -> str:
     """The `plan` that goes on after a stop: with `--replace` where a revised change's task is ticked, and with
-    `--no-explore` where the person gave it or the change is revised, which reads no code again."""
+    `--no-explore`, as `propose` read the code already, or was told not to, or kept a revised change's context."""
     flags = [" --replace"] if change is not None and _ticked(workspace, change) else []
-    flags += [" --no-explore"] if no_explore or change is not None else []
+    flags += [" --no-explore"]
     return f"`{PROG} plan {change_id}{''.join(flags)}`"
 
 
@@ -1673,7 +1715,6 @@ def _then_planned(
     of_specs: list[Finding],
     ledger: Any,
     *,
-    explore: bool,
     keep: str | None,
     review: str | None = None,
     lessons: str | None = None,
@@ -1696,13 +1737,11 @@ def _then_planned(
         return EXIT_OK
     # The change is written by now: a plan that does not end well leaves it a draft, and `plan` finishes it.
     try:
-        made = _plan_made(
-            workspace, change_id, specs, of_specs, replace=False, ledger=ledger, explore=explore, lessons=lessons
+        made = _plan_made(  # the code was read before the brief, or is not to be: the plan reads none
+            workspace, change_id, specs, of_specs, replace=False, ledger=ledger, explore=False, lessons=lessons
         )
     except NotYetError as exc:  # the calls so far are paid for: what stopped the plan is said as any other failure
         made = _Planned(ledger=ledger, failure=str(exc))
-    if made.explored:
-        print(f"explored  {made.explored}")
     if made.failure:
         return _unfinished(
             f"the brief and the specs are written, and the plan is not: {made.failure}. Run "
@@ -1776,15 +1815,6 @@ def _first_reads(workspace: Workspace, change_id: str) -> str:
     return " and ".join(first)
 
 
-@dataclass(frozen=True)
-class _Read:
-    """What a reading before the brief kept, to write as the change's `context.md` once the change has its id."""
-
-    found: Any
-    partial: str | None
-    others: Mapping[str, str | None]
-
-
 def _drafts(
     args: argparse.Namespace,
     workspace: Workspace,
@@ -1794,27 +1824,34 @@ def _drafts(
     seed: dict[str, Any],
     change: Change | None,
     repositories: Mapping[str, str],
+    *,
+    explore: bool,
 ) -> tuple[dict[str, Any], _Read | None]:
-    """The runs of one `propose`, and what its reading kept: the request sized, where no tier is known and the code
-    will be read, so that one owing no spec spends no reading; the code read, for a new change; then the brief and the
-    deltas, drafted from what the reading kept and what the profile says. Facts are adk-spec's to find; decisions are
-    the person's. A revision is drafted from the `context.md` its change keeps."""
+    """The runs of one `propose`, and what its reading kept: the request sized alone where no tier is known, so that
+    one owing no spec spends no reading; the code read, where `explore`; then the brief and the deltas, drafted from
+    what the reading kept and what the profile says. Facts are adk-spec's to find; decisions are the person's. A
+    revision is drafted from the `context.md` its change keeps."""
     from ..orchestration.gate import FAILURE
-    from ..orchestration.stages import CONTEXT_TEXT, PROFILE_TEXT, TIER
+    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, PROFILE_TEXT, REQUEST, TIER
+    from ..orchestration.stages import CONSTITUTION as RULES
 
-    explore = not args.no_explore and change is None
     tier = args.tier
-    if tier is None and explore:
+    if tier is None:
         sized = _sized_first(workspace, ledger, recorder, seed)
         tier = sized.get(TIER)
         if sized.get(FAILURE) or tier in (None, "none"):
             return sized, None
     profile = _optional(workspace, profile_text, PROFILE) or ""
-    read = _read_first(workspace, seed, ledger, repositories, profile) if explore else None
-    if read is not None and read.found.statements:
-        context = _found_text(workspace, "Context", read.found, partial=read.partial, others=read.others)
-    else:
-        context = context_text(workspace, change.state.id) if change else ""
+    read = None
+    if explore:  # aimed by the request, the brief to come
+        asked = f"# A change is requested\n\n## The request\n\n{seed[REQUEST].strip()}\n"
+        aim = {RULES: seed[RULES], BRIEF_TEXT: asked, DELTAS_TEXT: "", PROFILE_TEXT: profile}
+        read = _code_read(workspace, None, aim, ledger, repositories)
+        if read is not None:
+            print(f"explored  {read.said}")
+    context = context_of(read.text) if read is not None and read.text else ""
+    if change is not None:
+        context = context_text(workspace, change.state.id)
     seed = {**seed, PROFILE_TEXT: profile, CONTEXT_TEXT: context}
     return _rounds(args, workspace, known, ledger, recorder, seed, tier), read
 
@@ -1827,35 +1864,6 @@ def _sized_first(workspace: Workspace, ledger: Any, recorder: Any, seed: dict[st
     run = _ran(build_triage_app(ledger=ledger, recorder=recorder), seed, "propose")
     _learned(workspace, run.state)
     return {**run.state, FAILURE: run.state.get(FAILURE) or run.failure}
-
-
-def _read_first(
-    workspace: Workspace, seed: dict[str, Any], ledger: Any, repositories: Mapping[str, str], profile: str
-) -> _Read | None:
-    """The repository's code read for a request, its installed libraries and the repositories it names with it,
-    before the brief: what was kept, said in a line. Nothing where there is no repository or no file in it. A reading
-    never stops a propose: one that fails, or keeps nothing, is said, and the brief is drafted without it."""
-    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT, REQUEST, TREE
-    from ..orchestration.stages import CONSTITUTION as RULES
-
-    source = _source(workspace, repositories, installed=True)
-    if source is None or not source.paths:
-        return None
-    asked = f"# A change is requested\n\n## The request\n\n{seed[REQUEST].strip()}\n"
-    reading = {RULES: seed[RULES], BRIEF_TEXT: asked, DELTAS_TEXT: "", TREE: source.tree(), PROFILE_TEXT: profile}
-    found, failure = _reading(workspace, "explore", None, reading, ledger, source)
-    print(f"explored  {_explored_said(found, len(source.names), failure)}")
-    partial = "; ".join(part for part in (failure, *source.missing) if part) or None
-    return _Read(found, partial, source.commits())
-
-
-def _context_written(workspace: Workspace, change_id: str, read: _Read | None) -> None:
-    """What the reading before the brief kept, written as the change's `context.md`, now that it has its id."""
-    if read is None or not read.found.statements:
-        return
-    text = _found_text(workspace, f"Context: {change_id}", read.found, partial=read.partial, others=read.others)
-    (path,) = workspace.write_into(change_id, {CONTEXT_FILE: text})
-    print(f"          {workspace.shown(path)}")
 
 
 def _rounds(

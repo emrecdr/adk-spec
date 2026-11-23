@@ -243,10 +243,9 @@ def _libraries_shown(installed: Sequence[Environment]) -> str:
     for one in installed:
         named = []
         for name, version, tops in one.packages[:LIBRARIES_SHOWN]:
-            imports = [top for top in tops if top.replace("_", "-").casefold() != name.casefold()]
-            named.append(
-                f"{name} {version}".strip() + (f" ({', '.join(imports)})" if imports and tops != (name,) else "")
-            )
+            same = name.replace("_", "-").casefold()
+            imports = [top for top in tops if top.replace("_", "-").casefold() != same]
+            named.append(f"{name} {version}".strip() + (f" ({', '.join(imports)})" if imports else ""))
         more = len(one.packages) - LIBRARIES_SHOWN
         lines.append(f"{one.scheme} ({one.where}): {', '.join(named)}" + (f", and {more:,} more" if more > 0 else ""))
     return "\n".join(lines)
@@ -349,7 +348,7 @@ class Source:
         """The source of the repository at `root`, as git lists it now, less what a person excluded; and of each of
         `others`, by its name a path from `root` or an absolute one. `SourceError` for one that can never be read
         beside this one; one that is not here now is named in `missing`. With `installed`, the project's installed
-        libraries too, as a reading for a plan asks for them."""
+        libraries too, for a reading of the code."""
         here = _Repository("", root, listed_by_git(root, exclude=exclude), exclude)
         folders = {path.split("/", 1)[0] for path in here.paths if "/" in path}
         repositories, missing = [here], []

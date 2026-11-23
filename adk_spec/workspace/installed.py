@@ -118,7 +118,7 @@ def _node(root: Path) -> Environment | None:
     paths: list[str] = []
     for name, folder in _packages(modules):
         version = _version(folder / "package.json")
-        packages.append((name, version, (name,)))
+        packages.append((name, version, ()))  # imported by its own name
         paths += [f"{name}/{path}" for path in _walked(folder)]
         if len(paths) >= LIBRARY_MAX_PATHS:
             break
@@ -150,15 +150,21 @@ def _version(path: Path) -> str:
 
 
 def _walked(folder: Path) -> list[str]:
-    """A package's text files, from its folder: no link followed, no nested `node_modules` and no hidden folder."""
+    """A package's text files, from its folder: no link followed, no nested `node_modules` and no hidden folder. Walked
+    with the system's own folder entries: measured by review, paths built for each file took a large `node_modules`
+    1.4 s to list, and these 0.4 s."""
     found: list[str] = []
-    for at, folders, files in os.walk(folder, followlinks=False):
-        here = Path(at)
-        folders[:] = [one for one in folders if one != "node_modules" and not one.startswith(".")]
-        folders[:] = [one for one in folders if _folder(here / one)]
-        found += [
-            (here / name).relative_to(folder).as_posix()
-            for name in files
-            if Path(name).suffix in NODE_SUFFIXES and not (here / name).is_symlink()
-        ]
+    pending = [("", os.fspath(folder))]
+    while pending:
+        inside, at = pending.pop()
+        with os.scandir(at) as entries:
+            for entry in entries:
+                if entry.is_symlink() or entry.is_junction():
+                    continue
+                named = f"{inside}{entry.name}"
+                if entry.is_dir(follow_symlinks=False):
+                    if entry.name != "node_modules" and not entry.name.startswith("."):
+                        pending.append((f"{named}/", entry.path))
+                elif os.path.splitext(entry.name)[1] in NODE_SUFFIXES:
+                    found.append(named)
     return sorted(found)

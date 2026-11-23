@@ -96,6 +96,12 @@ def lessons_text(workspace: Workspace) -> str:
     return _cut(as_read(read_text(path)) if path.is_file() else "", LESSONS, LESSONS_MAX_CHARS)
 
 
+def context_of(text: str) -> str:
+    """A reading's text as a stage is given it before it is written as a change's `context.md`: cut as that file
+    would be."""
+    return _cut(text.strip(), CONTEXT, CONTEXT_FILE_MAX_CHARS)
+
+
 def _capped(path: Path, cap: int) -> str:
     """A file a stage reads as it stands, stripped, or nothing where there is none: cut past `cap`, saying so."""
     return _cut(read_text(path).strip() if path.is_file() else "", path.name, cap)
