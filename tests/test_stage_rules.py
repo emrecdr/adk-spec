@@ -46,3 +46,12 @@ def test_the_brief_names_as_few_capabilities_as_hold_the_change() -> None:
     told = str(build_brief().instruction)
     assert "Name as few capabilities as hold the change" in told
     assert "Each capability you name gets one requirement at least." in told
+
+
+def test_a_change_to_a_librarys_option_sends_the_scout_to_the_library() -> None:
+    """Found live, phase 15: asked for a timeout on httpx calls, the scout read the project and no line of httpx, whose
+    own default timeout is what the change turns on."""
+    from adk_spec.orchestration.stages.scout import build_scout
+
+    told = str(build_scout().instruction)
+    assert "A change that sets or relies on a library's option or default depends on it" in told
