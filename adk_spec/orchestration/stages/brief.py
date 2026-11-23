@@ -31,6 +31,8 @@ GUIDE = (
 Say why the change is wanted, what will be different once it is done, what it leaves alone, and what else it affects.
 State what you assume. A point you cannot settle from the request goes in open_points: the question, worded so a
 person can answer it in a sentence, and the answer you would suggest. Three at most, and do not guess past one.
+State nothing the request, an answer or what the repository holds does not say.
+Keep an answer's numbers, order and negatives exactly as the person gave them.
 Settle each fact from what the repository already holds and what is known of it, where they are given: never ask the
 person what they show. Of what they list as still unknown, put in open_points only what the person can decide or
 knows, and state the rest as unknown.

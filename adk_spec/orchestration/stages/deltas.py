@@ -23,6 +23,7 @@ GUIDE = """\
 Write one delta for each capability the brief lists, and for no other.
 A requirement is one statement of what the system does, with SHALL or MUST, and one scenario at least.
 A scenario is steps in order. Each step starts with GIVEN, WHEN, THEN or AND. It has one WHEN and one THEN at least.
+Write each THEN as what a person or a test can observe, so that a run could show it false.
 To change a living requirement, give its ID exactly as the spec spells it and restate it whole, with every scenario
 that still holds. To remove one, give its ID and one sentence of reason.
 A new requirement carries no ID: one is assigned. Never invent one.

@@ -29,9 +29,16 @@ DESIGN_TEXT = "design_text"
 OPENING = "You break a change into tasks for a coding agent to carry out. You write no code."
 GUIDE = """\
 Group the tasks by what each group delivers, in the order to do them. Number each group in its title.
+Where the code must change shape before the change fits, that group comes first:
+make the change easy, then make the easy change.
+Let each group after it deliver something that can be seen working on its own, through every part it needs, not one
+layer at a time.
 A task is one step with one result. Put the task that writes a test before the task whose code it tests.
 Name the requirement IDs each task serves, exactly as the deltas spell them. A setup task names none.
 Give each task one way its result is checked: a command to run, or what to look at.
+A test checks behaviour at the highest seam the repository already has, a command, an endpoint or a public function,
+and names it.
+For a bug, the first task is a test that fails on the bug as reported, run before any fix.
 Mark a task parallel only where it touches other files than its neighbours and waits on none of them.
 Write no task for anything the brief lists as a non-goal.
 Name files by the paths the repository uses. Where a file is new, put it beside its kind.

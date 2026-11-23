@@ -21,7 +21,8 @@ OPENING = "You review the files of a change against each other. You change none 
 GUIDE = """\
 Look for what the files say against each other, and against the rules of this repository:
 a contradiction between two files; wording in a requirement or a task that allows two readings; something the brief
-promises that no requirement delivers; one requirement stated twice; a rule of the repository the change breaks.
+promises that no requirement delivers; a requirement that softens a number, an order or a negative the brief gives;
+a THEN no run could show false; one requirement stated twice; a rule of the repository the change breaks.
 Report every fault you find. One finding does not excuse the next.
 Report only what you can point to. For each finding, name one file by the path given above it and copy from it the
 exact text the finding is about: a line or a phrase, word for word.
