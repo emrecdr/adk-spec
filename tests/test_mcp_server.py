@@ -19,6 +19,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from adk_spec.interfaces import cli, mcp_server
 from adk_spec.interfaces.mcp_server import INSTRUCTIONS, build_server
 from adk_spec.workspace.lock import _alive
+from adk_spec.workspace.skill import SKILL_TEXT
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -233,3 +234,10 @@ async def test_every_parameter_says_what_it_is_and_the_assistant_is_told_how_to_
             assert held.get("description"), f"{tool.name}.{name}"
     for said in ("tasks.md", "tick", "voids the approval", "minutes"):
         assert said in INSTRUCTIONS, said
+
+
+def test_the_skill_init_writes_keeps_the_rules_the_server_gives() -> None:
+    """Found by the cleanup review: the two texts that tell an assistant how to use adk-spec, one for the server's
+    tools and one for a terminal, had drifted, and the skill left naming another repository to the assistant."""
+    for said in ("adk-spec approve", "adk-spec archive", "--with", "tasks.md", "- [x]", "context.md", "voids"):
+        assert said in INSTRUCTIONS and said in SKILL_TEXT, said

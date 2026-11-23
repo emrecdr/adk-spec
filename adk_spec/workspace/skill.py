@@ -26,39 +26,38 @@ live in .spec/. Use when the person asks to propose, specify or plan a change, t
 
 # adk-spec
 
-This repository uses adk-spec. A change is planned as files in `.spec/changes/<id>/` before code is written, and the
-finished work is judged against them. adk-spec writes specs and plans and judges the work; it never edits code: you
-implement.
+This repository uses adk-spec: a change is planned as files in `.spec/changes/<id>/` before code is written, and the
+finished work is judged against them. adk-spec never edits code: you implement.
 
 ## Commands you may run
 
-Run them in the repository, as `adk-spec <command>`. Where the shell does not find `adk-spec`, ask the person how it
-is installed: often `uv run --project <path to adk-spec> adk-spec`.
+Run them in the repository. Where the shell does not find `adk-spec`, ask the person how it is installed: often
+`uv run --project <path to adk-spec> adk-spec`.
 
-- `adk-spec status`: each open change and its next step. It calls no model: run it first.
+- `adk-spec status`: each open change and its next step. Run it first.
 - `adk-spec propose --no-input "<request>"`: drafts a change. It asks no question and prints each point left open
   with a suggested answer: put them to the person, then revise the change with their answers,
   `adk-spec propose --no-input --id <id> "<the answers>"`.
 - `adk-spec plan <id>`: drafts the tasks again, after the brief or the specs changed.
 - `adk-spec check <id>`: checks the change's files against each other.
 - `adk-spec verify <id>`: runs the project's tests and judges the work against each requirement.
-- `adk-spec validate`: checks the structure of the specs. It calls no model.
+- `adk-spec validate`: checks the structure of the specs.
 
-`propose`, `plan`, `check` and `verify` call a model, take minutes and cost tokens: run each once for a request, never
-to poll.
+`propose`, `plan`, `check` and `verify` call a model and cost time and tokens: run each once for a request, never to
+poll.
 
 ## What stays the person's
 
-Never run `adk-spec approve`, `adk-spec archive`, `adk-spec init`, or any command with `--override`. Approving,
-archiving and setting a finding aside record the person's own decision: when a change is ready for one, tell them the
-command to run.
+Never run `adk-spec approve`, `adk-spec archive`, `adk-spec init`, any command with `--override`, or one that names
+another repository with `--with`. Approving, archiving and setting a finding aside record the person's own decision,
+and another repository's code would be sent to a model: when a change needs one of them, tell the person the command
+to run.
 
 ## Implementing an approved change
 
 1. Read `brief.md`, the specs under `specs/`, `context.md` and `design.md`, where there is one, in
    `.spec/changes/<id>/`.
-2. Work through `tasks.md` in order, test first. Each task names the requirements it serves, its files, and how to
-   check it.
+2. Work through `tasks.md` in order, test first.
 3. Tick each task's box, `- [ ]` to `- [x]`, once it is done. Ticking keeps the approval; any other edit of the
    change's files voids it, so change no other file in `.spec/`.
 4. Run `adk-spec verify <id>`, and work on what it finds `unmet` or `unclear`.

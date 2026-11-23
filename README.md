@@ -474,7 +474,8 @@ own test command and judges the work in all of them. `--with PATH` names a repos
 **With nothing to set up**, the skill `init` wrote tells your assistant how to use adk-spec: Copilot (agent mode in
 VS Code, the CLI and the cloud agent) and Claude Code read `.claude/skills/adk-spec/SKILL.md` and run `adk-spec` in
 the terminal. Ask in the chat, as below; the assistant runs `status`, `propose --no-input`, `plan`, `check`, `verify`
-and `validate`, implements the tasks and ticks them, and leaves `approve`, `archive` and every `--override` to you.
+and `validate`, implements the tasks and ticks them, and leaves `approve`, `archive`, every `--override` and every
+`--with` to you.
 The assistant's terminal must find `adk-spec`: a shell alias is not seen by every assistant's terminal, so install it
 as a tool (`uv tool install --editable ~/tools/adk_spec`), or say in the chat how to run it.
 

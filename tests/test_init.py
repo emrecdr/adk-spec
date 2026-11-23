@@ -10,6 +10,7 @@ from adk_spec.domain.secrets import scrub_lines
 from adk_spec.orchestration.explore import MAX_CALLS
 from adk_spec.workspace.files import read_text, write_text
 from adk_spec.workspace.layout import CONSTITUTION_TEXT
+from adk_spec.workspace.skill import SKILL_PARTS
 
 SCOUT, SURVEY = "You choose what to read", "You read parts of a repository's code"
 REVIEW = "You review what a reading of a repository's code found"
@@ -186,7 +187,7 @@ def test_init_asks_for_the_whole_repository_and_for_conventions_as_rules(tmp_pat
 
 
 # The Agent Skill: how an assistant uses adk-spec, read by GitHub Copilot and Claude Code from the repository.
-SKILL = ".claude/skills/adk-spec/SKILL.md"
+SKILL = "/".join(SKILL_PARTS)
 
 
 def test_init_writes_a_skill_an_assistant_reads_in_the_form_the_standard_asks(tmp_path, capsys) -> None:
@@ -194,15 +195,13 @@ def test_init_writes_a_skill_an_assistant_reads_in_the_form_the_standard_asks(tm
     Copilot and Claude Code read from `.claude/skills/`, so an assistant knows how to use adk-spec with nothing set up.
     The form is agentskills.io's: a name that is its folder's, lowercase and hyphens, and a description of 1,024
     characters at most."""
-    import re
-
     repository(tmp_path, FILES)
     assert run(tmp_path, "init", "--no-explore") == 0
     assert f"wrote     {SKILL}" in capsys.readouterr().out
     text = read_text(tmp_path / SKILL)
     head, _, body = text.removeprefix("---\n").partition("\n---\n")
     fields = dict(line.split(": ", 1) for line in head.splitlines())
-    assert fields["name"] == "adk-spec" and re.fullmatch(r"[a-z0-9-]{1,64}", fields["name"])
+    assert fields["name"] == SKILL_PARTS[2] == "adk-spec"
     assert 0 < len(fields["description"]) <= 1024
     for said in ("adk-spec status", "--no-input", "tasks.md", "- [x]", "adk-spec approve", "--override"):
         assert said in body, said

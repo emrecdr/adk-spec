@@ -26,7 +26,11 @@ the CLI, the cloud agent) and by Claude Code from `.claude/skills/<name>/SKILL.m
   writes it where missing, for a workspace made before this change; one line says it was written. Its text says what
   the MCP server's instructions say: the commands an assistant may run, that `propose`, `plan`, `check` and `verify`
   call a model and cost time, that approving, archiving and every `--override` stay the person's, and how to
-  implement from a change's folder and tick tasks.
+  implement from a change's folder and tick tasks. The cleanup review found the two texts had drifted: the skill now
+  also leaves `--with` to the person, as the server does, and one test holds both to the same rules.
+- Left for later, from the cleanup review: `init --refresh` refuses `--no-explore`, so a workspace made before the
+  skill gets it only with a new reading. Letting `--refresh --no-explore` write what is missing and read nothing is a
+  few lines, but changes what that pair of options means, for the few workspaces made before this change.
 
 ## Non-goals
 
