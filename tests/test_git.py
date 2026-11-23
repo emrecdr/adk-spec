@@ -230,3 +230,13 @@ def test_another_repository_is_given_no_trust_of_its_own(tmp_path, monkeypatch) 
     assert is_repository(tmp_path / "repo")
     with pytest.raises(GitError, match="dubious ownership"):
         is_repository(tmp_path / "repo", trust=False)
+
+
+def test_a_pattern_ending_in_a_slash_keeps_that_folder_out_at_any_depth(tmp_path) -> None:
+    """Found by the third audit: `secrets/` was taken for a path from the root, and kept out the top folder alone,
+    where `.gitignore` reads it at any depth; `config/secrets/b.txt` reached every command."""
+    names = ["secrets/a.txt", "config/secrets/b.txt", "deep/x/secrets/c.txt", "src/app.py"]
+    repository(tmp_path, dict.fromkeys(names, "x\n"))
+    assert files(tmp_path, exclude=("secrets/",)) == ["src/app.py"]
+    assert files(tmp_path, exclude=("config/secrets",)) == ["deep/x/secrets/c.txt", "secrets/a.txt", "src/app.py"]
+    assert layer.as_globs(("vendor/**",)) == ("vendor/**",), "a pattern that holds its folder's contents as written"

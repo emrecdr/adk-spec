@@ -309,7 +309,8 @@ def test_propose_drafts_no_plan_while_a_point_is_left_open(tmp_path, capsys, fak
     out = capsys.readouterr().out
     assert not (tmp_path / ".spec/changes/open/tasks.md").exists() and len(fake_provider.requests) == 2
     assert "plan      waits: the brief leaves 1 point open" in out
-    assert "next      settle the open point in brief.md" in out
+    # Found by the third audit: the editor's tools promised the open points in the output, and gave their count.
+    assert f"open      {ASKED}\n          suggested: Evergreen browsers only" in out
     brief = tmp_path / ".spec/changes/open/brief.md"
     write_text(brief, read_text(brief).replace(f"[NEEDS CLARIFICATION: {ASKED}]", "Evergreen browsers only."))
     assert run(tmp_path, "status") == 0 and "run `adk-spec plan open`" in capsys.readouterr().out

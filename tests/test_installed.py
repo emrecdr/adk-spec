@@ -182,3 +182,14 @@ def test_the_library_list_shows_a_real_path_to_name_a_file_by(tmp_path) -> None:
     root = _repository(tmp_path)
     python_environment(root)
     assert "such as python:httpx/__init__.py" in Source.of(root, exclude=(), installed=True).tree()
+
+
+def test_a_folder_pattern_keeps_a_librarys_files_out_as_it_does_the_repositorys(tmp_path) -> None:
+    """Found by the third audit: a pattern naming a folder kept nothing of an installed library out, since a
+    library's file was matched against the pattern whole."""
+    root = _repository(tmp_path)
+    _node(root, "leftpad", {"index.js": "module.exports = 1\n"})
+    _node(root)
+    for pattern in ("node_modules/leftpad", "node_modules/leftpad/", "leftpad/"):
+        source = Source.of(root, exclude=(pattern,), installed=True)
+        assert "leftpad" not in source.tree() and "react 19.2.0" in source.tree(), pattern

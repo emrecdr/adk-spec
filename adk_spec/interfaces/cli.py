@@ -32,7 +32,7 @@ from ..domain.context_md import (
     render_context,
     unknown_count,
 )
-from ..domain.convert import kept_ids, render_design, revision, slug_of, to_findings, to_tasks
+from ..domain.convert import kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
     DEMANDS,
@@ -757,17 +757,27 @@ def _env_file() -> Path | None:
     return CHECKOUT / ".env" if (CHECKOUT / "pyproject.toml").is_file() else None
 
 
+#: The names the checkout's `.env` added to this process's environment: adk-spec's own, kept from a project's tests.
+_FROM_ENV_FILE: set[str] = set()
+
+
 def _load_env() -> None:
     """The checkout's `.env` read into the environment, the shell winning over the file."""
     path = _env_file()
-    if path is None:
-        return
+    if path is not None:
+        _FROM_ENV_FILE.update(_loaded(path))
+
+
+def _loaded(path: Path) -> set[str]:
+    """`.env` at `path` read into the environment, never over a variable already set: the names it added."""
     from dotenv import load_dotenv
 
+    before = set(os.environ)
     try:
         load_dotenv(path, override=False, encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise UsageError(f"{path} is not UTF-8. Save it as UTF-8: Windows PowerShell 5.1's `>` writes UTF-16") from exc
+    return set(os.environ) - before
 
 
 def _line() -> str:
@@ -1578,7 +1588,7 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     runs = []
     for name, root, argv, timeout in [*asked, *source.tests()]:
         print(f"testing   {f'{name}: ' if name else ''}{scrub(' '.join(argv))[0]}")
-        done = run_tests(root, argv, timeout=timeout, name=name)
+        done = run_tests(root, argv, timeout=timeout, name=name, without=frozenset(_FROM_ENV_FILE))
         took = "" if done.seconds is None else f" in {done.seconds:.1f} s"
         print(f"tests     {f'{name} ' if name else ''}{done.outcome}{took}")
         runs.append(done)
@@ -1700,7 +1710,27 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     review = _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first else None
     # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
     planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None}
-    return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned)
+    unasked = _unasked(state) if args.no_input else []
+    return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned, unasked=unasked)
+
+
+def _unasked(state: Mapping[str, Any]) -> list[dict[str, str]]:
+    """The points a brief drafted with no question asked leaves open, each with its suggestion: what an assistant,
+    through the editor's tools, puts to the person. Found by the third audit: those tools promised them in the output,
+    and it held their count alone."""
+    from ..domain.drafts import BriefDraft
+    from ..orchestration.stages.brief import KEY as BRIEF_KEY
+
+    held = state.get(BRIEF_KEY)
+    return questions_of(BriefDraft.model_validate(held), every=True) if held else []
+
+
+def _open_said(unasked: Sequence[Mapping[str, str]]) -> None:
+    """Each open point a run asked no one about, and the answer it suggests."""
+    for one in unasked:
+        print(f"open      {plain(one['question'])}")
+        if one["suggested"]:
+            print(f"          suggested: {plain(one['suggested'])}")
 
 
 def _plan_command(workspace: Workspace, change_id: str, change: Change | None, no_explore: bool) -> str:
@@ -1734,6 +1764,7 @@ def _then_planned(
     keep: str | None,
     review: str | None = None,
     lessons: str | None = None,
+    unasked: Sequence[Mapping[str, str]] = (),
 ) -> int:
     """What `propose` does once its change is written: the plan, in the same command and under the same ceiling.
     An open point comes before it, since its answer shapes the tasks: none is drafted on a guess. A revised change
@@ -1745,6 +1776,7 @@ def _then_planned(
         print(f"tokens    {_spent(ledger)}")
         if waiting:
             print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
+            _open_said(unasked)
         elif review:
             print(f"plan      waits: a strict change is read first. Read brief.md and the specs, then {review}")
         if keep:
