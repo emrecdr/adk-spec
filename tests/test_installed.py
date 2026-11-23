@@ -162,3 +162,23 @@ def test_only_modules_are_shown_as_a_distributions_imports(tmp_path) -> None:
     (found,) = environments(root)
     ((_name, _version, tops),) = found.packages
     assert tops == ("_yaml", "yaml")
+
+
+def test_a_library_path_named_through_its_environment_is_read_by_its_own_name(tmp_path) -> None:
+    """Found live, phase 15: a survey asked for python:.venv/lib/python3.11/site-packages/httpx/_client.py, the
+    environment's path with a version of its own making, and was told there was no such file."""
+    root = _repository(tmp_path)
+    python_environment(root)
+    _node(root)
+    source = Source.of(root, exclude=(), installed=True)
+    asked = ["python:.venv/lib/python3.11/site-packages/httpx/_client.py", "node:node_modules/react/index.js"]
+    got = source.gathered(asked, ["python:/anywhere/site-packages/httpx"], [])
+    assert "def send(self, request" in got.shown and "export function useState" in got.shown
+    assert got.read == ("python:httpx/_client.py (whole)", "node:react/index.js (whole)")
+    assert "=== python:httpx/ (" in got.shown, "a folder named so is listed as well"
+
+
+def test_the_library_list_shows_a_real_path_to_name_a_file_by(tmp_path) -> None:
+    root = _repository(tmp_path)
+    python_environment(root)
+    assert "such as python:httpx/__init__.py" in Source.of(root, exclude=(), installed=True).tree()

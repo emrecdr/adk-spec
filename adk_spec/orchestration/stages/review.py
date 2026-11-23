@@ -25,8 +25,8 @@ show what its note says: a note about one function that rests on a line of anoth
 Then name what the change needs to know that no statement establishes: where it plugs in, what it must not break,
 how this repository does such a thing. Ask each as a question, and say where it might be answered.
 Where reading more would answer one, ask for it: a file by its path, a folder to list, or a word to search for.
-Where the answer is in an installed library, ask for its file, python:<path> or node:<path>, or for the library to
-list its files. Empty lists are a good answer."""
+Where the answer is in an installed library, ask for its file, python:<path> or node:<path>, its path inside the
+environment as the list of libraries shows, or for the library to list its files. Empty lists are a good answer."""
 
 
 def build_review() -> LlmAgent:

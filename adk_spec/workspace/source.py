@@ -67,6 +67,8 @@ WITHIN_MAX_CHARS = 120
 NAME = re.compile(r"[a-z][a-z0-9-]{0,30}")
 #: The most libraries the tree names in each environment: a stage is told how many more there are.
 LIBRARIES_SHOWN = 120
+#: Where an environment's own folder ends, in a library's path a model names through it.
+_THROUGH = {"python": "site-packages/", "node": "node_modules/"}
 
 
 class SourceError(Exception):
@@ -239,7 +241,10 @@ class _Repository:
 def _libraries_shown(installed: Sequence[Environment]) -> str:
     """The installed libraries as a stage is told of them: each environment's, by name and version, and how to read
     one. A library a distribution names apart from its import, as PyYAML's `yaml`, says the import too."""
-    lines = ["=== installed libraries, read offline: name a file as python:<path> or node:<path>, a library to list it"]
+    lines = [
+        "=== installed libraries, read offline: name a file as python:<path> or node:<path>, its path inside the "
+        "environment as the example shows, or a library to list it"
+    ]
     for one in installed:
         named = []
         for name, version, tops in one.packages[:LIBRARIES_SHOWN]:
@@ -247,7 +252,12 @@ def _libraries_shown(installed: Sequence[Environment]) -> str:
             imports = [top for top in tops if top.replace("_", "-").casefold() != same]
             named.append(f"{name} {version}".strip() + (f" ({', '.join(imports)})" if imports else ""))
         more = len(one.packages) - LIBRARIES_SHOWN
-        said = f"{one.scheme} ({one.where}): {', '.join(named)}" + (f", and {more:,} more" if more > 0 else "")
+        # A real path of the environment's: found live, `<path>` alone was read as the environment's path on disk.
+        example = next(
+            (path for path in one.paths if path.endswith(("/__init__.py", "/index.js"))), next(iter(one.paths), "")
+        )
+        such = f", a file named such as {one.scheme}:{example}" if example else ""
+        said = f"{one.scheme} ({one.where}){such}: {', '.join(named)}" + (f", and {more:,} more" if more > 0 else "")
         unread = [line.split(":", 1)[0] for line in one.unread]
         lines.append(said + (f"; not read: {', '.join(unread[:10])}" if unread else ""))
     return "\n".join(lines)
@@ -485,7 +495,7 @@ class Source:
     def _asked(self, asked: str) -> tuple[str, int | None, int | None]:
         """The path a model asked for, and the lines of it where it named a range. A path git lists is taken as it
         is, a colon in its name too."""
-        asked = asked.strip()
+        asked = self._canonical(asked.strip())
         if asked not in self._listed and (ranged := _RANGE.fullmatch(asked)) and ranged["path"] in self._listed:
             return ranged["path"], int(ranged["first"]), int(ranged["last"])
         return asked, None, None
@@ -519,8 +529,16 @@ class Source:
         got.reached[path] = (first, upto, total)
         got.holds(path, first, text)
 
+    def _canonical(self, asked: str) -> str:
+        """A library's path as its environment lists it, where a model named it through the environment's folder:
+        `python:.venv/lib/python3.11/site-packages/httpx/_client.py` is `python:httpx/_client.py`. Found live: named
+        so, a library's file was said to be no file. Looked up in the list after, as any path is."""
+        scheme, colon, inner = asked.partition(":")
+        marker = _THROUGH.get(scheme) if colon and scheme in self._libraries else None
+        return f"{scheme}:{inner.rpartition(marker)[2]}" if marker and marker in inner else asked
+
     def _folder(self, asked: str, got: _Round) -> None:
-        folder = asked.strip().strip("/")
+        folder = self._canonical(asked.strip()).strip("/")
         whole = folder in ("", ".")
         under = self.paths if whole else [path for path in self.paths if path.startswith(f"{folder}/")]
         if not under:
