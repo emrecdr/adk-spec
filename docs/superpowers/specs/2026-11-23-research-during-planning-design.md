@@ -33,6 +33,10 @@ on research: the repository's code, and what can be known beyond it.
    can be answered now first.
 3. **"yes" takes the suggestion** (Q3), as `=` does. An empty line still leaves a point open, so a key pressed by
    habit never accepts a model's answer. The brief words each question so that "yes" accepts its suggestion.
+   Narrowed after the code review, as recommended to the owner: "yes" takes a suggestion's text only where the
+   suggestion is itself a yes ("Yes, eight hours"); elsewhere it stays the person's answer. An answer reaches the next
+   draft beside its question, so a plain "yes" always says what the person meant, and a suggestion worded against its
+   question ("Should it be removed?", "No, keep it") is never stored for their yes.
 4. **The reading may look into installed libraries** (Q4): the repository root's Python environment (`.venv` or
    `venv`) and its `node_modules`. A stage is shown each library's name and version, and reads files by path,
    `python:httpx/_client.py` or `node:react/index.js`; libraries are never searched. Quotes are checked as for code,

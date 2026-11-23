@@ -59,8 +59,9 @@ the check blocks it as an error does, with no `--override`.
 
 - **`propose`** drafts a change from a request. A model writes each part; a gate after each stage checks it and
   asks again at most twice. On the standard tier it puts each point the brief leaves open to you as a question, at
-  most three a round and three rounds, each with a suggested answer: a line answers, `yes` or `=` takes the
-  suggestion, and an empty line leaves the point open, in which case approval waits until you settle it in the brief.
+  most three a round and three rounds, each with a suggested answer: a line answers, `=` takes the suggestion, `yes`
+  takes a suggestion that is itself a yes and is otherwise your answer, and an empty line leaves the point open, in
+  which case approval waits until you settle it in the brief.
   A question that only makes sense once another is answered waits for a later round, and the brief never asks what
   the code or the profile already show: facts are adk-spec's to find, decisions are yours.
   `--no-input` asks nothing, and `--id` names the change. Where you leave a question unanswered, `propose` writes
