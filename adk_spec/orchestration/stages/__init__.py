@@ -80,6 +80,10 @@ THE_DELTAS = section("## The requirement deltas", "deltas", DELTAS_TEXT, optiona
 FILES = section("## The files of this repository", "tree", TREE, optional=True)
 THE_CONTEXT = section("## What the repository already holds", "context", CONTEXT_TEXT, optional=True)
 THE_PROFILE = section("## What is known of this repository", "profile", PROFILE_TEXT, optional=True)
+#: The project's installed libraries a reading may ask to read, for the stages that ask after the scout. Found live:
+#: only the scout was shown them, and a review that named an unknown in httpx could not ask to read it.
+LIBRARIES = "libraries"
+THE_LIBRARIES = section("## The installed libraries you may ask for", "libraries", LIBRARIES, optional=True)
 #: What every draft of this workspace follows, `.spec/lessons.md`, read by each stage that writes a draft.
 THE_LESSONS = section(
     "## Lessons this workspace has learned\nCorrections made to earlier drafts here. Write so that none of them is "

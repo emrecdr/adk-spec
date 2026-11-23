@@ -27,6 +27,7 @@ from ..workspace.source import Source, merged
 from .gate import AGAIN, GIVE_UP, OK, checked, tries_key
 from .graph import NONE, SOME, _app, _ended
 from .plugins import UsageLedger
+from .stages import LIBRARIES
 from .stages import review as review_stage
 from .stages import scout as scout_stage
 from .stages import survey as survey_stage
@@ -182,7 +183,7 @@ def _look(
         return Event(route=NONE, state=update)
     # The survey of this round starts anew: its own tries, and no answer of the round before to be taken for it.
     anew = {survey_stage.KEY: None, tries_key(survey_stage.KEY): 0, LOOKS: (state.get(LOOKS) or 0) + 1}
-    return Event(route=SOME, state={**update, **anew, MATERIAL: got.shown})
+    return Event(route=SOME, state={**update, **anew, MATERIAL: got.shown, LIBRARIES: source.libraries()})
 
 
 def _looking(source: Source) -> tuple[Callable[[Context], Event], ...]:

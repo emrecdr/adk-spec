@@ -9,7 +9,7 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import SurveyDraft
-from . import THE_BRIEF, THE_DELTAS, instruction, section, stage
+from . import THE_BRIEF, THE_DELTAS, THE_LIBRARIES, instruction, section, stage
 
 KEY = "survey"
 #: The state keys of a round: what was read for it, the statements kept so far, and every file read so far.
@@ -28,7 +28,9 @@ error is raised.
 risk: what the code leaves unclear, or what the change could break.
 Say each thing once, and nothing the statements kept so far already say.
 Where something that matters is not in what you were shown, ask for it: a file by its path, a folder to list, or a
-word to search for. Ask only for what would change a statement. Empty lists are a good answer."""
+word to search for. Ask only for what would change a statement. Empty lists are a good answer.
+Where it turns on how an installed library behaves, ask for the library's file, python:<path> or node:<path>, or for
+the library to list its files."""
 
 
 def build_survey() -> LlmAgent:
@@ -38,6 +40,7 @@ def build_survey() -> LlmAgent:
         section("## What was read for this round", "material", MATERIAL),
         section("## The statements kept so far", "stated", STATED, optional=True),
         section("## Every file read so far", "read", READ, optional=True),
+        THE_LIBRARIES,
         THE_BRIEF,
         THE_DELTAS,
     )

@@ -302,3 +302,17 @@ async def test_a_statement_quoting_an_installed_library_is_kept(tmp_path, fake_p
     (scout,) = sent(fake_provider, SCOUT)
     assert "httpx 0.28.1" in between(scout, "tree") and "python:<path>" in scout, "the scout is told how to name one"
     assert "worth a file only where the change depends on how it behaves" in scout, "and when one is worth a file"
+
+
+@pytest.mark.asyncio
+async def test_the_survey_and_the_review_are_shown_the_libraries_they_may_ask_for(tmp_path, fake_provider) -> None:
+    """Found live, phase 15: the review named the unknown, how httpx sets its timeout, and could not ask to read it:
+    only the scout was shown the installed libraries."""
+    repository(tmp_path, {".gitignore": ".venv/\n", "src/app.py": "import httpx\n"})
+    python_environment(tmp_path)
+    held = Source.of(tmp_path, exclude=(), installed=True)
+    seed = {BRIEF_TEXT: "# Time out slow calls\n", DELTAS_TEXT: "", CONSTITUTION: "", TREE: held.tree()}
+    await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
+    for opening in (SURVEY, REVIEW):
+        (told,) = sent(fake_provider, opening)[:1]
+        assert "httpx 0.28.1" in told and "python:<path>" in told, opening

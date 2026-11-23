@@ -370,9 +370,13 @@ class Source:
         for one in self._others.values():
             listed = tree_text([one.full(path) for path in one.paths])
             blocks.append(f"=== {one.name} ({_counted(len(one.paths), 'file', 'files')})\n{listed}")
-        if self._installed:
-            blocks.append(_libraries_shown(self._installed))
+        if libraries := self.libraries():
+            blocks.append(libraries)
         return "\n".join(blocks)
+
+    def libraries(self) -> str:
+        """The installed libraries as a stage is told of them, and how to read one: nothing where none are read."""
+        return _libraries_shown(self._installed) if self._installed else ""
 
     def root_of(self, name: str) -> Path | None:
         """Another repository's root, or nothing where it was not read."""
