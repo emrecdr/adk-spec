@@ -19,6 +19,8 @@ tests beside that code, and the configuration or documentation that says how thi
 Name a file by its path exactly as the list below spells it. For part of a long file add a range of lines:
 src/app.py:120-260. Where the list shows a folder and not its files, name the folder to have it listed, or a word
 to search for.
+An installed library, listed after the files, is worth a file only where the change depends on how it behaves at the
+version installed: an option it takes, a default, what it raises. Libraries are not searched.
 Name little, and what matters most first: twelve files, four folders and six searches are read at most."""
 
 

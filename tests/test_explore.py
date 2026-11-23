@@ -281,3 +281,29 @@ async def test_a_review_that_disputes_every_statement_may_look_again(tmp_path, f
     fake_provider.answers_each_time(REVIEW, iter([reviewed(disputed=(1,), files=("docs/auth.md",)), reviewed()]))
     found = explored((await read(tmp_path)).state)
     assert len(sent(fake_provider, SURVEY)) == 2 and [one.path for one in found.statements] == ["docs/auth.md"]
+
+
+@pytest.mark.asyncio
+async def test_a_statement_quoting_an_installed_library_is_kept(tmp_path, fake_provider) -> None:
+    """Phase 15: a reading may look into the project's installed libraries, offline, at the versions it runs; a
+    statement about one counts where its quote is in the library's file, as for code."""
+    repository(tmp_path, {".gitignore": ".venv/\n", "src/app.py": "import httpx\n"})
+    site = tmp_path / ".venv/lib/python3.14/site-packages"
+    (site / "httpx").mkdir(parents=True)
+    (site / "httpx/_client.py").write_text("def send(request, *, timeout=5.0):\n    pass\n", encoding="utf-8")
+    (site / "httpx-0.28.1.dist-info").mkdir()
+    (site / "httpx-0.28.1.dist-info/METADATA").write_text("Name: httpx\nVersion: 0.28.1\n", encoding="utf-8")
+    (site / "httpx-0.28.1.dist-info/RECORD").write_text("httpx/_client.py,sha256=x,1\n", encoding="utf-8")
+    fake_provider.answers_when(
+        SCOUT, {"files": ["python:httpx/_client.py"], "folders": [], "searches": [], "reason": "Its timeout."}
+    )
+    quoted = {"kind": "exists", "file": "python:httpx/_client.py", "quote": "timeout=5.0", "note": "Five seconds."}
+    fake_provider.answers_when(SURVEY, survey(quoted))
+    held = Source.of(tmp_path, exclude=(), installed=True)
+    seed = {BRIEF_TEXT: "# Time out slow calls\n", DELTAS_TEXT: "", CONSTITUTION: "", TREE: held.tree()}
+    run = await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
+    found = explored(run.state)
+    assert [(one.path, one.line) for one in found.statements] == [("python:httpx/_client.py", 1)]
+    (scout,) = sent(fake_provider, SCOUT)
+    assert "httpx 0.28.1" in between(scout, "tree") and "python:<path>" in scout, "the scout is told how to name one"
+    assert "worth a file only where the change depends on how it behaves" in scout, "and when one is worth a file"
