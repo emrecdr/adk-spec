@@ -88,27 +88,21 @@ def test_what_an_archive_waits_for() -> None:
     assert "already" in archive_blockers(approved().model_copy(update={"status": "archived"}), [])[0]
 
 
+#: What a draft holding an open point waits on, where the plan is still owed.
+SETTLE_THEN_PLAN = "settle the open point in brief.md, then run `adk-spec plan passkeys`"
+
+
 @pytest.mark.parametrize(
     ("state", "findings", "stale", "said"),
     [
         (DRAFT, [ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_BASE], ["approval"], "run `adk-spec approve passkeys`"),  # `approve` records it itself
         (DRAFT, [NO_TASKS], ["approval"], "run `adk-spec plan passkeys`"),
-        (
-            DRAFT,
-            [NO_TASKS, MARKER],
-            ["approval"],
-            "settle the open point in brief.md, then run `adk-spec plan passkeys`",
-        ),
+        (DRAFT, [NO_TASKS, MARKER], ["approval"], SETTLE_THEN_PLAN),
         (DRAFT, [ERROR, MARKER, NO_TASKS], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_TASKS, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [MARKER], ["approval"], "settle the open point in brief.md, then run `adk-spec approve passkeys`"),
-        (
-            DRAFT,
-            [NO_TASK, MARKER],
-            ["approval"],
-            "settle the open point in brief.md, then run `adk-spec plan passkeys`",
-        ),
+        (DRAFT, [NO_TASK, MARKER], ["approval"], SETTLE_THEN_PLAN),
         (DRAFT, [NO_TASK], ["approval"], "run `adk-spec plan passkeys`"),
         (DRAFT, [TASKS_SYNTAX], ["approval"], "fix what `adk-spec validate passkeys` lists"),  # a hand edit: theirs
         (DRAFT, [NO_TASK, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),

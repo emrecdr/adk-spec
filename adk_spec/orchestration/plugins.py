@@ -86,16 +86,11 @@ class SchemaMismatch(BasePlugin):
         try:
             validate_schema(schema, text)
         except ValidationError as exc:
-            # Gemini says a cut answer by its finish reason alone, with no error code: found by the third audit, it was
-            # taken for a schema fault and asked for again twice. One cut short that still fits its schema stands.
-            cut = str(getattr(llm_response.finish_reason, "name", llm_response.finish_reason)) == "MAX_TOKENS"
-            code, why = (
-                ("MAX_TOKENS", f"{ENDED}: MAX_TOKENS: the answer reached the model's output limit")
-                if cut
-                else ("SCHEMA_MISMATCH", f"{MISMATCH}: {exc.errors()[0]['msg']}")
-            )
+            why = f"{MISMATCH}: {exc.errors()[0]['msg']}"
             callback_context.state[STAGE_ERROR] = why
-            return LlmResponse(error_code=code, error_message=why, usage_metadata=llm_response.usage_metadata)
+            return LlmResponse(
+                error_code="SCHEMA_MISMATCH", error_message=why, usage_metadata=llm_response.usage_metadata
+            )
         return None
 
 
@@ -107,8 +102,8 @@ class UsageLedger(BasePlugin):
         self.ceiling = ceiling
         #: What each stage spent, by its agent's name.
         self.spent: dict[str, Usage] = {}
-        #: The part of the run a lowered ceiling holds, and the run's own ceiling: what a refusal under it says.
-        self._part: tuple[str, int] | None = None
+        #: What a refusal says while a part of the run is held to a lowered ceiling, in place of the run's own.
+        self._held: str | None = None
 
     @property
     def total(self) -> Usage:
@@ -118,12 +113,8 @@ class UsageLedger(BasePlugin):
         """Why the next call would be refused, or nothing while the ceiling holds."""
         if self.ceiling is None or self.total.total < self.ceiling:
             return None
-        if self._part is not None:
-            part, whole = self._part
-            return (
-                f"{CEILING}: {part}'s share of the run's token ceiling of {whole:,}, {self.ceiling:,} in all, is spent"
-            )
-        return f"{CEILING}: the run's token ceiling of {self.ceiling:,} is spent"
+        held = self._held or f"the run's token ceiling of {self.ceiling:,}"
+        return f"{CEILING}: {held} is spent"
 
     @contextlib.contextmanager
     def held_to_half(self, part: str) -> Generator[None]:
@@ -131,15 +122,14 @@ class UsageLedger(BasePlugin):
         what comes after it. Nothing changes where there is no ceiling. Found by the third audit: the reading, the
         largest part of `propose`, spent the ceiling, and the brief or the deltas were refused every time."""
         whole = self.ceiling
-        if whole is None:
-            yield
-            return
-        spent = self.total.total
-        self.ceiling, self._part = spent + max(whole - spent, 0) // 2, (part, whole)
+        if whole is not None:
+            spent = self.total.total
+            self.ceiling = spent + max(whole - spent, 0) // 2
+            self._held = f"{part}'s share of the run's token ceiling of {whole:,}, {self.ceiling:,} in all,"
         try:
             yield
         finally:
-            self.ceiling, self._part = whole, None
+            self.ceiling, self._held = whole, None
 
     @override
     async def before_model_callback(self, *, callback_context: Any, llm_request: Any) -> LlmResponse | None:

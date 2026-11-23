@@ -310,7 +310,7 @@ def _sized(ctx: Context) -> Event:
     """The model's tier, and the capabilities it found, which the brief starts from. `none` ends the run with nothing
     drafted. Found by the third audit: the chat gave the brief no capabilities, where `propose` gives them."""
     chosen = Triage.model_validate(ctx.state[triage_stage.KEY])
-    found = {TIER: chosen.tier, SIZED: ", ".join(chosen.capabilities)}
+    found = {TIER: chosen.tier, SIZED: triage_stage.sized_text(chosen)}
     return Event(route=NONE if chosen.tier == "none" else GO, state=found)
 
 

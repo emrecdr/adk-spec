@@ -326,9 +326,17 @@ def test_an_open_change_whose_delta_does_not_read_still_holds_its_ids(tmp_path, 
     assert asked(fake_provider, DELTAS) == 1
 
 
-def test_an_answer_the_provider_cut_short_is_not_asked_again(tmp_path, capsys, fake_provider) -> None:
+@pytest.mark.parametrize(
+    "ended",
+    [
+        pytest.param({"error_code": "MAX_TOKENS", "error_message": "Maximum tokens reached"}, id="litellm"),
+        pytest.param({"finish_reason": "MAX_TOKENS"}, id="gemini"),
+    ],
+)
+def test_an_answer_the_provider_cut_short_is_not_asked_again(tmp_path, capsys, fake_provider, ended) -> None:
     """Found by the code review: a reply cut at the model's output limit was called a schema fault, asked for again
-    twice with the same request, and paid for three times."""
+    twice with the same request, and paid for three times. Found by the third audit: Gemini says it by a finish
+    reason alone, with no error code, and was still asked again."""
     from google.adk.models.llm_response import LlmResponse
     from google.genai import types
 
@@ -336,39 +344,12 @@ def test_an_answer_the_provider_cut_short_is_not_asked_again(tmp_path, capsys, f
     spent = types.GenerateContentResponseUsageMetadata(
         prompt_token_count=100, candidates_token_count=20, total_token_count=120
     )
-    cut = LlmResponse(
-        content=types.ModelContent('{"deltas": [{"capa'),
-        error_code="MAX_TOKENS",
-        error_message="Maximum tokens reached",
-        usage_metadata=spent,
-    )
+    cut = LlmResponse(content=types.ModelContent('{"deltas": [{"capa'), usage_metadata=spent, **ended)
     fake_provider.answers_when(DELTAS, cut)
     assert proposed(tmp_path, "--tier", "lean", "--id", "cut") == 3
     said = capsys.readouterr()
     assert "MAX_TOKENS" in said.err and "schema" not in said.err
     assert asked(fake_provider, DELTAS) == 1 and "deltas 120 in 1 call" in said.out
-
-
-def test_an_answer_gemini_cut_short_is_not_asked_again_either(tmp_path, capsys, fake_provider) -> None:
-    """Found by the third audit: Gemini's cut answer carries no error code, only a finish reason of MAX_TOKENS, so it
-    was still called a schema fault and asked for again twice."""
-    from google.adk.models.llm_response import LlmResponse
-    from google.genai import types
-
-    seeded(tmp_path)
-    spent = types.GenerateContentResponseUsageMetadata(
-        prompt_token_count=100, candidates_token_count=20, total_token_count=120
-    )
-    cut = LlmResponse(
-        content=types.ModelContent('{"deltas": [{"capa'),
-        finish_reason=types.FinishReason.MAX_TOKENS,
-        usage_metadata=spent,
-    )
-    fake_provider.answers_when(DELTAS, cut)
-    assert proposed(tmp_path, "--tier", "lean", "--id", "cut") == 3
-    said = capsys.readouterr()
-    assert "MAX_TOKENS" in said.err and "schema" not in said.err
-    assert asked(fake_provider, DELTAS) == 1
 
 
 def test_a_name_made_from_the_title_steps_past_one_that_differs_only_by_case(tmp_path, fake_provider) -> None:

@@ -498,3 +498,16 @@ def test_a_key_in_a_large_file_or_one_not_utf8_is_withheld_from_the_diff_too(tmp
     assert whole.count("MIINew3") == 2
     kept, held = Source.of(tmp_path, exclude=()).without_keys(whole)
     assert held == ("conf/big.txt", "conf/latin.txt") and "MIINew3" not in kept
+
+
+def test_a_file_read_before_as_too_large_is_still_searched_for_a_key(tmp_path, monkeypatch) -> None:
+    """Found by the cleanup review: what a reading of a file said, "too large to read", was taken for the answer to
+    whether it holds a key, so a file the reading had opened was never searched."""
+    monkeypatch.setattr(source, "FILE_MAX_BYTES", 300)
+    commit = repository(tmp_path, {**FILES, "conf/big.txt": "x = 1\n" * 100 + PEM})
+    path = tmp_path / "conf/big.txt"
+    path.write_text(path.read_text(encoding="utf-8").replace("MIIEow3", "MIINew3"), encoding="utf-8", newline="\n")
+    held = Source.of(tmp_path, exclude=())
+    assert "too large" in " ".join(held.gathered(["conf/big.txt"], [], []).left_out)
+    kept, withheld = held.without_keys(diff(tmp_path, commit, exclude=()))
+    assert withheld == ("conf/big.txt",) and "MIINew3" not in kept

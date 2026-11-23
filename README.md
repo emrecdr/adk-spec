@@ -548,7 +548,7 @@ Ready to run
 | `… is held by another adk-spec run` | Another command is writing in this repository: wait for it. If none is running, remove the file it names |
 | `the brief and the specs are written, and the plan is not: … Run adk-spec plan <id>` | The plan failed after the change was written: run that command to finish it |
 | `no change was written: …` | A stage failed before anything was written: read the reason, then run `propose` again |
-| `` `<id>` is not approved: its check found … blocking`` | Read `reports/check.md`, fix the files, approve again; or `--override "<why>"` (not for a strict change's warnings) |
+| `` `<id>` is not approved: the findings above block it`` | Read `reports/check.md`, fix the files, approve again; or `--override "<why>"` (not for a strict change's warnings) |
 | `unmet` or `unclear` in `verify` | Implement what is missing, or point the work at the requirement, and verify again |
 | `the tests failed` | Fix them and verify again; `verify --override "<why>"` verifies anyway, recorded |
 | `archive` stops: the living spec changed under the change | Read the current requirement, update the delta, then `adk-spec rebase <id>` and approve again |

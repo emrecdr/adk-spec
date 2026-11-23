@@ -197,22 +197,23 @@ class _Repository:
         """Whether a file git lists holds a private key, as `lines` would find: asked of a diff's files, which are
         not shown, so none is scrubbed for it. Scrubbed whole and thrown away, a large working tree cost a second on
         every status of a verified change."""
-        if path in self._opened:
-            return self._opened[path] == HOLDS_A_KEY
+        opened = self._opened.get(path)
+        if opened == HOLDS_A_KEY or isinstance(opened, list):  # read whole already: its answer stands
+            return opened == HOLDS_A_KEY
         target = self.root / path
         try:
-            if self._linked(path) or not target.is_file():
-                return False
-            if not target.resolve().is_relative_to(self.root.resolve()):
+            if self._linked(path) or not target.is_file() or not target.resolve().is_relative_to(self.root.resolve()):
                 return False
             if target.stat().st_size > KEY_SEARCH_MAX_BYTES:  # too large to search: withheld, as a key is
                 return True
             data = target.read_bytes()
         except OSError:
             return False
-        # Searched whatever its size under the cap and its encoding: a key's first line is ASCII. Found by the third
-        # audit: a file past the read cap, or one saved as Latin-1, was taken to hold none, and a hunk from a key's
-        # middle reached the diff `verify` sends.
+        # Searched whatever its size under the cap and its encoding: a key's first line is ASCII, and every one holds
+        # one of these, which skips decoding a large file that holds none. Found by the third audit: a file past the
+        # read cap, or one saved as Latin-1, was taken to hold none, and a hunk from a key's middle reached the diff.
+        if b"PRIVATE KEY" not in data and b"PuTTY-User-Key-File-" not in data:
+            return False
         return holds_a_key(normalise(data.decode("utf-8", errors="replace")))
 
     def _linked(self, path: str) -> bool:

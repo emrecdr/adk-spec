@@ -124,9 +124,26 @@ def bounded_over(base: type[BaseLlm]) -> type[BaseLlm]:
             except TimeoutError as exc:
                 raise CallTimeoutError(f"no answer within {REQUEST_TIMEOUT_S:g} s, the retries included") from exc
             for response in answered:
-                yield response
+                yield _ended_said(response)
 
     return Bounded
+
+
+#: The finish reasons of an answer that ended as it should, or of one that says no reason.
+_ENDED_WELL = frozenset({"STOP", "FINISH_REASON_UNSPECIFIED"})
+
+
+def _ended_said(response: Any) -> Any:
+    """An answer the provider ended early, at its output limit or for safety, given the reason as its error code: one
+    rule for both arms. LiteLLM's sets the code itself; Gemini's says it by a finish reason alone wherever the answer
+    holds text. Found by the third audit: Gemini's answer cut at its limit was taken for a schema fault, and asked for
+    again twice."""
+    reason = response.finish_reason
+    if response.error_code or response.partial or reason is None or reason in _ENDED_WELL:
+        return response
+    return response.model_copy(
+        update={"error_code": str(reason), "error_message": "the answer ended before it was whole"}
+    )
 
 
 def _litellm():  # unannotated: a checker then knows the module and its typed flags

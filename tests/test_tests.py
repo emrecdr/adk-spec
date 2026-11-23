@@ -238,7 +238,6 @@ def test_the_tests_are_not_given_the_keys_adk_spec_read_from_its_own_env_file(tm
     to the project's test command, code an agent may just have written: the provider's key with it. A variable the
     person's shell set stays, since `.env` never overrides one."""
     monkeypatch.setenv("FROM_THE_SHELL", "kept")
-    monkeypatch.delenv("FROM_THE_FILE", raising=False)
     code = "import os\nprint('file', os.environ.get('FROM_THE_FILE'))\nprint('shell', os.environ.get('FROM_THE_SHELL'))"
     monkeypatch.setenv("FROM_THE_FILE", "a key")
     run = run_tests(tmp_path, program(tmp_path, code), timeout=60, without=frozenset({"FROM_THE_FILE"}))

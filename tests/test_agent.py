@@ -7,7 +7,7 @@ import importlib
 import sys
 
 import pytest
-from conftest import ROOT, on_the_fake, seeded
+from conftest import ROOT, between, on_the_fake, seeded, sent_to
 from google.adk.apps.app import App
 from google.adk.cli.utils.agent_loader import AgentLoader
 from google.adk.runners import InMemoryRunner
@@ -128,13 +128,6 @@ def test_the_chat_loads_where_the_lessons_file_is_no_text(tmp_path, monkeypatch)
 async def test_the_chat_tells_the_brief_what_triage_sized_as_propose_does(tmp_path, monkeypatch, fake_provider) -> None:
     """Found by the third audit: the chat drafted the brief without the capabilities triage found, which `propose`
     gives it, and one message's would have stayed for the next."""
-    from conftest import between
-
     seeded(tmp_path)
     await said(loaded(tmp_path, monkeypatch), REQUEST)
-    brief = next(
-        str(r.config.system_instruction)
-        for r in fake_provider.requests
-        if "You write the brief" in str(r.config.system_instruction)
-    )
-    assert between(brief, "sized") == "auth"
+    assert between(sent_to(fake_provider, "You write the brief"), "sized") == "auth"

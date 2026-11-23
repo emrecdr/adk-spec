@@ -220,13 +220,15 @@ def _parser() -> _Top:
     propose.add_argument("--id", help="the change's name (default: made from the brief's title)")
     propose.add_argument("--tier", choices=TIERS, help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
-    propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
+    propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code")
     propose.add_argument("--with", dest="with_", action="append", default=[], metavar="PATH", help=WITH_HELP)
     propose.set_defaults(handler=_propose)
 
     plan = commands.add_parser("plan", help="draft a change's tasks again, and its design where one is owed")
     plan.add_argument("id", help="the change")
-    plan.add_argument("--replace", action="store_true", help="draft anew although a task of the list is ticked")
+    plan.add_argument(
+        "--replace", action="store_true", help="draft anew although a task is ticked, or the design was edited"
+    )
     plan.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
     plan.add_argument("--with", dest="with_", action="append", default=[], metavar="PATH", help=WITH_HELP)
     plan.set_defaults(handler=_drafting(_planned))
@@ -500,9 +502,8 @@ def _validate(args: argparse.Namespace) -> int:
         )
     for change_id in [args.id] if args.id else workspace.changes():
         try:
-            if (
-                workspace.state(change_id).status == "archived"
-            ):  # folded in, its delta has no base now: nothing to check
+            # Folded in, an archived change's delta has no base now: nothing to check.
+            if workspace.state(change_id).status == "archived":
                 continue
             found += _assessed(workspace, change_id, living, drift=False).findings
         except WorkspaceError as exc:  # one change that does not read stops no other's check
@@ -579,10 +580,10 @@ def _rebase(args: argparse.Namespace) -> int:
         print("nothing to record: every base stands")
     else:
         workspace.save_state(reopened(state, bases=held))
-    if held != state.bases and state.approval is not None:
-        print(f"the approval is void: read what was stale, then run `{PROG} approve {args.id}` again")
-    else:  # it ends on what comes next, as every command that moves a change does
-        _say_next(workspace, args.id, living)
+        if state.approval is not None:
+            print(f"the approval is void: read what was stale, then run `{PROG} approve {args.id}` again")
+            return EXIT_OK
+    _say_next(workspace, args.id, living)  # it ends on what comes next, as every command that moves a change does
     return EXIT_OK
 
 
@@ -612,16 +613,12 @@ def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec]
         ) from exc
 
 
-def _refused(change_id: str, blockers: list[Finding], blocking: int = 0) -> int:
-    """An approval refused, and why. Where the check alone blocks it, in the one finding that says so, the refusal
-    counts as the check did: found by the third audit, "2 blocking" was followed by "1 findings block it"."""
+def _refused(change_id: str, blockers: list[Finding]) -> int:
+    """An approval refused, by the findings printed above it, which say what to do. Found by the third audit: a
+    count of its own, "1 findings block it", read against the check's "2 blocking"."""
     _printed(blockers)
-    if blocking and [held.code for held in blockers] == ["check.blocking"]:
-        why = f"its check found {blocking} blocking: fix what reports/check.md lists, then approve again"
-    else:
-        count = len(blockers)
-        why = f"{count} finding{'' if count == 1 else 's'} block{'s' if count == 1 else ''} it"
-    print(f"{PROG}: `{change_id}` is not approved: {why}", file=sys.stderr)
+    said = "the findings above block it" if len(blockers) > 1 else "the finding above blocks it"
+    print(f"{PROG}: `{change_id}` is not approved: {said}", file=sys.stderr)
     return EXIT_FINDINGS
 
 
@@ -661,7 +658,7 @@ def _approve(args: argparse.Namespace) -> int:
                 "approve again with --override",
                 file=sys.stderr,
             )
-        return _refused(args.id, blockers, assessed.state.check.blocking if assessed.state.check else 0)
+        return _refused(args.id, blockers)
     files = assessed.files  # as they were read for the assessment that found the check current: no later read
     at = datetime.now(UTC).isoformat(timespec="seconds")
     # A reason is recorded only where it set something aside: a blocking finding of the check.
@@ -1676,6 +1673,7 @@ def _revising(workspace: Workspace, change_id: str | None) -> Change | None:
 
 def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | None) -> int:
     """A request drafted into a change, or the open change `change` revised by it."""
+    from ..domain.drafts import BriefDraft
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import Known
     from ..orchestration.plugins import UsageLedger
@@ -1734,19 +1732,10 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     review = _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first else None
     # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
     planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None}
-    unasked = _unasked(state) if args.no_input else []
+    # With no question asked, each open point is printed with its suggestion, for an assistant to put to the person.
+    # Found by the third audit: the editor's tools promised them in the output, which held their count alone.
+    unasked = questions_of(BriefDraft.model_validate(state[BRIEF_KEY]), every=True) if args.no_input else []
     return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned, unasked=unasked)
-
-
-def _unasked(state: Mapping[str, Any]) -> list[dict[str, str]]:
-    """The points a brief drafted with no question asked leaves open, each with its suggestion: what an assistant,
-    through the editor's tools, puts to the person. Found by the third audit: those tools promised them in the output,
-    and it held their count alone."""
-    from ..domain.drafts import BriefDraft
-    from ..orchestration.stages.brief import KEY as BRIEF_KEY
-
-    held = state.get(BRIEF_KEY)
-    return questions_of(BriefDraft.model_validate(held), every=True) if held else []
 
 
 def _open_said(unasked: Sequence[Mapping[str, str]]) -> None:
@@ -1917,7 +1906,7 @@ def _drafts(
     from ..orchestration.gate import FAILURE
     from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, PROFILE_TEXT, REQUEST, SIZED, TIER
     from ..orchestration.stages import CONSTITUTION as RULES
-    from ..orchestration.stages.triage import read_triage
+    from ..orchestration.stages.triage import read_triage, sized_text
 
     tier = args.tier
     if tier is None:
@@ -1928,7 +1917,7 @@ def _drafts(
         # The brief starts from the capabilities triage found. Found live: told nothing of them, a brief named three
         # for a two-function change triage had sized as one, and the deltas stage could not fill them.
         if not isinstance(found := read_triage(sized), str):
-            seed = {**seed, SIZED: ", ".join(found.capabilities)}
+            seed = {**seed, SIZED: sized_text(found)}
             # Said before the reading spends: a wrong tier is stopped here, and named with --tier.
             print(f"sized     {tier}: {plain(found.reason)}")
     profile = _optional(workspace, profile_text, PROFILE) or ""

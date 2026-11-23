@@ -46,9 +46,8 @@ def test_validate_lists_each_finding_with_its_place_and_fails_on_an_error(tmp_pa
     write_text(tmp_path / ".spec/specs/auth/spec.md", broken)
     assert run(tmp_path, "validate") == 1
     out = capsys.readouterr().out
-    assert (
-        "ERROR syntax .spec/specs/auth/spec.md:22" in out and "1 error, 0 warnings" in out
-    )  # found by the third audit: "1 errors"
+    assert "ERROR syntax .spec/specs/auth/spec.md:22" in out
+    assert "1 error, 0 warnings" in out, "found by the third audit: 1 errors"
 
 
 def test_warnings_fail_only_under_strict(tmp_path, capsys) -> None:

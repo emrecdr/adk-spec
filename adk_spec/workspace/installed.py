@@ -94,21 +94,33 @@ class _Gathering:
         self.packages: list[tuple[str, str, tuple[str, ...]]] = []
         self.paths: list[str] = []
         self.unread: list[str] = []
+        #: The packages found once the cap was full: counted, never read, and not named, as one excluded is not.
+        self.past = 0
+
+    @property
+    def full(self) -> bool:
+        return len(self.paths) >= LIBRARY_MAX_PATHS
 
     def add(self, name: str, version: str, tops: tuple[str, ...], files: Sequence[str]) -> None:
         kept = [path for path in files if not _excluded(f"{self.base}/{path}", self.globs)]
         if not kept and files:
             return  # excluded whole: not even named
         if len(self.paths) + len(kept) > LIBRARY_MAX_PATHS:
-            self.unread.append(f"{name}: past the {LIBRARY_MAX_PATHS:,} files an environment lists")
+            self.unread.append(f"{name}: {_past_the_cap()}")
             return
         self.packages.append((name, version, tops))
         self.paths += kept
 
     def made(self, scheme: str, where: str, root: Path) -> Environment:
+        if self.past:
+            self.unread.append(f"{self.past} more package{'' if self.past == 1 else 's'}: {_past_the_cap()}")
         return Environment(
             scheme, where, root, tuple(self.packages), tuple(sorted(set(self.paths))), tuple(self.unread)
         )
+
+
+def _past_the_cap() -> str:
+    return f"past the {LIBRARY_MAX_PATHS:,} files an environment lists"
 
 
 def _python(root: Path, globs: Sequence[str]) -> Environment | None:
@@ -171,10 +183,9 @@ def _node(root: Path, globs: Sequence[str]) -> Environment | None:
     if not _folder(modules) or _excluded("node_modules", globs):
         return None
     held = _Gathering("node_modules", globs)
-    past = 0
     for name, folder in _packages(modules):
-        if len(held.paths) >= LIBRARY_MAX_PATHS:  # full: counted, not walked, and not named, as one excluded is not
-            past += 1
+        if held.full:  # found by the third audit: each package after the cap was walked whole, for nothing
+            held.past += 1
             continue
         try:
             files = [f"{name}/{path}" for path in _walked(folder)]
@@ -182,10 +193,6 @@ def _node(root: Path, globs: Sequence[str]) -> Environment | None:
             held.unread.append(f"{name}: {exc.strerror or exc}")
             continue
         held.add(name, _version(folder / "package.json"), (), files)  # imported by its own name
-    if past:
-        held.unread.append(
-            f"{past} more package{'' if past == 1 else 's'}: past the {LIBRARY_MAX_PATHS:,} files an environment lists"
-        )
     return held.made("node", "node_modules", modules)
 
 

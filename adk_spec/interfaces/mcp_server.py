@@ -34,6 +34,8 @@ from pydantic import Field
 from ..domain.model import Tier
 from ..workspace.process import Started, TimedOut, started, stop, waited
 
+#: A tool's parameter that names a change.
+_Change = Annotated[str, Field(description="The change")]
 #: How long a tool waits for its command: a `propose` that reads the code takes minutes. A client may give up sooner.
 TOOL_TIMEOUT_S = 3600.0
 #: The commands running now. Each runs in a session of its own, which hears no signal sent to the server: where the
@@ -141,7 +143,7 @@ def build_server(root: Path) -> MCPServer:
 
     @server.tool(description="Draft a change's tasks again, and its design where one is owed.", annotations=WRITES)
     async def plan(
-        id: Annotated[str, Field(description="The change")],
+        id: _Change,
         replace: Annotated[
             bool, Field(description="Draft anew although a task is ticked, or a design was edited")
         ] = False,
@@ -154,7 +156,7 @@ def build_server(root: Path) -> MCPServer:
         annotations=REPORTS,
     )
     async def check(
-        id: Annotated[str, Field(description="The change")],
+        id: _Change,
         no_model: Annotated[bool, Field(description="Run the checks code makes, and call no model")] = False,
     ) -> str:
         return await ran(root, ["check", *_flag(no_model, "--no-model"), "--", id])
@@ -164,7 +166,7 @@ def build_server(root: Path) -> MCPServer:
         annotations=WRITES,
     )
     async def verify(
-        id: Annotated[str, Field(description="The change")],
+        id: _Change,
         bases: Annotated[
             list[str] | None,
             Field(description="Commits the work started from, as REF or NAME=REF; left out: the approval's"),

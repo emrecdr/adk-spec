@@ -7,7 +7,6 @@ neighbour only by case, which macOS and Windows read as the same file.
 
 from __future__ import annotations
 
-import functools
 import ntpath
 import os
 from pathlib import Path
@@ -45,8 +44,7 @@ def _refuse_name(part: str) -> None:
 def _refuse_twin(parent: Path, part: str) -> None:
     """Refuse `part` where its folder already holds a name equal to it but for case."""
     try:
-        stamp = os.stat(parent).st_mtime_ns
-        neighbours = _folded(str(parent), stamp)
+        neighbours = _folded(str(parent))
     except OSError:  # the folder is not there yet: nothing to collide with
         return
     for name in neighbours.get(part.casefold(), ()):
@@ -54,12 +52,18 @@ def _refuse_twin(parent: Path, part: str) -> None:
             raise PathError(f"`{part}` differs from `{name}` only by case, and some systems read both as one file")
 
 
-@functools.lru_cache(maxsize=64)
-def _folded(parent: str, _stamp: int) -> dict[str, tuple[str, ...]]:
-    """The names a folder holds, by their case-folded form, as it stood at `_stamp`, its time of last change, which
-    keys the cache: listed once while it does not change. Found by the third audit: listed for each lookup, reading
-    1,000 changes listed `changes/` 1,000 times."""
-    folded: dict[str, list[str]] = {}
-    for name in os.listdir(parent):
-        folded.setdefault(name.casefold(), []).append(name)
-    return {key: tuple(names) for key, names in folded.items()}
+#: Each folder's names by their case-folded form, beside its time of last change when it was listed.
+_LISTED: dict[str, tuple[int, dict[str, list[str]]]] = {}
+
+
+def _folded(parent: str) -> dict[str, list[str]]:
+    """The names a folder holds, by their case-folded form: listed once while it does not change, and again once it
+    does. Found by the third audit: listed for each lookup, reading 1,000 changes listed `changes/` 1,000 times."""
+    stamp = os.stat(parent).st_mtime_ns
+    held = _LISTED.get(parent)
+    if held is None or held[0] != stamp:
+        folded: dict[str, list[str]] = {}
+        for name in os.listdir(parent):
+            folded.setdefault(name.casefold(), []).append(name)
+        held = _LISTED[parent] = (stamp, folded)
+    return held[1]
