@@ -61,6 +61,15 @@ def marker_of(question: str) -> str:
     return f"[NEEDS CLARIFICATION: {worded(question)}]"
 
 
+def assumption_count(text: str) -> int:
+    """How many assumptions a brief's Assumptions section states: its sentences, its open points' markers aside. Found
+    live, phase 15: on gpt-4.1 a standard brief assumed where it might have asked, and the owner chose to have
+    `propose` say how many there are to check before approving."""
+    for marker in markers(text):
+        text = text.replace(marker, "")
+    return len([one for one in re.split(r"(?<=[.!?])\s+", text.strip()) if one.strip()])
+
+
 def parse_brief(text: str) -> Brief:
     """The brief `text` holds. `GrammarError`, with its line, where the text is off the grammar."""
     lines = lines_of(normalise(text))

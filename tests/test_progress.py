@@ -45,9 +45,11 @@ def test_propose_names_what_to_read_first_with_its_length(tmp_path, capsys, fake
     seeded(tmp_path)
     assert run(tmp_path, "propose", REQUEST, "--tier", "lean", "--id", "short") == 0
     out = capsys.readouterr().out
-    assert re.search(r"^read      brief\.md \(\d+ lines\) first$", out, re.MULTILINE)
+    # The owner's choice after phase 15's live runs: a brief that assumed where it might have asked says so.
+    assert re.search(r"^read      brief\.md \(\d+ lines, 1 assumption\) first$", out, re.MULTILINE)
     assert out.index("read      ") < out.index("next      "), "what to read, then what to run"
     fake_provider.answers_when(BRIEF, BRIEF_OWING_A_DESIGN)
     assert run(tmp_path, "propose", REQUEST, "--tier", "lean", "--id", "designed") == 0
     out = capsys.readouterr().out
-    assert re.search(r"^read      brief\.md \(\d+ lines\) and design\.md \(\d+ lines\) first$", out, re.MULTILINE)
+    said = r"^read      brief\.md \(\d+ lines, 1 assumption\) and design\.md \(\d+ lines\) first$"
+    assert re.search(said, out, re.MULTILINE)

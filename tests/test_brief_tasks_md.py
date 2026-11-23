@@ -91,3 +91,13 @@ def test_a_marker_is_found_whatever_its_case_and_spacing() -> None:
     """Deferred by the review: a lower-case marker, or one with a space before its colon, was not counted."""
     text = "[needs clarification] [NEEDS CLARIFICATION : which?] [Needs Clarification: x]"
     assert len(markers(text)) == 3
+
+
+def test_a_briefs_assumptions_are_counted_by_sentence_its_open_points_aside() -> None:
+    """Phase 15, found live: on gpt-4.1 a standard brief assumed where it might have asked, and the owner chose to
+    have propose say how many assumptions to check."""
+    from adk_spec.domain.brief_md import assumption_count
+
+    assert assumption_count("Only fetch_orders changes. Retries are on a timeout alone!\n\nNo logging is added.") == 3
+    assert assumption_count("Browsers support WebAuthn.\n\n[NEEDS CLARIFICATION: Which browsers are in scope?]") == 1
+    assert assumption_count("") == 0

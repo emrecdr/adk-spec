@@ -193,7 +193,7 @@ What happens inside `propose`:
 3. **Delta Specs `[Built]`:** Creates/updates capability specs with stable IDs (e.g., `REQ-AUTH-004: Passkey Sign-In`) and `GIVEN`/`WHEN`/`THEN` scenarios.
 4. **Brownfield Exploration & Review `[Built: P6–P7]`:** Reads tracked source files (`git grep` searches first, then folders, then files), rejects unquoted statements, attaches enclosing block signatures (`in: def start_session(...)`), and lets the `review` LLM flag any remaining unknowns in `.spec/changes/<id>/context.md`. *(Every reading starts from `.spec/profile.md` `[Built: P8]`.)*
 5. **Plan `[Built]`:** Drafts `design.md` (when cross-cutting/security-sensitive, as passkeys are) and test-first `tasks.md`.
-6. **Output `[Built]`:** Names exact files written, token usage, **what to read first** with line counts (`read      brief.md (42 lines) and design.md (58 lines) and context.md (1 unknown) first`), and prints:
+6. **Output `[Built]`:** Names exact files written, token usage, **what to read first** with line counts (`read      brief.md (42 lines, 3 assumptions) and design.md (58 lines) and context.md (1 unknown) first`, the assumptions those the brief made where it might have asked), and prints:
    `next      run adk-spec approve let-users-sign-in-with-a-passkey`
 
 #### Step 2 — Review & Edit the Drafts (`brief.md`, `specs/`, `design.md`, `tasks.md`)

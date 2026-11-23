@@ -42,7 +42,7 @@ Once for a repository: `adk-spec init`. At any time: `adk-spec status`, which sa
 `approve` and `verify` end on a `next` line that says the same.
 
 Between `propose` and `approve` you read what was drafted and edit it: the files are yours. `propose` names what
-to read first. Between `approve` and `verify` you implement the tasks, with the coding agent you use, ticking each
+to read first, and how many assumptions the brief made where it might have asked you: check those before approving. Between `approve` and `verify` you implement the tasks, with the coding agent you use, ticking each
 box. `adk-spec` writes specs and plans and judges the result. It does not edit your code.
 
 A small change is `lean`: it owes no check and no verification, so it takes three commands, `propose`, `approve`,

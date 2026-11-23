@@ -21,7 +21,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, NoReturn
 
-from ..domain.brief_md import render_brief
+from ..domain.brief_md import assumption_count, parse_brief, render_brief
 from ..domain.check import nameable, owed, removed
 from ..domain.context_md import (
     PARTIAL,
@@ -61,7 +61,7 @@ from ..domain.lifecycle import (
     verify_blockers,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, Spec, Tier
+from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
 from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
@@ -1820,11 +1820,22 @@ def _said_written(workspace: Workspace, folder: Path, files: Iterable[str], what
 _OPEN_POINT = "brief.marker-unresolved"
 
 
+def _assumed(text: str) -> int:
+    """How many assumptions a brief file states, none where it does not read."""
+    try:
+        return assumption_count(parse_brief(text).assumptions)
+    except GrammarError:
+        return 0
+
+
 def _first_reads(workspace: Workspace, change_id: str) -> str:
     """What a person reads first of a change, each with its length: the brief, and the design where there is one.
     Review counts most there, early and short; the task list follows from the two."""
     texts = workspace.approval_texts(change_id)
     first = [f"{name} ({len(lines_of(texts[name]))} lines)" for name in (BRIEF_FILE, DESIGN_FILE) if name in texts]
+    # What the brief assumed is read with it: found live, a standard brief assumed where it might have asked.
+    if first and first[0].startswith(BRIEF_FILE) and (assumed := _assumed(texts[BRIEF_FILE])):
+        first[0] = first[0][:-1] + f", {assumed} assumption{'' if assumed == 1 else 's'})"
     # What a reading could not establish is read before the plan that was drafted around it.
     if unknown := unknown_count(context_text(workspace, change_id)):
         first.append(f"{CONTEXT_FILE} ({unknown} unknown)")
