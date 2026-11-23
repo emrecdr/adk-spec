@@ -146,7 +146,8 @@ design and the tasks rest on what is there and not on file names. `plan` reads i
   runs: the repository's Python environment (`.venv` or `venv`) and its `node_modules`. A model is told each
   library's name and version, and names a file as `python:httpx/_client.py` or `node:react/index.js`, only where the
   change depends on how the library behaves. A library is read by the same rules, found in its environment's own
-  records, never searched, and nothing leaves your machine but what the model is shown, as with code. pnpm's linked
+  records, never searched, and nothing leaves your machine but what the model is shown, as with code. A path your
+  `exclude` names is left out of them too, and a package that cannot be opened is named, not read. pnpm's linked
   packages are not read.
 - **A model checks the reading.** A third call reviews what was kept, statement by statement, and reads no file.
   It leaves out a statement its quote does not bear out, names what is still unknown, and may send the reading one

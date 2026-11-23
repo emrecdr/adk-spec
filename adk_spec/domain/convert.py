@@ -109,28 +109,33 @@ def to_brief(draft: BriefDraft) -> Brief:
     return held.model_copy(update={"assumptions": assumptions})
 
 
-def questions_of(draft: BriefDraft) -> list[dict[str, str]]:
+def questions_of(draft: BriefDraft, *, every: bool = False) -> list[dict[str, str]]:
     """What a person is asked about a draft's brief: one question for each point its file marks as open, in the
     file's order, each with the answer the draft suggests for it, or none. A marker the model wrote in a section by
     itself is asked too. This was a model's stage: the question is the marker's own text, and only the suggestion
     took a model, which the brief stage now gives."""
-    suggested, waiting = _open(draft), _waiting(draft)
+    suggested, waiting = _open(draft), set() if every else _waiting(draft)
     asked = [one for one in dict.fromkeys(asked_in(render_brief(to_brief(draft)))) if one not in waiting]
     return [{"question": one or NO_QUESTION, "suggested": suggested.get(one, "")} for one in asked]
 
 
 def _waiting(draft: BriefDraft) -> set[str]:
     """The open points a round does not ask yet, each as its marker holds it: those that wait on another point's
-    answer, as the grilling skill asks a design tree only at its frontier. A number naming no other point waits on
-    nothing; where every point would wait, as in a loop, none does, so that a round never asks nothing."""
+    answer, as the grilling skill asks a design tree only at its frontier. A wait counts only on another point that
+    has a question, by its position: found by review, one on a point with none, never asked, held a point back for
+    good. A question that stands twice waits only where every copy does; where every point would wait, as in a
+    loop, none does, so that a round never asks nothing."""
     worded_points = [worded(one.question) for one in draft.open_points]
-    count = len(worded_points)
+    askable = {number for number, asked in enumerate(worded_points, 1) if asked}
     held = {
-        asked
-        for number, (asked, one) in enumerate(zip(worded_points, draft.open_points, strict=True), 1)
-        if asked and any(1 <= other <= count and other != number for other in one.depends_on)
+        number
+        for number, one in enumerate(draft.open_points, 1)
+        if number in askable and any(other in askable and other != number for other in one.depends_on)
     }
-    return set() if held >= {asked for asked in worded_points if asked} else held
+    if held >= askable:
+        return set()
+    free = {worded_points[number - 1] for number in askable - held}
+    return {worded_points[number - 1] for number in held} - free
 
 
 def to_deltas(

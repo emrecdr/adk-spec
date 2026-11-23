@@ -247,7 +247,9 @@ def _libraries_shown(installed: Sequence[Environment]) -> str:
             imports = [top for top in tops if top.replace("_", "-").casefold() != same]
             named.append(f"{name} {version}".strip() + (f" ({', '.join(imports)})" if imports else ""))
         more = len(one.packages) - LIBRARIES_SHOWN
-        lines.append(f"{one.scheme} ({one.where}): {', '.join(named)}" + (f", and {more:,} more" if more > 0 else ""))
+        said = f"{one.scheme} ({one.where}): {', '.join(named)}" + (f", and {more:,} more" if more > 0 else "")
+        unread = [line.split(":", 1)[0] for line in one.unread]
+        lines.append(said + (f"; not read: {', '.join(unread[:10])}" if unread else ""))
     return "\n".join(lines)
 
 
@@ -359,7 +361,7 @@ class Source:
                 missing.append(found)
             else:
                 repositories.append(found)
-        return cls(repositories, missing, environments(root) if installed else ())
+        return cls(repositories, missing, environments(root, exclude) if installed else ())
 
     def tree(self) -> str:
         """The files for a stage to name real paths by: this repository's, then each other's under a line that names

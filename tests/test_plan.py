@@ -589,3 +589,24 @@ def test_plans_own_reading_looks_into_the_installed_libraries_as_proposes_does(t
         if str(r.config.system_instruction).startswith("You choose what to read")
     )
     assert "httpx 0.28.1" in scout
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_plan_with_nothing_to_read_asks_after_no_reading_model(tmp_path, monkeypatch) -> None:
+    """Found by review: the reading's models were asked after before anything showed there was code to read, and a
+    plan outside a repository failed on a model it would never call."""
+    seeded(tmp_path)
+    monkeypatch.setenv("SPEC_SCOUT_MODEL", "gpt-4.1")  # one the fake arm cannot run on
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0
+
+
+def test_the_plan_command_after_a_stop_reads_the_code_where_no_context_was_written(tmp_path) -> None:
+    """Found by review: it always said --no-explore, also where propose's reading wrote no context.md."""
+    from adk_spec.interfaces.cli import _plan_command
+
+    seeded(tmp_path)
+    ws = Workspace(tmp_path)
+    assert _plan_command(ws, "passkeys", None, False) == "`adk-spec plan passkeys`"
+    assert _plan_command(ws, "passkeys", None, True) == "`adk-spec plan passkeys --no-explore`"
+    (tmp_path / ".spec/changes/passkeys/context.md").write_text("# Context: passkeys\n", encoding="utf-8")
+    assert _plan_command(ws, "passkeys", None, False) == "`adk-spec plan passkeys --no-explore`"

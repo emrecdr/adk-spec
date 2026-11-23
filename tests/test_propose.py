@@ -610,3 +610,24 @@ def test_what_a_gate_found_comes_after_the_material_so_a_retry_keeps_the_prompts
     built = next(getattr(stage, name)() for name in dir(stage) if name.startswith("build_"))
     text = str(built.instruction)
     assert text.index(RETRY) > text.rindex(">>>") and text.index(RETRY) < text.index(ENDING)
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_context_that_cannot_be_written_says_the_change_was(tmp_path, monkeypatch, capsys) -> None:
+    """Found by review: a refusal to write context.md was said as "no change was written", with the change there."""
+    from adk_spec.workspace.layout import Workspace, WorkspaceError
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    write = Workspace.write_into
+
+    def refused(self, change_id, files):
+        if "context.md" in files:
+            raise WorkspaceError("context.md is a link")
+        return write(self, change_id, files)
+
+    monkeypatch.setattr(Workspace, "write_into", refused)
+    assert proposed(tmp_path, "--tier", "lean", "--id", "kept") == 0
+    err = capsys.readouterr().err
+    assert "the change is written, and its context.md is not: context.md is a link" in err
+    assert (tmp_path / ".spec/changes/kept/brief.md").is_file()

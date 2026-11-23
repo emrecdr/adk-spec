@@ -103,3 +103,62 @@ def test_no_library_is_read_unless_asked_for(tmp_path) -> None:
     source = Source.of(root, exclude=())
     got = source.gathered(["python:httpx/_client.py"], [], [])
     assert "def send" not in got.shown and "httpx 0.28.1" not in source.tree()
+
+
+def test_an_excluded_environment_or_package_is_never_read(tmp_path) -> None:
+    """Found by review: `[repository] exclude` kept a private package out of the repository's files, and not out of
+    the libraries a reading opens."""
+    root = _repository(tmp_path)
+    python_environment(root, {"httpx/__init__.py": "x = 1\n", "httpx/secret_keys.py": "token = 1\n"})
+    _node(root)
+    _node(root, "@corp/sdk", {"index.js": "internal = 1\n"})
+    source = Source.of(root, exclude=("@corp", "secret_*.py"), installed=True)
+    got = source.gathered(["node:@corp/sdk/index.js", "python:httpx/secret_keys.py", "node:react/index.js"], [], [])
+    assert "internal = 1" not in got.shown and "token = 1" not in got.shown and "useState" in got.shown
+    assert "@corp/sdk" not in source.tree()
+    assert "node (node_modules)" not in Source.of(root, exclude=("node_modules",), installed=True).tree()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a folder's permissions do not shut a reader out on Windows")
+def test_an_unreadable_package_is_left_out_and_named_and_stops_nothing(tmp_path) -> None:
+    """Found by review: one folder a reader may not open stopped the whole propose, after triage was paid for."""
+    root = _repository(tmp_path)
+    _node(root)
+    locked = _node(root, "locked")
+    (locked / "lib").mkdir()
+    (locked / "lib").chmod(0)
+    try:
+        source = Source.of(root, exclude=(), installed=True)
+        assert "react 19.2.0" in source.tree() and "not read: locked" in source.tree()
+    finally:
+        (locked / "lib").chmod(0o755)
+
+
+def test_a_record_csv_cannot_read_leaves_its_distribution_out(tmp_path) -> None:
+    root = _repository(tmp_path)
+    site = python_environment(root)
+    (site / "httpx-0.28.1.dist-info" / "RECORD").write_text('"' + "x" * 200_000 + "\n", encoding="utf-8")
+    (found,) = environments(root)
+    assert not found.packages and "httpx" in " ".join(found.unread)
+
+
+def test_a_library_past_the_cap_is_named_as_not_read_and_not_listed(tmp_path, monkeypatch) -> None:
+    """Found by review: libraries past the cap stayed listed with their version, and every file asked of them was
+    said to be no file."""
+    from adk_spec.workspace import installed
+
+    root = _repository(tmp_path)
+    _node(root, "alpha", {"a.js": "1\n", "b.js": "2\n"})
+    _node(root, "zeta", {"z.js": "3\n", "y.js": "4\n"})
+    monkeypatch.setattr(installed, "LIBRARY_MAX_PATHS", 4)
+    (found,) = environments(root)
+    assert [name for name, _version, _tops in found.packages] == ["alpha"] and "zeta" in " ".join(found.unread)
+
+
+def test_only_modules_are_shown_as_a_distributions_imports(tmp_path) -> None:
+    root = _repository(tmp_path)
+    files = {"yaml/__init__.py": "x = 1\n", "README.md": "# r\n", "_yaml.pyi": "y: int\n"}
+    python_environment(root, files)
+    (found,) = environments(root)
+    ((_name, _version, tops),) = found.packages
+    assert tops == ("_yaml", "yaml")

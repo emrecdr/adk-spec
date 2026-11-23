@@ -174,10 +174,16 @@ def _here(exclude: Sequence[str]) -> tuple[str, ...]:
     slash, `*.pem` or `secrets`, names a file or a folder at any depth, one with a slash a path from that folder,
     and letters match in either case. Handed to git as written, `*.pem` kept only the top folder's keys out, and
     `vendor/**` nothing of a `Vendor/` on a system where the two are one folder."""
-    spelled = (
+    return (*_HERE, *(f":(exclude,glob,icase){one}" for one in as_globs(exclude)))
+
+
+def as_globs(exclude: Sequence[str]) -> tuple[str, ...]:
+    """Each of `exclude` as the globs it is read as, from the workspace's root: one with no slash, at any depth, as a
+    file or a folder; one with a slash, as written. Matched in either case. What git is handed, and what the installed
+    libraries are held to, so that one pattern keeps a path out of both."""
+    return tuple(
         one for pattern in exclude for one in ((pattern,) if "/" in pattern else (f"**/{pattern}", f"**/{pattern}/**"))
     )
-    return (*_HERE, *(f":(exclude,glob,icase){one}" for one in spelled))
 
 
 def _listed(root: Path, *which: str, exclude: Sequence[str], trust: bool = True) -> list[str]:

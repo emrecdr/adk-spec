@@ -445,13 +445,16 @@ def test_yes_takes_the_suggestion_and_is_an_answer_where_none_is_suggested(monke
 
     from adk_spec.interfaces import cli
 
-    monkeypatch.setattr(cli.sys, "stdin", io.StringIO("yes\nY\n=\nyes\n\n"))
+    monkeypatch.setattr(cli.sys, "stdin", io.StringIO("yes\nY\n=\nyes\nyes\n\n"))
     asked = [
-        {"question": "Keep sessions to eight hours?", "suggested": "Eight hours."},
-        {"question": "Sign out on every device?", "suggested": "Every device."},
+        {"question": "Keep sessions to eight hours?", "suggested": "Yes, eight hours."},
+        {"question": "Sign out on every device?", "suggested": "yes: every device"},
         {"question": "Log each sign-in?", "suggested": "Each one."},
         {"question": "Is it for staff only?", "suggested": ""},
+        {"question": "Should the old endpoint be removed?", "suggested": "No, keep it for one release."},
         {"question": "Which region?", "suggested": "Europe."},
     ]
-    assert cli._answered(asked) == ["Eight hours.", "Every device.", "Each one.", "yes", ""]
+    # Found by review: "yes" taken for "No, keep it" stored the opposite of the person's yes. An answer reaches the
+    # next draft beside its question, so a plain "yes" always says what the person meant.
+    assert cli._answered(asked) == ["Yes, eight hours.", "yes: every device", "Each one.", "yes", "yes", ""]
     assert "`yes` or `=` takes the suggestion" in capsys.readouterr().out

@@ -793,8 +793,12 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
         line = "" if ended else _line()
         ended = ended or line == ""  # no line at all: the input is over
         typed = line.strip()
-        # "yes" accepts a suggestion, the question worded for it; where none is suggested it is the answer itself.
-        takes = typed == "=" or (typed.casefold() in ("y", "yes") and bool(question["suggested"]))
+        # "yes" takes a suggestion that is itself a yes, as the brief words them. Found by review: taken for any
+        # suggestion, "No, keep it" was stored for a person's yes. An answer is read beside its question, so a plain
+        # "yes" always says what the person meant.
+        takes = typed == "=" or (
+            typed.casefold() in ("y", "yes") and question["suggested"].casefold().startswith("yes")
+        )
         if typed == "=" and not question["suggested"]:
             print("   nothing is suggested: the point stays open")
         answers.append(question["suggested"] if takes else typed)
@@ -1154,13 +1158,9 @@ def _read_code(
         # A reading that ended early is said each time it is used: nothing else would show that it is no whole one.
         early = PARTIAL in context_text(workspace, change_id)
         return ("kept: context.md is of a reading that ended early. Delete it to read again" if early else ""), None
-    from ..orchestration.explore import ROLES
-    from ..orchestration.models import require_ready
     from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT
     from ..orchestration.stages import CONSTITUTION as RULES
 
-    if why := require_ready(roles=ROLES):
-        raise UsageError(why)
     read = _code_read(
         workspace,
         change_id,
@@ -1192,17 +1192,32 @@ def _code_read(
     """One reading of the repository's code, of its installed libraries and of the repositories a change names,
     seeded with `seed` and the files a stage may name: what it came to. Nothing where there is no repository or no
     file in it. `propose` reads before the brief, `plan` where a change has no `context.md`: one reading, one scope."""
+    from ..orchestration.explore import ROLES
+    from ..orchestration.models import require_ready
     from ..orchestration.stages import TREE
 
     source = _source(workspace, repositories, installed=True)
     if source is None or not source.paths:
         return None
+    # Asked after only once there is code to read: a plan outside a repository needs no reading model.
+    if why := require_ready(roles=ROLES):
+        raise UsageError(why)
     found, failure = _reading(workspace, "explore", change_id, {**seed, TREE: source.tree()}, ledger, source)
     said = _explored_said(found, len(source.names), failure)
     if not found.statements:
         return _Read(said, "")
     partial = "; ".join(part for part in (failure, *source.missing) if part) or None
     return _Read(said, _found_text(workspace, _CONTEXT_TITLE, found, partial=partial, others=source.commits()))
+
+
+def _context_said(workspace: Workspace, change_id: str, read: _Read | None) -> None:
+    """The reading's `context.md` written for a change propose wrote, and said: a refusal is said beside the change,
+    which stands. Found by review: said as "no change was written", with the change there to be proposed twice."""
+    try:
+        if context := _context_written(workspace, change_id, read):
+            print(f"          {workspace.shown(context)}")
+    except WorkspaceError as exc:
+        print(f"{PROG}: the change is written, and its context.md is not: {exc}", file=sys.stderr)
 
 
 def _context_written(workspace: Workspace, change_id: str, read: _Read | None) -> Path | None:
@@ -1672,28 +1687,29 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
             return EXIT_OK
         try:
             kept.change, changed = _written(args, workspace, known, state, tier, repositories, change)
-            if context := _context_written(workspace, kept.change, read):
-                print(f"          {workspace.shown(context)}")
         except WorkspaceError as exc:  # the calls are paid for by now: say so beside the refusal
             kept.outcome = f"failed: {exc}"
             print(f"{PROG}: no change was written: {exc}", file=sys.stderr)
             print(f"tokens    {_spent(ledger)}")
             return EXIT_USAGE
         kept.outcome = "written"
+        _context_said(workspace, kept.change, read)
     keep = _tasks_kept(workspace, change, changed) if change else None
     change_id = kept.change or ""
     # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs.
-    review = _plan_command(workspace, change_id, change) if DEMANDS[tier].read_first else None
+    review = _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first else None
     # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
     planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None}
     return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned)
 
 
-def _plan_command(workspace: Workspace, change_id: str, change: Change | None) -> str:
+def _plan_command(workspace: Workspace, change_id: str, change: Change | None, no_explore: bool) -> str:
     """The `plan` that goes on after a stop: with `--replace` where a revised change's task is ticked, and with
-    `--no-explore`, as `propose` read the code already, or was told not to, or kept a revised change's context."""
+    `--no-explore` where the person gave it, the change is revised, or a `context.md` is there to keep. Found by
+    review: said always, it kept a plan from reading where propose's reading wrote nothing."""
     flags = [" --replace"] if change is not None and _ticked(workspace, change) else []
-    flags += [" --no-explore"]
+    there = (workspace.home / CHANGES / change_id / CONTEXT_FILE).is_file()
+    flags += [" --no-explore"] if no_explore or change is not None or there else []
     return f"`{PROG} plan {change_id}{''.join(flags)}`"
 
 

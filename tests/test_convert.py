@@ -382,3 +382,19 @@ def test_the_brief_lists_the_points_answerable_now_first() -> None:
         "[NEEDS CLARIFICATION: Which browsers are in scope?]",
         "[NEEDS CLARIFICATION: What do other browsers get?]",
     ]
+
+
+def test_a_point_waiting_on_one_that_is_never_asked_waits_on_nothing() -> None:
+    """Found by review: a dependency on a point with no question, which is never asked, held a point back for good."""
+    nameless = {"question": "", "suggested": "", "depends_on": []}
+    draft = brief_draft(open_points=[{**SCOPE, "depends_on": [2]}, nameless, FALLBACK | {"depends_on": []}])
+    assert [one["question"] for one in questions_of(draft)] == [
+        "Which browsers are in scope?",
+        "What do other browsers get?",
+    ]
+
+
+def test_the_last_round_asks_every_point_still_open() -> None:
+    """Found by review: a point that waited was never put to the person once the rounds ran out."""
+    draft = brief_draft(open_points=[SCOPE, FALLBACK])
+    assert len(questions_of(draft, every=True)) == 2

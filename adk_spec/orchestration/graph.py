@@ -321,7 +321,9 @@ def _open_points(ask: bool) -> Callable[[Context], Event]:
         asks = (tier := ctx.state.get(TIER)) in DEMANDS and DEMANDS[tier].asks
         if not (ask and asks and (ctx.state.get(ROUNDS) or 0) < ROUND_BUDGET):
             return Event(route=NONE)
-        questions = questions_of(BriefDraft.model_validate(ctx.state[brief_stage.KEY]))
+        # The last round asks every point still open: found by review, one that waited was otherwise never shown.
+        last = (ctx.state.get(ROUNDS) or 0) == ROUND_BUDGET - 1
+        questions = questions_of(BriefDraft.model_validate(ctx.state[brief_stage.KEY]), every=last)
         return Event(route=SOME, state={ASKING: questions}) if questions else Event(route=NONE)
 
     return open_points

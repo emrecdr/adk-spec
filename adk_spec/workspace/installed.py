@@ -13,10 +13,12 @@ import csv
 import io
 import json
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .files import NotTextError, read_text
+from .git import as_globs
 
 #: The folders a Python environment is looked for in, at the repository's root, in this order.
 ENVIRONMENTS = (".venv", "venv")
@@ -34,15 +36,34 @@ class Environment:
     #: The folder it was found in, from the repository's root: `.venv`, `venv` or `node_modules`.
     where: str
     root: Path
-    #: Each package's name, version and top-level names, by name.
+    #: Each package's name, version and import names apart from its own, by name.
     packages: tuple[tuple[str, str, tuple[str, ...]], ...]
     #: Every path a stage may read, from `root`, with forward slashes.
     paths: tuple[str, ...]
+    #: Each package not read, with why: one a reader may not open, or past the cap.
+    unread: tuple[str, ...] = ()
 
 
-def environments(root: Path) -> list[Environment]:
-    """The installed libraries of the project at `root`: its Python environment, then its `node_modules`."""
-    return [found for found in (_python(root), _node(root)) if found is not None]
+def environments(root: Path, exclude: Sequence[str] = ()) -> list[Environment]:
+    """The installed libraries of the project at `root`: its Python environment, then its `node_modules`, less every
+    path `exclude` keeps out of the repository's own files. One that cannot be opened at all is passed over: a reading
+    never stops for it."""
+    globs = tuple(glob.casefold() for glob in as_globs(exclude))
+    found = []
+    for build in (_python, _node):
+        try:
+            held = build(root, globs)
+        except OSError:
+            continue
+        if held is not None:
+            found.append(held)
+    return found
+
+
+def _excluded(path: str, globs: Sequence[str]) -> bool:
+    """Whether `path`, from the repository's root, is one a person excluded, read as git reads the patterns."""
+    held = PurePosixPath(path.casefold())
+    return any(held.full_match(glob) for glob in globs)
 
 
 def _folder(path: Path) -> bool:
@@ -64,22 +85,56 @@ def _site(root: Path) -> tuple[str, Path] | None:
     return None
 
 
-def _python(root: Path) -> Environment | None:
+class _Gathering:
+    """An environment's packages as they are found: each listed with its files, or named as not read, and the cap
+    kept by whole packages, so that no package is listed whose files were cut."""
+
+    def __init__(self, base: str, globs: Sequence[str]) -> None:
+        self.base, self.globs = base, globs
+        self.packages: list[tuple[str, str, tuple[str, ...]]] = []
+        self.paths: list[str] = []
+        self.unread: list[str] = []
+
+    def add(self, name: str, version: str, tops: tuple[str, ...], files: Sequence[str]) -> None:
+        kept = [path for path in files if not _excluded(f"{self.base}/{path}", self.globs)]
+        if not kept and files:
+            return  # excluded whole: not even named
+        if len(self.paths) + len(kept) > LIBRARY_MAX_PATHS:
+            self.unread.append(f"{name}: past the {LIBRARY_MAX_PATHS:,} files an environment lists")
+            return
+        self.packages.append((name, version, tops))
+        self.paths += kept
+
+    def made(self, scheme: str, where: str, root: Path) -> Environment:
+        return Environment(
+            scheme, where, root, tuple(self.packages), tuple(sorted(set(self.paths))), tuple(self.unread)
+        )
+
+
+def _python(root: Path, globs: Sequence[str]) -> Environment | None:
     found = _site(root)
-    if found is None:
+    if found is None or _excluded(found[0], globs):
         return None
     where, site = found
-    packages: list[tuple[str, str, tuple[str, ...]]] = []
-    paths: set[str] = set()
+    held = _Gathering(site.relative_to(root).as_posix(), globs)
     for info in sorted(site.glob("*.dist-info")):
         name, version = _metadata(info / "METADATA")
         if not name:
             continue
-        files = [path for path in _record(info / "RECORD") if Path(path).suffix in PYTHON_SUFFIXES]
-        tops = tuple(sorted({path.split("/", 1)[0].removesuffix(".py") for path in files}))
-        packages.append((name, version, tops))
-        paths.update(files)
-    return Environment("python", where, site, tuple(packages), tuple(sorted(paths)[:LIBRARY_MAX_PATHS]))
+        try:
+            files = [path for path in _record(info / "RECORD") if Path(path).suffix in PYTHON_SUFFIXES]
+        except csv.Error as exc:
+            held.unread.append(f"{name}: its RECORD does not read: {exc}")
+            continue
+        held.add(name, version, _imports(files), files)
+    return held.made("python", where, site)
+
+
+def _imports(files: Sequence[str]) -> tuple[str, ...]:
+    """What a distribution's files make importable at the top: each package folder, and each module or stub."""
+    tops = {path.split("/", 1)[0] for path in files if "/" in path}
+    tops |= {path.rsplit(".", 1)[0] for path in files if "/" not in path and path.endswith((".py", ".pyi"))}
+    return tuple(sorted(tops))
 
 
 def _metadata(path: Path) -> tuple[str, str]:
@@ -94,13 +149,14 @@ def _metadata(path: Path) -> tuple[str, str]:
 
 def _record(path: Path) -> list[str]:
     """The files a distribution's `RECORD` lists, kept only where they stay under `site-packages`: none that climbs
-    out of it, as a script in `bin` does, none that is compiled, and none of the record's own folder."""
+    out of it, as a script in `bin` does, none that is compiled, and none of the record's own folder. `csv.Error`
+    where the record is no CSV the reader takes."""
     try:
-        rows = csv.reader(io.StringIO(read_text(path)))
+        text = read_text(path)
     except NotTextError, OSError:
         return []
     kept = []
-    for row in rows:
+    for row in csv.reader(io.StringIO(text)):
         listed = row[0].replace("\\", "/") if row else ""
         parts = listed.split("/")
         if not listed or listed.startswith("/") or ":" in listed or ".." in parts or "__pycache__" in parts:
@@ -110,29 +166,33 @@ def _record(path: Path) -> list[str]:
     return kept
 
 
-def _node(root: Path) -> Environment | None:
+def _node(root: Path, globs: Sequence[str]) -> Environment | None:
     modules = root / "node_modules"
-    if not _folder(modules):
+    if not _folder(modules) or _excluded("node_modules", globs):
         return None
-    packages: list[tuple[str, str, tuple[str, ...]]] = []
-    paths: list[str] = []
+    held = _Gathering("node_modules", globs)
     for name, folder in _packages(modules):
-        version = _version(folder / "package.json")
-        packages.append((name, version, ()))  # imported by its own name
-        paths += [f"{name}/{path}" for path in _walked(folder)]
-        if len(paths) >= LIBRARY_MAX_PATHS:
-            break
-    return Environment("node", "node_modules", modules, tuple(packages), tuple(sorted(paths)[:LIBRARY_MAX_PATHS]))
+        try:
+            files = [f"{name}/{path}" for path in _walked(folder)]
+        except OSError as exc:
+            held.unread.append(f"{name}: {exc.strerror or exc}")
+            continue
+        held.add(name, _version(folder / "package.json"), (), files)  # imported by its own name
+    return held.made("node", "node_modules", modules)
 
 
 def _packages(modules: Path) -> list[tuple[str, Path]]:
     """Each package `node_modules` holds, `react` or `@scope/kit`, as a folder of its own with a `package.json`. A
-    linked package, as pnpm makes them, is not one: its files are another folder's."""
+    linked package, as pnpm makes them, is not one: its files are another folder's. A scope a reader may not open is
+    passed over."""
     found: list[tuple[str, Path]] = []
     for entry in sorted(modules.iterdir()):
         if entry.name.startswith(".") or not _folder(entry):
             continue
-        inside = sorted(entry.iterdir()) if entry.name.startswith("@") else [entry]
+        try:
+            inside = sorted(entry.iterdir()) if entry.name.startswith("@") else [entry]
+        except OSError:
+            continue
         found += [
             (folder.relative_to(modules).as_posix(), folder)
             for folder in inside
