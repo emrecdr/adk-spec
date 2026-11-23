@@ -240,3 +240,10 @@ def test_a_pattern_ending_in_a_slash_keeps_that_folder_out_at_any_depth(tmp_path
     assert files(tmp_path, exclude=("secrets/",)) == ["src/app.py"]
     assert files(tmp_path, exclude=("config/secrets",)) == ["deep/x/secrets/c.txt", "secrets/a.txt", "src/app.py"]
     assert layer.as_globs(("vendor/**",)) == ("vendor/**",), "a pattern that holds its folder's contents as written"
+
+
+def test_a_pattern_opening_with_a_slash_is_anchored_at_the_root_as_gitignore_reads_it(tmp_path) -> None:
+    """Found by the code review: `/build`, `.gitignore`'s way to keep out the top folder alone, was refused, and
+    nothing else could anchor a single name."""
+    repository(tmp_path, dict.fromkeys(["build/a.txt", "src/build/b.txt", "src/app.py"], "x\n"))
+    assert files(tmp_path, exclude=("/build",)) == ["src/app.py", "src/build/b.txt"]

@@ -139,10 +139,11 @@ def _ended_said(response: Any) -> Any:
     holds text. Found by the third audit: Gemini's answer cut at its limit was taken for a schema fault, and asked for
     again twice."""
     reason = response.finish_reason
-    if response.error_code or response.partial or reason is None or reason in _ENDED_WELL:
+    named = getattr(reason, "value", reason)  # found by the code review: `str()` spells an enum `FinishReason.X`
+    if response.error_code or response.partial or named is None or named in _ENDED_WELL:
         return response
     return response.model_copy(
-        update={"error_code": str(reason), "error_message": "the answer ended before it was whole"}
+        update={"error_code": str(named), "error_message": "the answer ended before it was whole"}
     )
 
 

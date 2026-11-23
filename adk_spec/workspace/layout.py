@@ -329,6 +329,8 @@ class Workspace:
         """A change's state file alone. `WorkspaceError` where it does not read, or names another change."""
         try:
             state = ChangeState.model_validate_json(read_text(folder / STATE))
+        except (NotTextError, OSError) as exc:  # found by the code review: UTF-16, as PowerShell 5.1's `>` writes
+            raise WorkspaceError(f"{self.shown(folder / STATE)} does not read: {exc}") from exc
         except ValidationError as exc:
             shown = self.shown(folder / STATE)
             # A field it does not know is a newer adk-spec's: ignored, it would be dropped by the next save.

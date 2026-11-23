@@ -52,14 +52,17 @@ def _refuse_twin(parent: Path, part: str) -> None:
             raise PathError(f"`{part}` differs from `{name}` only by case, and some systems read both as one file")
 
 
-#: Each folder's names by their case-folded form, beside its time of last change when it was listed.
-_LISTED: dict[str, tuple[int, dict[str, list[str]]]] = {}
+#: Each folder's names by their case-folded form, beside what it said of itself when it was listed.
+_LISTED: dict[str, tuple[tuple[int, int, int], dict[str, list[str]]]] = {}
 
 
 def _folded(parent: str) -> dict[str, list[str]]:
     """The names a folder holds, by their case-folded form: listed once while it does not change, and again once it
     does. Found by the third audit: listed for each lookup, reading 1,000 changes listed `changes/` 1,000 times."""
-    stamp = os.stat(parent).st_mtime_ns
+    held_by = os.stat(parent)
+    # Its time of last change, and its size and links, which move with what it holds where a coarse file system's
+    # stamp did not: found by the code review, a name made in the same tick as the listing went unseen.
+    stamp = (held_by.st_mtime_ns, held_by.st_size, held_by.st_nlink)
     held = _LISTED.get(parent)
     if held is None or held[0] != stamp:
         folded: dict[str, list[str]] = {}

@@ -374,6 +374,8 @@ _HOLDS: tuple[tuple[str, Actor, str], ...] = (
     (_PLAN, "run", "run `adk-spec plan {cid}`"),
     ("check.blocking", "you", _FIX_THE_CHECK),
 )
+#: What may hold a draft once its open point is settled: the holds after it.
+_AFTER_A_POINT = _HOLDS[[code for code, _actor, _phrase in _HOLDS].index("brief.marker-unresolved") + 1 :]
 
 
 def _after_approval(
@@ -421,8 +423,10 @@ def next_step(
     plan = [found for found in findings if settled_by_plan(found, started=started)]
     held = {found.code for found in (*findings, *check)} | ({_PLAN} if plan else set())
     held |= {_ERROR for found in findings if found.severity == "ERROR" and found not in plan}
-    # Every next step names the command that comes after it: found by the third audit, three did not.
-    after = f"run `adk-spec plan {cid}`" if _PLAN in held else f"run `adk-spec approve {cid}`"
+    # Every next step names the command that comes after it, the hold after an open point included: found by the
+    # third audit, three did not, and by the code review, "then approve" where a blocking check would refuse it.
+    rest = [phrase for code, _actor, phrase in _AFTER_A_POINT if code in held]
+    after = rest[0].format(cid=cid) if rest else f"run `adk-spec approve {cid}`"
     for code, actor, phrase in _HOLDS:
         if code in held:
             return Step(actor, phrase.format(cid=cid, after=after))

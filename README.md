@@ -721,10 +721,11 @@ design and the tasks rest on what is there and not on file names. `plan` reads i
 To keep paths out of every command, name them in `.spec/config.toml`, read as `.gitignore` reads them. A pattern
 with no slash, or a slash at its end alone, such as `*.pem`, `secrets` or `secrets/`, names a file or a folder at
 any depth. One with a slash before its end, such as `vendor/**` or `config/secrets`, is a path from the folder that
-holds `.spec/`. A folder is kept out with all it holds. Letters match in either case. An excluded path is never
-read, never listed among the repository's files, and never part of the diff `verify` sends, so work done only there
-is no evidence for `verify`. A `context.md` written before a path was excluded still holds what it quoted from it:
-delete the file to read again.
+holds `.spec/`, and so is one that opens with a slash, such as `/build`, which keeps out the top folder alone. A
+folder is kept out with all it holds. Letters match in either case. An excluded path is never read, never listed
+among the repository's files, and never part of the diff `verify` sends, so work done only there is no evidence for
+`verify`. A `context.md` written before a path was excluded still holds what it quoted from it: delete the file to
+read again.
 
 A file that holds a private key is treated as an excluded path is, with nothing to set up: it is never read, and
 `verify` leaves its changes out and says so.

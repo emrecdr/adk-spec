@@ -502,15 +502,15 @@ def _validate(args: argparse.Namespace) -> int:
         )
     for change_id in [args.id] if args.id else workspace.changes():
         try:
-            # Folded in, an archived change's delta has no base now: nothing to check.
-            if workspace.state(change_id).status == "archived":
-                continue
-            found += _assessed(workspace, change_id, living, drift=False).findings
-        except WorkspaceError as exc:  # one change that does not read stops no other's check
+            state = workspace.state(change_id)
+        except WorkspaceError as exc:  # one change whose state does not read stops no other's check
             if args.id:
                 raise
             unread = workspace.shown(workspace.home / CHANGES / change_id / STATE_FILE)
             found.append(finding("change.unreadable", str(exc), path=unread))
+            continue
+        if state.status != "archived":  # folded in, an archived change's delta has no base now: nothing to check
+            found += _assessed(workspace, change_id, living, drift=False).findings
     stops = failed(found, strict=args.strict)
     if args.json:
         print(json.dumps({"findings": [held.model_dump() for held in found], "failed": stops}, indent=2))

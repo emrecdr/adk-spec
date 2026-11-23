@@ -178,16 +178,17 @@ def _here(exclude: Sequence[str]) -> tuple[str, ...]:
 
 def as_globs(exclude: Sequence[str]) -> tuple[str, ...]:
     """Each of `exclude` as the globs it is read as, from the workspace's root, as `.gitignore` reads it: one with a
-    slash before its end, as a path from the root; one with none, or with a slash at its end alone, at any depth;
+    slash at its start or before its end, as a path from the root; one with none, or with a slash at its end alone,
+    at any depth;
     either one as a file, or a folder and all it holds. Matched in either case. What git is handed, and what the
     installed libraries are held to, so that one pattern keeps a path out of both. Found by the third audit: `secrets/`
     was taken for a path from the root, and `config/secrets/b.txt` reached every command."""
     globs: list[str] = []
     for pattern in exclude:
-        bare = pattern.rstrip("/")
+        bare = pattern.removeprefix("/").rstrip("/")
         if not bare:
             continue
-        base = bare if "/" in bare else f"**/{bare}"
+        base = bare if "/" in pattern.rstrip("/") else f"**/{bare}"  # a slash at its start anchors it too
         globs += [base] if base.endswith("/**") else [base, f"{base}/**"]
     return tuple(globs)
 

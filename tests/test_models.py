@@ -225,3 +225,16 @@ def test_login_takes_up_the_systems_certificates_before_it_asks_github_anything(
     first = tree.body[0].body
     assert calls and any("inject_into_ssl" in ast.unparse(statement) for statement in first[:3])
     assert "inject_into_ssl" not in inspect.getsource(login._seconds)
+
+
+def test_an_answer_gemini_ended_early_says_its_reason_by_name() -> None:
+    """Found by the code review: the reason was said as `FinishReason.MAX_TOKENS`, the enum's own spelling."""
+    from google.adk.models.llm_response import LlmResponse
+    from google.genai import types
+
+    from adk_spec.orchestration.models import _ended_said
+
+    cut = _ended_said(LlmResponse(content=types.ModelContent("{"), finish_reason=types.FinishReason.MAX_TOKENS))
+    assert cut.error_code == "MAX_TOKENS"
+    whole = LlmResponse(content=types.ModelContent("{}"), finish_reason=types.FinishReason.STOP)
+    assert _ended_said(whole).error_code is None

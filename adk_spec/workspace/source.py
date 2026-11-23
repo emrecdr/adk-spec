@@ -28,6 +28,7 @@ What cannot be given is left out and named, and is never an error: a reading goe
 
 from __future__ import annotations
 
+import mmap
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -56,7 +57,7 @@ FILE_MAX_CHARS = 12_000
 ROUND_MAX_CHARS = 40_000
 #: A file past this many bytes is not opened at all, and a word to search for past this many characters is none.
 FILE_MAX_BYTES = 2_000_000
-#: Past this a changed file is not searched for a key, and its part of a diff is withheld as a key's is.
+#: Past this a changed file that holds a key's first words is not read to tell, and its part of a diff is withheld.
 KEY_SEARCH_MAX_BYTES = 64_000_000
 TERM_MAX_CHARS = 100
 #: Why a file that holds a private key is left out, of a reading and of a diff alike.
@@ -204,15 +205,18 @@ class _Repository:
         try:
             if self._linked(path) or not target.is_file() or not target.resolve().is_relative_to(self.root.resolve()):
                 return False
-            if target.stat().st_size > KEY_SEARCH_MAX_BYTES:  # too large to search: withheld, as a key is
-                return True
-            data = target.read_bytes()
-        except OSError:
-            return False
-        # Searched whatever its size under the cap and its encoding: a key's first line is ASCII, and every one holds
-        # one of these, which skips decoding a large file that holds none. Found by the third audit: a file past the
-        # read cap, or one saved as Latin-1, was taken to hold none, and a hunk from a key's middle reached the diff.
-        if b"PRIVATE KEY" not in data and b"PuTTY-User-Key-File-" not in data:
+            if (size := target.stat().st_size) == 0:
+                return False
+            # Scanned in place for words every key's first line holds, in ASCII whatever the file's encoding: a file
+            # that holds none is never read into memory. Found by the third audit: a file past the read cap, or one
+            # saved as Latin-1, was taken to hold no key, and a hunk from a key's middle reached the diff.
+            with target.open("rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as held:
+                if held.find(b"PRIVATE KEY") < 0 and held.find(b"PuTTY-User-Key-File-") < 0:
+                    return False
+                if size > KEY_SEARCH_MAX_BYTES:  # key words in a file too large to read whole: withheld, as a key is
+                    return True
+                data = held[:]
+        except OSError, ValueError:
             return False
         return holds_a_key(normalise(data.decode("utf-8", errors="replace")))
 

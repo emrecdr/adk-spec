@@ -206,6 +206,18 @@ def test_a_state_file_written_before_a_field_was_added_still_reads(tmp_path) -> 
     assert ws.load_change("passkeys").change.state.needs_design is False
 
 
+def test_a_pattern_may_open_with_one_slash_to_anchor_it_at_the_root(tmp_path) -> None:
+    """Found by the code review: `.gitignore`'s `/build` was refused, and nothing else anchored a single name."""
+    from adk_spec.workspace.files import write_text
+    from adk_spec.workspace.layout import Workspace
+
+    ws = Workspace.init(tmp_path)
+    write_text(
+        tmp_path / ".spec/config.toml", '[project]\ndefault_tier = "lean"\n\n[repository]\nexclude = ["/build"]\n'
+    )
+    assert ws.config().exclude == ("/build",)
+
+
 def test_excluded_paths_are_read_from_the_config(tmp_path) -> None:
     from adk_spec.workspace.files import write_text
     from adk_spec.workspace.layout import Workspace
@@ -232,7 +244,7 @@ def test_a_table_written_as_a_value_is_refused_and_not_read_as_empty(tmp_path, l
 
 
 @pytest.mark.parametrize(
-    "value", ['"vendor/**"', "[3]", '[""]', '[":(top)secret"]', '["a\\nb"]', '["/vendor/**"]', '["src/../../x/**"]']
+    "value", ['"vendor/**"', "[3]", '[""]', '[":(top)secret"]', '["a\\nb"]', '["//vendor/**"]', '["src/../../x/**"]']
 )
 def test_exclude_must_be_a_list_of_patterns(tmp_path, value) -> None:
     """A pattern is handed to git as a path to leave out. One that opens with `:` would be read by git as an

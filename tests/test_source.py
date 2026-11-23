@@ -511,3 +511,15 @@ def test_a_file_read_before_as_too_large_is_still_searched_for_a_key(tmp_path, m
     assert "too large" in " ".join(held.gathered(["conf/big.txt"], [], []).left_out)
     kept, withheld = held.without_keys(diff(tmp_path, commit, exclude=()))
     assert withheld == ("conf/big.txt",) and "MIINew3" not in kept
+
+
+def test_a_changed_file_past_the_search_cap_is_withheld_only_where_it_holds_key_text(tmp_path, monkeypatch) -> None:
+    """Found by the code review: every changed file past the cap was said to hold a key, and its work left out of
+    what `verify` judges. It is scanned in place for a key's first words, never read whole into memory."""
+    monkeypatch.setattr(source, "KEY_SEARCH_MAX_BYTES", 200)
+    commit = repository(tmp_path, {**FILES, "data/big.csv": "a,b\n" * 100, "conf/big.txt": "x = 1\n" * 100 + PEM})
+    (tmp_path / "data/big.csv").write_text("a,b\n" * 101, encoding="utf-8", newline="\n")
+    path = tmp_path / "conf/big.txt"
+    path.write_text(path.read_text(encoding="utf-8").replace("MIIEow3", "MIINew3"), encoding="utf-8", newline="\n")
+    kept, withheld = Source.of(tmp_path, exclude=()).without_keys(diff(tmp_path, commit, exclude=()))
+    assert withheld == ("conf/big.txt",) and "data/big.csv" in kept

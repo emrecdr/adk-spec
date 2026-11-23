@@ -211,3 +211,47 @@ def test_once_the_cap_is_full_no_further_package_is_walked(tmp_path, monkeypatch
     (found,) = environments(root)
     assert walked == ["alpha"] and [name for name, _version, _tops in found.packages] == ["alpha"]
     assert found.unread == ("2 more packages: past the 4 files an environment lists",)
+
+
+def test_once_a_package_overflows_the_cap_no_further_one_is_walked(tmp_path, monkeypatch) -> None:
+    """Found by the code review: the walk stopped only where the packages filled the cap exactly; one that overflowed
+    it was turned away, and every package after it was walked whole as before."""
+    from adk_spec.workspace import installed
+
+    root = _repository(tmp_path)
+    _node(root, "alpha", {"a.js": "1\n"})  # with its package.json: two files
+    _node(root, "beta", {"x.js": "2\n", "y.js": "3\n", "z.js": "4\n"})  # four: past the cap of three
+    _node(root, "gamma", {"x.js": "5\n"})
+    monkeypatch.setattr(installed, "LIBRARY_MAX_PATHS", 3)
+    walked: list[str] = []
+    real = installed._walked
+    monkeypatch.setattr(installed, "_walked", lambda folder: walked.append(folder.name) or real(folder))
+    (found,) = environments(root)
+    assert walked == ["alpha", "beta"]
+    assert found.unread == (
+        "beta: past the 3 files an environment lists",
+        "1 more package: past the 3 files an environment lists",
+    )
+
+
+def test_an_excluded_package_is_not_even_counted_past_the_cap(tmp_path, monkeypatch) -> None:
+    from adk_spec.workspace import installed
+
+    root = _repository(tmp_path)
+    _node(root, "alpha", {"a.js": "1\n", "b.js": "2\n"})
+    _node(root, "zcorp-sdk", {"x.js": "3\n"})  # found after the cap is full
+    monkeypatch.setattr(installed, "LIBRARY_MAX_PATHS", 3)
+    (found,) = environments(root, exclude=("node_modules/zcorp-sdk/**",))
+    assert not found.unread, "its existence is no part of what a stage is told"
+
+
+def test_a_pattern_in_capitals_keeps_a_librarys_files_out_as_it_keeps_the_repositorys(tmp_path) -> None:
+    """Found by the code review: a pattern's letters matched in either case for git, and only in lower case for an
+    installed library."""
+    root = _repository(tmp_path)
+    _node(root, "leftpad", {"index.js": "1\n", "KEY.PEM": "k\n"})
+    _node(root)
+    source = Source.of(root, exclude=("Leftpad/",), installed=True)
+    assert "leftpad" not in source.tree() and "react 19.2.0" in source.tree()
+    (found,) = environments(root, exclude=("*.PEM",))
+    assert "leftpad/KEY.PEM" not in found.paths and "leftpad/index.js" in found.paths

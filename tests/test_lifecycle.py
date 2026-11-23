@@ -303,3 +303,17 @@ def test_a_task_list_with_a_ticked_box_is_fixed_by_hand_not_by_plan() -> None:
     assert next_step(DRAFT, [NO_TASK], ["approval"]).phrase == "run `adk-spec plan passkeys`"
     begun = next_step(DRAFT, [NO_TASK], ["approval"], started=True).phrase
     assert begun == "fix what `adk-spec validate passkeys` lists"
+
+
+def test_an_open_point_names_what_holds_the_change_after_it_a_blocking_check_too() -> None:
+    """Found by the code review: settling the open point was followed by "then run approve", which a blocking check
+    then refused."""
+    from adk_spec.domain.lifecycle import check_blockers
+    from adk_spec.domain.model import Checked
+
+    found = ChangeState(id="passkeys", tier="standard", check=Checked(at="t", files=FILES, blocking=1))
+    step = next_action(found, [MARKER], ["approval"], check=check_blockers(found, FILES))
+    assert step == f"settle the open point in brief.md, then {_FIXED}"
+
+
+_FIXED = "fix what reports/check.md lists, then run `adk-spec approve passkeys`"

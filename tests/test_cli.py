@@ -492,3 +492,15 @@ def test_new_waits_its_turn_as_every_command_that_writes_a_change_does(tmp_path,
     assert run(tmp_path, "new", "by-hand") == 2
     assert "held by another adk-spec run" in capsys.readouterr().err
     assert not (tmp_path / ".spec/changes/by-hand").exists()
+
+
+def test_a_change_json_saved_as_utf16_stops_no_other_change_either(tmp_path, capsys) -> None:
+    """Found by the code review: one saved through PowerShell 5.1's `>`, UTF-16, raised an error the guards did not
+    catch, and stopped every command as before."""
+    workspace = seeded(tmp_path)
+    other = workspace.new_change("other", "lean")
+    (other / "change.json").write_bytes('{"id": "other"}'.encode("utf-16"))
+    assert run(tmp_path, "status") == 0 and "other" in capsys.readouterr().out
+    assert run(tmp_path, "validate") == 1
+    assert "ERROR change.unreadable .spec/changes/other/change.json" in capsys.readouterr().out
+    workspace.taken(workspace.specs()[0])

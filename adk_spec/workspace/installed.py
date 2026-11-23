@@ -96,10 +96,13 @@ class _Gathering:
         self.unread: list[str] = []
         #: The packages found once the cap was full: counted, never read, and not named, as one excluded is not.
         self.past = 0
+        self._turned_away = False
 
     @property
     def full(self) -> bool:
-        return len(self.paths) >= LIBRARY_MAX_PATHS
+        """Whether the cap is spent: filled, or a package turned away for it. Found by the code review: filled
+        exactly alone, the walk went on past every package that overflowed it."""
+        return self._turned_away or len(self.paths) >= LIBRARY_MAX_PATHS
 
     def add(self, name: str, version: str, tops: tuple[str, ...], files: Sequence[str]) -> None:
         kept = [path for path in files if not _excluded(f"{self.base}/{path}", self.globs)]
@@ -107,6 +110,7 @@ class _Gathering:
             return  # excluded whole: not even named
         if len(self.paths) + len(kept) > LIBRARY_MAX_PATHS:
             self.unread.append(f"{name}: {_past_the_cap()}")
+            self._turned_away = True
             return
         self.packages.append((name, version, tops))
         self.paths += kept
@@ -185,7 +189,8 @@ def _node(root: Path, globs: Sequence[str]) -> Environment | None:
     held = _Gathering("node_modules", globs)
     for name, folder in _packages(modules):
         if held.full:  # found by the third audit: each package after the cap was walked whole, for nothing
-            held.past += 1
+            excluded = _excluded(f"node_modules/{name}", globs) or _excluded(f"node_modules/{name}/package.json", globs)
+            held.past += not excluded
             continue
         try:
             files = [f"{name}/{path}" for path in _walked(folder)]
