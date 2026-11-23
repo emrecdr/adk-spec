@@ -482,3 +482,19 @@ def test_the_line_that_opens_a_block_is_never_a_bracket_alone(tmp_path) -> None:
     cs = "public class Auth\n{\n    public void SignIn()\n    {\n        StartSession(user);\n    }\n}\n"
     held = made(tmp_path, {**FILES, "Auth.cs": cs})
     assert held.within("Auth.cs", 5) == "public void SignIn()" and held.within("Auth.cs", 3) == "public class Auth"
+
+
+def test_a_key_in_a_large_file_or_one_not_utf8_is_withheld_from_the_diff_too(tmp_path, monkeypatch) -> None:
+    """Found by the third audit: whether a file holds a key was asked only of a UTF-8 file within the read cap, so a
+    hunk from a key's middle in a larger file, or in one saved as Latin-1, reached the diff `verify` sends."""
+    monkeypatch.setattr(source, "FILE_MAX_BYTES", 300)
+    (tmp_path / "conf").mkdir(parents=True)
+    (tmp_path / "conf/latin.txt").write_bytes(("caf\xe9 = 1\n" + PEM).encode("latin-1"))
+    commit = repository(tmp_path, {**FILES, "conf/big.txt": "x = 1\n" * 100 + PEM})
+    for name in ("conf/big.txt", "conf/latin.txt"):
+        path = tmp_path / name
+        path.write_bytes(path.read_bytes().replace(b"MIIEow3", b"MIINew3"))
+    whole = diff(tmp_path, commit, exclude=())
+    assert whole.count("MIINew3") == 2
+    kept, held = Source.of(tmp_path, exclude=()).without_keys(whole)
+    assert held == ("conf/big.txt", "conf/latin.txt") and "MIINew3" not in kept

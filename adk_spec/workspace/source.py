@@ -56,6 +56,8 @@ FILE_MAX_CHARS = 12_000
 ROUND_MAX_CHARS = 40_000
 #: A file past this many bytes is not opened at all, and a word to search for past this many characters is none.
 FILE_MAX_BYTES = 2_000_000
+#: Past this a changed file is not searched for a key, and its part of a diff is withheld as a key's is.
+KEY_SEARCH_MAX_BYTES = 64_000_000
 TERM_MAX_CHARS = 100
 #: Why a file that holds a private key is left out, of a reading and of a diff alike.
 HOLDS_A_KEY = "holds a private key, which is never shown"
@@ -199,11 +201,19 @@ class _Repository:
             return self._opened[path] == HOLDS_A_KEY
         target = self.root / path
         try:
-            if self._linked(path) or not target.is_file() or target.stat().st_size > FILE_MAX_BYTES:
+            if self._linked(path) or not target.is_file():
                 return False
-            return target.resolve().is_relative_to(self.root.resolve()) and holds_a_key(normalise(read_text(target)))
-        except NotTextError, OSError:
+            if not target.resolve().is_relative_to(self.root.resolve()):
+                return False
+            if target.stat().st_size > KEY_SEARCH_MAX_BYTES:  # too large to search: withheld, as a key is
+                return True
+            data = target.read_bytes()
+        except OSError:
             return False
+        # Searched whatever its size under the cap and its encoding: a key's first line is ASCII. Found by the third
+        # audit: a file past the read cap, or one saved as Latin-1, was taken to hold none, and a hunk from a key's
+        # middle reached the diff `verify` sends.
+        return holds_a_key(normalise(data.decode("utf-8", errors="replace")))
 
     def _linked(self, path: str) -> bool:
         """Whether the file at `path`, or a folder on the way to it from the root, is a symbolic link or a

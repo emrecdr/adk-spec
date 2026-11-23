@@ -86,11 +86,16 @@ class SchemaMismatch(BasePlugin):
         try:
             validate_schema(schema, text)
         except ValidationError as exc:
-            why = f"{MISMATCH}: {exc.errors()[0]['msg']}"
-            callback_context.state[STAGE_ERROR] = why
-            return LlmResponse(
-                error_code="SCHEMA_MISMATCH", error_message=why, usage_metadata=llm_response.usage_metadata
+            # Gemini says a cut answer by its finish reason alone, with no error code: found by the third audit, it was
+            # taken for a schema fault and asked for again twice. One cut short that still fits its schema stands.
+            cut = str(getattr(llm_response.finish_reason, "name", llm_response.finish_reason)) == "MAX_TOKENS"
+            code, why = (
+                ("MAX_TOKENS", f"{ENDED}: MAX_TOKENS: the answer reached the model's output limit")
+                if cut
+                else ("SCHEMA_MISMATCH", f"{MISMATCH}: {exc.errors()[0]['msg']}")
             )
+            callback_context.state[STAGE_ERROR] = why
+            return LlmResponse(error_code=code, error_message=why, usage_metadata=llm_response.usage_metadata)
         return None
 
 

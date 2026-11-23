@@ -349,6 +349,28 @@ def test_an_answer_the_provider_cut_short_is_not_asked_again(tmp_path, capsys, f
     assert asked(fake_provider, DELTAS) == 1 and "deltas 120 in 1 call" in said.out
 
 
+def test_an_answer_gemini_cut_short_is_not_asked_again_either(tmp_path, capsys, fake_provider) -> None:
+    """Found by the third audit: Gemini's cut answer carries no error code, only a finish reason of MAX_TOKENS, so it
+    was still called a schema fault and asked for again twice."""
+    from google.adk.models.llm_response import LlmResponse
+    from google.genai import types
+
+    seeded(tmp_path)
+    spent = types.GenerateContentResponseUsageMetadata(
+        prompt_token_count=100, candidates_token_count=20, total_token_count=120
+    )
+    cut = LlmResponse(
+        content=types.ModelContent('{"deltas": [{"capa'),
+        finish_reason=types.FinishReason.MAX_TOKENS,
+        usage_metadata=spent,
+    )
+    fake_provider.answers_when(DELTAS, cut)
+    assert proposed(tmp_path, "--tier", "lean", "--id", "cut") == 3
+    said = capsys.readouterr()
+    assert "MAX_TOKENS" in said.err and "schema" not in said.err
+    assert asked(fake_provider, DELTAS) == 1
+
+
 def test_a_name_made_from_the_title_steps_past_one_that_differs_only_by_case(tmp_path, fake_provider) -> None:
     """Found by the code review: the name was compared by its exact letters, the folder was then refused as a twin
     by case, and the drafts were dropped after every call was paid for."""
