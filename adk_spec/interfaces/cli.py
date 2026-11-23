@@ -516,7 +516,8 @@ def _validate(args: argparse.Namespace) -> int:
         return EXIT_FINDINGS if stops else EXIT_OK
     _printed(found)
     errors = sum(held.severity == "ERROR" for held in found)
-    print(f"{errors} errors, {sum(held.severity == 'WARNING' for held in found)} warnings")
+    warnings = sum(held.severity == "WARNING" for held in found)
+    print(f"{errors} error{'' if errors == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}")
     return EXIT_FINDINGS if stops else EXIT_OK
 
 
@@ -815,7 +816,7 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     A line is the answer; `=` takes the suggestion; an empty line leaves the point open; the end of the input, or
     no input at all, answers every question still to come with nothing."""
     points = "1 point" if len(questions) == 1 else f"{len(questions)} points"
-    print(f"The brief leaves {points} open. A line answers. `yes` or `=` takes the suggestion.")
+    print(f"The brief leaves {points} open. A line answers. `=` takes the suggestion, and `yes` one that says yes.")
     print("An empty line leaves the point open.")
     answers: list[str] = []
     ended = sys.stdin is None  # a process started with no terminal and no pipe

@@ -231,7 +231,7 @@ each with a suggested answer:
 ```text
 sized     standard: a new way to sign in, within one capability
 explored  6 files: 9 statements kept
-The brief leaves 1 point open. A line answers. `yes` or `=` takes the suggestion.
+The brief leaves 1 point open. A line answers. `=` takes the suggestion, and `yes` one that says yes.
 An empty line leaves the point open.
 1. Which browsers are in scope?
    suggested: Evergreen browsers only

@@ -46,7 +46,9 @@ def test_validate_lists_each_finding_with_its_place_and_fails_on_an_error(tmp_pa
     write_text(tmp_path / ".spec/specs/auth/spec.md", broken)
     assert run(tmp_path, "validate") == 1
     out = capsys.readouterr().out
-    assert "ERROR syntax .spec/specs/auth/spec.md:22" in out and "1 errors, 0 warnings" in out
+    assert (
+        "ERROR syntax .spec/specs/auth/spec.md:22" in out and "1 error, 0 warnings" in out
+    )  # found by the third audit: "1 errors"
 
 
 def test_warnings_fail_only_under_strict(tmp_path, capsys) -> None:
@@ -461,7 +463,7 @@ def test_yes_takes_the_suggestion_and_is_an_answer_where_none_is_suggested(monke
     # Found by review: "yes" taken for "No, keep it" stored the opposite of the person's yes. An answer reaches the
     # next draft beside its question, so a plain "yes" always says what the person meant.
     assert cli._answered(asked) == ["Yes, eight hours.", "yes: every device", "Each one.", "yes", "yes", ""]
-    assert "`yes` or `=` takes the suggestion" in capsys.readouterr().out
+    assert "`=` takes the suggestion, and `yes` one that says yes" in capsys.readouterr().out
 
 
 def test_one_change_whose_state_does_not_read_stops_no_other(tmp_path, capsys) -> None:
