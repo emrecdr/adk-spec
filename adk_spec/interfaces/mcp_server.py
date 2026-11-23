@@ -30,7 +30,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from ..domain.model import Tier
-from ..workspace.process import Started, TimedOut, started, stop, waited
+from ..workspace.process import Started, TimedOut, started, stop, tie_children, waited
 
 #: How long a tool waits for its command: a `propose` that reads the code takes minutes. A client may give up sooner.
 TOOL_TIMEOUT_S = 3600.0
@@ -93,7 +93,8 @@ def _said(output: bytes | None, note: str) -> str:
 
 def stop_on_signals() -> None:
     """Stopping the server, as an editor does reloading its window, stops the commands it runs first. Windows ends a
-    process with no signal it could hear."""
+    process with no signal it could hear: there the commands are tied to the server by a job object, `main`'s, and end
+    with it by the system."""
     for name in ("SIGTERM", "SIGHUP"):
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), _stopped_by)
@@ -158,6 +159,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="adk-spec-mcp", description="adk-spec's commands as MCP tools, over stdio.")
     parser.add_argument("--root", default=".", help="a folder in the repository to work in (default: this one)")
     args = parser.parse_args(argv)
+    # On Windows a killed server hears no signal: its commands are tied to it, and end with it, by the system.
+    tie_children()
     stop_on_signals()
     try:
         build_server(Path(args.root).resolve()).run("stdio")

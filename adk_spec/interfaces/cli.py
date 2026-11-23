@@ -103,6 +103,7 @@ from ..workspace.layout import DESIGN as DESIGN_FILE
 from ..workspace.layout import TASKS as TASKS_FILE
 from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
+from ..workspace.process import tie_children
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
 from ..workspace.source import NAME, Source, SourceError, repositories_named
@@ -2067,6 +2068,7 @@ def run() -> int:
     for stream, errors in ((sys.stdout, "replace"), (sys.stderr, "replace"), (sys.stdin, "strict")):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors=errors)
+    tie_children()  # on Windows, what this run starts ends with it: a test run's leftovers too
     try:
         return main(sys.argv[1:])
     except KeyboardInterrupt:

@@ -405,9 +405,7 @@ and a step moves to code only where its output is a function of its input with n
 ## The owner's, outside any phase
 
 - A smoke run on the Gemini arm. It needs a `GOOGLE_API_KEY`.
-- The gate on a Windows machine. The CI workflow has a Windows job, and the repository has no remote.
-- A Windows job object, to stop what a passing test run leaves running there; until then it runs on, and only a run
-  past its time, or interrupted, is stopped on Windows. It waits for a Windows machine to test it on.
+- The gate on a Windows machine of the owner's own. CI runs it on Windows on every push, and passes.
 - Two items of the outside audit of 22 November 2026, deferred with their reasons. Untracked files diffed in Python
   rather than one `git` process each: faster on Windows, but the diff's text would change, and every change verified
   before it would read as drifted unless the text matched git's byte for byte; a Windows run should first show the

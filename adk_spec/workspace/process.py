@@ -3,7 +3,9 @@
 A program is found on PATH's absolute entries only, never in the current folder, which a repository's own files
 could fill. A run is bounded in time, and past it, or on an interrupt, the whole tree of processes it started is
 stopped: on Windows by `taskkill`, elsewhere by ending the session it was started in. A project's tests are run so
-that what they leave running is stopped too, and so that only the end of their output is ever held.
+that what they leave running is stopped too, and so that only the end of their output is ever held. On Windows, what
+an adk-spec process starts is also tied to it by a job object, `tie_children`: it ends when the process ends, killed
+or not, as a session's would end elsewhere.
 """
 
 from __future__ import annotations
@@ -99,6 +101,81 @@ def stop(process: subprocess.Popen[bytes]) -> None:
     may already be another process's."""
     if process.poll() is None:
         _stopped(process, WINDOWS)
+
+
+#: The job this process and all it starts run in, on Windows: held open for the process's life, and closed by the
+#: system as it ends, however it ends.
+_TIED: list[int] = []
+
+
+def tie_children() -> bool:
+    """On Windows, every program this process starts, and every one those start, ends when this process ends, killed
+    or not: the process is put into a job object that kills what it holds once its last handle closes, which happens
+    as the process ends, and what it starts after joins it by itself, with no moment between start and joining. The
+    roadmap's Windows job object: a server an editor killed left its command running, spending and holding the lock,
+    and a test run left behind what it started. Elsewhere a run is started in a session of its own and stopped whole,
+    and this does nothing. Whether the tie is made: where the system refuses it, things go on as before."""
+    if not WINDOWS:
+        return False
+    if not _TIED:
+        try:
+            _TIED.append(_killed_on_close())
+        except OSError:
+            return False
+    return True
+
+
+def _killed_on_close() -> int:
+    """A job object that kills every process in it once its last handle closes, with this process in it: its
+    handle, or `OSError` where the system refuses either step."""
+    import ctypes
+    from ctypes import wintypes
+
+    class _Limits(ctypes.Structure):
+        _fields_ = (
+            ("PerProcessUserTimeLimit", ctypes.c_int64),
+            ("PerJobUserTimeLimit", ctypes.c_int64),
+            ("LimitFlags", wintypes.DWORD),
+            ("MinimumWorkingSetSize", ctypes.c_size_t),
+            ("MaximumWorkingSetSize", ctypes.c_size_t),
+            ("ActiveProcessLimit", wintypes.DWORD),
+            ("Affinity", ctypes.c_size_t),
+            ("PriorityClass", wintypes.DWORD),
+            ("SchedulingClass", wintypes.DWORD),
+        )
+
+    class _ExtendedLimits(ctypes.Structure):
+        _fields_ = (
+            ("BasicLimitInformation", _Limits),
+            ("IoInfo", ctypes.c_uint64 * 6),
+            ("ProcessMemoryLimit", ctypes.c_size_t),
+            ("JobMemoryLimit", ctypes.c_size_t),
+            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+            ("PeakJobMemoryUsed", ctypes.c_size_t),
+        )
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)  # pyrefly: ignore[missing-attribute]
+    kernel.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
+    kernel.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel.SetInformationJobObject.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+    kernel.SetInformationJobObject.restype = wintypes.BOOL
+    kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+    kernel.AssignProcessToJobObject.restype = wintypes.BOOL
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+    job = kernel.CreateJobObjectW(None, None)
+    if not job:
+        raise ctypes.WinError(ctypes.get_last_error())  # pyrefly: ignore[missing-attribute]
+    limits = _ExtendedLimits()
+    limits.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    extended = 9  # JobObjectExtendedLimitInformation
+    set_up = kernel.SetInformationJobObject(job, extended, ctypes.byref(limits), ctypes.sizeof(limits))
+    if not set_up or not kernel.AssignProcessToJobObject(job, kernel.GetCurrentProcess()):
+        refused = ctypes.WinError(ctypes.get_last_error())  # pyrefly: ignore[missing-attribute]
+        kernel.CloseHandle(job)  # a job this process is not in kills nothing as it closes
+        raise refused
+    return job
 
 
 @dataclass(frozen=True)

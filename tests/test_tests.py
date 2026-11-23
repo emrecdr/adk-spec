@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import os
 import signal
+import subprocess
 import sys
+import textwrap
 import time
 
 import pytest
@@ -231,3 +233,62 @@ def test_a_program_that_ended_and_was_waited_for_is_not_stopped(monkeypatch) -> 
     process.waited(started, 60)
     process.stop(started)
     assert stopped == []
+
+
+def test_off_windows_tying_a_processs_children_to_it_is_left_to_the_session() -> None:
+    """Elsewhere a run is started in a session of its own and stopped whole: the job object is Windows' alone."""
+    if process.WINDOWS:
+        pytest.skip("on Windows the tie is made")
+    assert process.tie_children() is False
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a job object is Windows' own")
+def test_on_windows_what_a_process_left_running_ends_with_it(tmp_path) -> None:
+    """The roadmap's Windows job object, waiting for a Windows machine until CI ran there: a process that ended,
+    normally or killed, as an editor ends the MCP server, left what it started running, spending and holding the
+    lock."""
+    from adk_spec.workspace.lock import _alive
+
+    marker = tmp_path / "pid"
+    child = textwrap.dedent(f"""
+        import subprocess, sys
+        from adk_spec.workspace import process
+        print("tied" if process.tie_children() else "not tied", flush=True)
+        code = "import os, time; open(" + repr({str(marker)!r}) + ", 'w').write(str(os.getpid())); time.sleep(60)"
+        subprocess.Popen([sys.executable, "-c", code])
+        import time
+        while True:
+            try:
+                if open({str(marker)!r}).read():
+                    break
+            except OSError:
+                pass
+            time.sleep(0.05)
+    """)
+    done = subprocess.run([sys.executable, "-c", child], capture_output=True, text=True, timeout=60, check=False)
+    assert done.stdout.strip() == "tied", done.stderr
+    pid = int(marker.read_text())
+    for _ in range(100):
+        if not _alive(pid):
+            return
+        time.sleep(0.05)
+    pytest.fail("the grandchild still runs after the process that started it ended")
+
+
+def test_both_programs_tie_what_they_start_to_themselves(monkeypatch) -> None:
+    from adk_spec.interfaces import cli, mcp_server
+
+    tied = []
+    for module in (cli, mcp_server):
+        monkeypatch.setattr(module, "tie_children", lambda: tied.append(1) or True)
+    monkeypatch.setattr(sys, "argv", ["adk-spec", "--help"])
+    with pytest.raises(SystemExit):
+        cli.run()
+
+    class Idle:
+        def run(self, _transport) -> None:
+            return None
+
+    monkeypatch.setattr(mcp_server, "build_server", lambda _root: Idle())
+    mcp_server.main([])
+    assert tied == [1, 1]
