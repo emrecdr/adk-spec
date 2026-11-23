@@ -452,3 +452,15 @@ def test_a_finding_that_quotes_a_line_as_the_model_was_shown_it_is_kept(tmp_path
     assert run(tmp_path, "check", "passkeys") == 1
     assert state(ws).check.blocking == 1 and "A password is written out in the brief." in read_text(tmp_path / REPORT)
     assert "hunter2" not in str(fake_provider.requests[-1].config.system_instruction)
+
+
+def test_a_refused_approval_counts_as_its_check_did(tmp_path, capsys, fake_provider) -> None:
+    """Found by the third audit: the check said "2 blocking" and the refusal "1 findings block it", the one finding
+    that says the check blocks. The refusal says what the check found, in its own count."""
+    standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    said = capsys.readouterr().err
+    assert "`passkeys` is not approved: its check found 1 blocking: fix what reports/check.md lists" in said
+    assert "findings block it" not in said

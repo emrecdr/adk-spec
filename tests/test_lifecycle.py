@@ -94,17 +94,27 @@ def test_what_an_archive_waits_for() -> None:
         (DRAFT, [ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_BASE], ["approval"], "run `adk-spec approve passkeys`"),  # `approve` records it itself
         (DRAFT, [NO_TASKS], ["approval"], "run `adk-spec plan passkeys`"),
-        (DRAFT, [NO_TASKS, MARKER], ["approval"], "settle the open point in brief.md"),
+        (
+            DRAFT,
+            [NO_TASKS, MARKER],
+            ["approval"],
+            "settle the open point in brief.md, then run `adk-spec plan passkeys`",
+        ),
         (DRAFT, [ERROR, MARKER, NO_TASKS], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_TASKS, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
-        (DRAFT, [MARKER], ["approval"], "settle the open point in brief.md"),
-        (DRAFT, [NO_TASK, MARKER], ["approval"], "settle the open point in brief.md"),
+        (DRAFT, [MARKER], ["approval"], "settle the open point in brief.md, then run `adk-spec approve passkeys`"),
+        (
+            DRAFT,
+            [NO_TASK, MARKER],
+            ["approval"],
+            "settle the open point in brief.md, then run `adk-spec plan passkeys`",
+        ),
         (DRAFT, [NO_TASK], ["approval"], "run `adk-spec plan passkeys`"),
         (DRAFT, [TASKS_SYNTAX], ["approval"], "fix what `adk-spec validate passkeys` lists"),  # a hand edit: theirs
         (DRAFT, [NO_TASK, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [OTHER], ["approval"], "run `adk-spec approve passkeys`"),
         (DRAFT, [], ["approval"], "run `adk-spec approve passkeys`"),
-        (approved(), [], ["tasks.md"], "approve again: tasks.md changed since the approval"),
+        (approved(), [], ["tasks.md"], "tasks.md changed since the approval: run `adk-spec approve passkeys` again"),
         (approved(), [], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
         (approved(), [ERROR], [], "fix what `adk-spec validate passkeys` lists"),
         (approved(), [OTHER], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
@@ -247,7 +257,9 @@ def test_a_standard_change_edited_after_approval_is_sent_to_approve_again_which_
     state = approved("standard").model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
     owed = check_blockers(state, {**FILES, "tasks.md": "sha256:edited"})
     said = next_action(state, [], ["tasks.md"], check=owed)
-    assert said == "approve again: tasks.md changed since the approval", "`approve` checks first, by itself"
+    assert said == "tasks.md changed since the approval: run `adk-spec approve passkeys` again", (
+        "`approve` checks first, by itself"
+    )
 
 
 def test_an_approval_makes_a_check_that_is_missing_or_stale_and_no_other() -> None:

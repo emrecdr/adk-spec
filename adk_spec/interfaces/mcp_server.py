@@ -23,11 +23,13 @@ import os
 import signal
 import sys
 from pathlib import Path
+from typing import Annotated
 
 import anyio
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
+from pydantic import Field
 
 from ..domain.model import Tier
 from ..workspace.process import Started, TimedOut, started, stop, waited
@@ -47,12 +49,17 @@ adk-spec drafts and checks spec-driven changes in the repository this server was
 models. propose drafts a change from a request, or, given the id of an open change, revises it; it asks no question:
 points the brief leaves open come back in its output, so ask the person, then revise with propose and the change's
 id. plan drafts a change's tasks again; check checks its files; verify judges the work against each requirement;
-status lists the open changes and what comes next; validate checks the files' structure. A change that spans other
-repositories is started by the person in a terminal, with `adk-spec propose --with`; the tools then keep them.
+status lists the open changes and what comes next; validate checks the files' structure. propose and plan call a
+model several times and take minutes, propose the most: call them once per request, never to poll. A change that
+spans other repositories is started by the person in a terminal, with `adk-spec propose --with`; the tools then keep
+them.
 
-Approving and archiving are the person's decisions: when a change is ready, tell them to run `adk-spec approve <id>`
-in a terminal, and once it is verified `adk-spec archive <id>`. Never approve, archive or set a finding aside for
-them."""
+A change lives in `.spec/changes/<id>/`. Approving and archiving are the person's decisions: when a change is ready,
+tell them to run `adk-spec approve <id>` in a terminal, and once it is verified `adk-spec archive <id>`. Never
+approve, archive or set a finding aside for them. Once it is approved, implement it: read brief.md, the specs,
+context.md and design.md in its folder, then work through tasks.md in order, test first, and tick each task's box,
+`- [x]`, when it is done. Ticking a box keeps the approval; any other edit of the change's files voids the approval.
+Then call verify with the change's id."""
 
 
 def command(root: Path, *args: str) -> list[str]:
@@ -117,36 +124,67 @@ def build_server(root: Path) -> MCPServer:
         description="Draft a change from a request, or revise the open change `id` names. Asks nothing.",
         annotations=WRITES,
     )
-    async def propose(request: str, id: str | None = None, tier: Tier | None = None, no_explore: bool = False) -> str:
+    async def propose(
+        request: Annotated[str, Field(description="What is wanted, in a sentence or a paragraph")],
+        id: Annotated[
+            str | None, Field(description="An open change to revise by the request, or a new one's name")
+        ] = None,
+        tier: Annotated[
+            Tier | None, Field(description="How much ceremony; left out, a model sizes the request")
+        ] = None,
+        no_explore: Annotated[
+            bool, Field(description="Read none of the repository's code: cheaper, less grounded")
+        ] = False,
+    ) -> str:
         named = [*_flag(bool(id), f"--id={id}"), *_flag(bool(tier), f"--tier={tier}")]
         return await ran(root, ["propose", "--no-input", *named, *_flag(no_explore, "--no-explore"), "--", request])
 
     @server.tool(description="Draft a change's tasks again, and its design where one is owed.", annotations=WRITES)
-    async def plan(id: str, replace: bool = False, no_explore: bool = False) -> str:
+    async def plan(
+        id: Annotated[str, Field(description="The change")],
+        replace: Annotated[
+            bool, Field(description="Draft anew although a task is ticked, or a design was edited")
+        ] = False,
+        no_explore: Annotated[bool, Field(description="Read none of the repository's code for the plan")] = False,
+    ) -> str:
         return await ran(root, ["plan", *_flag(replace, "--replace"), *_flag(no_explore, "--no-explore"), "--", id])
 
     @server.tool(
         description="Check a change's files against each other and against the repository's rules.",
         annotations=REPORTS,
     )
-    async def check(id: str, no_model: bool = False) -> str:
+    async def check(
+        id: Annotated[str, Field(description="The change")],
+        no_model: Annotated[bool, Field(description="Run the checks code makes, and call no model")] = False,
+    ) -> str:
         return await ran(root, ["check", *_flag(no_model, "--no-model"), "--", id])
 
     @server.tool(
         description="Run the project's tests and judge the work against each requirement of a change.",
         annotations=WRITES,
     )
-    async def verify(id: str, bases: list[str] | None = None) -> str:
+    async def verify(
+        id: Annotated[str, Field(description="The change")],
+        bases: Annotated[
+            list[str] | None,
+            Field(description="Commits the work started from, as REF or NAME=REF; left out: the approval's"),
+        ] = None,
+    ) -> str:
         return await ran(root, ["verify", *(f"--base={base}" for base in bases or ()), "--", id])
 
     @server.tool(description="List each open change and what comes next with it.", annotations=READS)
-    async def status(include_archived: bool = False) -> str:
+    async def status(
+        include_archived: Annotated[bool, Field(description="List archived changes too")] = False,
+    ) -> str:
         return await ran(root, ["status", *_flag(include_archived, "--all")])
 
     @server.tool(
         description="Check the structure of the living specs and of the open changes, or of one.", annotations=READS
     )
-    async def validate(id: str | None = None, strict: bool = False) -> str:
+    async def validate(
+        id: Annotated[str | None, Field(description="One change to check, in place of every open one")] = None,
+        strict: Annotated[bool, Field(description="Fail on a warning too")] = False,
+    ) -> str:
         return await ran(root, ["validate", *_flag(strict, "--strict"), *_flag(bool(id), "--", id or "")])
 
     return server

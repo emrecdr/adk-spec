@@ -656,3 +656,16 @@ def test_under_a_ceiling_the_reading_leaves_the_drafting_half_of_what_is_left(tm
     assert (tmp_path / ".spec/changes/capped/tasks.md").is_file()
     assert _order(fake_provider)[-3:] == [BRIEF, DELTAS, TASKS]
     assert "the reading's share of the run's token ceiling of 840" in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_the_tier_triage_chose_is_said_before_the_reading_spends(tmp_path, capsys) -> None:
+    """Found by the third audit: the tier was said only at the end, after minutes of reading, and never where the run
+    failed. Said first, a wrong tier is stopped and named with `--tier` before the reading is paid for."""
+    seeded(tmp_path)
+    repository(tmp_path)
+    assert proposed(tmp_path, "--id", "told") == 0
+    out = capsys.readouterr().out
+    assert "sized     lean: one small change\nexplored" in out
+    assert proposed(tmp_path, "--tier", "lean", "--id", "named") == 0
+    assert "sized" not in capsys.readouterr().out, "a tier named is not sized, nor said again"

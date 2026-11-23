@@ -576,10 +576,12 @@ def _rebase(args: argparse.Namespace) -> int:
         print(f"{req_id}  dropped")
     if held == state.bases:
         print("nothing to record: every base stands")
-        return EXIT_OK
-    workspace.save_state(reopened(state, bases=held))
-    if state.approval is not None:
+    else:
+        workspace.save_state(reopened(state, bases=held))
+    if held != state.bases and state.approval is not None:
         print(f"the approval is void: read what was stale, then run `{PROG} approve {args.id}` again")
+    else:  # it ends on what comes next, as every command that moves a change does
+        _say_next(workspace, args.id, living)
     return EXIT_OK
 
 
@@ -609,9 +611,16 @@ def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec]
         ) from exc
 
 
-def _refused(change_id: str, blockers: list[Finding]) -> int:
+def _refused(change_id: str, blockers: list[Finding], blocking: int = 0) -> int:
+    """An approval refused, and why. Where the check alone blocks it, in the one finding that says so, the refusal
+    counts as the check did: found by the third audit, "2 blocking" was followed by "1 findings block it"."""
     _printed(blockers)
-    print(f"{PROG}: `{change_id}` is not approved: {len(blockers)} findings block it", file=sys.stderr)
+    if blocking and [held.code for held in blockers] == ["check.blocking"]:
+        why = f"its check found {blocking} blocking: fix what reports/check.md lists, then approve again"
+    else:
+        count = len(blockers)
+        why = f"{count} finding{'' if count == 1 else 's'} block{'s' if count == 1 else ''} it"
+    print(f"{PROG}: `{change_id}` is not approved: {why}", file=sys.stderr)
     return EXIT_FINDINGS
 
 
@@ -651,7 +660,7 @@ def _approve(args: argparse.Namespace) -> int:
                 "approve again with --override",
                 file=sys.stderr,
             )
-        return _refused(args.id, blockers)
+        return _refused(args.id, blockers, assessed.state.check.blocking if assessed.state.check else 0)
     files = assessed.files  # as they were read for the assessment that found the check current: no later read
     at = datetime.now(UTC).isoformat(timespec="seconds")
     # A reason is recorded only where it set something aside: a blocking finding of the check.
@@ -1919,6 +1928,8 @@ def _drafts(
         # for a two-function change triage had sized as one, and the deltas stage could not fill them.
         if not isinstance(found := read_triage(sized), str):
             seed = {**seed, SIZED: ", ".join(found.capabilities)}
+            # Said before the reading spends: a wrong tier is stopped here, and named with --tier.
+            print(f"sized     {tier}: {plain(found.reason)}")
     profile = _optional(workspace, profile_text, PROFILE) or ""
     read = None
     if explore:  # aimed by the request, the brief to come

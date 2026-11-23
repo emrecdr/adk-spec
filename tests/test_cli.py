@@ -182,10 +182,13 @@ def test_a_rebase_voids_an_approval_and_says_what_was_stale(tmp_path, capsys) ->
     assert state_of(tmp_path)["status"] == "draft" and state_of(tmp_path)["approval"] is None
 
 
-def test_a_rebase_that_changes_nothing_keeps_the_approval(tmp_path) -> None:
+def test_a_rebase_that_changes_nothing_keeps_the_approval_and_says_what_comes_next(tmp_path, capsys) -> None:
+    """Found by the third audit: `rebase` was the one command that moves a change and ended on no next step."""
     seeded(tmp_path)
     approved(tmp_path)
+    capsys.readouterr()
     assert run(tmp_path, "rebase", "passkeys") == 0 and state_of(tmp_path)["status"] == "approved"
+    assert "next      implement tasks.md, then run `adk-spec archive passkeys`" in capsys.readouterr().out
 
 
 def test_an_approval_names_the_account_where_no_name_is_given(tmp_path, monkeypatch) -> None:
