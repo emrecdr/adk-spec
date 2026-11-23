@@ -1,61 +1,611 @@
 # adk-spec
 
-Spec-driven development on Google ADK. Models draft the specs and judge them; Python owns the files, the IDs, the
-gates and the merge into one living spec per capability.
+adk-spec turns a request such as "let users sign in with a passkey" into a written, reviewed plan before any code
+is written, and afterwards checks the finished code against that plan. It is spec-driven development, run on Google
+ADK with GitHub Copilot's or Gemini's models: models draft the specs and judge the work; plain Python owns the files,
+the requirement IDs, the checks, the approvals and the record.
 
-## Install
+**Contents:** [What it is for](#what-it-is-for) · [How it works](#how-it-works) ·
+[Where things live](#two-folders-where-adk-spec-lives-and-where-you-run-it) · [Install](#install-once) ·
+[Choose a model](#choose-a-model-once) · [Start in a repository](#start-in-a-repository-once-per-repository) ·
+[Your first change](#your-first-change-step-by-step) · [Use cases](#use-cases) ·
+[When something goes wrong](#when-something-goes-wrong) · [Commands](#command-reference) ·
+[Settings](#settings-reference) · [What each command does, in depth](#what-each-command-does-in-depth) ·
+[Developing adk-spec](#developing-adk-spec)
 
-```
-uv sync --locked
-```
+## What it is for
 
-## The gate
+A coding assistant writes code straight from a chat message. What was meant is lost in the chat, nothing records
+what was agreed, and nothing checks the result against it. adk-spec puts a short written plan between the request
+and the code, and keeps it:
 
-Run before every commit, one command a line:
+- **Before the code:** it reads the code that matters for your request, asks you only what the code cannot answer,
+  and writes the change as files you can read and edit: why and what (`brief.md`), the requirements with their
+  scenarios (`specs/`), what the code already is (`context.md`), a design where one is owed (`design.md`) and the
+  tasks (`tasks.md`).
+- **The decision:** you read the files, edit them, and approve them. A check runs first and stops on contradictions
+  or gaps between the files.
+- **After the code:** it runs your tests, reads the diff, and gives each requirement a verdict, keeping a `met` only
+  where it can point at the lines that show it.
+- **The record:** a finished change is folded into one living spec per capability (`.spec/specs/auth/spec.md`), so
+  the next change starts from what the system really does.
 
-```
-uv run ruff check .
-uv run ruff format --check .
-uv run pyrefly check
-uv run pytest -q
-```
+adk-spec writes specs and plans and judges the work. **It never edits your code**: you implement the tasks, by hand or
+with the coding assistant you already use (GitHub Copilot, Claude Code, Cursor and others). Your project can be in
+any language; adk-spec reads it through git.
 
-## The flow
+## How it works
 
-One change takes four commands, one for each decision you make. What the tool can do by itself happens inside them.
+One change takes four commands, one for each decision that is yours. Everything the tool can do by itself happens
+inside them.
 
-```
-adk-spec propose "Let users sign in with a passkey."
-adk-spec approve <id>
-adk-spec verify <id>
-adk-spec archive <id>
+```text
+ you: "Let users sign in with a passkey."
+        │
+        ▼
+ adk-spec propose "…"      sizes the request, reads the code, asks what the code cannot answer,
+        │                  writes brief.md, specs/, context.md, design.md (where owed), tasks.md
+        ▼
+ you read and edit the files in .spec/changes/<id>/
+        │
+        ▼
+ adk-spec approve <id>     checks the files against each other, then records your approval
+        │
+        ▼
+ you (or your coding assistant) implement tasks.md, ticking each box
+        │
+        ▼
+ adk-spec verify <id>      runs your tests, judges the diff against each requirement
+        │
+        ▼
+ adk-spec archive <id>     folds the change into the living specs in .spec/specs/
 ```
 
 | Command | The question it answers | What happens inside |
 |---|---|---|
-| `propose` | What do we want to build? | Sizes the request, reads the code that matters for it, asks you only what the code cannot answer, writes the brief and the specs, and writes the design where one is owed, and the tasks |
+| `propose` | What do we want to build? | Sizes the request, reads the code that matters for it, asks you only what the code cannot answer, writes the brief and the specs, the design where one is owed, and the tasks |
 | `approve` | Do I agree with this plan? | Records what the change is written against, checks the files against each other, stops on anything blocking, then records your approval |
-| `verify` | Is it built? | Judges what changed in the repository against each requirement. Run it as often as you like while implementing |
+| `verify` | Is it built? | Runs your tests and judges what changed in the repository against each requirement. Run it as often as you like |
 | `archive` | Make it the record? | Folds the change into the living specs, all of it or none |
 
-Once for a repository: `adk-spec init`. At any time: `adk-spec status`, which says what to do next. `propose`,
-`approve` and `verify` end on a `next` line that says the same.
+Not every change needs all four. `propose` sizes each request into a **tier**, or you name one with `--tier`:
 
-Between `propose` and `approve` you read what was drafted and edit it: the files are yours. `propose` names what
-to read first, and how many assumptions the brief made where it might have asked you: check those before approving. Between `approve` and `verify` you implement the tasks, with the coding agent you use, ticking each
-box. `adk-spec` writes specs and plans and judges the result. It does not edit your code.
+| Tier | For | Commands | What it owes |
+|---|---|---|---|
+| none | a typo, a comment, a cosmetic edit | `propose` only, which says no spec is owed and writes nothing | nothing |
+| `lean` | a small, contained change or bug fix | `propose`, `approve`, `archive` | no check, no verification |
+| `standard` | an ordinary feature (the default) | `propose`, `approve`, `verify`, `archive` | a check before approval, a verification before archive |
+| `strict` | many capabilities, a high risk of regression, an audit trail | `propose`, `plan`, `approve` twice, `verify`, `archive` | always a design; you read the brief before the plan; two different approvers; a warning blocks as an error does |
 
-A small change is `lean`: it owes no check and no verification, so it takes three commands, `propose`, `approve`,
-`archive`. `propose` sizes a request itself, with a model call: a typo or a cosmetic change may owe no spec at all,
-and a risky one may be strict.
-`--tier lean`, `--tier standard` or `--tier strict` says it by hand.
+At any time, `adk-spec status` says what to do next, and every command that moves a change ends on a `next` line
+that says the same.
 
-A `strict` change is for many capabilities, a high risk of regression or an audit trail: it always owes a design;
-`propose` writes its brief and specs and stops for you to read them, and `adk-spec plan <id>` goes on; two different
-names approve it, `approve --by A` and then `approve --by B`, an edit in between voiding the first; and a warning of
-the check blocks it as an error does, with no `--override`.
+## Two folders: where adk-spec lives, and where you run it
 
-### What each command does
+adk-spec is installed once, in a folder of its own. You run it **inside the repository you are working on**, your
+project, never inside adk-spec's own folder:
+
+```text
+~/tools/adk_spec/          adk-spec itself: installed once; holds .env, your model settings
+~/code/shop/               your project's git repository: run every adk-spec command here
+├── .spec/                 written by adk-spec; commit it with your code
+│   ├── config.toml        this repository's settings for adk-spec
+│   ├── constitution.md    the rules every change follows
+│   ├── profile.md         what the code is, as init read it
+│   ├── lessons.md         corrections every draft follows
+│   ├── specs/             the living specs: one folder per capability
+│   └── changes/           one folder per change: brief.md, specs/, context.md, design.md, tasks.md, reports/
+├── src/
+└── tests/
+```
+
+- `adk-spec init` makes `.spec/` in the folder you run it in: run it at the root of your project's repository.
+- Every other command finds `.spec/` in the folder you are in or any folder above it, so you can run it from
+  anywhere inside the repository. `--root <folder>` points it at another repository without moving there.
+- Commit `.spec/` with your code: the specs and the changes are shared through git like any other file. What must
+  not be shared ignores itself: `.spec/runs/` (recordings of what was sent to the model) and the lock files.
+
+## Install (once)
+
+You need [uv](https://docs.astral.sh/uv/) and git. uv fetches Python 3.14 for adk-spec by itself; your project
+needs no Python. macOS and Windows are supported.
+
+```shell
+git clone <adk-spec repository URL> ~/tools/adk_spec
+cd ~/tools/adk_spec
+uv sync --locked
+cp .env.example .env        # your model settings: see "Choose a model"
+```
+
+Then give yourself an `adk-spec` command that works in any folder. Either one of these:
+
+- **A shell alias** (runs the exact versions adk-spec was tested with):
+
+  ```shell
+  # macOS and Linux: add to ~/.zshrc or ~/.bashrc
+  alias adk-spec='uv run --project ~/tools/adk_spec adk-spec'
+  ```
+
+  ```powershell
+  # Windows PowerShell: add to your $PROFILE
+  function adk-spec { uv run --project "$HOME\tools\adk_spec" adk-spec @args }
+  ```
+
+  `uv run --project` runs adk-spec from its own folder's environment while you stay in your project's folder.
+
+- **An installed tool**, which also puts `adk-spec-mcp` on your PATH for the editor setup below:
+
+  ```shell
+  uv tool install --editable ~/tools/adk_spec
+  ```
+
+  It still reads `~/tools/adk_spec/.env`. It resolves its own versions rather than the lock file: ADK, LiteLLM and
+  MCP are pinned and match, other libraries may be a patch newer.
+
+Check it: `adk-spec --help` lists every command. A `git pull` in `~/tools/adk_spec`, then `uv sync --locked`,
+updates it.
+
+## Choose a model (once)
+
+adk-spec calls models through one of two arms, chosen in `~/tools/adk_spec/.env`. That file is read from adk-spec's
+own folder only, never from your project, and a variable set in your shell wins over it.
+
+**GitHub Copilot** (the default arm): no key. Log in once with GitHub's device flow, then pick a model.
+
+```shell
+adk-spec login              # opens GitHub's device flow; the token is cached on this machine
+adk-spec models             # lists the models your Copilot plan serves (calls no model)
+```
+
+```ini
+# ~/tools/adk_spec/.env
+SPEC_PROVIDER=copilot
+SPEC_MODEL=                 # blank: gpt-4.1; or a name `adk-spec models` lists
+```
+
+**Gemini**: an AI Studio key, or Vertex AI with a project.
+
+```ini
+# ~/tools/adk_spec/.env
+SPEC_PROVIDER=gemini
+SPEC_MODEL=                 # blank: gemini-3.8-flash
+GOOGLE_API_KEY=<your key>
+```
+
+Then check it:
+
+```shell
+adk-spec smoke --check      # says whether the arm is ready; sends nothing
+adk-spec smoke              # one small model call, to prove the arm answers
+```
+
+Two more settings, both optional: `SPEC_FALLBACK_MODEL` names a second model tried when the first answers 429, 5xx
+or times out, and `SPEC_<STAGE>_MODEL` gives one stage its own model, for example a stronger one for
+`SPEC_VERIFY_MODEL` or a cheaper one for `SPEC_TRIAGE_MODEL`, named as `adk-spec models` lists them. The stages are
+`triage`, `scout`, `survey`, `review`, `brief`, `deltas`, `design`, `tasks`, `check` and `verify`.
+
+## Start in a repository (once per repository)
+
+```shell
+cd ~/code/shop              # the root of your project's git repository
+adk-spec init
+```
+
+```text
+made      .spec
+reading   the code, to describe this repository: up to 7 model calls. --no-explore skips it
+explored  42 files: 18 statements kept
+wrote     .spec/profile.md
+next      keep what is true in constitution.md, then run `adk-spec propose "<what you want>"`
+```
+
+`init` reads your code once and writes `.spec/profile.md`: the stack, the commands, where things live, the
+conventions and the risks, each statement quoting the code it rests on. Every later change starts its reading from
+it. Rules already true of the code are drafted into `.spec/constitution.md`, each marked with its evidence.
+
+Then:
+
+1. **Read `.spec/constitution.md`**: keep the rules that are true and wanted, edit or delete the rest. Every stage
+   of every change reads it, so keep it short (under 16,000 characters).
+2. **Name your test command** in `.spec/config.toml`, so that `verify` runs it (see [Settings](#settings-reference)).
+3. **Commit** `.spec/`: `git add .spec && git commit -m "Add adk-spec"`.
+
+`init --no-explore` makes the tree with no model call; `init --refresh` reads the code again later and rewrites the
+profile.
+
+## Your first change, step by step
+
+A standard feature, from request to record. The output below is what adk-spec prints; your files, counts and token
+numbers will be your own.
+
+### 1. Propose
+
+```shell
+adk-spec propose "Let users sign in with a passkey."
+```
+
+adk-spec sizes the request and says the tier it chose (a wrong one is stopped here with Ctrl-C and named with
+`--tier`), reads the code that matters for it, and asks what only you can decide, at most three questions a round,
+each with a suggested answer:
+
+```text
+sized     standard: a new way to sign in, within one capability
+explored  6 files: 9 statements kept
+The brief leaves 1 point open. A line answers. `=` takes the suggestion, and `yes` one that says yes.
+An empty line leaves the point open.
+1. Which browsers are in scope?
+   suggested: Evergreen browsers only
+=
+wrote     .spec/changes/sign-in-with-a-passkey, a standard draft
+          .spec/changes/sign-in-with-a-passkey/brief.md
+          .spec/changes/sign-in-with-a-passkey/specs/auth/spec.md
+          .spec/changes/sign-in-with-a-passkey/context.md
+          .spec/changes/sign-in-with-a-passkey/tasks.md
+tokens    triage 1,204 in 1 call, scout 2,310 in 1 call, survey 9,871 in 2 calls, …: 23,149 total
+read      brief.md (25 lines, 1 assumption) first
+next      run `adk-spec approve sign-in-with-a-passkey`
+```
+
+Answering a question: type your answer, `=` (or `yes` where the suggestion is a yes) to take the suggestion, or an
+empty line to leave the point open. A point left open stays in `brief.md` as `[NEEDS CLARIFICATION: …]`, and the
+tasks wait until you settle it there and run `adk-spec plan <id>`.
+
+The change's name comes from the brief's title; `--id passkeys` names it yourself. `--no-input` asks nothing and
+prints each open point with its suggestion instead.
+
+### 2. Read and edit
+
+The files in `.spec/changes/sign-in-with-a-passkey/` are yours: edit any of them. `propose` names what to read first
+and how many assumptions the brief made where it might have asked you; check those before approving.
+
+`brief.md`, why and what:
+
+```markdown
+# Sign in with a passkey
+
+## Why
+Passwords are the top source of account takeovers.
+
+## What changes
+Users can register a passkey and sign in with it.
+
+## Non-goals
+No change to session length.
+
+## Capabilities
+- auth
+
+## Assumptions
+Browsers in scope support WebAuthn.
+```
+
+`specs/auth/spec.md`, the requirements this change adds, modifies or removes in the `auth` capability, each with a
+stable ID and scenarios a test could show false:
+
+```markdown
+# Delta: auth
+
+## ADDED Requirements
+
+### REQ-AUTH-004: Sign in with a passkey
+
+The system SHALL let a user sign in with a passkey.
+
+#### Scenario: Registered passkey
+
+- WHEN the user presents a registered passkey
+- THEN the system starts a session
+```
+
+`context.md` is what the reading found: what exists, where the change plugs in, conventions, risks and what is still
+unknown, each statement quoting a file and line. `tasks.md` is the work, test first, each task naming the
+requirements it serves, its files and how to check it:
+
+```markdown
+- [ ] T001 [REQ-AUTH-004] Write the failing passkey sign-in test
+  - files: tests/test_passkey.py
+  - verify: uv run pytest tests/test_passkey.py
+```
+
+Changed your mind about what is wanted? Edit the brief or the specs and run `adk-spec plan <id>` to draft the tasks
+again, or ask for the change in words: `adk-spec propose "also allow backup codes" --id sign-in-with-a-passkey`.
+
+### 3. Approve
+
+```shell
+adk-spec approve sign-in-with-a-passkey
+```
+
+```text
+checked   .spec/changes/sign-in-with-a-passkey/reports/check.md: 1 finding, 0 blocking
+tokens    check 1,393 in 1 call: 1,393 total
+approved `sign-in-with-a-passkey` by ana: 3 files recorded
+next      implement tasks.md, then run `adk-spec verify sign-in-with-a-passkey`
+```
+
+The check runs first: code checks the structure and that every requirement has a task, a model looks for what takes
+a reading, such as two files that contradict each other. A blocking finding stops the approval: fix it and approve
+again, or approve with `--override "<your reason>"`, which is recorded. The approval records a fingerprint of each
+file: any later edit voids it, ticking a task box does not.
+
+### 4. Implement
+
+Work through `tasks.md` yourself or with your coding assistant, ticking each box (`- [x]`) as it is done. For
+example, to GitHub Copilot or Claude Code:
+
+> Implement `.spec/changes/sign-in-with-a-passkey/tasks.md` task by task, test first. Read `brief.md`, the specs and
+> `context.md` in that folder first. Tick each task's box when it is done. Do not edit any other file in `.spec/`.
+
+### 5. Verify
+
+```shell
+adk-spec verify sign-in-with-a-passkey
+```
+
+```text
+testing   uv run pytest -q
+tests     passed in 4.2 s
+met       REQ-AUTH-004  The new passkey handler starts a session for a registered passkey.
+wrote     .spec/changes/sign-in-with-a-passkey/reports/verify.md
+tokens    verify 3,866 in 1 call: 3,866 total
+next      run `adk-spec archive sign-in-with-a-passkey`
+```
+
+Each requirement gets `met`, `unmet` or `unclear`. A `met` stands only where the model quoted lines that really are
+in the diff; anything else is `unclear`, so missing or invented evidence never reads as a pass. A failing test run
+keeps the change from being verified. Run `verify` as often as you like while you work; `--override "<your reason>"`
+verifies a change you judge done although a requirement is not shown met.
+
+### 6. Archive
+
+```shell
+adk-spec archive sign-in-with-a-passkey
+```
+
+```text
+archived `sign-in-with-a-passkey`: folded into auth
+```
+
+`.spec/specs/auth/spec.md` now holds `REQ-AUTH-004`. Commit the change with the code it describes.
+
+## Use cases
+
+### A small bug fix (`lean`)
+
+```shell
+adk-spec propose "Fix: a password with a trailing space is refused" --tier lean --id trailing-space
+adk-spec approve trailing-space
+# fix the bug and add its test, ticking the tasks
+adk-spec archive trailing-space
+```
+
+```text
+approved `trailing-space` by ana: 3 files recorded
+next      implement tasks.md, then run `adk-spec archive trailing-space`
+…
+archived `trailing-space`: folded into auth
+```
+
+A lean change owes no check and no verification. Without `--tier`, `propose` sizes the request itself and may call
+a fix that touches security, money or data `strict`.
+
+### A typo or a cosmetic edit (no spec)
+
+```shell
+adk-spec propose "Fix the typo in the login docstring"
+```
+
+```text
+no spec is owed: A typo in a comment changes no behaviour.
+tokens    triage 1,180 in 1 call: 1,180 total
+```
+
+Nothing is written. Make the edit as usual.
+
+### A risky change (`strict`, two approvers)
+
+```shell
+adk-spec propose "Store passwords with Argon2 instead of SHA-256" --tier strict --id argon2
+```
+
+```text
+wrote     .spec/changes/argon2, a strict draft
+          .spec/changes/argon2/brief.md
+          .spec/changes/argon2/specs/auth/spec.md
+          .spec/changes/argon2/context.md
+plan      waits: a strict change is read first. Read brief.md and the specs, then `adk-spec plan argon2 --no-explore`
+next      run `adk-spec plan argon2`
+```
+
+A strict change stops after the brief and the specs, so that the design and the tasks are drafted from what you
+agreed. Then:
+
+```shell
+adk-spec plan argon2                # always writes design.md, then tasks.md
+adk-spec approve argon2 --by ana
+adk-spec approve argon2 --by ben    # a second, different name; an edit in between voids the first
+# implement
+adk-spec verify argon2
+adk-spec archive argon2
+```
+
+On a strict change a warning of the check blocks as an error does, and there is no `--override` for it.
+
+### Changing your mind mid-flight
+
+Ask for the change in words, naming the open change with `--id`:
+
+```shell
+adk-spec propose "Also allow backup codes" --id sign-in-with-a-passkey
+```
+
+```text
+revising  sign-in-with-a-passkey, a standard draft: its files kept where the request does not reach
+revised   added REQ-AUTH-005; changed nothing; dropped nothing
+```
+
+It keeps the tier, `context.md` and every edit the request does not reach; a requirement that keeps its name keeps
+its ID. The tasks are drafted again unless one is ticked. A revised change is a draft again, to be approved again.
+Or edit the files yourself and run `adk-spec plan <id>` (add `--replace` to redraft a task list that has a ticked
+box). A verified or archived change is not revised: propose a new one.
+
+### A feature across repositories
+
+When one feature changes an API and the web app that calls it, name the other repositories with the change, from the
+repository that holds `.spec/`:
+
+```shell
+cd ~/code/shop-api
+adk-spec propose "Let users sign in with a passkey." --with ../shop-web --with mobile=../shop-mobile
+```
+
+The reading covers them all, `approve` records where the work begins in each, and `verify` runs each repository's
+own test command and judges the work in all of them. `--with PATH` names a repository after its folder,
+`--with NAME=PATH` names it yourself. Forgot one? `adk-spec plan <id> --with ../other` adds it.
+
+### From VS Code with Copilot, or Claude Code
+
+`adk-spec-mcp` serves `propose`, `plan`, `check`, `verify`, `status` and `validate` as tools to your coding assistant,
+so you can ask for a change in the chat and have the assistant implement it. Approving and archiving stay yours, in a
+terminal.
+
+VS Code, in your project's `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "adk-spec": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "--project", "/path/to/adk_spec", "adk-spec-mcp", "--root", "${workspaceFolder}"]
+    }
+  }
+}
+```
+
+Claude Code, from your project's folder:
+
+```shell
+claude mcp add adk-spec -- uv run --project /path/to/adk_spec adk-spec-mcp --root "$PWD"
+```
+
+(With the installed tool: `"command": "adk-spec-mcp", "args": ["--root", "${workspaceFolder}"]`, and
+`claude mcp add adk-spec -- adk-spec-mcp --root "$PWD"`.)
+
+Then, in the chat:
+
+1. "Use adk-spec to propose: let users sign in with a passkey." The tool asks no question: open points come back in
+   its output for the assistant to put to you, and it revises the change with your answers.
+2. Read the files, then in a terminal: `adk-spec approve <id>`.
+3. "Implement `.spec/changes/<id>/tasks.md`, ticking each box, then run adk-spec verify on it."
+4. In a terminal: `adk-spec archive <id>`.
+
+A `propose` that reads the code takes minutes. A change that spans other repositories is started in a terminal with
+`--with`; the tools then keep them.
+
+### Writing a change by hand
+
+```shell
+adk-spec new drop-remember-me --tier lean
+```
+
+This makes `.spec/changes/drop-remember-me/` with its state file and no model call. Write `brief.md`, `tasks.md`
+and one `specs/<capability>/spec.md` per capability, with whole requirement blocks under `## ADDED Requirements`,
+`## MODIFIED Requirements` and `## REMOVED Requirements`, then `adk-spec validate drop-remember-me`, `approve` and
+`archive` as above.
+
+### Keeping the specs sound in CI
+
+`adk-spec validate` checks the structure of the living specs and of every open change, calls no model, and exits 1
+on an error (`--strict`: on a warning too). In a CI job where adk-spec is installed:
+
+```shell
+adk-spec validate --strict
+```
+
+### Where am I?
+
+```shell
+adk-spec status
+```
+
+```text
+Waiting on you
+  sign-in-with-a-passkey  standard  approved  implement tasks.md, then run `adk-spec verify sign-in-with-a-passkey`
+  argon2                  strict    draft     run `adk-spec approve argon2`
+
+Ready to run
+  trailing-space          lean      draft     run `adk-spec plan trailing-space`
+```
+
+`--all` lists archived changes too; `--json` prints the list for a script.
+
+## When something goes wrong
+
+| What you see | What to do |
+|---|---|
+| `no .spec folder at or above …` | You are outside the repository, or it has no `.spec/` yet: `cd` into it, or run `adk-spec init` at its root |
+| `… is held by another adk-spec run` | Another command is writing in this repository: wait for it. If none is running, remove the file it names |
+| `the brief and the specs are written, and the plan is not: … Run adk-spec plan <id>` | The plan failed after the change was written: run that command to finish it |
+| `no change was written: …` | A stage failed before anything was written: read the reason, then run `propose` again |
+| `` `<id>` is not approved: the findings above block it`` | Read `reports/check.md`, fix the files, approve again; or `--override "<why>"` (not for a strict change's warnings) |
+| `unmet` or `unclear` in `verify` | Implement what is missing, or point the work at the requirement, and verify again |
+| `the tests failed` | Fix them and verify again; `verify --override "<why>"` verifies anyway, recorded |
+| `archive` stops: the living spec changed under the change | Read the current requirement, update the delta, then `adk-spec rebase <id>` and approve again |
+| `CEILING: … token ceiling … is spent` | Raise `[limits] max_tokens` in `.spec/config.toml` |
+| `… changed since the approval: run adk-spec approve <id> again` | A file changed after approval: read the change and approve again |
+
+Exit codes: `0` done, `1` a step was refused or found what stops it (a check, a validation, a verification),
+`2` a usage or configuration error, before anything is spent, `3` a model or provider failure, `130` interrupted.
+
+## Command reference
+
+Every command runs in the repository it is started in (or `--root <folder>`).
+
+| Command | Options | Calls a model |
+|---|---|---|
+| `init` | `--no-explore` read no code · `--refresh` read the code again, rewrite the profile | yes, unless `--no-explore` |
+| `propose "<request>"` | `--id ID` name the change, or revise the open change `ID` · `--tier lean\|standard\|strict` · `--no-input` ask nothing · `--no-explore` read no code · `--with PATH` or `--with NAME=PATH` another repository (repeatable) | yes |
+| `approve <id>` | `--by NAME` who approves (default: this account) · `--strict` refuse on a warning too · `--override REASON` approve despite a blocking finding | for a standard change whose check is missing or stale |
+| `verify <id>` | `--base REF` the commit the work started from, or `NAME=REF` for another repository · `--override REASON` verify although a requirement is not shown met | yes |
+| `archive <id>` | | no |
+| `status` | `--all` archived changes too · `--json` | no |
+| `plan <id>` | `--replace` redraft although a task is ticked, or a design you edited · `--no-explore` · `--with PATH` | yes |
+| `check <id>` | `--no-model` the checks code makes, alone | unless `--no-model` |
+| `rebase <id>` | | no |
+| `validate [id]` | `--strict` fail on a warning too · `--json` | no |
+| `new <id>` | `--tier lean\|standard\|strict` (default: the config's) | no |
+| `login` | `--force` log in again | no (GitHub's device flow) |
+| `models` | `--json` | no (reads the provider's list) |
+| `smoke` | `--check` say whether the arm is ready, send nothing · `--model MODEL` · `--request TEXT` · `--json` | yes, unless `--check` |
+
+`plan`, `check`, `rebase`, `validate` and `new` redo one step by itself; a normal change never needs them.
+
+## Settings reference
+
+`.spec/config.toml`, in your project, committed. A key adk-spec does not know is refused by name.
+
+```toml
+[project]
+default_tier = "standard"        # the tier `adk-spec new` gives without --tier; `propose` sizes each request itself
+
+[limits]
+max_tokens = 80000               # what one command may spend; unset: no ceiling
+keep_runs = 20                   # how many recordings .spec/runs/ keeps
+
+[repository]
+exclude = ["vendor/**", "**/*.pem", "config/production.yaml"]   # never read, listed or sent
+
+[verify]
+test = ["uv", "run", "pytest", "-q"]   # your test command, as a list of words; run with no shell
+timeout = 900                    # seconds; 900 where it is not set
+```
+
+`~/tools/adk_spec/.env`, adk-spec's own, never committed: `SPEC_PROVIDER` (`copilot` or `gemini`), `SPEC_MODEL`,
+`SPEC_FALLBACK_MODEL`, `SPEC_<STAGE>_MODEL`, and for Gemini `GOOGLE_API_KEY` (or `GOOGLE_GENAI_USE_ENTERPRISE=TRUE`
+with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists them all.
+
+## What each command does, in depth
 
 - **`propose`** drafts a change from a request. A model writes each part; a gate after each stage checks it and
   asks again at most twice. On the standard tier it puts each point the brief leaves open to you as a question, at
@@ -73,10 +623,10 @@ the check blocks it as an error does, with no `--override`.
   "Working in an existing repository" below. `--no-explore` skips it.
 
   Where `--id` names a change that is open, `propose` revises it by the request, keeping the change's tier and
-  everything the request does not reach, your edits included: `adk-spec propose "also allow backup codes" --id
-  passkeys`. It says which requirements it added, changed and dropped; a requirement that keeps its name keeps its ID.
-  The tasks are drafted again unless one is ticked, and `context.md` is kept. A revised change is a draft again, to
-  be approved again. A verified or archived change is not revised: propose a new one.
+  everything the request does not reach, your edits included. It says which requirements it added, changed and
+  dropped; a requirement that keeps its name keeps its ID. The tasks are drafted again unless one is ticked, and
+  `context.md` is kept. A revised change is a draft again, to be approved again. A verified or archived change is
+  not revised: propose a new one.
 
 - **`approve`** records who approved, when, and the fingerprint of each file. A later edit voids it; ticking a
   task does not. The name is a recorded claim, not an authentication. On a standard change it first makes the
@@ -107,23 +657,18 @@ the check blocks it as an error does, with no `--override`.
   the report its result and the end of its output, scrubbed of secret shapes. A run that fails, cannot start or runs
   past its time keeps the change from being verified, whatever the verdicts; `--override` still verifies it, with
   your reason. Only the command you wrote is run, as the list of words you wrote, with no shell to read it; another
-  repository of the change runs the command in its own `.spec/config.toml`, where it has one.
+  repository of the change runs the command in its own `.spec/config.toml`, where it has one. The tests are not
+  given the variables adk-spec's own `.env` set, your provider's key among them.
   A run is judged by its own exit, and whatever it started, a server say, is stopped when it ends, as on Ctrl-C.
   Output that names a private key is shown in no part. On Windows a batch file (`npm.cmd`) is refused, since
   cmd.exe reads its words again: name the program it runs. The work is judged as it stands after the tests.
-
-  ```toml
-  [verify]
-  test = ["uv", "run", "pytest", "-q"]
-  timeout = 900  # seconds, 900 where it is not set
-  ```
 
 - **`archive`** folds the change's deltas into the living specs. A standard change is archived only once verified.
   If the living spec changed under a requirement the delta touches, the archive stops and writes nothing: read the
   current requirement, update the delta, then run `adk-spec rebase <id>` and approve again.
 
 - **`status`** lists each open change and what to do next with it, in groups: `Waiting on you`, `Ready to run`,
-  and with `--all` `Done`.
+  and with `--all` `Done`. A change whose `change.json` does not read is listed with the reason, and stops no other.
 
 - **`init`** makes `.spec/` with a config, a constitution and the folders for specs and changes. In an existing
   repository it then reads the code, saying first what that costs (up to seven model calls; `--no-explore` skips
@@ -131,8 +676,15 @@ the check blocks it as an error does, with no `--override`.
   each statement with a quote. Rules already true of the code are drafted into the new constitution, each with its
   evidence, for you to keep, edit or delete. Every change's reading starts from the profile. `init --refresh` reads
   the code again and rewrites the profile; it drafts rules only while the constitution is still the template.
-  Without a model set up, `init` makes the tree
-  and says how to read the code later.
+  Without a model set up, `init` makes the tree and says how to read the code later.
+
+- **`plan`** drafts a change's tasks again, and its design where one is owed, after you edited the brief or the
+  specs. Where a task is already ticked it replaces nothing unless you add `--replace`, and it keeps a design you
+  wrote or edited, planning from it, unless you add `--replace`. It reads the code first where the change has no
+  `context.md`; `--no-explore` skips that.
+- **`check`** makes the check `approve` makes, and writes `reports/check.md`, without approving.
+- **`rebase`** records anew what a change's deltas are written against, after a living spec moved under them.
+- **`validate`** checks the structure of the living specs and of every open change. `--strict` fails on a warning.
 
 ### Working in an existing repository
 
@@ -161,33 +713,24 @@ design and the tasks rest on what is there and not on file names. `plan` reads i
   stands; delete it and the next `adk-spec plan <id>` reads the code again. It is no part of an approval.
 - **What it costs.** Up to seven model calls: one to choose, four to state, two to review. Measured live on a
   repository of 268 files it took some 30,000 tokens; far less in a small repository. It is the largest part of
-  `propose`. `[limits] max_tokens` holds it, and the `tokens` line shows it.
+  `propose`. Under `[limits] max_tokens` it spends at most half of what is left, and the rest is kept for the
+  brief, the specs and the plan; the `tokens` line shows what it spent.
 - **It never stops a plan.** A reading that fails or finds nothing says so in one line, and the plan is drafted
   without it.
 
-To keep paths out of every command, name them in `.spec/config.toml`. A pattern with no slash, such as `*.pem` or
-`secrets`, names a file or a folder at any depth. One with a slash, such as `vendor/**`, is a path from the folder
-that holds `.spec/`. Letters match in either case. An excluded path is never read, never listed among the repository's files, and
-never part of the diff `verify` sends, so work done only there is no evidence for `verify`. A `context.md` written
-before a path was excluded still holds what it quoted from it: delete the file to read again.
+To keep paths out of every command, name them in `.spec/config.toml`, read as `.gitignore` reads them. A pattern
+with no slash, or a slash at its end alone, such as `*.pem`, `secrets` or `secrets/`, names a file or a folder at
+any depth. One with a slash before its end, such as `vendor/**` or `config/secrets`, is a path from the folder that
+holds `.spec/`, and so is one that opens with a slash, such as `/build`, which keeps out the top folder alone. A
+folder is kept out with all it holds. Letters match in either case. An excluded path is never read, never listed
+among the repository's files, and never part of the diff `verify` sends, so work done only there is no evidence for
+`verify`. A `context.md` written before a path was excluded still holds what it quoted from it: delete the file to
+read again.
 
 A file that holds a private key is treated as an excluded path is, with nothing to set up: it is never read, and
 `verify` leaves its changes out and says so.
 
-```toml
-[repository]
-exclude = ["vendor/**", "**/*.pem", "config/production.yaml"]
-```
-
-### A feature across repositories
-
-A feature often changes more than one repository: an API and the web app that calls it. Name the others with the
-change, as often as needed:
-
-```
-adk-spec propose "Let users sign in with a passkey." --with ../api --with web=../web-app
-adk-spec plan sign-in-with-a-passkey --with ../mobile
-```
+### A feature across repositories, in depth
 
 - `--with PATH` names a repository after its folder; `--with NAME=PATH` names it yourself. A path is read from the
   folder you run the command in, as your shell reads it, and recorded in the change; the next change names its own,
@@ -204,84 +747,13 @@ adk-spec plan sign-in-with-a-passkey --with ../mobile
 - `approve` records where the work begins in each, and `verify` judges the work in all of them. Name a repository's
   starting point by hand with `verify <id> --base api=<commit>`, for one named after the change was approved.
 
-### Inside a coding assistant
-
-`adk-spec-mcp` serves six of the commands as MCP tools to a coding assistant: `propose` (revising an open change
-too), `plan`, `check`, `verify`, `status` and `validate`. Each runs as it does in the terminal, on adk-spec's own
-models and settings, and asks no question: points a brief leaves open come back in its output, for the assistant to
-put to you. `approve` and `archive` stay yours, in a terminal: approving records your decision. So does a change
-that spans other repositories: start it with `adk-spec propose --with` in a terminal, and the tools keep them.
-
-VS Code with GitHub Copilot, in `.vscode/mcp.json`:
-
-```json
-{
-  "servers": {
-    "adk-spec": {
-      "type": "stdio",
-      "command": "uv",
-      "args": ["run", "--project", "/path/to/adk_spec", "adk-spec-mcp", "--root", "${workspaceFolder}"]
-    }
-  }
-}
-```
-
-Claude Code, from the repository's folder:
-
-```
-claude mcp add adk-spec -- uv run --project /path/to/adk_spec adk-spec-mcp --root "$PWD"
-```
-
-A `propose` that reads the code takes minutes; an editor that gives up on a tool sooner needs its tool timeout
-raised.
-
-### To redo one step
-
-You never need these in a normal change. Each does one step of the flow again, by itself.
-
-```
-adk-spec plan <id>
-adk-spec check <id>
-adk-spec rebase <id>
-adk-spec validate
-adk-spec new <id> --tier lean
-```
-
-- `plan` drafts a change's tasks again, and its design where one is owed, after you edited the brief or the specs.
-  Where a task is already ticked it replaces nothing unless you add `--replace`, and it keeps a design you wrote or
-  edited, planning from it, unless you add `--replace`. It reads the code first where the
-  change has no `context.md`; `--no-explore` skips that.
-- `check` makes the check `approve` makes, and writes `reports/check.md`, without approving.
-- `rebase` records anew what a change's deltas are written against, after a living spec moved under them.
-- `validate` checks the structure of the living specs and of every open change. `--strict` fails on a warning too.
-- `new` starts a change you write by hand: `brief.md`, `tasks.md`, and one `specs/<capability>/spec.md` for each
-  capability it touches, with whole requirement blocks under `## ADDED Requirements`, `## MODIFIED Requirements`
-  and `## REMOVED Requirements`. Then `approve` and `archive` as above.
-
-### Setup
-
-```
-adk-spec login
-adk-spec models
-adk-spec smoke
-```
-
-- `login` logs in to GitHub Copilot once, with GitHub's device flow.
-- `models` lists the models the chosen arm serves. It only reads the provider's list and calls no model.
-- `smoke` runs one stage alone, to prove the chosen arm answers in a schema. `smoke --check` says whether the arm
-  is ready and sends nothing.
-
 ### What a command costs, and what it sends
 
 `propose`, `verify`, `plan` and `check` call a model, and `approve` does where a standard change's check is not
 current. `[limits] max_tokens` in `.spec/config.toml` caps what one command may spend: once that much is spent no
 further call is sent, so a command overshoots by its last call at most, and `propose` asks no question whose answer
-it could not use.
-
-```toml
-[limits]
-max_tokens = 30000
-```
+it could not use. A ceiling below twice what the reading costs reads less: some 80,000 tokens leaves a `propose` on
+a repository of a few hundred files room for all of it.
 
 On a terminal a command says which stage it is on while it works. Every command that calls a model keeps what it
 sent and what came back under `.spec/runs/`, which ignores itself for git: one file a model pass, so a `propose`
@@ -297,7 +769,7 @@ key blocks, passwords in URLs, and values a name says are secret. If the scrub f
 shapes, not secrets, so it is a net and no guarantee: keep secrets in files git ignores, and name anything else
 that must not leave under `[repository] exclude`.
 
-## Watching a run in ADK's own interface
+### Watching a run in ADK's own interface
 
 `adk_spec/agent.py` is the shape ADK's interface loads. From inside a repository that holds `.spec/`, run
 `uv run --project <this checkout> adk web --no_use_local_storage <this checkout>` and choose `adk_spec`. One message
@@ -306,25 +778,41 @@ chat ends on the drafts. Nothing is written to `.spec/` and no question is asked
 ADK keeps each session, the code a reading showed included, in a `.adk` folder of the checkout. The commands are
 the product; this is for watching.
 
-## Measuring the model's stages
-
-`uv run python -m scripts.measure` builds seven small changes, runs `check`, `verify` or `plan` on each a few
-times on the arm your environment names, and reports how often each planted fault was caught, and whether the
-reading of the code named the place a change plugs in. It calls a model: about eight calls a run of the set, and
-it says the number before the first. `docs/measurements/README.md` says what each case plants.
-
-`uv run python scripts/dump_instructions.py` prints every stage's instruction, to compare before and after a change
-to one.
-
-## Notes for each system
+### Notes for each system
 
 - Windows: set `PYTHONUTF8=1` in the user environment. LiteLLM may otherwise read its own files as cp1252.
 - Windows on ARM64: set `UV_PYTHON_ARCH=x86_64`. LiteLLM ships no wheel for native ARM64.
 - macOS: install the Xcode Command Line Tools while `google-adk` is 2.14.1. `watchdog` 6.0.0 builds from source on
   Python 3.14.
+- Behind a company proxy that re-signs HTTPS, adk-spec trusts the operating system's certificate store.
 
-## Where things are
+## Developing adk-spec
 
+Everything above is for using adk-spec in your project. This part is for working on adk-spec itself, in its own
+folder.
+
+```shell
+uv sync --locked
+```
+
+The gate, before every commit, one command a line:
+
+```shell
+uv run ruff check .
+uv run ruff format --check .
+uv run pyrefly check
+uv run pytest -q
+```
+
+The tests run on a fake model and call none. `uv run python -m scripts.measure` builds seven small changes, runs
+`check`, `verify` or `plan` on each a few times on the arm your environment names, and reports how often each
+planted fault was caught, and whether the reading of the code named the place a change plugs in. It calls a model:
+about eight calls a run of the set, and it says the number before the first. `docs/measurements/README.md` says what
+each case plants. `uv run python scripts/dump_instructions.py` prints every stage's instruction, to compare before
+and after a change to one.
+
+- `docs/full-usage-guide.md`: how adk-spec compares with other spec kits, and the whole lifecycle in one picture.
 - `docs/reports/Spec driven framework on Google ADK.md`: the research this project rests on; `docs/research_notes/`
   holds the notes behind it, and `docs/reports/` the owner's own reports.
-- `docs/superpowers/plans/`: the implementation plans.
+- `docs/superpowers/plans/`: the implementation plans, and in its `README.md` the roadmap.
+- `CLAUDE.md` and `.github/copilot-instructions.md`: the architecture and the rules, for an assistant working here.

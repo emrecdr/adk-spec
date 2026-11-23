@@ -57,6 +57,8 @@ def _staged(path: Path, text: str) -> Path:
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as out:
             out.write(normalise(text))
+            out.flush()
+            os.fsync(out.fileno())  # on disk before it replaces the file: a crash leaves the old text or the new
         if os.name != "nt":  # a Windows file has no owner, group and other modes
             staged.chmod(_mode_for(path))
     except BaseException:

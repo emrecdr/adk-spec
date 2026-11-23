@@ -107,7 +107,7 @@ def _pattern(one: str) -> bool:
     """Whether `one` is a pattern git takes for a path under the workspace's root: some text on one line, with no
     colon at its start, which git reads as an instruction of its own, and no way out of the root, which git refuses,
     so that every file would then be listed and read with nothing said."""
-    inside = not one.startswith(("/", ":")) and ".." not in one.split("/")
+    inside = not one.startswith(("//", ":")) and ".." not in one.split("/")  # one slash anchors it, as in .gitignore
     return bool(one.strip()) and one.isprintable() and one == one.strip() and inside
 
 

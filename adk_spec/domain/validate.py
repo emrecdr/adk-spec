@@ -51,6 +51,7 @@ SEVERITY: dict[str, Severity] = {
     "brief.markers-over-budget": "ERROR",
     "brief.marker-malformed": "ERROR",
     "brief.marker-unresolved": "WARNING",
+    "change.unreadable": "ERROR",
     "change.missing-brief": "ERROR",
     "change.no-deltas": "ERROR",
     "change.missing-tasks": "WARNING",

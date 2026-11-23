@@ -353,6 +353,13 @@ def pytest_configure() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_disk_flush(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test waits on a disk flush for each file it writes: thousands of them, slow where the system really flushes.
+    The one test of the flush asks for it itself."""
+    monkeypatch.setattr(os, "fsync", lambda _fd: None)
+
+
+@pytest.fixture(autouse=True)
 def _umask_kept() -> Iterator[None]:
     """No test leaves its umask to the next: the login sets 0o077 for its whole process."""
     umask = os.umask

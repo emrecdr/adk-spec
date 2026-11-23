@@ -34,11 +34,16 @@ WITHHELD = "(the output names a private key, so none of it is shown)"
 _BATCH = (".bat", ".cmd")
 
 
-def run_tests(root: Path, argv: Sequence[str], *, timeout: int, name: str = "") -> TestRun:
-    """The tests run in `root` by `argv`, judged by their own exit and stopped past `timeout` seconds. Never an
-    error: a program that cannot be found or started is a run that did not pass, and says why."""
+def run_tests(
+    root: Path, argv: Sequence[str], *, timeout: int, name: str = "", without: frozenset[str] = frozenset()
+) -> TestRun:
+    """The tests run in `root` by `argv`, judged by their own exit and stopped past `timeout` seconds, given the
+    person's environment less the names in `without`: what adk-spec's own `.env` added, a provider's key among them,
+    is adk-spec's, not the project's. Found by the third audit: the tests, code an agent may just have written, were
+    handed the key. Never an error: a program that cannot be found or started is a run that did not pass, and says
+    why."""
     words = tuple(argv)
-    env = _environment(root)
+    env = {key: value for key, value in _environment(root).items() if key not in without}
     program, why = _program(words[0], env.get("PATH", ""))
     if program is None:
         return TestRun(name, words, f"not run: {words[0]}: {why}", "", None)

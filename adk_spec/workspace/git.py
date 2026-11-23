@@ -170,20 +170,27 @@ def head(root: Path, *, trust: bool = True) -> str | None:
 
 def _here(exclude: Sequence[str]) -> tuple[str, ...]:
     """What limits a git command to the files under the folder it runs in: none of `.spec/`, and none a person
-    excluded. Each of `exclude` is read as a `.gitignore` reads the common patterns, and never as less: one with no
-    slash, `*.pem` or `secrets`, names a file or a folder at any depth, one with a slash a path from that folder,
-    and letters match in either case. Handed to git as written, `*.pem` kept only the top folder's keys out, and
-    `vendor/**` nothing of a `Vendor/` on a system where the two are one folder."""
+    excluded. Each of `exclude` is read as a `.gitignore` reads the common patterns, and never as less: `as_globs`
+    says how. Handed to git as written, `*.pem` kept only the top folder's keys out, and `vendor/**` nothing of a
+    `Vendor/` on a system where the two are one folder."""
     return (*_HERE, *(f":(exclude,glob,icase){one}" for one in as_globs(exclude)))
 
 
 def as_globs(exclude: Sequence[str]) -> tuple[str, ...]:
-    """Each of `exclude` as the globs it is read as, from the workspace's root: one with no slash, at any depth, as a
-    file or a folder; one with a slash, as written. Matched in either case. What git is handed, and what the installed
-    libraries are held to, so that one pattern keeps a path out of both."""
-    return tuple(
-        one for pattern in exclude for one in ((pattern,) if "/" in pattern else (f"**/{pattern}", f"**/{pattern}/**"))
-    )
+    """Each of `exclude` as the globs it is read as, from the workspace's root, as `.gitignore` reads it: one with a
+    slash at its start or before its end, as a path from the root; one with none, or with a slash at its end alone,
+    at any depth;
+    either one as a file, or a folder and all it holds. Matched in either case. What git is handed, and what the
+    installed libraries are held to, so that one pattern keeps a path out of both. Found by the third audit: `secrets/`
+    was taken for a path from the root, and `config/secrets/b.txt` reached every command."""
+    globs: list[str] = []
+    for pattern in exclude:
+        bare = pattern.removeprefix("/").rstrip("/")
+        if not bare:
+            continue
+        base = bare if "/" in pattern.rstrip("/") else f"**/{bare}"  # a slash at its start anchors it too
+        globs += [base] if base.endswith("/**") else [base, f"{base}/**"]
+    return tuple(globs)
 
 
 def _listed(root: Path, *which: str, exclude: Sequence[str], trust: bool = True) -> list[str]:

@@ -482,3 +482,44 @@ def test_the_line_that_opens_a_block_is_never_a_bracket_alone(tmp_path) -> None:
     cs = "public class Auth\n{\n    public void SignIn()\n    {\n        StartSession(user);\n    }\n}\n"
     held = made(tmp_path, {**FILES, "Auth.cs": cs})
     assert held.within("Auth.cs", 5) == "public void SignIn()" and held.within("Auth.cs", 3) == "public class Auth"
+
+
+def test_a_key_in_a_large_file_or_one_not_utf8_is_withheld_from_the_diff_too(tmp_path, monkeypatch) -> None:
+    """Found by the third audit: whether a file holds a key was asked only of a UTF-8 file within the read cap, so a
+    hunk from a key's middle in a larger file, or in one saved as Latin-1, reached the diff `verify` sends."""
+    monkeypatch.setattr(source, "FILE_MAX_BYTES", 300)
+    (tmp_path / "conf").mkdir(parents=True)
+    (tmp_path / "conf/latin.txt").write_bytes(("caf\xe9 = 1\n" + PEM).encode("latin-1"))
+    commit = repository(tmp_path, {**FILES, "conf/big.txt": "x = 1\n" * 100 + PEM})
+    for name in ("conf/big.txt", "conf/latin.txt"):
+        path = tmp_path / name
+        path.write_bytes(path.read_bytes().replace(b"MIIEow3", b"MIINew3"))
+    whole = diff(tmp_path, commit, exclude=())
+    assert whole.count("MIINew3") == 2
+    kept, held = Source.of(tmp_path, exclude=()).without_keys(whole)
+    assert held == ("conf/big.txt", "conf/latin.txt") and "MIINew3" not in kept
+
+
+def test_a_file_read_before_as_too_large_is_still_searched_for_a_key(tmp_path, monkeypatch) -> None:
+    """Found by the cleanup review: what a reading of a file said, "too large to read", was taken for the answer to
+    whether it holds a key, so a file the reading had opened was never searched."""
+    monkeypatch.setattr(source, "FILE_MAX_BYTES", 300)
+    commit = repository(tmp_path, {**FILES, "conf/big.txt": "x = 1\n" * 100 + PEM})
+    path = tmp_path / "conf/big.txt"
+    path.write_text(path.read_text(encoding="utf-8").replace("MIIEow3", "MIINew3"), encoding="utf-8", newline="\n")
+    held = Source.of(tmp_path, exclude=())
+    assert "too large" in " ".join(held.gathered(["conf/big.txt"], [], []).left_out)
+    kept, withheld = held.without_keys(diff(tmp_path, commit, exclude=()))
+    assert withheld == ("conf/big.txt",) and "MIINew3" not in kept
+
+
+def test_a_changed_file_past_the_search_cap_is_withheld_only_where_it_holds_key_text(tmp_path, monkeypatch) -> None:
+    """Found by the code review: every changed file past the cap was said to hold a key, and its work left out of
+    what `verify` judges. It is scanned in place for a key's first words, never read whole into memory."""
+    monkeypatch.setattr(source, "KEY_SEARCH_MAX_BYTES", 200)
+    commit = repository(tmp_path, {**FILES, "data/big.csv": "a,b\n" * 100, "conf/big.txt": "x = 1\n" * 100 + PEM})
+    (tmp_path / "data/big.csv").write_text("a,b\n" * 101, encoding="utf-8", newline="\n")
+    path = tmp_path / "conf/big.txt"
+    path.write_text(path.read_text(encoding="utf-8").replace("MIIEow3", "MIINew3"), encoding="utf-8", newline="\n")
+    kept, withheld = Source.of(tmp_path, exclude=()).without_keys(diff(tmp_path, commit, exclude=()))
+    assert withheld == ("conf/big.txt",) and "data/big.csv" in kept

@@ -38,11 +38,11 @@ OpenSpec started with a sprawling multi-command workflow before simplifying, and
   1. PROPOSE          adk-spec propose "<request>" [--with ../other-repo] [--tier lean|standard|strict]
      (Decision 1:     ├─ Triage: the model sizes the request (Phase 10's rules were removed by the owner)
       What to build?) │   └─ tier == none ──▶ exits cleanly (no change folder for trivial typos)
-                      ├─ Clarify: <=3 open points/round, <=3 rounds, `=` takes suggestion (or --no-input)
-                      ├─ (Phase 13 [Built] strict: stops after brief.md and the specs; `plan` goes on)
-                      ├─ Write Brief + EARS/BDD Delta Specs (with stable REQ-<CAP>-NNN IDs, reading lessons.md)
-                      ├─ Explore Code [Built P6–P7]: Scout → Python Git Source (scrubbed, no keys) → Survey
+                      ├─ Explore Code first [Built P6–P7, P15]: Scout → Python Git Source (scrubbed, no keys) → Survey
                       │   └─ LLM Review checks quote attribution & names "## What is still unknown" → context.md
+                      ├─ Clarify: <=3 open points/round, <=3 rounds, `=` takes suggestion (or --no-input)
+                      ├─ Write Brief + EARS/BDD Delta Specs (with stable REQ-<CAP>-NNN IDs, reading lessons.md)
+                      ├─ (Phase 13 [Built] strict: stops after brief.md and the specs; `plan` goes on)
                       └─ Plan: Design (when owed / always in strict) + Tasks (T### [P] [REQ-...] + files + verify)
                              │
                       (Human reads & edits .spec/changes/<id>/*; Phase 11 [Built]: `propose "..." --id <id>` revises)
@@ -141,7 +141,7 @@ Edit `.spec/config.toml` to harden exclusions, set token limits, and register yo
 default_tier = "standard"
 
 [limits]
-max_tokens = 30000
+max_tokens = 80000
 keep_runs = 20
 
 [repository]
@@ -151,7 +151,7 @@ exclude = ["vendor/**", "**/*.pem", "*.key", "config/production.yaml"]
 # Phase 9 [Built]: only a test command you write here is ever run by verify: a list, run with no shell
 [verify]
 test = ["uv", "run", "pytest", "-q"]
-timeout = 900"
+timeout = 900
 ```
 
 Review `.spec/constitution.md` (`[Built]`, keep concise under 16,000 chars so every stage reads crisp rules):
@@ -269,9 +269,9 @@ What `adk-spec` does across repos `[Built: P7]`:
 adk-spec propose "Fix the crash when the export runs on an empty month."
 
 # Fast 3-command loop (no design, no check, no verify owed):
-adk-spec approve fix-jwt-refresh-grace
+adk-spec approve fix-the-crash-on-an-empty-month
 # ... fix bug + add unit test ...
-adk-spec archive fix-jwt-refresh-grace
+adk-spec archive fix-the-crash-on-an-empty-month
 ```
 
 **Scenario B — Typo / comment / throwaway tweak (`none`):**

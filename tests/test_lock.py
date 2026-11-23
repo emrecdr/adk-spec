@@ -90,3 +90,22 @@ def test_a_run_removes_its_lock_though_the_machines_name_changed_meanwhile(tmp_p
     with held(ws):
         monkeypatch.setattr(platform, "node", lambda: "renamed-on-another-network")
     assert not (ws.home / LOCK).exists()
+
+
+def test_a_lock_that_could_not_be_written_is_not_left_behind(tmp_path, monkeypatch) -> None:
+    """Found by the third audit: a full disk failed the lock's write after the file was made, and the empty lock,
+    which names no run, was refused to every command after it until a person removed it."""
+    from adk_spec.workspace import lock
+
+    class Unwritable(str):
+        def encode(self, *_args: object, **_kwargs: object) -> bytes:
+            raise OSError(28, "No space left on device")
+
+    ws = Workspace.init(tmp_path)
+    monkeypatch.setattr(lock, "_mark", lambda: Unwritable("1 host"))
+    with pytest.raises(OSError, match="No space"), held(ws):
+        pass
+    monkeypatch.undo()
+    assert not (ws.home / LOCK).exists() and not (ws.home / TAKING).exists()
+    with held(ws):
+        pass

@@ -54,3 +54,9 @@ def build_triage() -> LlmAgent:
 
 def read_triage(state: Mapping[str, Any]) -> Triage | str:
     return read_back(state, KEY, Triage)
+
+
+def sized_text(sized: Triage) -> str:
+    """The capabilities a request was sized as touching, as the brief is shown them: by `propose` and by the chat
+    alike, which found by the third audit had drifted apart."""
+    return ", ".join(sized.capabilities)

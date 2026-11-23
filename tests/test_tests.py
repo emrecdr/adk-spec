@@ -231,3 +231,28 @@ def test_a_program_that_ended_and_was_waited_for_is_not_stopped(monkeypatch) -> 
     process.waited(started, 60)
     process.stop(started)
     assert stopped == []
+
+
+def test_the_tests_are_not_given_the_keys_adk_spec_read_from_its_own_env_file(tmp_path, monkeypatch) -> None:
+    """Found by the third audit: `verify` loaded the checkout's `.env` into its own environment, and handed it whole
+    to the project's test command, code an agent may just have written: the provider's key with it. A variable the
+    person's shell set stays, since `.env` never overrides one."""
+    monkeypatch.setenv("FROM_THE_SHELL", "kept")
+    code = "import os\nprint('file', os.environ.get('FROM_THE_FILE'))\nprint('shell', os.environ.get('FROM_THE_SHELL'))"
+    monkeypatch.setenv("FROM_THE_FILE", "a key")
+    run = run_tests(tmp_path, program(tmp_path, code), timeout=60, without=frozenset({"FROM_THE_FILE"}))
+    assert "file None" in run.tail and "shell kept" in run.tail
+
+
+def test_the_cli_says_which_variables_its_env_file_added(tmp_path, monkeypatch) -> None:
+    """What `verify` keeps from the tests: the names `.env` added, never one the shell had set."""
+    from adk_spec.interfaces import cli
+
+    env = tmp_path / ".env"
+    env.write_text("FROM_THE_FILE=a key\nFROM_THE_SHELL=from the file\n", encoding="utf-8")
+    monkeypatch.setenv("FROM_THE_SHELL", "kept")
+    monkeypatch.delenv("FROM_THE_FILE", raising=False)
+    try:
+        assert cli._loaded(env) == {"FROM_THE_FILE"} and os.environ["FROM_THE_SHELL"] == "kept"
+    finally:
+        os.environ.pop("FROM_THE_FILE", None)

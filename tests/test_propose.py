@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from conftest import (
     CANNED_REVIEW,
+    CANNED_SURVEY,
     CANNED_TRIAGE,
     DELTAS_ON_A_MISSING_ID,
     approved,
@@ -325,9 +326,17 @@ def test_an_open_change_whose_delta_does_not_read_still_holds_its_ids(tmp_path, 
     assert asked(fake_provider, DELTAS) == 1
 
 
-def test_an_answer_the_provider_cut_short_is_not_asked_again(tmp_path, capsys, fake_provider) -> None:
+@pytest.mark.parametrize(
+    "ended",
+    [
+        pytest.param({"error_code": "MAX_TOKENS", "error_message": "Maximum tokens reached"}, id="litellm"),
+        pytest.param({"finish_reason": "MAX_TOKENS"}, id="gemini"),
+    ],
+)
+def test_an_answer_the_provider_cut_short_is_not_asked_again(tmp_path, capsys, fake_provider, ended) -> None:
     """Found by the code review: a reply cut at the model's output limit was called a schema fault, asked for again
-    twice with the same request, and paid for three times."""
+    twice with the same request, and paid for three times. Found by the third audit: Gemini says it by a finish
+    reason alone, with no error code, and was still asked again."""
     from google.adk.models.llm_response import LlmResponse
     from google.genai import types
 
@@ -335,12 +344,7 @@ def test_an_answer_the_provider_cut_short_is_not_asked_again(tmp_path, capsys, f
     spent = types.GenerateContentResponseUsageMetadata(
         prompt_token_count=100, candidates_token_count=20, total_token_count=120
     )
-    cut = LlmResponse(
-        content=types.ModelContent('{"deltas": [{"capa'),
-        error_code="MAX_TOKENS",
-        error_message="Maximum tokens reached",
-        usage_metadata=spent,
-    )
+    cut = LlmResponse(content=types.ModelContent('{"deltas": [{"capa'), usage_metadata=spent, **ended)
     fake_provider.answers_when(DELTAS, cut)
     assert proposed(tmp_path, "--tier", "lean", "--id", "cut") == 3
     said = capsys.readouterr()
@@ -641,3 +645,30 @@ def test_the_brief_is_told_the_capabilities_triage_sized_the_request_as_touching
     assert proposed(tmp_path, "--id", "sized", "--no-explore") == 0
     brief = sent_to(fake_provider, BRIEF)
     assert between(brief, "sized") == "auth"
+
+
+def test_under_a_ceiling_the_reading_leaves_the_drafting_half_of_what_is_left(tmp_path, capsys, fake_provider) -> None:
+    """Found by the third audit: under `[limits] max_tokens` the reading, the largest part of `propose`, spent the
+    ceiling, and the brief or the deltas were refused every time: nothing written, at the README's own example. The
+    reading is held to half of what is left, and says where it stopped."""
+    seeded(tmp_path)
+    repository(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", LIMITS + "max_tokens = 840\n")
+    fake_provider.answers_when(SURVEY, {**CANNED_SURVEY, "more_searches": ["password"]})  # it would read on and on
+    assert proposed(tmp_path, "--id", "capped") == 0
+    assert (tmp_path / ".spec/changes/capped/tasks.md").is_file()
+    assert _order(fake_provider)[-3:] == [BRIEF, DELTAS, TASKS]
+    assert "the reading's share of the run's token ceiling of 840" in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_the_tier_triage_chose_is_said_before_the_reading_spends(tmp_path, capsys) -> None:
+    """Found by the third audit: the tier was said only at the end, after minutes of reading, and never where the run
+    failed. Said first, a wrong tier is stopped and named with `--tier` before the reading is paid for."""
+    seeded(tmp_path)
+    repository(tmp_path)
+    assert proposed(tmp_path, "--id", "told") == 0
+    out = capsys.readouterr().out
+    assert "sized     lean: one small change\nexplored" in out
+    assert proposed(tmp_path, "--tier", "lean", "--id", "named") == 0
+    assert "sized" not in capsys.readouterr().out, "a tier named is not sized, nor said again"

@@ -94,21 +94,37 @@ class _Gathering:
         self.packages: list[tuple[str, str, tuple[str, ...]]] = []
         self.paths: list[str] = []
         self.unread: list[str] = []
+        #: The packages found once the cap was full: counted, never read, and not named, as one excluded is not.
+        self.past = 0
+        self._turned_away = False
+
+    @property
+    def full(self) -> bool:
+        """Whether the cap is spent: filled, or a package turned away for it. Found by the code review: filled
+        exactly alone, the walk went on past every package that overflowed it."""
+        return self._turned_away or len(self.paths) >= LIBRARY_MAX_PATHS
 
     def add(self, name: str, version: str, tops: tuple[str, ...], files: Sequence[str]) -> None:
         kept = [path for path in files if not _excluded(f"{self.base}/{path}", self.globs)]
         if not kept and files:
             return  # excluded whole: not even named
         if len(self.paths) + len(kept) > LIBRARY_MAX_PATHS:
-            self.unread.append(f"{name}: past the {LIBRARY_MAX_PATHS:,} files an environment lists")
+            self.unread.append(f"{name}: {_past_the_cap()}")
+            self._turned_away = True
             return
         self.packages.append((name, version, tops))
         self.paths += kept
 
     def made(self, scheme: str, where: str, root: Path) -> Environment:
+        if self.past:
+            self.unread.append(f"{self.past} more package{'' if self.past == 1 else 's'}: {_past_the_cap()}")
         return Environment(
             scheme, where, root, tuple(self.packages), tuple(sorted(set(self.paths))), tuple(self.unread)
         )
+
+
+def _past_the_cap() -> str:
+    return f"past the {LIBRARY_MAX_PATHS:,} files an environment lists"
 
 
 def _python(root: Path, globs: Sequence[str]) -> Environment | None:
@@ -172,6 +188,10 @@ def _node(root: Path, globs: Sequence[str]) -> Environment | None:
         return None
     held = _Gathering("node_modules", globs)
     for name, folder in _packages(modules):
+        if held.full:  # found by the third audit: each package after the cap was walked whole, for nothing
+            excluded = _excluded(f"node_modules/{name}", globs) or _excluded(f"node_modules/{name}/package.json", globs)
+            held.past += not excluded
+            continue
         try:
             files = [f"{name}/{path}" for path in _walked(folder)]
         except OSError as exc:

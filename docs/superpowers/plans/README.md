@@ -396,6 +396,28 @@ and a step moves to code only where its output is a function of its input with n
 
 ## Decided, and next
 
+- **The third audit, 23 November 2026**: a read-only audit's findings, each checked by an independent verifier that
+  tried to disprove it, then fixed test first on the branch `audit3-fixes`, as recommended. Fixed: exclude patterns
+  read as `.gitignore` reads them (`secrets/` at any depth, a folder with all it holds); `verify`'s tests given no
+  variable adk-spec's own `.env` set; open points printed with their suggestions under `--no-input`; a lock that
+  could not be written removed; one unreadable `change.json` stopping no other change; the reading held to half of
+  what is left of a token ceiling, and the README's example ceiling raised from 30,000 to 80,000; the tier said
+  before the reading; a refusal counting as the check did; every next line naming its command; the editor's tools
+  told how to implement, each parameter described; a capability with no living spec named as new to the stages, the
+  cause of the send-back met most; keys in a large or non-UTF-8 file withheld from a diff; a Gemini answer cut at its
+  limit not asked again; the chat given triage's capabilities; `new` under the lock; a file on disk before it
+  replaces the old one; a folder listed once while it does not change; no node package walked past the cap. The
+  README is a usage guide, at the owner's request. Refuted: statements dropped for a wrong path were invented quotes.
+  Deferred, with their reasons:
+  - **A propose that fails late keeps nothing** (the reading and the answers are lost). Keeping a half-written change
+    reverses the rule that a change is written whole or not at all, and makes `validate` fail for the workspace: the
+    owner's decision. The most common late failure, a delta with no purpose, is fixed at its cause.
+  - **An Agent Skill beside the MCP server.** A skill cannot ship inside a Python package; adk-spec would have to
+    write one into the repository it works in (`.claude/skills/`, which Copilot reads too): the owner's decision.
+  - **Progress notifications from the MCP tools.** Neither VS Code nor Claude Code times a local server out at 60 s,
+    and Claude Code is reported to send no progress token, so a heartbeat would be cosmetic in VS Code alone.
+  - **The tier recorded in an approval.** It catches only an accidental edit of `change.json`, which a hand edit could
+    already forge, and a new field makes every older adk-spec refuse the file.
 - **A second way to use adk-spec, beside the terminal**: decided on 22 November 2026, as recommended. It is an MCP
   server for coding assistants, phase 14 above.
 - **A change file written by a newer adk-spec**: decided on 22 November 2026, as recommended. An older adk-spec keeps

@@ -370,10 +370,12 @@ _FIX_THE_CHECK = "fix what reports/check.md lists, then run `adk-spec approve {c
 #: reads it. A check that is missing or stale holds nothing: the approval makes it.
 _HOLDS: tuple[tuple[str, Actor, str], ...] = (
     (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
-    ("brief.marker-unresolved", "you", "settle the open point in brief.md"),
+    ("brief.marker-unresolved", "you", "settle the open point in brief.md, then {after}"),
     (_PLAN, "run", "run `adk-spec plan {cid}`"),
     ("check.blocking", "you", _FIX_THE_CHECK),
 )
+#: What may hold a draft once its open point is settled: the holds after it.
+_AFTER_A_POINT = _HOLDS[[code for code, _actor, _phrase in _HOLDS].index("brief.marker-unresolved") + 1 :]
 
 
 def _after_approval(
@@ -386,7 +388,7 @@ def _after_approval(
         # The approval was asked again, made the check of the edited files, and was stopped by what it found.
         return Step("you", _FIX_THE_CHECK.format(cid=cid))
     if stale:  # the edit that voided the approval made a check stale as well, which the approval makes again
-        return Step("you", f"approve again: {', '.join(stale)} changed since the approval")
+        return Step("you", f"{', '.join(stale)} changed since the approval: run `adk-spec approve {cid}` again")
     if errors:  # a base that moved, a spec that no longer reads
         return Step("you", f"fix what `adk-spec validate {cid}` lists")
     if state.status == "verified" and drifted and DEMANDS[state.tier].verified:
@@ -394,7 +396,8 @@ def _after_approval(
     if state.status == "verified":
         return Step("run", f"run `adk-spec archive {cid}`")
     if state.verification and not state.verification.tests_passed:
-        return Step("you", f'the tests failed: fix them and run `adk-spec verify {cid}`, or verify --override "<why>"')
+        why = f'`adk-spec verify {cid} --override "<why>"`'
+        return Step("you", f"the tests failed: fix them and run `adk-spec verify {cid}`, or {why}")
     last = "verify" if DEMANDS[state.tier].verified else "archive"
     return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
 
@@ -420,9 +423,13 @@ def next_step(
     plan = [found for found in findings if settled_by_plan(found, started=started)]
     held = {found.code for found in (*findings, *check)} | ({_PLAN} if plan else set())
     held |= {_ERROR for found in findings if found.severity == "ERROR" and found not in plan}
+    # Every next step names the command that comes after it, the hold after an open point included: found by the
+    # third audit, three did not, and by the code review, "then approve" where a blocking check would refuse it.
+    rest = [phrase for code, _actor, phrase in _AFTER_A_POINT if code in held]
+    after = rest[0].format(cid=cid) if rest else f"run `adk-spec approve {cid}`"
     for code, actor, phrase in _HOLDS:
         if code in held:
-            return Step(actor, phrase.format(cid=cid))
+            return Step(actor, phrase.format(cid=cid, after=after))
     # What blocks an approval and has no step of its own. A check the approval makes itself is no such thing.
     left = [owed for owed in check if owed.code not in _MADE_BY_APPROVAL]
     if approve_blockers(state, findings) or check_stops(left):

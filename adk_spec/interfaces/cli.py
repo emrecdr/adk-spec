@@ -32,7 +32,7 @@ from ..domain.context_md import (
     render_context,
     unknown_count,
 )
-from ..domain.convert import kept_ids, render_design, revision, slug_of, to_findings, to_tasks
+from ..domain.convert import kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.lifecycle import (
     DEMANDS,
@@ -100,6 +100,7 @@ from ..workspace.layout import (
 )
 from ..workspace.layout import CONTEXT as CONTEXT_FILE
 from ..workspace.layout import DESIGN as DESIGN_FILE
+from ..workspace.layout import STATE as STATE_FILE
 from ..workspace.layout import TASKS as TASKS_FILE
 from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
@@ -184,7 +185,7 @@ def _parser() -> _Top:
     new = commands.add_parser("new", help="start a change: its folder and its state file")
     new.add_argument("id", help="the change's name: lowercase words joined by hyphens")
     new.add_argument("--tier", choices=TIERS, help="how much ceremony it gets (default: the config's)")
-    new.set_defaults(handler=_new)
+    new.set_defaults(handler=_locked(_new))
 
     validate = commands.add_parser("validate", help="check the structure of the living specs and of open changes")
     validate.add_argument("id", nargs="?", help="one change to check, in place of every open one")
@@ -219,13 +220,15 @@ def _parser() -> _Top:
     propose.add_argument("--id", help="the change's name (default: made from the brief's title)")
     propose.add_argument("--tier", choices=TIERS, help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
-    propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
+    propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code")
     propose.add_argument("--with", dest="with_", action="append", default=[], metavar="PATH", help=WITH_HELP)
     propose.set_defaults(handler=_propose)
 
     plan = commands.add_parser("plan", help="draft a change's tasks again, and its design where one is owed")
     plan.add_argument("id", help="the change")
-    plan.add_argument("--replace", action="store_true", help="draft anew although a task of the list is ticked")
+    plan.add_argument(
+        "--replace", action="store_true", help="draft anew although a task is ticked, or the design was edited"
+    )
     plan.add_argument("--no-explore", action="store_true", help="read none of the repository's code for the plan")
     plan.add_argument("--with", dest="with_", action="append", default=[], metavar="PATH", help=WITH_HELP)
     plan.set_defaults(handler=_drafting(_planned))
@@ -498,16 +501,24 @@ def _validate(args: argparse.Namespace) -> int:
             )
         )
     for change_id in [args.id] if args.id else workspace.changes():
-        if workspace.state(change_id).status == "archived":  # folded in, its delta has no base now: nothing to check
+        try:
+            state = workspace.state(change_id)
+        except WorkspaceError as exc:  # one change whose state does not read stops no other's check
+            if args.id:
+                raise
+            unread = workspace.shown(workspace.home / CHANGES / change_id / STATE_FILE)
+            found.append(finding("change.unreadable", str(exc), path=unread))
             continue
-        found += _assessed(workspace, change_id, living, drift=False).findings
+        if state.status != "archived":  # folded in, an archived change's delta has no base now: nothing to check
+            found += _assessed(workspace, change_id, living, drift=False).findings
     stops = failed(found, strict=args.strict)
     if args.json:
         print(json.dumps({"findings": [held.model_dump() for held in found], "failed": stops}, indent=2))
         return EXIT_FINDINGS if stops else EXIT_OK
     _printed(found)
     errors = sum(held.severity == "ERROR" for held in found)
-    print(f"{errors} errors, {sum(held.severity == 'WARNING' for held in found)} warnings")
+    warnings = sum(held.severity == "WARNING" for held in found)
+    print(f"{errors} error{'' if errors == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}")
     return EXIT_FINDINGS if stops else EXIT_OK
 
 
@@ -520,9 +531,13 @@ def _status(args: argparse.Namespace) -> int:
     living, _found = workspace.specs()
     rows = []
     for change_id in workspace.changes():
-        if not args.all and workspace.state(change_id).status == "archived":  # history, which is not read
+        try:
+            if not args.all and workspace.state(change_id).status == "archived":  # history, which is not read
+                continue
+            assessed = _assessed(workspace, change_id, living)
+        except WorkspaceError as exc:  # one change that does not read stops no other: it is named, and why
+            rows.append({"id": change_id, "tier": "-", "status": "unread", "actor": "you", "next": str(exc)})
             continue
-        assessed = _assessed(workspace, change_id, living)
         state, step = assessed.state, assessed.step
         row = {"id": change_id, "tier": state.tier, "status": state.status, "actor": step.actor, "next": step.phrase}
         rows.append(row)
@@ -563,10 +578,12 @@ def _rebase(args: argparse.Namespace) -> int:
         print(f"{req_id}  dropped")
     if held == state.bases:
         print("nothing to record: every base stands")
-        return EXIT_OK
-    workspace.save_state(reopened(state, bases=held))
-    if state.approval is not None:
-        print(f"the approval is void: read what was stale, then run `{PROG} approve {args.id}` again")
+    else:
+        workspace.save_state(reopened(state, bases=held))
+        if state.approval is not None:
+            print(f"the approval is void: read what was stale, then run `{PROG} approve {args.id}` again")
+            return EXIT_OK
+    _say_next(workspace, args.id, living)  # it ends on what comes next, as every command that moves a change does
     return EXIT_OK
 
 
@@ -597,8 +614,11 @@ def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec]
 
 
 def _refused(change_id: str, blockers: list[Finding]) -> int:
+    """An approval refused, by the findings printed above it, which say what to do. Found by the third audit: a
+    count of its own, "1 findings block it", read against the check's "2 blocking"."""
     _printed(blockers)
-    print(f"{PROG}: `{change_id}` is not approved: {len(blockers)} findings block it", file=sys.stderr)
+    said = "the findings above block it" if len(blockers) > 1 else "the finding above blocks it"
+    print(f"{PROG}: `{change_id}` is not approved: {said}", file=sys.stderr)
     return EXIT_FINDINGS
 
 
@@ -757,17 +777,27 @@ def _env_file() -> Path | None:
     return CHECKOUT / ".env" if (CHECKOUT / "pyproject.toml").is_file() else None
 
 
+#: The names the checkout's `.env` added to this process's environment: adk-spec's own, kept from a project's tests.
+_FROM_ENV_FILE: set[str] = set()
+
+
 def _load_env() -> None:
     """The checkout's `.env` read into the environment, the shell winning over the file."""
     path = _env_file()
-    if path is None:
-        return
+    if path is not None:
+        _FROM_ENV_FILE.update(_loaded(path))
+
+
+def _loaded(path: Path) -> set[str]:
+    """`.env` at `path` read into the environment, never over a variable already set: the names it added."""
     from dotenv import load_dotenv
 
+    before = set(os.environ)
     try:
         load_dotenv(path, override=False, encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise UsageError(f"{path} is not UTF-8. Save it as UTF-8: Windows PowerShell 5.1's `>` writes UTF-16") from exc
+    return set(os.environ) - before
 
 
 def _line() -> str:
@@ -783,7 +813,7 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     A line is the answer; `=` takes the suggestion; an empty line leaves the point open; the end of the input, or
     no input at all, answers every question still to come with nothing."""
     points = "1 point" if len(questions) == 1 else f"{len(questions)} points"
-    print(f"The brief leaves {points} open. A line answers. `yes` or `=` takes the suggestion.")
+    print(f"The brief leaves {points} open. A line answers. `=` takes the suggestion, and `yes` one that says yes.")
     print("An empty line leaves the point open.")
     answers: list[str] = []
     ended = sys.stdin is None  # a process started with no terminal and no pipe
@@ -1202,7 +1232,8 @@ def _code_read(
     # Asked after only once there is code to read: a plan outside a repository needs no reading model.
     if why := require_ready(roles=ROLES):
         raise UsageError(why)
-    found, failure = _reading(workspace, "explore", change_id, {**seed, TREE: source.tree()}, ledger, source)
+    with ledger.held_to_half("the reading"):
+        found, failure = _reading(workspace, "explore", change_id, {**seed, TREE: source.tree()}, ledger, source)
     said = _explored_said(found, len(source.names), failure)
     if not found.statements:
         return _Read(said, "")
@@ -1578,7 +1609,7 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     runs = []
     for name, root, argv, timeout in [*asked, *source.tests()]:
         print(f"testing   {f'{name}: ' if name else ''}{scrub(' '.join(argv))[0]}")
-        done = run_tests(root, argv, timeout=timeout, name=name)
+        done = run_tests(root, argv, timeout=timeout, name=name, without=frozenset(_FROM_ENV_FILE))
         took = "" if done.seconds is None else f" in {done.seconds:.1f} s"
         print(f"tests     {f'{name} ' if name else ''}{done.outcome}{took}")
         runs.append(done)
@@ -1642,6 +1673,7 @@ def _revising(workspace: Workspace, change_id: str | None) -> Change | None:
 
 def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | None) -> int:
     """A request drafted into a change, or the open change `change` revised by it."""
+    from ..domain.drafts import BriefDraft
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import Known
     from ..orchestration.plugins import UsageLedger
@@ -1700,7 +1732,18 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     review = _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first else None
     # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
     planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None}
-    return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned)
+    # With no question asked, each open point is printed with its suggestion, for an assistant to put to the person.
+    # Found by the third audit: the editor's tools promised them in the output, which held their count alone.
+    unasked = questions_of(BriefDraft.model_validate(state[BRIEF_KEY]), every=True) if args.no_input else []
+    return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned, unasked=unasked)
+
+
+def _open_said(unasked: Sequence[Mapping[str, str]]) -> None:
+    """Each open point a run asked no one about, and the answer it suggests."""
+    for one in unasked:
+        print(f"open      {plain(one['question'])}")
+        if one["suggested"]:
+            print(f"          suggested: {plain(one['suggested'])}")
 
 
 def _plan_command(workspace: Workspace, change_id: str, change: Change | None, no_explore: bool) -> str:
@@ -1734,6 +1777,7 @@ def _then_planned(
     keep: str | None,
     review: str | None = None,
     lessons: str | None = None,
+    unasked: Sequence[Mapping[str, str]] = (),
 ) -> int:
     """What `propose` does once its change is written: the plan, in the same command and under the same ceiling.
     An open point comes before it, since its answer shapes the tasks: none is drafted on a guess. A revised change
@@ -1745,6 +1789,7 @@ def _then_planned(
         print(f"tokens    {_spent(ledger)}")
         if waiting:
             print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
+            _open_said(unasked)
         elif review:
             print(f"plan      waits: a strict change is read first. Read brief.md and the specs, then {review}")
         if keep:
@@ -1861,7 +1906,7 @@ def _drafts(
     from ..orchestration.gate import FAILURE
     from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, PROFILE_TEXT, REQUEST, SIZED, TIER
     from ..orchestration.stages import CONSTITUTION as RULES
-    from ..orchestration.stages.triage import read_triage
+    from ..orchestration.stages.triage import read_triage, sized_text
 
     tier = args.tier
     if tier is None:
@@ -1872,7 +1917,9 @@ def _drafts(
         # The brief starts from the capabilities triage found. Found live: told nothing of them, a brief named three
         # for a two-function change triage had sized as one, and the deltas stage could not fill them.
         if not isinstance(found := read_triage(sized), str):
-            seed = {**seed, SIZED: ", ".join(found.capabilities)}
+            seed = {**seed, SIZED: sized_text(found)}
+            # Said before the reading spends: a wrong tier is stopped here, and named with --tier.
+            print(f"sized     {tier}: {plain(found.reason)}")
     profile = _optional(workspace, profile_text, PROFILE) or ""
     read = None
     if explore:  # aimed by the request, the brief to come

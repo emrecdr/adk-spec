@@ -10,6 +10,7 @@ from adk_spec.interfaces.cli import main
 from adk_spec.orchestration.stages import BOUNDARY
 from adk_spec.workspace import context
 from adk_spec.workspace.context import (
+    NEW_CAPABILITY,
     ContextTooLargeError,
     capability_index,
     constitution_text,
@@ -25,11 +26,15 @@ def test_the_index_gives_each_capability_its_purpose(tmp_path) -> None:
     assert capability_index(Workspace.init(tmp_path / "empty").specs()[0]) == ""
 
 
-def test_living_text_is_each_named_spec_whole_and_skips_one_not_there_yet(tmp_path) -> None:
+def test_living_text_is_each_named_spec_whole_and_names_one_not_there_yet_as_new(tmp_path) -> None:
+    """Found by the third audit: a capability with no living spec was left out without a word, and the deltas stage,
+    told to give a purpose only to a new one, was never told which were new: `delta.purpose-missing` was the send-back
+    met most."""
     specs = seeded(tmp_path).specs()[0]
     text = living_text(specs, ["auth", "search"])
-    assert text.startswith("=== auth\n# auth\n") and "REQ-AUTH-002" in text and "search" not in text
-    assert living_text(specs, ["search"]) == ""
+    assert text.startswith("=== auth\n# auth\n") and "REQ-AUTH-002" in text
+    assert text.endswith(f"=== search\n{NEW_CAPABILITY}")
+    assert living_text(specs, ["search"]) == f"=== search\n{NEW_CAPABILITY}"
 
 
 def test_a_context_past_the_limit_is_refused_by_name_and_never_cut(tmp_path, monkeypatch) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 from conftest import approved, held_open_from, run, seeded, state_of
@@ -45,7 +46,8 @@ def test_validate_lists_each_finding_with_its_place_and_fails_on_an_error(tmp_pa
     write_text(tmp_path / ".spec/specs/auth/spec.md", broken)
     assert run(tmp_path, "validate") == 1
     out = capsys.readouterr().out
-    assert "ERROR syntax .spec/specs/auth/spec.md:22" in out and "1 errors, 0 warnings" in out
+    assert "ERROR syntax .spec/specs/auth/spec.md:22" in out
+    assert "1 error, 0 warnings" in out, "found by the third audit: 1 errors"
 
 
 def test_warnings_fail_only_under_strict(tmp_path, capsys) -> None:
@@ -182,10 +184,13 @@ def test_a_rebase_voids_an_approval_and_says_what_was_stale(tmp_path, capsys) ->
     assert state_of(tmp_path)["status"] == "draft" and state_of(tmp_path)["approval"] is None
 
 
-def test_a_rebase_that_changes_nothing_keeps_the_approval(tmp_path) -> None:
+def test_a_rebase_that_changes_nothing_keeps_the_approval_and_says_what_comes_next(tmp_path, capsys) -> None:
+    """Found by the third audit: `rebase` was the one command that moves a change and ended on no next step."""
     seeded(tmp_path)
     approved(tmp_path)
+    capsys.readouterr()
     assert run(tmp_path, "rebase", "passkeys") == 0 and state_of(tmp_path)["status"] == "approved"
+    assert "next      implement tasks.md, then run `adk-spec archive passkeys`" in capsys.readouterr().out
 
 
 def test_an_approval_names_the_account_where_no_name_is_given(tmp_path, monkeypatch) -> None:
@@ -457,4 +462,45 @@ def test_yes_takes_the_suggestion_and_is_an_answer_where_none_is_suggested(monke
     # Found by review: "yes" taken for "No, keep it" stored the opposite of the person's yes. An answer reaches the
     # next draft beside its question, so a plain "yes" always says what the person meant.
     assert cli._answered(asked) == ["Yes, eight hours.", "yes: every device", "Each one.", "yes", "yes", ""]
-    assert "`yes` or `=` takes the suggestion" in capsys.readouterr().out
+    assert "`=` takes the suggestion, and `yes` one that says yes" in capsys.readouterr().out
+
+
+def test_one_change_whose_state_does_not_read_stops_no_other(tmp_path, capsys) -> None:
+    """Found by the third audit: a `change.json` left with a merge's conflict marks stopped `status`, `validate` and
+    `propose` for every change, `propose` before any model call. It is named, and the rest go on; its requirement IDs
+    stay spoken for."""
+    workspace = seeded(tmp_path)
+    other = workspace.new_change("other", "lean")
+    write_text(other / "change.json", "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> theirs\n")
+    write_text(other / "specs" / "billing" / "spec.md", "### Requirement: REQ-BILLING-001 Invoices\n")
+    assert run(tmp_path, "status") == 0
+    out = capsys.readouterr().out
+    assert "passkeys" in out and "other" in out and "change.json does not read" in out
+    assert run(tmp_path, "validate") == 1
+    assert "ERROR change.unreadable .spec/changes/other/change.json" in capsys.readouterr().out
+    living, _found = workspace.specs()
+    assert "REQ-BILLING-001" in workspace.taken(living)
+
+
+def test_new_waits_its_turn_as_every_command_that_writes_a_change_does(tmp_path, capsys) -> None:
+    """Found by the third audit: `new` wrote a change's folder while another run held the workspace, and could write
+    over the change that run was writing."""
+    import platform
+
+    seeded(tmp_path)
+    write_text(tmp_path / ".spec/.lock", f"{os.getpid()} {platform.node()}")
+    assert run(tmp_path, "new", "by-hand") == 2
+    assert "held by another adk-spec run" in capsys.readouterr().err
+    assert not (tmp_path / ".spec/changes/by-hand").exists()
+
+
+def test_a_change_json_saved_as_utf16_stops_no_other_change_either(tmp_path, capsys) -> None:
+    """Found by the code review: one saved through PowerShell 5.1's `>`, UTF-16, raised an error the guards did not
+    catch, and stopped every command as before."""
+    workspace = seeded(tmp_path)
+    other = workspace.new_change("other", "lean")
+    (other / "change.json").write_bytes('{"id": "other"}'.encode("utf-16"))
+    assert run(tmp_path, "status") == 0 and "other" in capsys.readouterr().out
+    assert run(tmp_path, "validate") == 1
+    assert "ERROR change.unreadable .spec/changes/other/change.json" in capsys.readouterr().out
+    workspace.taken(workspace.specs()[0])

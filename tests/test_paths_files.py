@@ -129,3 +129,38 @@ def test_a_written_file_is_as_readable_as_any_file_this_account_makes(tmp_path) 
         os.umask(mask)
     assert stat.S_IMODE((tmp_path / "new.md").stat().st_mode) == 0o644
     assert stat.S_IMODE(kept.stat().st_mode) == 0o664
+
+
+def test_a_folder_is_listed_once_for_many_lookups_and_again_once_it_changes(tmp_path, monkeypatch) -> None:
+    """Found by the third audit: each lookup listed its folder anew, so reading N changes listed `changes/` N times:
+    600 ms for `status` at 1,000 changes. A twin of a name made since is still refused: the folder's change is seen."""
+    from adk_spec.workspace import paths
+
+    for n in range(50):
+        (tmp_path / f"change-{n}").mkdir()
+    listed: list[str] = []
+    real = os.listdir
+    monkeypatch.setattr(paths.os, "listdir", lambda folder: listed.append(str(folder)) or real(folder))
+    for n in range(50):
+        inside(tmp_path, f"change-{n}")
+    assert len(listed) == 1
+    (tmp_path / "fresh").mkdir()
+    os.utime(tmp_path, ns=(1_000_000_000, 1_000_000_000))  # a stamp no listing above was made at
+    with pytest.raises(PathError, match="only by case"):
+        inside(tmp_path, "FRESH")
+    assert len(listed) == 2
+
+
+@pytest.mark.skipif(os.name == "nt", reason="NTFS stamps are fine, and a Windows folder says nothing of its size")
+def test_a_folder_whose_stamp_did_not_move_is_listed_again_once_its_size_did(tmp_path) -> None:
+    """Found by the code review: on a file system whose stamps are coarse, a name made in the same tick as the listing
+    was not seen. The folder's size and links are asked as well."""
+    (tmp_path / "fresh").mkdir()
+    before = os.stat(tmp_path).st_mtime_ns
+    inside(tmp_path, "fresh")
+    for n in range(40):  # enough entries that the folder's own size moves
+        (tmp_path / f"more-{n}").mkdir()
+    (tmp_path / "other").mkdir()
+    os.utime(tmp_path, ns=(before, before))  # a stamp that did not move, as on a coarse file system
+    with pytest.raises(PathError, match="only by case"):
+        inside(tmp_path, "OTHER")

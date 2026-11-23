@@ -88,23 +88,27 @@ def test_what_an_archive_waits_for() -> None:
     assert "already" in archive_blockers(approved().model_copy(update={"status": "archived"}), [])[0]
 
 
+#: What a draft holding an open point waits on, where the plan is still owed.
+SETTLE_THEN_PLAN = "settle the open point in brief.md, then run `adk-spec plan passkeys`"
+
+
 @pytest.mark.parametrize(
     ("state", "findings", "stale", "said"),
     [
         (DRAFT, [ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_BASE], ["approval"], "run `adk-spec approve passkeys`"),  # `approve` records it itself
         (DRAFT, [NO_TASKS], ["approval"], "run `adk-spec plan passkeys`"),
-        (DRAFT, [NO_TASKS, MARKER], ["approval"], "settle the open point in brief.md"),
+        (DRAFT, [NO_TASKS, MARKER], ["approval"], SETTLE_THEN_PLAN),
         (DRAFT, [ERROR, MARKER, NO_TASKS], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [NO_TASKS, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
-        (DRAFT, [MARKER], ["approval"], "settle the open point in brief.md"),
-        (DRAFT, [NO_TASK, MARKER], ["approval"], "settle the open point in brief.md"),
+        (DRAFT, [MARKER], ["approval"], "settle the open point in brief.md, then run `adk-spec approve passkeys`"),
+        (DRAFT, [NO_TASK, MARKER], ["approval"], SETTLE_THEN_PLAN),
         (DRAFT, [NO_TASK], ["approval"], "run `adk-spec plan passkeys`"),
         (DRAFT, [TASKS_SYNTAX], ["approval"], "fix what `adk-spec validate passkeys` lists"),  # a hand edit: theirs
         (DRAFT, [NO_TASK, ERROR], ["approval"], "fix what `adk-spec validate passkeys` lists"),
         (DRAFT, [OTHER], ["approval"], "run `adk-spec approve passkeys`"),
         (DRAFT, [], ["approval"], "run `adk-spec approve passkeys`"),
-        (approved(), [], ["tasks.md"], "approve again: tasks.md changed since the approval"),
+        (approved(), [], ["tasks.md"], "tasks.md changed since the approval: run `adk-spec approve passkeys` again"),
         (approved(), [], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
         (approved(), [ERROR], [], "fix what `adk-spec validate passkeys` lists"),
         (approved(), [OTHER], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
@@ -247,7 +251,9 @@ def test_a_standard_change_edited_after_approval_is_sent_to_approve_again_which_
     state = approved("standard").model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
     owed = check_blockers(state, {**FILES, "tasks.md": "sha256:edited"})
     said = next_action(state, [], ["tasks.md"], check=owed)
-    assert said == "approve again: tasks.md changed since the approval", "`approve` checks first, by itself"
+    assert said == "tasks.md changed since the approval: run `adk-spec approve passkeys` again", (
+        "`approve` checks first, by itself"
+    )
 
 
 def test_an_approval_makes_a_check_that_is_missing_or_stale_and_no_other() -> None:
@@ -297,3 +303,17 @@ def test_a_task_list_with_a_ticked_box_is_fixed_by_hand_not_by_plan() -> None:
     assert next_step(DRAFT, [NO_TASK], ["approval"]).phrase == "run `adk-spec plan passkeys`"
     begun = next_step(DRAFT, [NO_TASK], ["approval"], started=True).phrase
     assert begun == "fix what `adk-spec validate passkeys` lists"
+
+
+def test_an_open_point_names_what_holds_the_change_after_it_a_blocking_check_too() -> None:
+    """Found by the code review: settling the open point was followed by "then run approve", which a blocking check
+    then refused."""
+    from adk_spec.domain.lifecycle import check_blockers
+    from adk_spec.domain.model import Checked
+
+    found = ChangeState(id="passkeys", tier="standard", check=Checked(at="t", files=FILES, blocking=1))
+    step = next_action(found, [MARKER], ["approval"], check=check_blockers(found, FILES))
+    assert step == f"settle the open point in brief.md, then {_FIXED}"
+
+
+_FIXED = "fix what reports/check.md lists, then run `adk-spec approve passkeys`"

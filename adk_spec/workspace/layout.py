@@ -239,7 +239,11 @@ class Workspace:
         taken = {held.id for spec in specs.values() for held in (*spec.requirements, *spec.retired)}
         for change_id in self.changes():
             folder = self._folder(change_id)
-            if self._state(folder, change_id).status == "archived":  # history grows, and is not read
+            try:
+                archived = self._state(folder, change_id).status == "archived"  # history grows, and is not read
+            except WorkspaceError:  # one that does not read is taken to be open: its IDs are never handed out twice
+                archived = False
+            if archived:
                 continue
             for capability in self._holding(folder / SPECS, SPEC_FILE):
                 text = _text_or_bytes(folder / SPECS / capability / SPEC_FILE)
@@ -325,6 +329,8 @@ class Workspace:
         """A change's state file alone. `WorkspaceError` where it does not read, or names another change."""
         try:
             state = ChangeState.model_validate_json(read_text(folder / STATE))
+        except (NotTextError, OSError) as exc:  # found by the code review: UTF-16, as PowerShell 5.1's `>` writes
+            raise WorkspaceError(f"{self.shown(folder / STATE)} does not read: {exc}") from exc
         except ValidationError as exc:
             shown = self.shown(folder / STATE)
             # A field it does not know is a newer adk-spec's: ignored, it would be dropped by the next save.

@@ -221,3 +221,15 @@ async def test_the_tools_say_which_only_read_and_which_call_a_model(tmp_path) ->
         assert not tools[name].read_only_hint and tools[name].open_world_hint
     assert tools["check"].destructive_hint is False, "check writes its own report alone"
     assert tools["propose"].destructive_hint is not False, "propose may rewrite a change's files"
+
+
+@pytest.mark.asyncio
+async def test_every_parameter_says_what_it_is_and_the_assistant_is_told_how_to_implement(tmp_path) -> None:
+    """Found by the third audit: no parameter had a description, and the instructions said nothing of implementing
+    from the change's folder, of ticking tasks, or of what a `propose` costs."""
+    tools = await build_server(tmp_path).list_tools()
+    for tool in tools:
+        for name, held in tool.input_schema["properties"].items():
+            assert held.get("description"), f"{tool.name}.{name}"
+    for said in ("tasks.md", "tick", "voids the approval", "minutes"):
+        assert said in INSTRUCTIONS, said
