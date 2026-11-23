@@ -10,6 +10,7 @@ from adk_spec.domain.secrets import scrub_lines
 from adk_spec.orchestration.explore import MAX_CALLS
 from adk_spec.workspace.files import read_text, write_text
 from adk_spec.workspace.layout import CONSTITUTION_TEXT
+from adk_spec.workspace.skill import SKILL_PARTS
 
 SCOUT, SURVEY = "You choose what to read", "You read parts of a repository's code"
 REVIEW = "You review what a reading of a repository's code found"
@@ -45,7 +46,8 @@ def test_init_reads_the_code_writes_the_profile_and_drafts_the_rules(tmp_path, c
     reads_the_tests(fake_provider)
     assert run(tmp_path, "init") == 0
     out = capsys.readouterr().out
-    assert [line.split()[0] for line in out.splitlines()] == ["made", "reading", "explored", "wrote", "drafted", "next"]
+    said = [line.split()[0] for line in out.splitlines()]
+    assert said == ["made", "wrote", "reading", "explored", "wrote", "drafted", "next"], "the skill, then the reading"
     assert "wrote     .spec/profile.md\n" in out
     assert "drafted   1 rule into .spec/constitution.md: keep, edit or delete each\n" in out
     assert read_text(tmp_path / PROFILE).startswith("# This repository\n\nRead from the repository at commit ")
@@ -182,3 +184,68 @@ def test_init_asks_for_the_whole_repository_and_for_conventions_as_rules(tmp_pat
     brief = " ".join(between(scout, "brief").split())
     assert "the whole repository, not one feature of it" in brief
     assert "as a rule new code must follow" in brief and "one sentence" in brief
+
+
+# The Agent Skill: how an assistant uses adk-spec, read by GitHub Copilot and Claude Code from the repository.
+SKILL = "/".join(SKILL_PARTS)
+
+
+def test_init_writes_a_skill_an_assistant_reads_in_the_form_the_standard_asks(tmp_path, capsys) -> None:
+    """The owner's choice, 23 November 2026, after the third audit: `init` writes an Agent Skill, which both GitHub
+    Copilot and Claude Code read from `.claude/skills/`, so an assistant knows how to use adk-spec with nothing set up.
+    The form is agentskills.io's: a name that is its folder's, lowercase and hyphens, and a description of 1,024
+    characters at most."""
+    repository(tmp_path, FILES)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    assert f"wrote     {SKILL}" in capsys.readouterr().out
+    text = read_text(tmp_path / SKILL)
+    head, _, body = text.removeprefix("---\n").partition("\n---\n")
+    fields = dict(line.split(": ", 1) for line in head.splitlines())
+    assert fields["name"] == SKILL_PARTS[2] == "adk-spec"
+    assert 0 < len(fields["description"]) <= 1024
+    for said in ("adk-spec status", "--no-input", "tasks.md", "- [x]", "adk-spec approve", "--override"):
+        assert said in body, said
+
+
+def test_init_never_writes_over_a_skill_that_is_there(tmp_path, capsys) -> None:
+    repository(tmp_path, FILES)
+    write_text(tmp_path / SKILL, "---\nname: adk-spec\ndescription: mine\n---\n\nMine.\n")
+    assert run(tmp_path, "init", "--no-explore") == 0
+    assert read_text(tmp_path / SKILL).endswith("Mine.\n") and "SKILL.md" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("held", [".claude", ".Claude/"], ids=["a-file", "a-case-twin"])
+def test_a_skill_that_cannot_be_written_is_a_line_and_init_ends_well(tmp_path, capsys, held) -> None:
+    """Found by the code review: where `.claude` was a file, a link or a folder named but for case, writing the skill
+    failed `init` after the tree was made, and every refresh after it failed at the same line, before the profile."""
+    repository(tmp_path, FILES)
+    if held.endswith("/"):
+        (tmp_path / held).mkdir()
+    else:
+        (tmp_path / held).write_text("mine\n", encoding="utf-8")
+    assert run(tmp_path, "init", "--no-explore") == 0
+    said = capsys.readouterr().out
+    assert f"skipped   {SKILL}: " in said and "next" in said and (tmp_path / ".spec").is_dir()
+
+
+def test_the_skill_is_no_part_of_the_code_a_reading_or_verify_sees(tmp_path) -> None:
+    """Found by the code review: written untracked, the skill was listed with the repository's code, so a reading
+    could take its rules for the code's own, and `verify` judged it as new work. A skill of the person's still is."""
+    from adk_spec.workspace.git import diff, files
+
+    base = repository(tmp_path, FILES)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    write_text(tmp_path / ".claude/skills/release/SKILL.md", "---\nname: release\ndescription: mine\n---\n")
+    listed = files(tmp_path, exclude=())
+    assert SKILL not in listed and ".claude/skills/release/SKILL.md" in listed
+    assert "adk-spec/SKILL.md" not in diff(tmp_path, base, exclude=())
+
+
+def test_a_refresh_writes_the_skill_where_a_workspace_made_before_it_has_none(tmp_path, capsys, fake_provider) -> None:
+    repository(tmp_path, FILES)
+    reads_the_tests(fake_provider)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    (tmp_path / SKILL).unlink()
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh") == 0
+    assert (tmp_path / SKILL).is_file() and f"wrote     {SKILL}" in capsys.readouterr().out

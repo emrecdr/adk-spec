@@ -23,6 +23,7 @@ from pathlib import Path
 
 from .layout import ROOT_NAME
 from .process import Completed, TimedOut, on_path, run
+from .skill import SKILL_PARTS
 
 #: How long one git command may run, in seconds.
 GIT_TIMEOUT_S: float = 30
@@ -45,8 +46,9 @@ _SETTLED = {
     "diff.mnemonicPrefix": "false",
 }
 _PLAIN = ("--no-color", "--no-ext-diff", "--no-textconv", "-M")
-#: The folder's own files, without this package's tree: a pathspec git reads from the folder it runs in.
-_HERE = ("--", ".", f":(exclude){ROOT_NAME}")
+#: The folder's own files, without this package's tree or the skill `init` writes: a pathspec git reads from the
+#: folder it runs in. Found by the code review: listed with the code, the skill's rules read as the code's own.
+_HERE = ("--", ".", f":(exclude){ROOT_NAME}", f":(exclude){'/'.join(SKILL_PARTS[:-1])}")
 
 
 class GitError(Exception):
