@@ -470,25 +470,85 @@ def test_plan_alone_still_redrafts_a_change(tmp_path, fake_provider) -> None:
     assert asked(fake_provider, TASKS) == 2 and ws.load_change("again").change.tasks
 
 
-def test_propose_reads_the_code_once_the_change_is_written(tmp_path, capsys, fake_provider) -> None:
-    """Brownfield, part 1: the reading sits before the design and the tasks, where the change that was agreed is
-    known, and has no command of its own."""
+SCOUT, SURVEY = "You choose what to read", "You read parts of a repository's code"
+REVIEW = "You review what a reading of a repository's code found"
+
+
+def _order(fake_provider) -> list[str]:
+    sent = [str(r.config.system_instruction) for r in fake_provider.requests]
+    stages = (TRIAGE, SCOUT, SURVEY, REVIEW, BRIEF, DELTAS, TASKS)
+    return [next(one for one in stages if text.startswith(one)) for text in sent]
+
+
+def _sent_to(fake_provider, opening: str) -> str:
+    return next(
+        str(r.config.system_instruction)
+        for r in fake_provider.requests
+        if str(r.config.system_instruction).startswith(opening)
+    )
+
+
+def test_propose_reads_the_code_before_the_brief_and_once(tmp_path, capsys, fake_provider) -> None:
+    """Phase 15, the owner's choice: the request is sized, the code read, and only then the brief drafted, so facts
+    are adk-spec's to find and decisions the person's. One reading a change: the plan keeps its context."""
     from conftest import repository
 
     seeded(tmp_path)
     repository(tmp_path)
     capsys.readouterr()
-    assert proposed(tmp_path, "--tier", "lean", "--id", "read") == 0
-    scout, survey = "You choose what to read", "You read parts of a repository's code"
-    review = "You review what a reading of a repository's code found"
-    sent = [str(r.config.system_instruction) for r in fake_provider.requests]
-    order = [next(o for o in (BRIEF, DELTAS, scout, survey, review, TASKS) if text.startswith(o)) for text in sent]
-    assert order == [BRIEF, DELTAS, scout, survey, review, TASKS], "the reading comes after the specs, before the plan"
+    assert proposed(tmp_path, "--id", "read") == 0
+    assert _order(fake_provider) == [TRIAGE, SCOUT, SURVEY, REVIEW, BRIEF, DELTAS, TASKS]
     assert "return password()" in read_text(tmp_path / ".spec/changes/read/context.md")
     out = capsys.readouterr().out
     assert "explored  1 file: 1 statement kept" in out and ".spec/changes/read/context.md" in out
+    fake_provider.requests.clear()
+    assert proposed(tmp_path, "--tier", "lean", "--id", "named") == 0
+    assert _order(fake_provider) == [SCOUT, SURVEY, REVIEW, BRIEF, DELTAS, TASKS], "a tier named is not sized"
+
+
+def test_the_brief_is_given_the_profile_and_what_the_reading_kept(tmp_path, fake_provider) -> None:
+    from conftest import repository
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    write_text(tmp_path / ".spec/profile.md", "# This repository\n\nEvery error is raised as an AppError.\n")
+    assert proposed(tmp_path, "--tier", "lean", "--id", "read") == 0
+    for opening in (BRIEF, DELTAS):
+        sent = _sent_to(fake_provider, opening)
+        assert "Every error is raised as an AppError." in sent and "return password()" in sent, opening
+
+
+def test_a_request_that_owes_no_spec_spends_no_reading(tmp_path, fake_provider) -> None:
+    from conftest import repository
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    fake_provider.answers_when(TRIAGE, {**CANNED_TRIAGE, "tier": "none"})
+    assert proposed(tmp_path, "--id", "nothing") == 0
+    assert _order(fake_provider) == [TRIAGE]
+
+
+def test_a_reading_that_keeps_nothing_writes_no_context_and_the_plan_reads_no_more(tmp_path, fake_provider) -> None:
+    from conftest import repository
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    nothing = {"statements": [], "more_files": [], "more_folders": [], "more_searches": []}
+    fake_provider.answers_when(SURVEY, nothing)
+    assert proposed(tmp_path, "--tier", "lean", "--id", "empty") == 0
+    assert not (tmp_path / ".spec/changes/empty/context.md").exists()
+    assert _order(fake_provider).count(SCOUT) == 1, "the plan does not read again what propose read"
+
+
+def test_no_explore_reads_nothing_and_the_brief_still_sees_the_profile(tmp_path, fake_provider) -> None:
+    from conftest import repository
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    write_text(tmp_path / ".spec/profile.md", "# This repository\n\nEvery error is raised as an AppError.\n")
     assert proposed(tmp_path, "--tier", "lean", "--id", "unread", "--no-explore") == 0
-    assert not (tmp_path / ".spec/changes/unread/context.md").exists()
+    assert SCOUT not in _order(fake_provider) and not (tmp_path / ".spec/changes/unread/context.md").exists()
+    assert "Every error is raised as an AppError." in _sent_to(fake_provider, BRIEF)
 
 
 # The other repositories a change spans, named with it.

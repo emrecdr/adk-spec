@@ -5,7 +5,20 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import BriefDraft
-from . import CAPABILITIES, ENDING, REQUEST, RETRY, RULES, THE_LESSONS, TIER, fenced, placeholder, stage
+from . import (
+    CAPABILITIES,
+    ENDING,
+    REQUEST,
+    RETRY,
+    RULES,
+    THE_CONTEXT,
+    THE_LESSONS,
+    THE_PROFILE,
+    TIER,
+    fenced,
+    placeholder,
+    stage,
+)
 
 KEY = "brief"
 #: The state keys a new draft reads beside the request: a person's answers, each beside the question that was put,
@@ -18,6 +31,9 @@ GUIDE = (
 Say why the change is wanted, what will be different once it is done, what it leaves alone, and what else it affects.
 State what you assume. A point you cannot settle from the request goes in open_points: the question, worded so a
 person can answer it in a sentence, and the answer you would suggest. Three at most, and do not guess past one.
+Settle each fact from what the repository already holds and what is known of it, where they are given: never ask the
+person what they show. Of what they list as still unknown, put in open_points only what the person can decide or
+knows, and state the rest as unknown.
 Write no [NEEDS CLARIFICATION] marker yourself.
 A design is needed only where the change is cross-cutting, adds a dependency, carries security or migration risk, or
 owes a technical decision before coding. Say which, in one sentence.
@@ -49,6 +65,10 @@ def build_brief() -> LlmAgent:
             GUIDE,
             "",
             THE_LESSONS,
+            "",
+            THE_PROFILE,
+            "",
+            THE_CONTEXT,
             "",
             "## Answers from the person, to use and not to question",
             fenced("answers", placeholder(ANSWERS, optional=True)),

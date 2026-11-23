@@ -5,7 +5,17 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from ...domain.drafts import DeltasDraft
-from . import CURRENT_DELTAS, LIVING_SPECS, THE_BRIEF, THE_LESSONS, instruction, section, stage
+from . import (
+    CURRENT_DELTAS,
+    LIVING_SPECS,
+    THE_BRIEF,
+    THE_CONTEXT,
+    THE_LESSONS,
+    THE_PROFILE,
+    instruction,
+    section,
+    stage,
+)
 
 KEY = "deltas"
 OPENING = "You write the requirement deltas of a change. You write no code."
@@ -25,5 +35,5 @@ it; to drop it, leave it out."""
 
 def build_deltas() -> LlmAgent:
     current = section("## The deltas as they stand", "current deltas", CURRENT_DELTAS, optional=True)
-    text = instruction(OPENING, GUIDE, THE_LESSONS, LIVING_SPECS, THE_BRIEF, current)
+    text = instruction(OPENING, GUIDE, THE_LESSONS, LIVING_SPECS, THE_PROFILE, THE_CONTEXT, THE_BRIEF, current)
     return stage(KEY, "Writes the requirement deltas of a change.", text, DeltasDraft)

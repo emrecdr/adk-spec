@@ -145,6 +145,18 @@ def _app(edges: list[Any], ledger: UsageLedger, recorder: BasePlugin | None = No
     return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
 
 
+def build_triage_app(*, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:
+    """Triage alone, behind its gate: the tier under `TIER`, `none` among them. `propose` sizes a request first, so
+    that one owing no spec spends no reading of the code, and the brief is drafted after the reading, from it."""
+    triage, triage_gate = triage_stage.build_triage(), checked(triage_stage.KEY, lambda _state: [])
+    edges = [
+        ("START", triage, triage_gate),
+        (triage_gate, {OK: _sized, AGAIN: triage, GIVE_UP: _ended}),
+        (_sized, {GO: _ended, NONE: _ended}),
+    ]
+    return _app(edges, ledger, recorder)
+
+
 def build_smoke_app() -> App:
     """The triage stage alone: what `adk-spec smoke` runs to prove an arm answers in a schema."""
     edges = [("START", triage_stage.build_triage())]
