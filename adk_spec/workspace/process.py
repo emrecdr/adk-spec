@@ -113,14 +113,18 @@ def tie_children() -> bool:
     or not: the process is put into a job object that kills what it holds once its last handle closes, which happens
     as the process ends, and what it starts after joins it by itself, with no moment between start and joining. The
     roadmap's Windows job object: a server an editor killed left its command running, spending and holding the lock,
-    and a test run left behind what it started. Elsewhere a run is started in a session of its own and stopped whole,
-    and this does nothing. Whether the tie is made: where the system refuses it, things go on as before."""
+    and a test run left behind what it started, which now ends as the adk-spec process does, not as the run does. A
+    program that asks to leave the job may: only leaving by default is ruled out. Elsewhere a run is started in a
+    session of its own and stopped whole, and this does nothing. Whether the tie is made: where it fails, in any way,
+    things go on as before, so that no command stops for it."""
     if not WINDOWS:
         return False
     if not _TIED:
+        import ctypes
+
         try:
             _TIED.append(_killed_on_close())
-        except OSError:
+        except OSError, AttributeError, ctypes.ArgumentError:  # found by review: not OSError alone
             return False
     return True
 
@@ -168,7 +172,9 @@ def _killed_on_close() -> int:
     if not job:
         raise ctypes.WinError(ctypes.get_last_error())  # pyrefly: ignore[missing-attribute]
     limits = _ExtendedLimits()
-    limits.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, and JOB_OBJECT_LIMIT_BREAKAWAY_OK: found by review, a project's test that
+    # starts a helper outside its job, as it may by hand, was otherwise refused under adk-spec.
+    limits.BasicLimitInformation.LimitFlags = 0x2000 | 0x0800
     extended = 9  # JobObjectExtendedLimitInformation
     set_up = kernel.SetInformationJobObject(job, extended, ctypes.byref(limits), ctypes.sizeof(limits))
     if not set_up or not kernel.AssignProcessToJobObject(job, kernel.GetCurrentProcess()):
@@ -212,8 +218,8 @@ def run_kept(argv: list[str], *, env: Mapping[str, str], timeout: float, keep: i
         _stopped(process, WINDOWS)
         raise
     # What it left running, also where it passed: its session outlives it while something in it runs. Not on Windows,
-    # where taskkill finds a tree by its root, which has ended: what it left there runs on, until a job object holds
-    # the tree, which waits for a Windows machine to test it on.
+    # where taskkill finds a tree by its root, which has ended: what it left there runs on until the adk-spec process
+    # ends, when `tie_children`'s job ends it, not when the run does.
     if code is None or not WINDOWS:
         _stopped(process, WINDOWS)
     with contextlib.suppress(subprocess.TimeoutExpired):

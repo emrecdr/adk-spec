@@ -363,6 +363,15 @@ def _umask_kept() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _no_tie(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test ties the test process itself to a job, on Windows: found by review, a test that ran `cli.run` left
+    every process the suite started after it in a kill-on-close job, in an order no test chose."""
+    from adk_spec.interfaces import cli
+
+    monkeypatch.setattr(cli, "tie_children", lambda: False)
+
+
+@pytest.fixture(autouse=True)
 def _nothing_from_the_shell(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
     """No test inherits a provider, a model, a key or where an arm's calls go, nor reads the developer's Copilot
     login: its folder is one no test made. Each test sets what it runs on."""

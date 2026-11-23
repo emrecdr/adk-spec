@@ -242,37 +242,100 @@ def test_off_windows_tying_a_processs_children_to_it_is_left_to_the_session() ->
     assert process.tie_children() is False
 
 
-@pytest.mark.skipif(os.name != "nt", reason="a job object is Windows' own")
-def test_on_windows_what_a_process_left_running_ends_with_it(tmp_path) -> None:
-    """The roadmap's Windows job object, waiting for a Windows machine until CI ran there: a process that ended,
-    normally or killed, as an editor ends the MCP server, left what it started running, spending and holding the
-    lock."""
+#: A child that ties itself, says whether it could, starts a grandchild that writes its number and sleeps, and waits
+#: for that number; then it exits, or sleeps until it is killed.
+_TIED_CHILD = """
+import subprocess, sys, time
+from adk_spec.workspace import process
+print("tied" if process.tie_children() else "not tied", flush=True)
+code = "import os, time; open(%r, 'w').write(str(os.getpid())); time.sleep(60)" % (sys.argv[1],)
+subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+while True:
+    try:
+        if open(sys.argv[1]).read():
+            break
+    except OSError:
+        pass
+    time.sleep(0.05)
+if sys.argv[2] == "killed":
+    time.sleep(60)
+"""
+
+
+def _ended(pid: int) -> bool:
     from adk_spec.workspace.lock import _alive
 
-    marker = tmp_path / "pid"
-    child = textwrap.dedent(f"""
-        import subprocess, sys
-        from adk_spec.workspace import process
-        print("tied" if process.tie_children() else "not tied", flush=True)
-        code = "import os, time; open(" + repr({str(marker)!r}) + ", 'w').write(str(os.getpid())); time.sleep(60)"
-        subprocess.Popen([sys.executable, "-c", code])
-        import time
-        while True:
-            try:
-                if open({str(marker)!r}).read():
-                    break
-            except OSError:
-                pass
-            time.sleep(0.05)
-    """)
-    done = subprocess.run([sys.executable, "-c", child], capture_output=True, text=True, timeout=60, check=False)
-    assert done.stdout.strip() == "tied", done.stderr
-    pid = int(marker.read_text())
     for _ in range(100):
         if not _alive(pid):
-            return
+            return True
         time.sleep(0.05)
-    pytest.fail("the grandchild still runs after the process that started it ended")
+    return False
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a job object is Windows' own")
+@pytest.mark.parametrize("how", ["exits", "killed"])
+def test_on_windows_what_a_process_left_running_ends_with_it(tmp_path, how) -> None:
+    """The roadmap's Windows job object, waiting for a Windows machine until CI ran there: a process that ended,
+    normally or killed, as an editor kills the MCP server, left what it started running, spending and holding the
+    lock."""
+    marker = tmp_path / "pid"
+    child = subprocess.Popen(
+        [sys.executable, "-c", _TIED_CHILD, str(marker), how],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    try:
+        assert child.stdout is not None and child.stdout.readline().strip() == "tied"
+        for _ in range(200):
+            if marker.exists() and marker.read_text():
+                break
+            time.sleep(0.05)
+        if how == "killed":
+            child.kill()  # TerminateProcess: no handler runs, as an editor ends a server
+        child.wait(timeout=60)
+        assert _ended(int(marker.read_text())), "the grandchild still runs after the process that started it ended"
+    finally:
+        child.kill()
+        if marker.exists() and marker.read_text():
+            subprocess.run(["taskkill", "/F", "/PID", marker.read_text()], capture_output=True, check=False)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a job object is Windows' own")
+def test_on_windows_a_program_that_asks_to_leave_the_job_still_may() -> None:
+    """Found by review: with no breakaway allowed, a project's test that starts a helper outside its job was refused
+    under adk-spec, and passed when run by hand. Only leaving by default is ruled out."""
+    probe = textwrap.dedent("""
+        import subprocess, sys
+        from adk_spec.workspace import process
+        def leaves():
+            try:
+                subprocess.run([sys.executable, "-c", "pass"], creationflags=0x01000000, check=True)
+                return "left"
+            except OSError:
+                return "refused"
+        before = leaves()  # the job the test itself runs in may refuse it, as CI's may
+        print(before, "tied" if process.tie_children() else "not tied", leaves(), flush=True)
+    """)
+    said = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, timeout=60, check=False)
+    before, tied, after = said.stdout.split()
+    if before == "refused":
+        pytest.skip("the job this test runs in allows no program to leave it")
+    assert (tied, after) == ("tied", "left"), said.stderr
+
+
+def test_a_tie_that_fails_any_way_stops_no_command(monkeypatch) -> None:
+    """Found by review: only OSError was caught, and a ctypes error raised by the tie would have stopped every
+    command on Windows, --help too."""
+    import ctypes
+
+    def broken():
+        raise ctypes.ArgumentError("a handle ctypes cannot convert")
+
+    monkeypatch.setattr(process, "WINDOWS", True)
+    monkeypatch.setattr(process, "_TIED", [])
+    monkeypatch.setattr(process, "_killed_on_close", broken)
+    assert process.tie_children() is False
 
 
 def test_both_programs_tie_what_they_start_to_themselves(monkeypatch) -> None:
@@ -281,6 +344,7 @@ def test_both_programs_tie_what_they_start_to_themselves(monkeypatch) -> None:
     tied = []
     for module in (cli, mcp_server):
         monkeypatch.setattr(module, "tie_children", lambda: tied.append(1) or True)
+    monkeypatch.setattr(mcp_server, "stop_on_signals", lambda: None)  # found by review: the real one stays installed
     monkeypatch.setattr(sys, "argv", ["adk-spec", "--help"])
     with pytest.raises(SystemExit):
         cli.run()
