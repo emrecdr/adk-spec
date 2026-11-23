@@ -215,9 +215,12 @@ Then:
    of every change reads it, so keep it short (under 16,000 characters).
 2. **Name your test command** in `.spec/config.toml`, so that `verify` runs it (see [Settings](#settings-reference)).
 3. **Commit** `.spec/` and the skill: `git add .spec .claude/skills/adk-spec && git commit -m "Add adk-spec"`.
+   Where `.gitignore` leaves out `.claude/`, add the skill with `git add -f .claude/skills/adk-spec`.
 
 `init --no-explore` makes the tree with no model call; `init --refresh` reads the code again later and rewrites the
-profile, and writes the skill into a repository that has none, as one set up before adk-spec wrote it.
+profile, and writes the skill into a repository that has none, as one set up before adk-spec wrote it. That reading
+calls a model: to add the skill alone, copy `.claude/skills/adk-spec/` from a repository that has it. adk-spec reads
+the skill as none of your code, as it reads `.spec/`.
 
 ## Your first change, step by step
 

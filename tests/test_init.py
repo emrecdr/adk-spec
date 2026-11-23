@@ -214,6 +214,33 @@ def test_init_never_writes_over_a_skill_that_is_there(tmp_path, capsys) -> None:
     assert read_text(tmp_path / SKILL).endswith("Mine.\n") and "SKILL.md" not in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("held", [".claude", ".Claude/"], ids=["a-file", "a-case-twin"])
+def test_a_skill_that_cannot_be_written_is_a_line_and_init_ends_well(tmp_path, capsys, held) -> None:
+    """Found by the code review: where `.claude` was a file, a link or a folder named but for case, writing the skill
+    failed `init` after the tree was made, and every refresh after it failed at the same line, before the profile."""
+    repository(tmp_path, FILES)
+    if held.endswith("/"):
+        (tmp_path / held).mkdir()
+    else:
+        (tmp_path / held).write_text("mine\n", encoding="utf-8")
+    assert run(tmp_path, "init", "--no-explore") == 0
+    said = capsys.readouterr().out
+    assert f"skipped   {SKILL}: " in said and "next" in said and (tmp_path / ".spec").is_dir()
+
+
+def test_the_skill_is_no_part_of_the_code_a_reading_or_verify_sees(tmp_path) -> None:
+    """Found by the code review: written untracked, the skill was listed with the repository's code, so a reading
+    could take its rules for the code's own, and `verify` judged it as new work. A skill of the person's still is."""
+    from adk_spec.workspace.git import diff, files
+
+    base = repository(tmp_path, FILES)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    write_text(tmp_path / ".claude/skills/release/SKILL.md", "---\nname: release\ndescription: mine\n---\n")
+    listed = files(tmp_path, exclude=())
+    assert SKILL not in listed and ".claude/skills/release/SKILL.md" in listed
+    assert "adk-spec/SKILL.md" not in diff(tmp_path, base, exclude=())
+
+
 def test_a_refresh_writes_the_skill_where_a_workspace_made_before_it_has_none(tmp_path, capsys, fake_provider) -> None:
     repository(tmp_path, FILES)
     reads_the_tests(fake_provider)

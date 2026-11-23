@@ -106,7 +106,7 @@ from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
-from ..workspace.skill import write_skill
+from ..workspace.skill import SKILL_PARTS, write_skill
 from ..workspace.source import NAME, Source, SourceError, repositories_named
 from ..workspace.tests import run_tests
 
@@ -320,9 +320,7 @@ def _init(args: argparse.Namespace) -> int:
     else:
         workspace = Workspace.init(_unheld(Path(args.root).absolute()))
         print(f"made      {workspace.shown(workspace.home)}")
-    # How an assistant uses adk-spec, where the repository has none: a refresh gives it to a workspace made before it.
-    if (skill := write_skill(workspace.root)) is not None:
-        print(f"wrote     {workspace.shown(skill)}")
+    _skill(workspace)
     code = EXIT_OK
     if not args.no_explore:
         _load_env()
@@ -332,6 +330,20 @@ def _init(args: argparse.Namespace) -> int:
     later = f"; `{PROG} init --refresh` reads the code" if args.no_explore else ""
     print(f'next      keep what is true in constitution.md, then run `{PROG} propose "<what you want>"`{later}')
     return code if args.refresh else EXIT_OK
+
+
+def _skill(workspace: Workspace) -> None:
+    """How an assistant uses adk-spec, written where the repository has none: a refresh gives it to a workspace made
+    before it. One that cannot be written is a line, never a failed `init`: found by the code review, a `.claude` that
+    was a file or a link failed the command after the tree was made, and every refresh after it."""
+    try:
+        skill = write_skill(workspace.root)
+    except (PathError, OSError) as exc:
+        why = exc.strerror if isinstance(exc, OSError) and exc.strerror else exc
+        print(f"skipped   {workspace.shown(workspace.root.joinpath(*SKILL_PARTS))}: {why}")
+        return
+    if skill is not None:
+        print(f"wrote     {workspace.shown(skill)}")
 
 
 def _unheld(root: Path) -> Path:

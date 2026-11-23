@@ -415,7 +415,9 @@ and a step moves to code only where its output is a function of its input with n
     no purpose, is fixed at its cause.
   - **An Agent Skill beside the MCP server.** Built, on the owner's decision of 23 November 2026: `init` writes
     `.claude/skills/adk-spec/SKILL.md`, which Copilot and Claude Code read, once and never over one that is there
-    (`docs/superpowers/specs/2026-11-24-agent-skill-design.md`).
+    (`docs/superpowers/specs/2026-11-24-agent-skill-design.md`). Cleaned up and code-reviewed: the skill leaves
+    `--with` to the person as the server does, a skill that cannot be written is one line and never a failed `init`,
+    and git's listings leave it out as they leave out `.spec/`.
   - **Progress notifications from the MCP tools.** Neither VS Code nor Claude Code times a local server out at 60 s,
     and Claude Code is reported to send no progress token, so a heartbeat would be cosmetic in VS Code alone.
   - **The tier recorded in an approval.** It catches only an accidental edit of `change.json`, which a hand edit could

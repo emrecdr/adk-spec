@@ -28,6 +28,11 @@ the CLI, the cloud agent) and by Claude Code from `.claude/skills/<name>/SKILL.m
   call a model and cost time, that approving, archiving and every `--override` stay the person's, and how to
   implement from a change's folder and tick tasks. The cleanup review found the two texts had drifted: the skill now
   also leaves `--with` to the person, as the server does, and one test holds both to the same rules.
+- From the code review: a skill that cannot be written (a `.claude` that is a file, a link, or named but for case) is
+  one `skipped` line, never a failed `init`; and git's listings leave the skill out as they leave out `.spec/`, so
+  a reading never takes its rules for the code's own, and `verify` never judges it as new work.
+- Left for later, from the code review: a refresh writes the skill again where a person deleted it on purpose; a
+  marker of its having been offered once would be new state for a rare case.
 - Left for later, from the cleanup review: `init --refresh` refuses `--no-explore`, so a workspace made before the
   skill gets it only with a new reading. Letting `--refresh --no-explore` write what is missing and read nothing is a
   few lines, but changes what that pair of options means, for the few workspaces made before this change.
