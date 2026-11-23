@@ -106,6 +106,12 @@ with `explore=False`. A revision is seeded with its own `context.md`.
   each question so "yes" accepts the suggestion; ask nothing the context or profile settles; ask of what is still
   unknown what the person can decide or knows. Commit.
 
+### Task 4b: Rules from the skills the owner pointed to (added mid-phase)
+
+**Files:** `stages/{brief,deltas,tasks,check}.py` (guides only); test `tests/test_stage_rules.py`, one test a rule:
+the brief invents nothing and keeps an answer's exact words; a THEN a run could show false; tasks easy-first, sliced,
+tested at the highest seam, a bug fix starting with a failing test; the check finding a softened brief. Commit.
+
 ### Task 5: Docs
 
 README (how `propose` reads first, libraries), `docs/full-usage-guide.md`, the roadmap's phase 15 row and state,

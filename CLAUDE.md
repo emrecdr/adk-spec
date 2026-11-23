@@ -44,7 +44,8 @@ import except `adk_spec/agent.py`, the shape `adk web` loads.
   draft that does not read back as written is refused), validation, the change's life (`lifecycle.py`), secret
   scrubbing (`secrets.py`), conversion of model drafts (`drafts.py` → `convert.py`).
 - **workspace**: the `.spec/` tree (`layout.py`), atomic writes (`files.py`), the writer lock (`lock.py`), git and
-  the set of repositories a change spans (`git.py`, `source.py`), config, what stages are given (`context.py`),
+  the set of repositories a change spans (`git.py`, `source.py`), the project's installed libraries a reading may
+  open offline as `python:`/`node:` paths (`installed.py`), config, what stages are given (`context.py`),
   running the project's tests (`tests.py`, `process.py`).
 - **orchestration**: ADK `Workflow` graphs (`graph.py`), one schema-bound `LlmAgent` per stage (`stages/`), the gate
   after each stage (`gate.py`), the code reading (`explore.py`), plugins every app carries (`plugins.py`: schema
@@ -67,6 +68,9 @@ Rules that span files and are easy to break:
   edited. An older adk-spec refuses a `change.json` with a field it does not know.
 - **Secrets never reach a model or a recording**: `secrets.scrub`/`scrub_lines` on everything sent, the `Scrub`
   plugin on every app (fail closed), and files or test output holding a private key withheld whole.
+- **`propose` reads before it drafts**: triage alone, then the reading (`explore.py`) aimed by the request, then the
+  brief and deltas from its `context.md` and the profile; the plan reuses that `context.md`. A brief's open points
+  name what they wait on (`depends_on`), and a round asks only those answerable now.
 - **What a stage is told goes through `workspace/context.py`**, each input capped; stage instructions are built in
   `stages/__init__.py` (`instruction()`, shared sections, the retry findings just before the ending).
 

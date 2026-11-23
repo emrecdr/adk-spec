@@ -45,6 +45,27 @@ on research: the repository's code, and what can be known beyond it.
 7. **The editor's tools are unchanged** (Q7): they ask nothing; the open points come back in their output for the
    assistant to put to the person, who revises with `propose` and the change's id.
 
+## Borrowed from the skills the owner pointed to
+
+The owner asked, mid-phase, for the good parts of fifteen skills (github.com/mattpocock/skills) to be used. Taken,
+each into the stage it fits, as written rules:
+
+- **Facts versus decisions, rounds at the frontier, "yes" accepts** (grilling): decisions 1 to 3 above.
+- **The brief invents nothing** (to-spec): it states nothing the request, an answer or the repository does not say,
+  and keeps an answer's numbers, order and negatives as the person gave them.
+- **Criteria that can fail** (to-tickets): each THEN is written so that a run could show it false.
+- **Tasks** (to-tickets, tdd, diagnosing-bugs): make the change easy first, then slice what follows so each group can
+  be seen working on its own; test at the highest seam the repository already has; a bug fix starts with a test that
+  fails on the bug as reported.
+- **The check** (to-spec): a requirement that softens a number, an order or a negative the brief gives, and a THEN no
+  run could show false, are findings.
+
+Left for the owner to choose later, each larger: a second verify review against the repository's rules beside the
+requirements (implement's two axes); task dependencies written in `tasks.md` (to-tickets' blocking edges); a glossary
+and decision records under `.spec/` (grill-with-docs); every stage's instruction reworded as the wanted behaviour
+(writing-for-agents), measured live before and after. Not adk-spec's to do, as it writes specs and judges work and
+never edits code: wayfinder, prototype, teach, handoff, to-questionnaire, wait-what, improve-codebase-architecture.
+
 ## How it fits
 
 - **`workspace/source.py`**: `Source.of(..., installed=True)` adds the installed libraries as read-only sources beside

@@ -2,6 +2,7 @@
 
 **Status Legend:**
 - **`[Built: Phases 1–13]`** — Implemented, reviewed and merged; every phase on the roadmap in [plans/README.md](superpowers/plans/README.md) is built. Brought up to date with the code on 22 November 2026.
+- **`[Built: Phase 15]`** — Research during planning: `propose` reads the code and the project's installed libraries offline before the brief, which asks only what the code cannot answer, in order of what depends on what; `yes` takes a suggestion.
 - **`[Built: Phase 14]`** — The second interface, decided by the owner on 22 November 2026 and built: `adk-spec-mcp`, an MCP server inside coding assistants.
 
 > **Core Thesis:** **Models draft, explore, clarify, and judge; Python owns the files, requirement IDs, structural checks, SHA-256 approvals, secret/key guards, and atomic spec merge.** Every capability—whether you run `adk-spec` today or after Phase 13—keeps human decisions cleanly separated from deterministic guardrails.
@@ -416,6 +417,10 @@ What `strict` adds on top of `standard` `[Built: P13]`:
 | **Setup** | `adk-spec login [--force]` | 15-minute GitHub Copilot OAuth device flow (`--force` re-authenticates) |
 | | `adk-spec models [--json]` | Query active arm's live model catalog with zero model tokens spent |
 | | `adk-spec smoke [--check]` | Offline config check (`--check`) or single schema-bound smoke call |
+
+### Phase 15: research during planning (`[Built]`)
+
+The owner decided on 23 November 2026, in grilling rounds, how a change is researched before it is planned. `propose` sizes the request alone (one owing no spec spends no reading), reads the code that matters for it, its installed libraries too (`python:httpx/_client.py`, `node:react/index.js`, read offline at the versions installed), and only then drafts the brief and the specs from what was kept and from `profile.md`, never asking you what those show. The brief's open points name what they wait on: a round asks only those answerable now, and `yes` or `=` takes a suggestion. Rules taken from the skills the owner pointed to sit in the stages: the brief invents nothing and keeps an answer's numbers and negatives; scenarios are written so a run could show them false; tasks make the change easy first and start a bug fix with a failing test; the check finds a requirement that softens the brief. Company documentation and web search were set aside for now.
 
 ### Phase 14: inside a coding assistant (`[Built]`)
 

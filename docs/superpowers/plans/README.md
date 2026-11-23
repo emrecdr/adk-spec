@@ -40,6 +40,7 @@ How it is applied in every phase below:
 | 10 and 11 | Sizing by rule; revising by instruction | `2026-11-22-adk-spec-sizing-and-revising.md` | The sizing rule was removed by the owner after review: the model sizes every request. `propose "<instruction>" --id <id>` revises an open change, keeping its tier, its IDs by name and what the instruction does not reach, and says what it added, changed and dropped. | Built, cleaned up, reviewed and merged. Measured live: sized by rule, revised with its IDs kept |
 | 12 | A lessons file | `2026-11-22-adk-spec-lessons.md` | `.spec/lessons.md`, shared through git and read by every drafting stage: a person's corrections, and a line adk-spec adds in code for each fault a gate sent back that the next try fixed. `approve` names a drafted file a person edited, once. No model call. | Built, cleaned up, reviewed and merged. Measured live: a lesson written and counted |
 | 13 | The `strict` tier | `2026-11-22-adk-spec-strict-tier.md` | A design always owed; `propose` stops after the brief and specs for a person to read, and `plan` goes on; two different names approve; a warning blocks, with no override. What each tier demands is one table in the domain. | Built, cleaned up, reviewed and merged. Measured live: the stop, a design, two names |
+| 15 | Research during planning | `2026-11-23-adk-spec-research-during-planning.md` | `propose` reads the code, and the project's installed libraries offline, before the brief; the brief asks only what the code cannot answer, in order of what depends on what, and "yes" takes a suggestion; rules from the skills the owner pointed to in the brief, specs, tasks and check. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner |
 | 14 | Inside a coding assistant | `2026-11-22-adk-spec-mcp-server.md` | `adk-spec-mcp` serves six commands as MCP tools to a coding assistant (`propose`, revising too, `plan`, `check`, `verify`, `status`, `validate`), each run as the terminal runs it; approving and archiving stay the person's. | Built, cleaned up, reviewed and merged. Its live proof, in VS Code and in Claude Code, waits for the owner |
 
 ## The plan being followed now
@@ -337,6 +338,30 @@ one pass the default for the rest. That is this tier. **Size.** Medium.
 what each tier demands into one table in the domain, which closed gaps where a warning of the check did not block,
 one name could give both approvals, and a third approval dropped an approved change back to a draft. Measured live:
 the stop, a design drafted by `plan`, the same name refused, and two names approving.
+
+### Phase 15. Research during planning
+
+**`2026-11-23-adk-spec-research-during-planning.md`**. Design `../specs/2026-11-23-research-during-planning-design.md`.
+
+**Goal.** A change rests on research before it is planned: the brief asks the person only what the repository
+cannot answer.
+
+**Features it adds.** `propose` sizes the request, reads the code and the project's installed libraries offline
+(`python:` and `node:` paths), and only then drafts the brief, from what was kept and the profile, once: the plan keeps
+its `context.md`. The brief's open points name what they wait on, a round asks only those answerable now, and "yes"
+takes a suggestion. From the skills the owner pointed to (github.com/mattpocock/skills): the brief invents nothing and
+keeps an answer's exact words; a THEN is written so a run could show it false; tasks make the change easy first, slice
+what follows, test at the highest seam, and start a bug fix with a test that fails on it; the check finds a
+requirement that softens the brief.
+
+**Set aside, with reasons.** Company documentation (Confluence Cloud) and Microsoft 365 Copilot's reach into it: the
+models adk-spec calls are GitHub Copilot's, whose connectors run in its clients, and Microsoft 365 is another product
+needing an app registration. Web search: one arm only, or a third party's key fed words from company work. From the
+skills, for the owner to choose later: a second verify review against the repository's rules, task dependencies in
+`tasks.md`, a glossary and decision records, and stage instructions reworded positively, measured before and after.
+
+**State.** Built, cleaned up, reviewed and merged on 23 November 2026. Its live proof, a `propose` and `plan` on a
+repository with a `.venv`, waits for the owner's go-ahead.
 
 ### Phase 14. adk-spec inside a coding assistant
 

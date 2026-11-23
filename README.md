@@ -33,7 +33,7 @@ adk-spec archive <id>
 
 | Command | The question it answers | What happens inside |
 |---|---|---|
-| `propose` | What do we want to build? | Sizes the request, asks its questions, writes the brief and the specs, reads the code that matters for them, and writes the design where one is owed, and the tasks |
+| `propose` | What do we want to build? | Sizes the request, reads the code that matters for it, asks you only what the code cannot answer, writes the brief and the specs, and writes the design where one is owed, and the tasks |
 | `approve` | Do I agree with this plan? | Records what the change is written against, checks the files against each other, stops on anything blocking, then records your approval |
 | `verify` | Is it built? | Judges what changed in the repository against each requirement. Run it as often as you like while implementing |
 | `archive` | Make it the record? | Folds the change into the living specs, all of it or none |
@@ -59,14 +59,17 @@ the check blocks it as an error does, with no `--override`.
 
 - **`propose`** drafts a change from a request. A model writes each part; a gate after each stage checks it and
   asks again at most twice. On the standard tier it puts each point the brief leaves open to you as a question, at
-  most three a round and three rounds, each with a suggested answer: a line answers, `=` takes the suggestion, and
-  an empty line leaves the point open, in which case approval waits until you settle it in the brief.
+  most three a round and three rounds, each with a suggested answer: a line answers, `yes` or `=` takes the
+  suggestion, and an empty line leaves the point open, in which case approval waits until you settle it in the brief.
+  A question that only makes sense once another is answered waits for a later round, and the brief never asks what
+  the code or the profile already show: facts are adk-spec's to find, decisions are yours.
   `--no-input` asks nothing, and `--id` names the change. Where you leave a question unanswered, `propose` writes
   the brief and the specs and drafts no plan on a guess: settle the point in the brief, then `adk-spec plan <id>`.
   The same command finishes a plan that did not end well.
 
-  In a git repository `propose` reads the code before it drafts the design and the tasks, and writes what it found
-  to `context.md` in the change's folder. See "Working in an existing repository" below. `--no-explore` skips it.
+  In a git repository `propose` reads the code before it drafts the brief, once: the brief, the specs, the design
+  and the tasks are all drafted from what it found, which it writes to `context.md` in the change's folder. See
+  "Working in an existing repository" below. `--no-explore` skips it.
 
   Where `--id` names a change that is open, `propose` revises it by the request, keeping the change's tier and
   everything the request does not reach, your edits included: `adk-spec propose "also allow backup codes" --id
@@ -132,12 +135,19 @@ the check blocks it as an error does, with no `--override`.
 
 ### Working in an existing repository
 
-Before `propose` or `plan` drafts a design and tasks, it reads the code that matters for the change, so that both
-rest on what is there and not on file names.
+Before `propose` drafts a brief, it reads the code that matters for the request, so that the brief, the specs, the
+design and the tasks rest on what is there and not on file names. `plan` reads it for a change that has no
+`context.md` yet.
 
 - **How it reads.** A model names what it wants to see: files, folders to list, words to search for. Code reads
   them, and only where git lists the path: nothing git ignores, nothing outside the repository, never a symbolic
   link. A second model call states what the text shows. It may ask to see more, three rounds at most.
+- **Installed libraries, offline.** The reading may also open the project's installed libraries, at the versions it
+  runs: the repository's Python environment (`.venv` or `venv`) and its `node_modules`. A model is told each
+  library's name and version, and names a file as `python:httpx/_client.py` or `node:react/index.js`, only where the
+  change depends on how the library behaves. A library is read by the same rules, found in its environment's own
+  records, never searched, and nothing leaves your machine but what the model is shown, as with code. pnpm's linked
+  packages are not read.
 - **A model checks the reading.** A third call reviews what was kept, statement by statement, and reads no file.
   It leaves out a statement its quote does not bear out, names what is still unknown, and may send the reading one
   round further.
