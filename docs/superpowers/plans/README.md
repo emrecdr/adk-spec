@@ -40,7 +40,7 @@ How it is applied in every phase below:
 | 10 and 11 | Sizing by rule; revising by instruction | `2026-11-22-adk-spec-sizing-and-revising.md` | The sizing rule was removed by the owner after review: the model sizes every request. `propose "<instruction>" --id <id>` revises an open change, keeping its tier, its IDs by name and what the instruction does not reach, and says what it added, changed and dropped. | Built, cleaned up, reviewed and merged. Measured live: sized by rule, revised with its IDs kept |
 | 12 | A lessons file | `2026-11-22-adk-spec-lessons.md` | `.spec/lessons.md`, shared through git and read by every drafting stage: a person's corrections, and a line adk-spec adds in code for each fault a gate sent back that the next try fixed. `approve` names a drafted file a person edited, once. No model call. | Built, cleaned up, reviewed and merged. Measured live: a lesson written and counted |
 | 13 | The `strict` tier | `2026-11-22-adk-spec-strict-tier.md` | A design always owed; `propose` stops after the brief and specs for a person to read, and `plan` goes on; two different names approve; a warning blocks, with no override. What each tier demands is one table in the domain. | Built, cleaned up, reviewed and merged. Measured live: the stop, a design, two names |
-| 15 | Research during planning | `2026-11-23-adk-spec-research-during-planning.md` | `propose` reads the code, and the project's installed libraries offline, before the brief; the brief asks only what the code cannot answer, in order of what depends on what, and "yes" takes a suggestion; rules from the skills the owner pointed to in the brief, specs, tasks and check. | Built, cleaned up, reviewed and merged. Its live proof waits for the owner |
+| 15 | Research during planning | `2026-11-23-adk-spec-research-during-planning.md` | `propose` reads the code, and the project's installed libraries offline, before the brief; the brief asks only what the code cannot answer, in order of what depends on what, and "yes" takes a suggestion; rules from the skills the owner pointed to in the brief, specs, tasks and check. | Built, cleaned up, reviewed and merged; measured live, a fault the first run found fixed |
 | 14 | Inside a coding assistant | `2026-11-22-adk-spec-mcp-server.md` | `adk-spec-mcp` serves six commands as MCP tools to a coding assistant (`propose`, revising too, `plan`, `check`, `verify`, `status`, `validate`), each run as the terminal runs it; approving and archiving stay the person's. | Built, cleaned up, reviewed and merged. Its live proof, in VS Code and in Claude Code, waits for the owner |
 
 ## The plan being followed now
@@ -360,8 +360,10 @@ needing an app registration. Web search: one arm only, or a third party's key fe
 skills, for the owner to choose later: a second verify review against the repository's rules, task dependencies in
 `tasks.md`, a glossary and decision records, and stage instructions reworded positively, measured before and after.
 
-**State.** Built, cleaned up, reviewed and merged on 23 November 2026. Its live proof, a `propose` and `plan` on a
-repository with a `.venv`, waits for the owner's go-ahead.
+**State.** Built, cleaned up, reviewed and merged on 23 November 2026, and measured live the same day
+(`../../measurements/2026-11-23-phase-15-live.md`): the first run failed at the deltas, the brief naming three
+capabilities where triage named one; the brief now starts from triage's, and the second run wrote the change. Not
+yet seen live: a standard change's question rounds, and a scout opening an installed library.
 
 ### Phase 14. adk-spec inside a coding assistant
 
