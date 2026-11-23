@@ -185,7 +185,7 @@ def _parser() -> _Top:
     new = commands.add_parser("new", help="start a change: its folder and its state file")
     new.add_argument("id", help="the change's name: lowercase words joined by hyphens")
     new.add_argument("--tier", choices=TIERS, help="how much ceremony it gets (default: the config's)")
-    new.set_defaults(handler=_new)
+    new.set_defaults(handler=_locked(_new))
 
     validate = commands.add_parser("validate", help="check the structure of the living specs and of open changes")
     validate.add_argument("id", nargs="?", help="one change to check, in place of every open one")

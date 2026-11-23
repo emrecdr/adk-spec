@@ -39,3 +39,12 @@ def test_elsewhere_a_permission_error_is_not_retried(tmp_path, monkeypatch) -> N
     with pytest.raises(PermissionError):
         files.write_all({tmp_path / "a.md": "text\n"})
     assert len(calls) == 1
+
+
+def test_a_file_is_on_disk_before_it_replaces_the_old_one(tmp_path, monkeypatch) -> None:
+    """Found by the third audit: a file was renamed over the old one before its text was flushed, so a crash could
+    leave neither the old text nor the new."""
+    flushed: list[int] = []
+    monkeypatch.setattr(files.os, "fsync", flushed.append)
+    files.write_text(tmp_path / "a.md", "new\n")
+    assert len(flushed) == 1 and (tmp_path / "a.md").read_text(encoding="utf-8") == "new\n"

@@ -41,7 +41,7 @@ from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import SPEC_FILE, SPECS
 from .gate import AGAIN, FAILURE, GIVE_UP, OK, PENDING, SENT_BACK, checked, tries_key
 from .plugins import STAGE_ERROR, Scrub, UsageLedger, roster
-from .stages import BRIEF_TEXT, FINDINGS, LIVING, REQUEST, TIER
+from .stages import BRIEF_TEXT, FINDINGS, LIVING, REQUEST, SIZED, TIER
 from .stages import brief as brief_stage
 from .stages import check as check_stage
 from .stages import deltas as deltas_stage
@@ -307,9 +307,11 @@ def _ended() -> Event:
 
 
 def _sized(ctx: Context) -> Event:
-    """The model's tier. `none` ends the run with nothing drafted."""
-    chosen = Triage.model_validate(ctx.state[triage_stage.KEY]).tier
-    return Event(route=NONE if chosen == "none" else GO, state={TIER: chosen})
+    """The model's tier, and the capabilities it found, which the brief starts from. `none` ends the run with nothing
+    drafted. Found by the third audit: the chat gave the brief no capabilities, where `propose` gives them."""
+    chosen = Triage.model_validate(ctx.state[triage_stage.KEY])
+    found = {TIER: chosen.tier, SIZED: ", ".join(chosen.capabilities)}
+    return Event(route=NONE if chosen.tier == "none" else GO, state=found)
 
 
 def _open_points(ask: bool) -> Callable[[Context], Event]:
@@ -407,7 +409,7 @@ _NOTHING_YET: dict[str, None] = dict.fromkeys(
         *_DRAFTING,
         *(tries_key(stage) for stage in _DRAFTING),
         *(PENDING, SENT_BACK),
-        *(FAILURE, FINDINGS, STAGE_ERROR, TIER, ASKING, ROUNDS, BRIEF_TEXT, LIVING),
+        *(FAILURE, FINDINGS, STAGE_ERROR, TIER, SIZED, ASKING, ROUNDS, BRIEF_TEXT, LIVING),
         *(brief_stage.ANSWERS, brief_stage.REPLACES),
     )
 )

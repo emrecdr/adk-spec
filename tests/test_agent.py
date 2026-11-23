@@ -122,3 +122,19 @@ def test_the_chat_loads_where_the_lessons_file_is_no_text(tmp_path, monkeypatch)
     ws = seeded(tmp_path)
     (ws.home / "lessons.md").write_bytes("- a lesson\n".encode("utf-16"))
     assert loaded(tmp_path, monkeypatch).root_agent is not None
+
+
+@pytest.mark.asyncio
+async def test_the_chat_tells_the_brief_what_triage_sized_as_propose_does(tmp_path, monkeypatch, fake_provider) -> None:
+    """Found by the third audit: the chat drafted the brief without the capabilities triage found, which `propose`
+    gives it, and one message's would have stayed for the next."""
+    from conftest import between
+
+    seeded(tmp_path)
+    await said(loaded(tmp_path, monkeypatch), REQUEST)
+    brief = next(
+        str(r.config.system_instruction)
+        for r in fake_provider.requests
+        if "You write the brief" in str(r.config.system_instruction)
+    )
+    assert between(brief, "sized") == "auth"

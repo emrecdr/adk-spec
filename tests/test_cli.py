@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 from conftest import approved, held_open_from, run, seeded, state_of
@@ -478,3 +479,15 @@ def test_one_change_whose_state_does_not_read_stops_no_other(tmp_path, capsys) -
     assert "ERROR change.unreadable .spec/changes/other/change.json" in capsys.readouterr().out
     living, _found = workspace.specs()
     assert "REQ-BILLING-001" in workspace.taken(living)
+
+
+def test_new_waits_its_turn_as_every_command_that_writes_a_change_does(tmp_path, capsys) -> None:
+    """Found by the third audit: `new` wrote a change's folder while another run held the workspace, and could write
+    over the change that run was writing."""
+    import platform
+
+    seeded(tmp_path)
+    write_text(tmp_path / ".spec/.lock", f"{os.getpid()} {platform.node()}")
+    assert run(tmp_path, "new", "by-hand") == 2
+    assert "held by another adk-spec run" in capsys.readouterr().err
+    assert not (tmp_path / ".spec/changes/by-hand").exists()
