@@ -34,9 +34,10 @@ State what you assume. A point you cannot settle from the request goes in open_p
 person can answer it in a sentence, and the answer you would suggest. Three at most, and do not guess past one.
 State nothing the request, an answer or what the repository holds does not say.
 Keep an answer's numbers, order and negatives exactly as the person gave them.
-Settle each fact from what the repository already holds and what is known of it, where they are given: never ask the
-person what they show. Of what they list as still unknown, put in open_points only what the person can decide or
-knows, and state the rest as unknown.
+Settle each fact from what the repository already holds and what is known of it, where they are given.
+Where the request can be read two ways, as which code or which callers it covers, put it in open_points: that is the
+person's to decide, whatever the reading supposed. Of what is still unknown, ask what the person can decide or knows,
+and state the rest as unknown.
 Write no [NEEDS CLARIFICATION] marker yourself.
 A design is needed only where the change is cross-cutting, adds a dependency, carries security or migration risk, or
 owes a technical decision before coding. Say which, in one sentence.

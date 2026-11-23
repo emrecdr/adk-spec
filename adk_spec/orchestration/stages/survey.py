@@ -18,7 +18,8 @@ STATED = "stated"
 READ = "read"
 OPENING = "You read parts of a repository's code and state what in them matters for a change. You plan nothing."
 GUIDE = """\
-State only what the text you were shown shows. For each statement, name one file by the path written above its
+State only what the text you were shown shows: what the code is, never what the change should cover, which is the
+person's to settle. For each statement, name one file by the path written above its
 text, and copy from it the exact text the statement rests on: a line or a phrase, word for word. A statement whose
 quote is not in that file is thrown away.
 exists: behaviour or code already there that the change builds on, or must not write a second time.

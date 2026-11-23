@@ -55,3 +55,17 @@ def test_a_change_to_a_librarys_option_sends_the_scout_to_the_library() -> None:
 
     told = str(build_scout().instruction)
     assert "A change that sets or relies on a library's option or default depends on it" in told
+
+
+def test_the_brief_asks_where_the_request_reads_two_ways_whatever_the_reading_supposed() -> None:
+    """Found live, phase 15: in three standard runs of three the brief asked nothing, settling which code the change
+    covers by assumption after the reading had stated it as a fact."""
+    told = str(build_brief().instruction)
+    assert "Where the request can be read two ways" in told and "whatever the reading supposed" in told
+    assert "never ask the person what they show" not in told
+
+
+def test_the_survey_states_what_the_code_is_never_what_the_change_should_cover() -> None:
+    from adk_spec.orchestration.stages.survey import build_survey
+
+    assert "never what the change should cover" in str(build_survey().instruction)
