@@ -782,7 +782,7 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     A line is the answer; `=` takes the suggestion; an empty line leaves the point open; the end of the input, or
     no input at all, answers every question still to come with nothing."""
     points = "1 point" if len(questions) == 1 else f"{len(questions)} points"
-    print(f"The brief leaves {points} open. A line answers. `=` takes the suggestion.")
+    print(f"The brief leaves {points} open. A line answers. `yes` or `=` takes the suggestion.")
     print("An empty line leaves the point open.")
     answers: list[str] = []
     ended = sys.stdin is None  # a process started with no terminal and no pipe
@@ -792,9 +792,11 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
         line = "" if ended else _line()
         ended = ended or line == ""  # no line at all: the input is over
         typed = line.strip()
+        # "yes" accepts a suggestion, the question worded for it; where none is suggested it is the answer itself.
+        takes = typed == "=" or (typed.casefold() in ("y", "yes") and bool(question["suggested"]))
         if typed == "=" and not question["suggested"]:
             print("   nothing is suggested: the point stays open")
-        answers.append(question["suggested"] if typed == "=" else typed)
+        answers.append(question["suggested"] if takes else typed)
     return answers
 
 

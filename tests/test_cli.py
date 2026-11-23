@@ -436,3 +436,22 @@ def test_validate_checks_no_archived_change(tmp_path, monkeypatch) -> None:
     ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"status": "archived"}))
     monkeypatch.setattr(cli, "_assessed", lambda *_args, **_kw: (_ for _ in ()).throw(AssertionError("assessed")))
     assert run(tmp_path, "validate") == 0
+
+
+def test_yes_takes_the_suggestion_and_is_an_answer_where_none_is_suggested(monkeypatch, capsys) -> None:
+    """Phase 15, after the grilling skill: a question is worded so that "yes" accepts its suggestion, as `=` does. An
+    empty line still leaves a point open, so a key pressed by habit never accepts a model's answer."""
+    import io
+
+    from adk_spec.interfaces import cli
+
+    monkeypatch.setattr(cli.sys, "stdin", io.StringIO("yes\nY\n=\nyes\n\n"))
+    asked = [
+        {"question": "Keep sessions to eight hours?", "suggested": "Eight hours."},
+        {"question": "Sign out on every device?", "suggested": "Every device."},
+        {"question": "Log each sign-in?", "suggested": "Each one."},
+        {"question": "Is it for staff only?", "suggested": ""},
+        {"question": "Which region?", "suggested": "Europe."},
+    ]
+    assert cli._answered(asked) == ["Eight hours.", "Every device.", "Each one.", "yes", ""]
+    assert "`yes` or `=` takes the suggestion" in capsys.readouterr().out

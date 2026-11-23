@@ -10,9 +10,9 @@ is missing when the answer is read back from state. An empty string or an empty 
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .model import StatementKind
 
@@ -79,6 +79,21 @@ class OpenPointDraft(BaseModel):
 
     question: str = Field(description="The open point as one question a person can answer in a sentence.")
     suggested: str = Field(description="The answer you would suggest, in a sentence. Empty where you have none.")
+    depends_on: list[int] = Field(
+        description=(
+            "The numbers, counting from 1 in this list, of the other open points whose answers this one waits on. "
+            "Empty where it waits on none."
+        )
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _waits_on_none_where_unsaid(cls, data: Any) -> Any:
+        """An answer drafted before points named what they wait on, a recording's, waits on none. The field stays
+        required in the schema: Copilot's strict schemas require every property."""
+        if isinstance(data, dict) and "depends_on" not in data:
+            return {**data, "depends_on": []}
+        return data
 
 
 class BriefDraft(BaseModel):

@@ -38,7 +38,8 @@ Write no [NEEDS CLARIFICATION] marker yourself.
 A design is needed only where the change is cross-cutting, adds a dependency, carries security or migration risk, or
 owes a technical decision before coding. Say which, in one sentence.
 Name every point you cannot settle at once: a later draft is for what an answer opened, not for a point you could
-have raised before.
+have raised before. Where a point's question only makes sense once another is answered, give that point's number in
+depends_on: it is asked in a later round. Word each question so that "yes" accepts your suggested answer.
 Where a brief to replace is given, keep what it says, settle each point an answer settles, and contradict no answer.
 Where the request asks to change that brief, change only what it asks, and keep every other line as it is.
 A [NEEDS CLARIFICATION: ...] line in it is a point that draft left open: do not copy it. Settle it from an answer, or

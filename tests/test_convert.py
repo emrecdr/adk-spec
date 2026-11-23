@@ -351,3 +351,34 @@ def test_a_marker_that_is_no_marker_is_an_error_and_not_a_point_silently_dropped
 def test_a_well_formed_marker_is_not_called_malformed() -> None:
     brief = to_brief(brief_draft(assumptions="A. [ needs clarification : which of [a, b? ] B. [NEEDS CLARIFICATION]"))
     assert [found.code for found in validate_brief(brief, render_brief(brief))] == ["brief.marker-unresolved"] * 3
+
+
+# Phase 15: open points asked in order of what they depend on, as the grilling skill asks a design tree.
+
+SCOPE = {"question": "Which browsers are in scope?", "suggested": "The last two versions of each.", "depends_on": []}
+FALLBACK = {"question": "What do other browsers get?", "suggested": "Passwords, as now.", "depends_on": [1]}
+
+
+def test_a_round_asks_only_the_points_whose_prerequisites_are_settled() -> None:
+    draft = brief_draft(open_points=[SCOPE, FALLBACK])  # the second waits on the first's answer
+    assert [one["question"] for one in questions_of(draft)] == ["Which browsers are in scope?"]
+
+
+def test_points_that_depend_on_each_other_in_a_loop_are_all_asked() -> None:
+    one = {**SCOPE, "depends_on": [2]}
+    draft = brief_draft(open_points=[one, FALLBACK])
+    assert len(questions_of(draft)) == 2, "with nothing askable now, every point is asked rather than none"
+
+
+def test_a_dependency_on_a_point_that_is_not_there_waits_on_nothing() -> None:
+    draft = brief_draft(open_points=[{**SCOPE, "depends_on": [1, 7]}])
+    assert [one["question"] for one in questions_of(draft)] == ["Which browsers are in scope?"]
+
+
+def test_the_brief_lists_the_points_answerable_now_first() -> None:
+    waiting = {**FALLBACK, "depends_on": [2]}
+    draft = brief_draft(assumptions="", open_points=[waiting, SCOPE])
+    assert markers(render_brief(to_brief(draft))) == [
+        "[NEEDS CLARIFICATION: Which browsers are in scope?]",
+        "[NEEDS CLARIFICATION: What do other browsers get?]",
+    ]

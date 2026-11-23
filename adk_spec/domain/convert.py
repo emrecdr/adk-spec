@@ -103,7 +103,8 @@ def to_brief(draft: BriefDraft) -> Brief:
         assumptions=_text(draft.assumptions),
     )
     written = set(asked_in(render_brief(held)))
-    points = [marker_of(asked) for asked in _open(draft) if asked not in written]
+    waiting = _waiting(draft)  # a point that waits on another's answer is listed after those answerable now
+    points = [marker_of(asked) for asked in sorted(_open(draft), key=waiting.__contains__) if asked not in written]
     assumptions = "\n\n".join(part for part in (held.assumptions, *points) if part)
     return held.model_copy(update={"assumptions": assumptions})
 
@@ -113,9 +114,23 @@ def questions_of(draft: BriefDraft) -> list[dict[str, str]]:
     file's order, each with the answer the draft suggests for it, or none. A marker the model wrote in a section by
     itself is asked too. This was a model's stage: the question is the marker's own text, and only the suggestion
     took a model, which the brief stage now gives."""
-    suggested = _open(draft)
-    asked = dict.fromkeys(asked_in(render_brief(to_brief(draft))))
+    suggested, waiting = _open(draft), _waiting(draft)
+    asked = [one for one in dict.fromkeys(asked_in(render_brief(to_brief(draft)))) if one not in waiting]
     return [{"question": one or NO_QUESTION, "suggested": suggested.get(one, "")} for one in asked]
+
+
+def _waiting(draft: BriefDraft) -> set[str]:
+    """The open points a round does not ask yet, each as its marker holds it: those that wait on another point's
+    answer, as the grilling skill asks a design tree only at its frontier. A number naming no other point waits on
+    nothing; where every point would wait, as in a loop, none does, so that a round never asks nothing."""
+    worded_points = [worded(one.question) for one in draft.open_points]
+    count = len(worded_points)
+    held = {
+        asked
+        for number, (asked, one) in enumerate(zip(worded_points, draft.open_points, strict=True), 1)
+        if asked and any(1 <= other <= count and other != number for other in one.depends_on)
+    }
+    return set() if held >= {asked for asked in worded_points if asked} else held
 
 
 def to_deltas(
