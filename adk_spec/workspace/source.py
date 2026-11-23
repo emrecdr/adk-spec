@@ -18,6 +18,11 @@ that a quote found in the text is found at the line the file has it.
 A file that holds a private key is shown in no piece at all, here or in a diff: a key with no last line is hidden by
 no scrub, and a diff shows a file in pieces that hold neither line.
 
+The project's installed libraries may be read too, where a reading asks for them: its Python environment and its
+`node_modules`, found by `installed.py`, each under its scheme, `python:httpx/_client.py` or `node:react/index.js`. A
+library's path is looked up in the list its environment's own records give, and read by the same rules. Libraries are
+never searched, diffed or tested, and are no repository a change spans.
+
 What cannot be given is left out and named, and is never an error: a reading goes on without it.
 """
 
@@ -37,6 +42,7 @@ from .context import tree_text
 from .files import NotTextError, read_text
 from .git import GitError, diff, grep, head, is_repository, top
 from .git import files as listed_by_git
+from .installed import Environment, environments
 from .layout import CONFIG, ROOT_NAME
 
 #: What one round of reading holds at most. Provisional, as the context limits are, until a live run measures them.
@@ -59,6 +65,8 @@ _RANGE = re.compile(r"(?P<path>.+):(?P<first>[0-9]{1,9})-(?P<last>[0-9]{1,9})")
 WITHIN_MAX_CHARS = 120
 #: The name of another repository, which prefixes its paths: a short word.
 NAME = re.compile(r"[a-z][a-z0-9-]{0,30}")
+#: The most libraries the tree names in each environment: a stage is told how many more there are.
+LIBRARIES_SHOWN = 120
 
 
 class SourceError(Exception):
@@ -131,9 +139,13 @@ def _indent(line: str) -> int:
 class _Repository:
     """One repository's files as a reading may give them: git's own list, each file opened and scrubbed once."""
 
-    def __init__(self, name: str, root: Path, paths: Sequence[str], exclude: Sequence[str]) -> None:
+    def __init__(
+        self, name: str, root: Path, paths: Sequence[str], exclude: Sequence[str], *, scheme: str = ""
+    ) -> None:
         #: The name its paths are shown under; the workspace's own has none, and is the one git is told to trust.
         self.name = name
+        #: An installed library's environment, `python` or `node`, whose paths are shown after it and a colon.
+        self.scheme = scheme
         self.trust = not name
         self.root = root
         #: Every path git lists, in order, from `root`, with forward slashes.
@@ -147,7 +159,9 @@ class _Repository:
         self._opened: dict[str, list[str] | str] = {}
 
     def full(self, path: str) -> str:
-        """`path` as a stage is shown it: under the repository's name, where it has one."""
+        """`path` as a stage is shown it: under the repository's name, where it has one, or its library's scheme."""
+        if self.scheme:
+            return f"{self.scheme}:{path}"
         return f"{self.name}/{path}" if self.name else path
 
     def lines(self, path: str) -> list[str] | str:
@@ -222,6 +236,22 @@ class _Repository:
         return rows, False
 
 
+def _libraries_shown(installed: Sequence[Environment]) -> str:
+    """The installed libraries as a stage is told of them: each environment's, by name and version, and how to read
+    one. A library a distribution names apart from its import, as PyYAML's `yaml`, says the import too."""
+    lines = ["=== installed libraries, read offline: name a file as python:<path> or node:<path>, a library to list it"]
+    for one in installed:
+        named = []
+        for name, version, tops in one.packages[:LIBRARIES_SHOWN]:
+            imports = [top for top in tops if top.replace("_", "-").casefold() != name.casefold()]
+            named.append(
+                f"{name} {version}".strip() + (f" ({', '.join(imports)})" if imports and tops != (name,) else "")
+            )
+        more = len(one.packages) - LIBRARIES_SHOWN
+        lines.append(f"{one.scheme} ({one.where}): {', '.join(named)}" + (f", and {more:,} more" if more > 0 else ""))
+    return "\n".join(lines)
+
+
 def repositories_named(given: Sequence[str], held: Mapping[str, str]) -> dict[str, str]:
     """A change's repositories, `held`, with each one a person names added: `PATH`, named after its folder, or
     `NAME=PATH`, with forward slashes. A name given again takes its new path. `SourceError` for a name that cannot be
@@ -294,22 +324,32 @@ class Source:
     """The files a stage may be shown: those of the repository that holds `.spec/`, and those of each other
     repository a change names, under its name."""
 
-    def __init__(self, repositories: Sequence[_Repository], missing: Sequence[str] = ()) -> None:
+    def __init__(
+        self, repositories: Sequence[_Repository], missing: Sequence[str] = (), installed: Sequence[Environment] = ()
+    ) -> None:
         here, *others = repositories
         self._here = here
         self._others = {one.name: one for one in others}
-        #: Every path a stage may name: this repository's, then each other's under its name.
-        self.paths = [one.full(path) for one in repositories for path in one.paths]
+        #: The installed libraries, an environment a scheme, kept apart: no search, diff, test or commit is theirs.
+        self._installed = tuple(installed)
+        self._libraries = {
+            one.scheme: _Repository(one.scheme, one.root, one.paths, (), scheme=one.scheme) for one in installed
+        }
+        #: Every path a stage may name: this repository's, then each other's under its name, then each library's.
+        self.paths = [one.full(path) for one in (*repositories, *self._libraries.values()) for path in one.paths]
         self._listed = frozenset(self.paths)
         #: The other repositories that were read, and a line for each one that was not.
         self.names = tuple(self._others)
         self.missing = tuple(missing)
 
     @classmethod
-    def of(cls, root: Path, *, exclude: Sequence[str], others: Mapping[str, str] | None = None) -> Source:
+    def of(
+        cls, root: Path, *, exclude: Sequence[str], others: Mapping[str, str] | None = None, installed: bool = False
+    ) -> Source:
         """The source of the repository at `root`, as git lists it now, less what a person excluded; and of each of
         `others`, by its name a path from `root` or an absolute one. `SourceError` for one that can never be read
-        beside this one; one that is not here now is named in `missing`."""
+        beside this one; one that is not here now is named in `missing`. With `installed`, the project's installed
+        libraries too, as a reading for a plan asks for them."""
         here = _Repository("", root, listed_by_git(root, exclude=exclude), exclude)
         folders = {path.split("/", 1)[0] for path in here.paths if "/" in path}
         repositories, missing = [here], []
@@ -320,7 +360,7 @@ class Source:
                 missing.append(found)
             else:
                 repositories.append(found)
-        return cls(repositories, missing)
+        return cls(repositories, missing, environments(root) if installed else ())
 
     def tree(self) -> str:
         """The files for a stage to name real paths by: this repository's, then each other's under a line that names
@@ -329,6 +369,8 @@ class Source:
         for one in self._others.values():
             listed = tree_text([one.full(path) for path in one.paths])
             blocks.append(f"=== {one.name} ({_counted(len(one.paths), 'file', 'files')})\n{listed}")
+        if self._installed:
+            blocks.append(_libraries_shown(self._installed))
         return "\n".join(blocks)
 
     def root_of(self, name: str) -> Path | None:
@@ -419,7 +461,10 @@ class Source:
         return ""
 
     def _where(self, path: str) -> tuple[_Repository, str]:
-        """The repository a path a stage names is in, and the path within it."""
+        """The repository a path a stage names is in, and the path within it: an installed library's by its scheme."""
+        scheme, colon, inner = path.partition(":")
+        if colon and inner and (library := self._libraries.get(scheme)) is not None:
+            return library, inner
         name, _, rest = path.partition("/")
         other = self._others.get(name)
         return (other, rest) if other is not None and rest else (self._here, path)
