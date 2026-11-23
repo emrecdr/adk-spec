@@ -324,14 +324,16 @@ def test_a_scout_that_finds_nothing_to_read_says_so_and_the_plan_is_drafted(tmp_
     assert stages(fake_provider) == ["scout", "tasks"] and not (tmp_path / CONTEXT).exists()
 
 
-def test_a_ceiling_spent_by_the_reading_leaves_what_it_kept(tmp_path, capsys, fake_provider) -> None:
+def test_a_ceiling_holds_the_reading_to_half_and_keeps_what_it_read(tmp_path, capsys, fake_provider) -> None:
+    """The reading spends at most half of what is left, keeps what it read by then, and the plan is drafted."""
     seeded(tmp_path)
     repository(tmp_path)
-    write_text(tmp_path / ".spec/config.toml", '[project]\ndefault_tier = "lean"\n\n[limits]\nmax_tokens = 240\n')
+    write_text(tmp_path / ".spec/config.toml", '[project]\ndefault_tier = "lean"\n\n[limits]\nmax_tokens = 480\n')
     capsys.readouterr()
-    assert run(tmp_path, "plan", "passkeys", "--replace") == 3, "the scout and the survey spent it: no tasks call"
-    assert STATED in read_text(tmp_path / CONTEXT), "what was read is kept for the next plan"
-    assert stages(fake_provider) == ["scout", "survey"] and "CEILING" in capsys.readouterr().err
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 0, "the scout and the survey spent its half"
+    assert STATED in read_text(tmp_path / CONTEXT), "what was read is kept"
+    assert stages(fake_provider) == ["scout", "survey", "tasks"]
+    assert "the reading's share of the run's token ceiling of 480" in capsys.readouterr().out
 
 
 def test_a_secret_in_a_tracked_file_reaches_no_request_no_recording_and_no_context(tmp_path, fake_provider) -> None:

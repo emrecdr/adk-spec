@@ -62,12 +62,19 @@ def _refusal(workspace: Workspace, path: Path) -> str:
 
 
 def _taken(path: Path, mine: str) -> bool:
-    """Whether the file was made, a lock or a marker, saying `mine`. Where another run made it first, it is not."""
+    """Whether the file was made, a lock or a marker, saying `mine`. Where another run made it first, it is not. One
+    made that could not be written, on a full disk say, is removed: empty, it names no run, and would be refused to
+    every run after it until a person removed it."""
     try:
-        with path.open("xb") as made:  # made exclusively: it fails where the file is there
-            made.write(mine.encode())
+        made = path.open("xb")  # made exclusively: it fails where the file is there
     except FileExistsError:
         return False
+    try:
+        with made:
+            made.write(mine.encode())
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
     return True
 
 

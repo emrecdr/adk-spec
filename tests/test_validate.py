@@ -133,6 +133,7 @@ def test_every_code_has_a_case_and_a_severity() -> None:
         "spec.folder-mismatch",
         "spec.folder-bad-name",
         "delta.living-unreadable",
+        "change.unreadable",  # the command's, of a change whose state does not read: its case is in test_cli.py
     }
 
 

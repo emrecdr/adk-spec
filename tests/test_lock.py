@@ -90,3 +90,37 @@ def test_a_run_removes_its_lock_though_the_machines_name_changed_meanwhile(tmp_p
     with held(ws):
         monkeypatch.setattr(platform, "node", lambda: "renamed-on-another-network")
     assert not (ws.home / LOCK).exists()
+
+
+def test_a_lock_that_could_not_be_written_is_not_left_behind(tmp_path, monkeypatch) -> None:
+    """Found by the third audit: a full disk failed the lock's write after the file was made, and the empty lock,
+    which names no run, was refused to every command after it until a person removed it."""
+    import pathlib
+
+    ws = Workspace.init(tmp_path)
+    real = pathlib.Path.open
+
+    class Full:
+        def __init__(self, handle) -> None:
+            self.handle = handle
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> None:
+            self.handle.close()
+
+        def write(self, _data: bytes) -> int:
+            raise OSError(28, "No space left on device")
+
+    def opened(path, mode="r", *args, **kwargs):
+        handle = real(path, mode, *args, **kwargs)
+        return Full(handle) if mode == "xb" else handle
+
+    monkeypatch.setattr(pathlib.Path, "open", opened)
+    with pytest.raises(OSError, match="No space"), held(ws):
+        pass
+    monkeypatch.undo()
+    assert not (ws.home / LOCK).exists() and not (ws.home / TAKING).exists()
+    with held(ws):
+        pass

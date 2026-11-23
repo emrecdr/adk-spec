@@ -161,7 +161,8 @@ design and the tasks rest on what is there and not on file names. `plan` reads i
   stands; delete it and the next `adk-spec plan <id>` reads the code again. It is no part of an approval.
 - **What it costs.** Up to seven model calls: one to choose, four to state, two to review. Measured live on a
   repository of 268 files it took some 30,000 tokens; far less in a small repository. It is the largest part of
-  `propose`. `[limits] max_tokens` holds it, and the `tokens` line shows it.
+  `propose`. Under `[limits] max_tokens` it spends at most half of what is left, and the rest is kept for the
+  brief, the specs and the plan; the `tokens` line shows what it spent.
 - **It never stops a plan.** A reading that fails or finds nothing says so in one line, and the plan is drafted
   without it.
 
@@ -278,11 +279,12 @@ adk-spec smoke
 `propose`, `verify`, `plan` and `check` call a model, and `approve` does where a standard change's check is not
 current. `[limits] max_tokens` in `.spec/config.toml` caps what one command may spend: once that much is spent no
 further call is sent, so a command overshoots by its last call at most, and `propose` asks no question whose answer
-it could not use.
+it could not use. A ceiling below twice what the reading costs reads less: some 80,000 tokens leaves a `propose` on
+a repository of a few hundred files room for all of it.
 
 ```toml
 [limits]
-max_tokens = 30000
+max_tokens = 80000
 ```
 
 On a terminal a command says which stage it is on while it works. Every command that calls a model keeps what it

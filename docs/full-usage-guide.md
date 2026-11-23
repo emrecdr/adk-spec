@@ -141,7 +141,7 @@ Edit `.spec/config.toml` to harden exclusions, set token limits, and register yo
 default_tier = "standard"
 
 [limits]
-max_tokens = 30000
+max_tokens = 80000
 keep_runs = 20
 
 [repository]
@@ -151,7 +151,7 @@ exclude = ["vendor/**", "**/*.pem", "*.key", "config/production.yaml"]
 # Phase 9 [Built]: only a test command you write here is ever run by verify: a list, run with no shell
 [verify]
 test = ["uv", "run", "pytest", "-q"]
-timeout = 900"
+timeout = 900
 ```
 
 Review `.spec/constitution.md` (`[Built]`, keep concise under 16,000 chars so every stage reads crisp rules):

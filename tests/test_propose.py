@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from conftest import (
     CANNED_REVIEW,
+    CANNED_SURVEY,
     CANNED_TRIAGE,
     DELTAS_ON_A_MISSING_ID,
     approved,
@@ -641,3 +642,17 @@ def test_the_brief_is_told_the_capabilities_triage_sized_the_request_as_touching
     assert proposed(tmp_path, "--id", "sized", "--no-explore") == 0
     brief = sent_to(fake_provider, BRIEF)
     assert between(brief, "sized") == "auth"
+
+
+def test_under_a_ceiling_the_reading_leaves_the_drafting_half_of_what_is_left(tmp_path, capsys, fake_provider) -> None:
+    """Found by the third audit: under `[limits] max_tokens` the reading, the largest part of `propose`, spent the
+    ceiling, and the brief or the deltas were refused every time: nothing written, at the README's own example. The
+    reading is held to half of what is left, and says where it stopped."""
+    seeded(tmp_path)
+    repository(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", LIMITS + "max_tokens = 840\n")
+    fake_provider.answers_when(SURVEY, {**CANNED_SURVEY, "more_searches": ["password"]})  # it would read on and on
+    assert proposed(tmp_path, "--id", "capped") == 0
+    assert (tmp_path / ".spec/changes/capped/tasks.md").is_file()
+    assert _order(fake_provider)[-3:] == [BRIEF, DELTAS, TASKS]
+    assert "the reading's share of the run's token ceiling of 840" in capsys.readouterr().out

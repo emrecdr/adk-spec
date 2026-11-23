@@ -100,6 +100,7 @@ from ..workspace.layout import (
 )
 from ..workspace.layout import CONTEXT as CONTEXT_FILE
 from ..workspace.layout import DESIGN as DESIGN_FILE
+from ..workspace.layout import STATE as STATE_FILE
 from ..workspace.layout import TASKS as TASKS_FILE
 from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
@@ -498,9 +499,17 @@ def _validate(args: argparse.Namespace) -> int:
             )
         )
     for change_id in [args.id] if args.id else workspace.changes():
-        if workspace.state(change_id).status == "archived":  # folded in, its delta has no base now: nothing to check
-            continue
-        found += _assessed(workspace, change_id, living, drift=False).findings
+        try:
+            if (
+                workspace.state(change_id).status == "archived"
+            ):  # folded in, its delta has no base now: nothing to check
+                continue
+            found += _assessed(workspace, change_id, living, drift=False).findings
+        except WorkspaceError as exc:  # one change that does not read stops no other's check
+            if args.id:
+                raise
+            unread = workspace.shown(workspace.home / CHANGES / change_id / STATE_FILE)
+            found.append(finding("change.unreadable", str(exc), path=unread))
     stops = failed(found, strict=args.strict)
     if args.json:
         print(json.dumps({"findings": [held.model_dump() for held in found], "failed": stops}, indent=2))
@@ -520,9 +529,13 @@ def _status(args: argparse.Namespace) -> int:
     living, _found = workspace.specs()
     rows = []
     for change_id in workspace.changes():
-        if not args.all and workspace.state(change_id).status == "archived":  # history, which is not read
+        try:
+            if not args.all and workspace.state(change_id).status == "archived":  # history, which is not read
+                continue
+            assessed = _assessed(workspace, change_id, living)
+        except WorkspaceError as exc:  # one change that does not read stops no other: it is named, and why
+            rows.append({"id": change_id, "tier": "-", "status": "unread", "actor": "you", "next": str(exc)})
             continue
-        assessed = _assessed(workspace, change_id, living)
         state, step = assessed.state, assessed.step
         row = {"id": change_id, "tier": state.tier, "status": state.status, "actor": step.actor, "next": step.phrase}
         rows.append(row)
@@ -1212,7 +1225,8 @@ def _code_read(
     # Asked after only once there is code to read: a plan outside a repository needs no reading model.
     if why := require_ready(roles=ROLES):
         raise UsageError(why)
-    found, failure = _reading(workspace, "explore", change_id, {**seed, TREE: source.tree()}, ledger, source)
+    with ledger.held_to_half("the reading"):
+        found, failure = _reading(workspace, "explore", change_id, {**seed, TREE: source.tree()}, ledger, source)
     said = _explored_said(found, len(source.names), failure)
     if not found.statements:
         return _Read(said, "")

@@ -458,3 +458,20 @@ def test_yes_takes_the_suggestion_and_is_an_answer_where_none_is_suggested(monke
     # next draft beside its question, so a plain "yes" always says what the person meant.
     assert cli._answered(asked) == ["Yes, eight hours.", "yes: every device", "Each one.", "yes", "yes", ""]
     assert "`yes` or `=` takes the suggestion" in capsys.readouterr().out
+
+
+def test_one_change_whose_state_does_not_read_stops_no_other(tmp_path, capsys) -> None:
+    """Found by the third audit: a `change.json` left with a merge's conflict marks stopped `status`, `validate` and
+    `propose` for every change, `propose` before any model call. It is named, and the rest go on; its requirement IDs
+    stay spoken for."""
+    workspace = seeded(tmp_path)
+    other = workspace.new_change("other", "lean")
+    write_text(other / "change.json", "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> theirs\n")
+    write_text(other / "specs" / "billing" / "spec.md", "### Requirement: REQ-BILLING-001 Invoices\n")
+    assert run(tmp_path, "status") == 0
+    out = capsys.readouterr().out
+    assert "passkeys" in out and "other" in out and "change.json does not read" in out
+    assert run(tmp_path, "validate") == 1
+    assert "ERROR change.unreadable .spec/changes/other/change.json" in capsys.readouterr().out
+    living, _found = workspace.specs()
+    assert "REQ-BILLING-001" in workspace.taken(living)
