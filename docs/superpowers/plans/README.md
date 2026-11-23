@@ -410,10 +410,12 @@ and a step moves to code only where its output is a function of its input with n
   README is a usage guide, at the owner's request. Refuted: statements dropped for a wrong path were invented quotes.
   Deferred, with their reasons:
   - **A propose that fails late keeps nothing** (the reading and the answers are lost). Keeping a half-written change
-    reverses the rule that a change is written whole or not at all, and makes `validate` fail for the workspace: the
-    owner's decision. The most common late failure, a delta with no purpose, is fixed at its cause.
-  - **An Agent Skill beside the MCP server.** A skill cannot ship inside a Python package; adk-spec would have to
-    write one into the repository it works in (`.claude/skills/`, which Copilot reads too): the owner's decision.
+    reverses the rule that a change is written whole or not at all, and makes `validate` fail for the workspace. The
+    owner decided on 23 November 2026, as recommended, to keep it deferred. The most common late failure, a delta with
+    no purpose, is fixed at its cause.
+  - **An Agent Skill beside the MCP server.** Built, on the owner's decision of 23 November 2026: `init` writes
+    `.claude/skills/adk-spec/SKILL.md`, which Copilot and Claude Code read, once and never over one that is there
+    (`docs/superpowers/specs/2026-11-24-agent-skill-design.md`).
   - **Progress notifications from the MCP tools.** Neither VS Code nor Claude Code times a local server out at 60 s,
     and Claude Code is reported to send no progress token, so a heartbeat would be cosmetic in VS Code alone.
   - **The tier recorded in an approval.** It catches only an accidental edit of `change.json`, which a hand edit could

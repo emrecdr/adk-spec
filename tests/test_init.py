@@ -45,7 +45,8 @@ def test_init_reads_the_code_writes_the_profile_and_drafts_the_rules(tmp_path, c
     reads_the_tests(fake_provider)
     assert run(tmp_path, "init") == 0
     out = capsys.readouterr().out
-    assert [line.split()[0] for line in out.splitlines()] == ["made", "reading", "explored", "wrote", "drafted", "next"]
+    said = [line.split()[0] for line in out.splitlines()]
+    assert said == ["made", "wrote", "reading", "explored", "wrote", "drafted", "next"], "the skill, then the reading"
     assert "wrote     .spec/profile.md\n" in out
     assert "drafted   1 rule into .spec/constitution.md: keep, edit or delete each\n" in out
     assert read_text(tmp_path / PROFILE).startswith("# This repository\n\nRead from the repository at commit ")
@@ -182,3 +183,43 @@ def test_init_asks_for_the_whole_repository_and_for_conventions_as_rules(tmp_pat
     brief = " ".join(between(scout, "brief").split())
     assert "the whole repository, not one feature of it" in brief
     assert "as a rule new code must follow" in brief and "one sentence" in brief
+
+
+# The Agent Skill: how an assistant uses adk-spec, read by GitHub Copilot and Claude Code from the repository.
+SKILL = ".claude/skills/adk-spec/SKILL.md"
+
+
+def test_init_writes_a_skill_an_assistant_reads_in_the_form_the_standard_asks(tmp_path, capsys) -> None:
+    """The owner's choice, 23 November 2026, after the third audit: `init` writes an Agent Skill, which both GitHub
+    Copilot and Claude Code read from `.claude/skills/`, so an assistant knows how to use adk-spec with nothing set up.
+    The form is agentskills.io's: a name that is its folder's, lowercase and hyphens, and a description of 1,024
+    characters at most."""
+    import re
+
+    repository(tmp_path, FILES)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    assert f"wrote     {SKILL}" in capsys.readouterr().out
+    text = read_text(tmp_path / SKILL)
+    head, _, body = text.removeprefix("---\n").partition("\n---\n")
+    fields = dict(line.split(": ", 1) for line in head.splitlines())
+    assert fields["name"] == "adk-spec" and re.fullmatch(r"[a-z0-9-]{1,64}", fields["name"])
+    assert 0 < len(fields["description"]) <= 1024
+    for said in ("adk-spec status", "--no-input", "tasks.md", "- [x]", "adk-spec approve", "--override"):
+        assert said in body, said
+
+
+def test_init_never_writes_over_a_skill_that_is_there(tmp_path, capsys) -> None:
+    repository(tmp_path, FILES)
+    write_text(tmp_path / SKILL, "---\nname: adk-spec\ndescription: mine\n---\n\nMine.\n")
+    assert run(tmp_path, "init", "--no-explore") == 0
+    assert read_text(tmp_path / SKILL).endswith("Mine.\n") and "SKILL.md" not in capsys.readouterr().out
+
+
+def test_a_refresh_writes_the_skill_where_a_workspace_made_before_it_has_none(tmp_path, capsys, fake_provider) -> None:
+    repository(tmp_path, FILES)
+    reads_the_tests(fake_provider)
+    assert run(tmp_path, "init", "--no-explore") == 0
+    (tmp_path / SKILL).unlink()
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh") == 0
+    assert (tmp_path / SKILL).is_file() and f"wrote     {SKILL}" in capsys.readouterr().out

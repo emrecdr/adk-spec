@@ -106,6 +106,7 @@ from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
+from ..workspace.skill import write_skill
 from ..workspace.source import NAME, Source, SourceError, repositories_named
 from ..workspace.tests import run_tests
 
@@ -319,6 +320,9 @@ def _init(args: argparse.Namespace) -> int:
     else:
         workspace = Workspace.init(_unheld(Path(args.root).absolute()))
         print(f"made      {workspace.shown(workspace.home)}")
+    # How an assistant uses adk-spec, where the repository has none: a refresh gives it to a workspace made before it.
+    if (skill := write_skill(workspace.root)) is not None:
+        print(f"wrote     {workspace.shown(skill)}")
     code = EXIT_OK
     if not args.no_explore:
         _load_env()

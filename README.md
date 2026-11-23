@@ -95,6 +95,7 @@ project, never inside adk-spec's own folder:
 │   ├── lessons.md         corrections every draft follows
 │   ├── specs/             the living specs: one folder per capability
 │   └── changes/           one folder per change: brief.md, specs/, context.md, design.md, tasks.md, reports/
+├── .claude/skills/adk-spec/SKILL.md   written by init: how your coding assistant uses adk-spec; commit it too
 ├── src/
 └── tests/
 ```
@@ -193,6 +194,7 @@ adk-spec init
 
 ```text
 made      .spec
+wrote     .claude/skills/adk-spec/SKILL.md
 reading   the code, to describe this repository: up to 7 model calls. --no-explore skips it
 explored  42 files: 18 statements kept
 wrote     .spec/profile.md
@@ -201,17 +203,21 @@ next      keep what is true in constitution.md, then run `adk-spec propose "<wha
 
 `init` reads your code once and writes `.spec/profile.md`: the stack, the commands, where things live, the
 conventions and the risks, each statement quoting the code it rests on. Every later change starts its reading from
-it. Rules already true of the code are drafted into `.spec/constitution.md`, each marked with its evidence.
+it. Rules already true of the code are drafted into `.spec/constitution.md`, each marked with its evidence. It
+also writes `.claude/skills/adk-spec/SKILL.md`, an [Agent Skill](https://agentskills.io) that GitHub Copilot and
+Claude Code read from the repository: it tells your coding assistant how to use adk-spec, with nothing to set up
+(see [below](#from-vs-code-with-copilot-or-claude-code)). It is yours: edit it as you like; `init` never writes over
+one that is there.
 
 Then:
 
 1. **Read `.spec/constitution.md`**: keep the rules that are true and wanted, edit or delete the rest. Every stage
    of every change reads it, so keep it short (under 16,000 characters).
 2. **Name your test command** in `.spec/config.toml`, so that `verify` runs it (see [Settings](#settings-reference)).
-3. **Commit** `.spec/`: `git add .spec && git commit -m "Add adk-spec"`.
+3. **Commit** `.spec/` and the skill: `git add .spec .claude/skills/adk-spec && git commit -m "Add adk-spec"`.
 
 `init --no-explore` makes the tree with no model call; `init --refresh` reads the code again later and rewrites the
-profile.
+profile, and writes the skill into a repository that has none, as one set up before adk-spec wrote it.
 
 ## Your first change, step by step
 
@@ -465,7 +471,14 @@ own test command and judges the work in all of them. `--with PATH` names a repos
 
 ### From VS Code with Copilot, or Claude Code
 
-`adk-spec-mcp` serves `propose`, `plan`, `check`, `verify`, `status` and `validate` as tools to your coding assistant,
+**With nothing to set up**, the skill `init` wrote tells your assistant how to use adk-spec: Copilot (agent mode in
+VS Code, the CLI and the cloud agent) and Claude Code read `.claude/skills/adk-spec/SKILL.md` and run `adk-spec` in
+the terminal. Ask in the chat, as below; the assistant runs `status`, `propose --no-input`, `plan`, `check`, `verify`
+and `validate`, implements the tasks and ticks them, and leaves `approve`, `archive` and every `--override` to you.
+The assistant's terminal must find `adk-spec`: a shell alias is not seen by every assistant's terminal, so install it
+as a tool (`uv tool install --editable ~/tools/adk_spec`), or say in the chat how to run it.
+
+**With the MCP server**, `adk-spec-mcp` serves `propose`, `plan`, `check`, `verify`, `status` and `validate` as tools to your coding assistant,
 so you can ask for a change in the chat and have the assistant implement it. Approving and archiving stay yours, in a
 terminal.
 
@@ -676,7 +689,8 @@ with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists t
   each statement with a quote. Rules already true of the code are drafted into the new constitution, each with its
   evidence, for you to keep, edit or delete. Every change's reading starts from the profile. `init --refresh` reads
   the code again and rewrites the profile; it drafts rules only while the constitution is still the template.
-  Without a model set up, `init` makes the tree and says how to read the code later.
+  Without a model set up, `init` makes the tree and says how to read the code later. It also writes the Agent Skill
+  `.claude/skills/adk-spec/SKILL.md` where the repository has none, and never over one that is there.
 
 - **`plan`** drafts a change's tasks again, and its design where one is owed, after you edited the brief or the
   specs. Where a task is already ticked it replaces nothing unless you add `--replace`, and it keeps a design you
