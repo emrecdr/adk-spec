@@ -171,13 +171,21 @@ def _node(root: Path, globs: Sequence[str]) -> Environment | None:
     if not _folder(modules) or _excluded("node_modules", globs):
         return None
     held = _Gathering("node_modules", globs)
+    past = 0
     for name, folder in _packages(modules):
+        if len(held.paths) >= LIBRARY_MAX_PATHS:  # full: counted, not walked, and not named, as one excluded is not
+            past += 1
+            continue
         try:
             files = [f"{name}/{path}" for path in _walked(folder)]
         except OSError as exc:
             held.unread.append(f"{name}: {exc.strerror or exc}")
             continue
         held.add(name, _version(folder / "package.json"), (), files)  # imported by its own name
+    if past:
+        held.unread.append(
+            f"{past} more package{'' if past == 1 else 's'}: past the {LIBRARY_MAX_PATHS:,} files an environment lists"
+        )
     return held.made("node", "node_modules", modules)
 
 

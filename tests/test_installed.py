@@ -193,3 +193,21 @@ def test_a_folder_pattern_keeps_a_librarys_files_out_as_it_does_the_repositorys(
     for pattern in ("node_modules/leftpad", "node_modules/leftpad/", "leftpad/"):
         source = Source.of(root, exclude=(pattern,), installed=True)
         assert "leftpad" not in source.tree() and "react 19.2.0" in source.tree(), pattern
+
+
+def test_once_the_cap_is_full_no_further_package_is_walked(tmp_path, monkeypatch) -> None:
+    """Found by the third audit: every package of a large `node_modules` was walked whole after the cap was full,
+    for nothing. They are counted, not walked, and not named: a name could be one an exclusion keeps out."""
+    from adk_spec.workspace import installed
+
+    root = _repository(tmp_path)
+    _node(root, "alpha", {"a.js": "1\n", "b.js": "2\n", "c.js": "3\n"})  # with its package.json: four files
+    for name in ("beta", "gamma"):
+        _node(root, name, {"x.js": "4\n"})
+    monkeypatch.setattr(installed, "LIBRARY_MAX_PATHS", 4)
+    walked: list[str] = []
+    real = installed._walked
+    monkeypatch.setattr(installed, "_walked", lambda folder: walked.append(folder.name) or real(folder))
+    (found,) = environments(root)
+    assert walked == ["alpha"] and [name for name, _version, _tops in found.packages] == ["alpha"]
+    assert found.unread == ("2 more packages: past the 4 files an environment lists",)
