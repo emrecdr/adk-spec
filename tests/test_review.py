@@ -146,3 +146,27 @@ def test_archive_stopped_by_a_moved_base_names_the_view(tmp_path, capsys) -> Non
     assert run(tmp_path, "archive", "passkeys") == 1
     assert VIEW in capsys.readouterr().err
     assert "-The system MUST lock an account after seven failed attempts." in read_text(tmp_path / VIEW)
+
+
+def test_a_modified_requirement_the_living_spec_holds_as_it_is_says_so() -> None:
+    same = parse_delta(DELTA.replace("three failed attempts", "five failed attempts").replace("a third", "a fifth"))
+    living = parse_spec(SPEC.replace("- GIVEN four failed attempts\n", "").replace("- AND the user is told why\n", ""))
+    assert "REQ-AUTH-002 is unchanged from the living spec." in render_review(
+        "passkeys", {"auth": same}, {"auth": living}, {}
+    )
+
+
+def test_a_view_that_cannot_be_written_does_not_fail_the_command(tmp_path, monkeypatch) -> None:
+    """Found by the code review: a finished command ended in exit 3 where `reports/review.md` would not be written."""
+    from adk_spec.workspace.layout import Workspace
+
+    seeded(tmp_path)
+    writing = Workspace.write_report
+
+    def held(self, change_id, name, text):
+        if name == "review.md":
+            raise OSError(13, "Permission denied")
+        return writing(self, change_id, name, text)
+
+    monkeypatch.setattr(Workspace, "write_report", held)
+    assert run(tmp_path, "rebase", "passkeys") == 0

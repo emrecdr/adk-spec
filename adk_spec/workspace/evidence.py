@@ -10,6 +10,7 @@ from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence,
 from ..domain.model import ChangeState, Delta, Finding
 from ..domain.text import quoted_at
 from ..domain.validate import finding
+from .config import ConfigError
 from .files import NotTextError, read_text
 from .git import GitError, grep, is_repository
 from .layout import CHANGES, EVIDENCE, SPECS, Workspace
@@ -47,9 +48,11 @@ def _found(path: Path, quote: str) -> bool:
 
 
 def evidence_findings(workspace: Workspace) -> list[Finding]:
-    """A note for each suspect requirement of every living spec, and for each evidence line that does not read."""
+    """A note for each suspect requirement of every living spec, and for each evidence line that does not read. A
+    requirement the living spec no longer holds is not checked, nor any of a living spec that does not read."""
     found: list[Finding] = []
-    exclude = workspace.config().exclude
+    living, _faults = workspace.specs()
+    exclude: tuple[str, ...] | None = None  # read once, and only where there is evidence to look for
     for capability in workspace.capabilities():
         path = workspace.home / SPECS / capability / EVIDENCE
         shown = workspace.shown(path)
@@ -65,8 +68,20 @@ def evidence_findings(workspace: Workspace) -> list[Finding]:
             )
             for at in unread
         ]
-        found += suspects(read, lambda one: holds(workspace.root, one, exclude), path=shown)
+        held = {req.id for req in living[capability].requirements} if capability in living else set()
+        if kept := [(at, one) for at, one in read if one.req in held]:
+            exclude = _excluded(workspace) if exclude is None else exclude
+            found += suspects(kept, lambda one, skip=exclude: holds(workspace.root, one, skip), path=shown)
     return found
+
+
+def _excluded(workspace: Workspace) -> tuple[str, ...]:
+    """The person's exclude patterns; none where the config does not read. Found by the code review: read first, a
+    fault in it, or no config at all, stopped `validate` and `status` where no evidence was kept."""
+    try:
+        return tuple(workspace.config().exclude)
+    except ConfigError, OSError:
+        return ()
 
 
 def evidence_folded(

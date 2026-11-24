@@ -34,7 +34,7 @@ def remaining(verdicts: Sequence[Verdict], groups: Sequence[TaskGroup], touched:
         if verdict.verdict == "met":
             continue
         serving = [task for task in tasks if verdict.id in task.requirements]
-        named = dict.fromkeys(path for task in serving for path in task.files)
+        named = dict.fromkeys(_path(path) for task in serving for path in task.files)
         left.append(
             Left(
                 id=verdict.id,
@@ -42,10 +42,20 @@ def remaining(verdicts: Sequence[Verdict], groups: Sequence[TaskGroup], touched:
                 reason=verdict.reason,
                 ticked=tuple(task.id for task in serving if task.done),
                 open=tuple(task.id for task in serving if not task.done),
-                untouched=tuple(path for path in named if path not in touched),
+                untouched=tuple(path for path in named if not _touched(path, touched)),
             )
         )
     return left
+
+
+def _path(named: str) -> str:
+    """A task's file as a path: written by a person or a model, it may be quoted in backticks or open on `./`."""
+    return named.strip().strip("`").removeprefix("./").rstrip("/")
+
+
+def _touched(path: str, touched: frozenset[str]) -> bool:
+    """Whether the diff touched `path`, or a file under it where it is a folder."""
+    return path in touched or any(one.startswith(f"{path}/") for one in touched)
 
 
 def render_remaining(change_id: str, left: Sequence[Left]) -> str:

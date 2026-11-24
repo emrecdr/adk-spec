@@ -77,3 +77,18 @@ def test_a_changelog_that_does_not_read_is_left_and_the_change_archived(tmp_path
     assert run(tmp_path, "archive", "passkeys") == 0
     assert (tmp_path / CHANGELOG).read_bytes() == b"\xff\xfe not text"
     assert f"kept      {CHANGELOG}: " in capsys.readouterr().out
+
+
+def test_a_heading_of_a_persons_own_is_kept_whole() -> None:
+    """Found by the code review: `# Changelog of the API` lost its first two words, and a file opening on a blank line
+    got a second heading."""
+    entry = changelog_entry("passkeys", "2026-11-24", DELTAS)
+    theirs = with_entry("# Changelog of the API\n\n## old\n", entry)
+    assert theirs.startswith("# Changelog\n\n## passkeys") and "\n# Changelog of the API\n" in theirs
+    assert with_entry("\n# Changelog\n\n## old\n", entry).count("# Changelog") == 1
+
+
+def test_the_summary_says_an_override_and_its_reason() -> None:
+    change = Change(state=ChangeState(id="passkeys", tier="lean"), brief=parse_brief(BRIEF), deltas=DELTAS, tasks=None)
+    text = render_summary(change, {"REQ-AUTH-002": "unmet"}, {}, None, override="the judge misread the lockout")
+    assert "Verified by override: the judge misread the lockout" in text

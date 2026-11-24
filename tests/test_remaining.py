@@ -79,7 +79,8 @@ def test_the_next_step_names_the_unmet_requirements(tmp_path, capsys, fake_provi
 
 
 def test_the_next_step_names_three_unmet_requirements_and_counts_the_rest() -> None:
-    state = verified(approved(), {f"REQ-A-00{n}": "unmet" for n in range(1, 6)}, base="c0", diff="sha256:d", at="t")
+    left = {f"REQ-A-00{n}": "unmet" for n in range(1, 6)}
+    state = verified(approved("standard"), left, base="c0", diff="sha256:d", at="t")
     said = phrase(state, [], [])
     assert said.startswith("REQ-A-001, REQ-A-002, REQ-A-003 and 2 more unmet: work from reports/remaining.md")
     assert said.endswith(f"then run `adk-spec verify {state.id}`")
@@ -88,3 +89,37 @@ def test_the_next_step_names_three_unmet_requirements_and_counts_the_rest() -> N
 def test_failed_tests_come_before_unmet_requirements() -> None:
     state = verified(approved(), {"REQ-A-001": "unmet"}, base="c0", diff="sha256:d", at="t", tests={".": "failed"})
     assert phrase(state, [], []).startswith("the tests failed")
+
+
+def test_a_report_that_will_not_be_removed_loses_no_verification(tmp_path, monkeypatch, fake_provider) -> None:
+    """Found by the code review: on Windows a held file refused to be removed, after the verification was paid for and
+    before it was recorded."""
+    from pathlib import Path
+
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    fake_provider.answers_each_time(VERIFY, iter([UNMET, None]))
+    assert run(tmp_path, "verify", "passkeys") == 1
+    removing = Path.unlink
+
+    def held(path, missing_ok=False):
+        if path.name == "remaining.md":
+            raise PermissionError(32, "The process cannot access the file")
+        removing(path, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", held)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    assert json.loads((tmp_path / ".spec/changes/passkeys/change.json").read_text())["status"] == "verified"
+
+
+def test_a_lean_change_with_an_unmet_requirement_is_pointed_to_its_archive() -> None:
+    """Found by the code review: a lean change owes no verification, and was sent to verify again."""
+    state = verified(approved(), {"REQ-A-001": "unmet"}, base="c0", diff="sha256:d", at="t")
+    assert phrase(state, [], []).endswith(f"then run `adk-spec archive {state.id}`")
+
+
+def test_task_paths_are_read_as_paths() -> None:
+    """Found by the code review: a task's `./` path, a backticked one or a folder read as untouched by the work."""
+    groups = parse_tasks(TASKS.replace("src/auth/passkey.py, src/auth/lockout.py", "./src/auth/passkey.py, `src`"))
+    (left,) = remaining(SAID, groups, frozenset({"src/auth/passkey.py"}))
+    assert left.untouched == ()

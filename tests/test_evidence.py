@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from conftest import on_the_fake, run, seeded
+from conftest import on_the_fake, repository, run, seeded
 from test_verify import AFTER, verified_in_a_repository
 
 from adk_spec.domain.evidence_md import (
@@ -18,6 +18,7 @@ from adk_spec.domain.evidence_md import (
     parse_evidence,
     render_evidence,
 )
+from adk_spec.domain.text import quoted_at
 from adk_spec.domain.verify import Verdict
 from adk_spec.workspace.files import write_text
 
@@ -191,3 +192,36 @@ def test_an_evidence_line_off_the_grammar_is_a_note(tmp_path, capsys) -> None:
     write_text(tmp_path / LIVING_EVIDENCE, render_evidence("auth", [proof()]) + "a line written by hand\n")
     (note,) = [line for line in validated(tmp_path, capsys)[1].splitlines() if "spec.evidence-unreadable" in line]
     assert note.startswith("INFO") and LIVING_EVIDENCE in note
+
+
+def test_a_config_that_does_not_read_stops_neither_validate_nor_status(tmp_path) -> None:
+    """Found by the code review: the evidence check read the config first, and a fault in it, or none at all, stopped
+    `validate` and `status` where no evidence was kept."""
+    seeded(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", "[review]\nfrom = 'a newer adk-spec'\n")
+    assert run(tmp_path, "validate") in (0, 1) and run(tmp_path, "status") == 0
+    (tmp_path / ".spec/config.toml").unlink()
+    assert run(tmp_path, "validate") in (0, 1) and run(tmp_path, "status") == 0
+
+
+def test_a_long_quote_is_never_cut_too_short_to_find() -> None:
+    """Found by the code review: cut at its one early space, `x = <300 characters>` was kept as `x =`, which no text
+    holds, and its requirement read as suspect at once."""
+    line = "x = " + "A" * 300
+    said = [Verdict("REQ-AUTH-004", "met", (("src/auth.py", line),), "r")]
+    (one,) = kept(said, added=frozenset({"REQ-AUTH-004"}), change="passkeys", at=AT, repositories={})
+    assert len(one.quote) <= QUOTE_MAX and quoted_at(one.quote, line) is not None
+
+
+def test_a_requirement_no_longer_in_the_living_spec_is_not_suspect(tmp_path, capsys) -> None:
+    """Found by the code review: lines left in a living evidence file for a requirement since removed were reported
+    as suspect, with advice to verify a change that keeps it."""
+    seeded(tmp_path)
+    repository(tmp_path)
+    lines = [
+        proof("REQ-AUTH-009", quote="def retired_long_ago():"),
+        proof("REQ-AUTH-002", quote="def never_written():"),
+    ]
+    write_text(tmp_path / LIVING_EVIDENCE, render_evidence("auth", lines))
+    gone = [line for line in validated(tmp_path, capsys)[1].splitlines() if "spec.evidence-gone" in line]
+    assert len(gone) == 1 and "REQ-AUTH-002" in gone[0]

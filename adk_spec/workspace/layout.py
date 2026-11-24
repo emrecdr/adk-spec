@@ -330,8 +330,11 @@ class Workspace:
         return self.write_into(change_id, {f"{REPORTS}/{name}": text})[0]
 
     def drop(self, change_id: str, path: str) -> None:
-        """A file adk-spec generated in a change's folder removed, where there is one: what it said no longer holds."""
-        (self._folder(change_id) / path).unlink(missing_ok=True)
+        """A file adk-spec generated in a change's folder removed, where there is one: what it said no longer holds.
+        One that will not go, held open on Windows, is left: found by the code review, its refusal lost a
+        verification paid for and not yet recorded."""
+        with contextlib.suppress(OSError):
+            (self._folder(change_id) / path).unlink(missing_ok=True)
 
     def learn(self, sent_back: Iterable[tuple[str, str]]) -> None:
         """Each of `sent_back`, a stage and a problem its gate sent back that the next try fixed, noted in the lessons

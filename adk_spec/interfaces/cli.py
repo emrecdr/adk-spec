@@ -535,8 +535,11 @@ def _say_next(
     assessed = _assessed(workspace, change_id, living, drift=drift)
     deltas = assessed.loaded.change.deltas
     if assessed.stale and deltas:  # a draft, or an approved change edited since: an approval is owed
-        shown, overlaps = _view_written(workspace, change_id, deltas, living)
-        print(f"review    {shown}: {review_said(deltas, overlaps)}")
+        try:
+            shown, overlaps = _view_written(workspace, change_id, deltas, living)
+            print(f"review    {shown}: {review_said(deltas, overlaps)}")
+        except OSError:  # the view is an aid: the command's work is saved, and its next step is said
+            pass
     phrase = assessed.step.phrase
     print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
 
@@ -893,7 +896,7 @@ def _archive(args: argparse.Namespace) -> int:
             refused += [held.model_copy(update={"path": path}) for held in exc.findings]
     if refused:
         _printed(refused)
-        print(f"{PROG}: `{args.id}` is not archived, and no file was written", file=sys.stderr)
+        print(f"{PROG}: `{args.id}` is not archived, and no spec was written", file=sys.stderr)
         if any(held.code == "delta.base-stale" for held in refused):
             shown, _overlapping = _view_written(workspace, args.id, loaded.change.deltas, living)
             print(
@@ -1748,7 +1751,8 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     reason = after.verification.override if after.verification else None
     report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases, tests=runs)
     wrote = [workspace.write_report(args.id, "verify.md", report)]
-    summary = render_summary(change, said, ran, after.approval)  # what a reviewer of the pull request reads
+    # What a reviewer of the pull request reads, an override's reason with it.
+    summary = render_summary(change, said, ran, after.approval, override=reason)
     wrote.append(workspace.write_report(args.id, "summary.md", summary))
     # What is left is written where the next step points: found by the research, the step ignored the verdicts.
     touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)

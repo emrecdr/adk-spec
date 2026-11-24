@@ -482,7 +482,8 @@ def _unmet(state: ChangeState) -> Step | None:
         return None
     more = len(unmet) - UNMET_NAMED
     named = ", ".join(unmet[:UNMET_NAMED]) + (f" and {more} more" if more > 0 else "")
-    return Step("you", f"{named} unmet: work from reports/remaining.md, then run `adk-spec verify {state.id}`")
+    last = "verify" if DEMANDS[state.tier].verified else "archive"  # a lean change owes no verification
+    return Step("you", f"{named} unmet: work from reports/remaining.md, then run `adk-spec {last} {state.id}`")
 
 
 def next_step(

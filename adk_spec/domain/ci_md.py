@@ -1,6 +1,7 @@
 """What `validate` says to GitHub Actions: each finding as a workflow command, which GitHub shows on the file's
 line, and a short summary for the run's page. GitHub shows ten annotations of each kind a step; the summary carries
-the rest. Each message is scrubbed first: annotations leave the machine."""
+the rest. Each message is scrubbed, as a pull request shows its annotations to everyone who reads it; the job's log
+holds what `validate` printed above them."""
 
 from __future__ import annotations
 
