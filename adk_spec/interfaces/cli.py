@@ -34,6 +34,7 @@ from ..domain.context_md import (
 )
 from ..domain.convert import kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
+from ..domain.evidence_md import kept, render_evidence
 from ..domain.lifecycle import (
     DEMANDS,
     Step,
@@ -92,9 +93,11 @@ from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGES,
     CONSTITUTION,
+    EVIDENCE,
     LESSONS,
     PROFILE,
     REMAINING,
+    REPORTS,
     REVIEW,
     ROOT_NAME,
     SPEC_FILE,
@@ -1688,7 +1691,12 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     if left:
         wrote.append(workspace.write_report(args.id, REMAINING, render_remaining(args.id, left)))
     else:
-        workspace.drop_report(args.id, REMAINING)
+        workspace.drop(args.id, f"{REPORTS}/{REMAINING}")
+    # The lines that proved each requirement, kept for `archive` to fold in beside the living spec.
+    if proofs := kept(verdicts, added=added, change=args.id, at=at, repositories=state.repositories):
+        workspace.write_into(args.id, {EVIDENCE: render_evidence(args.id, proofs)})
+    else:
+        workspace.drop(args.id, EVIDENCE)
     workspace.save_state(after)
     for one in verdicts:
         print(f"{one.verdict:<8}  {one.id}  {one.reason}")
