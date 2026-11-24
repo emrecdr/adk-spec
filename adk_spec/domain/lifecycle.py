@@ -179,13 +179,14 @@ def check_stands(state: ChangeState, files: Mapping[str, str]) -> bool:
 
 
 def model_holds(state: ChangeState, files: Mapping[str, str]) -> bool:
-    """Whether a check by code alone leaves the change's last check as it is: a model's that stands, or a model's
-    that found something blocking, files edited since or not. Found by the fourth audit: after any edit, a check by
-    code alone replaced the model's, and the approval went through with its blocking finding never fixed, on the
-    strict tier too. Only a model clears what a model found."""
+    """Whether a check by code alone leaves the change's last check as it is: a model's that stands, or, on a tier
+    that owes a check, a model's that found something blocking, files edited since or not. Found by the fourth
+    audit: after any edit, a check by code alone replaced the model's, and the approval went through with its
+    blocking finding never fixed, on the strict tier too. Only a model clears what a model found."""
     held = state.check
-    owed = DEMANDS[state.tier].checked  # found by the code review: a lean change owes no check to hold
-    return held is not None and held.model is not None and (check_stands(state, files) or (owed and held.blocking > 0))
+    if held is None or held.model is None:
+        return False
+    return check_stands(state, files) or (DEMANDS[state.tier].checked and held.blocking > 0)
 
 
 def checked(
@@ -373,11 +374,15 @@ def settled_by_plan(found: Finding, *, started: bool = False) -> bool:
     return found.code in _OWED_BY_PLAN or (found.code in _UNMATCHED and not started)
 
 
-def of_the_plan(found: Finding) -> bool:
-    """Whether a finding is about what `plan` writes, so that it does not stop `plan`: the task list, which it drafts
-    again, or a design owed and missing."""
+def plan_blockers(findings: Sequence[Finding]) -> list[Finding]:
+    """The errors that stop a plan being drafted now: every ERROR but one about what `plan` writes, the task list,
+    which it drafts again, or a design owed and missing. A list that was not read is no list a plan may draft over:
+    its ticked boxes are unknown. One rule for `plan` and for the plan `propose` goes on to."""
+    return [found for found in findings if found.severity == "ERROR" and not _of_the_plan(found)]
+
+
+def _of_the_plan(found: Finding) -> bool:
     named = (found.path or "").rsplit("/", 1)[-1]
-    # A list that would not open is no list a plan may draft over: its ticked boxes are unknown.
     return found.code != UNREAD and (found.code in _OWED_BY_PLAN or named == TASKS_FILE)
 
 

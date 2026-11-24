@@ -33,6 +33,7 @@ BACKUP = {
     "name": "Sign in with a backup code",
     "statement": "The system SHALL let a user sign in with a one-time backup code.",
 }
+LOCK = {**PASSKEY, "name": "Lock after failures", "statement": "The system MUST lock an account after three."}
 #: The seeded change's delta with its passkey requirement alone, as the canned deltas answer restates it.
 PASSKEY_ALONE = """\
 # Delta: auth
@@ -60,6 +61,16 @@ def unticked(root):
     ws = seeded(root)
     write_text(root / TASKS, tasks_for("REQ-AUTH-004", "REQ-AUTH-002"))
     return ws
+
+
+def moved_base(ws, fake_provider) -> None:
+    """The seeded change with a base for REQ-AUTH-002 the living spec no longer holds, and a deltas answer that keeps
+    modifying it and removes REQ-AUTH-001, which has none recorded."""
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"bases": {"REQ-AUTH-002": "b0"}}))
+    removed = [{"id": "REQ-AUTH-001", "reason": "Passwords are retired."}]
+    modified = [{"id": "REQ-AUTH-002", "requirement": LOCK}]
+    delta = {"capability": "auth", "purpose": "", "added": [PASSKEY], "modified": modified, "removed": removed}
+    fake_provider.answers_when(DELTAS, {"deltas": [delta]})
 
 
 def revised(root, *argv: str, instruction: str = "Also let users sign in with a backup code.") -> int:
@@ -196,14 +207,7 @@ def test_a_revision_keeps_each_base_it_recorded_and_records_only_a_new_one(tmp_p
     """Found by the fourth audit: a revision recorded every base afresh, so a requirement another change had since
     altered lost its stale base, its warning with it, and the archive wrote over the other change's words. A base
     is the guard against two changes to one requirement, and only `rebase` records one anew."""
-    ws = seeded(tmp_path)  # a task is ticked: no plan is drafted, which a stale base would hold
-    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"bases": {"REQ-AUTH-002": "b0"}}))
-    lock = {**PASSKEY, "name": "Lock after failures", "statement": "The system MUST lock an account after three."}
-    removed = [{"id": "REQ-AUTH-001", "reason": "Passwords are retired."}]
-    delta = {"capability": "auth", "purpose": "", "added": [PASSKEY], "removed": removed}
-    fake_provider.answers_when(
-        DELTAS, {"deltas": [{**delta, "modified": [{"id": "REQ-AUTH-002", "requirement": lock}]}]}
-    )
+    moved_base(seeded(tmp_path), fake_provider)
     assert revised(tmp_path) == 1, "the base that moved holds the plan until `rebase`"
     bases = state_of(tmp_path, "passkeys")["bases"]
     assert bases["REQ-AUTH-002"] == "b0" and bases["REQ-AUTH-001"] not in ("", "b0")
@@ -304,14 +308,10 @@ def test_a_task_list_that_is_no_utf8_text_is_never_drafted_over(tmp_path, capsys
 def test_a_revision_whose_base_moved_holds_its_plan_and_names_the_step(tmp_path, capsys, fake_provider) -> None:
     """Found by the code review: a kept base that no longer held was an error the plan refused, so the revision
     ended as an engine failure, exit 3, naming a `plan` that refused again until `rebase`."""
-    ws = unticked(tmp_path)
-    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"bases": {"REQ-AUTH-002": "b0"}}))
-    lock = {**PASSKEY, "name": "Lock after failures", "statement": "The system MUST lock an account after three."}
-    modified = [{"id": "REQ-AUTH-002", "requirement": lock}]
-    delta = {"capability": "auth", "purpose": "", "added": [PASSKEY], "modified": modified, "removed": []}
-    fake_provider.answers_when(DELTAS, {"deltas": [delta]})
+    moved_base(unticked(tmp_path), fake_provider)
     capsys.readouterr()
     assert revised(tmp_path) == 1
     out = capsys.readouterr().out
-    assert "ERROR delta.base-stale" in out and "next      fix what `adk-spec validate passkeys` lists" in out
+    assert "ERROR delta.base-stale .spec/changes/passkeys/specs/auth/spec.md" in out
+    assert "next      fix what `adk-spec validate passkeys` lists" in out
     assert not any(TASKS_STAGE in str(r.config.system_instruction) for r in fake_provider.requests)

@@ -69,12 +69,6 @@ The rules every change in this repository follows. Keep it short, and give each 
 ## Repository structure
 """
 #: A finding that says a file is missing, and the file whose own fault makes it untrue.
-_MISSING = {
-    "change.missing-brief": BRIEF,
-    "change.missing-tasks": TASKS,
-    "change.missing-design": DESIGN,
-    "change.no-deltas": SPECS,
-}
 
 
 class WorkspaceError(ValueError):
@@ -113,8 +107,8 @@ def findings_of(loaded: LoadedChange, living: Mapping[str, Spec], unreadable: Co
     for held in validate_change(loaded.change, living):
         if held.path in blind:
             continue
-        file = _MISSING.get(held.code)
-        if file and any(path == file or path.startswith(f"{file}/") for path in unread):
+        # A file that did not read is not also missing: a finding about it, or about the folder it stands in, waits.
+        if held.path and any(path == held.path or path.startswith(f"{held.path}/") for path in unread):
             continue
         found.append(held)
     # With any living spec or one of the change's own deltas unread, what a task may name is unknown: a task may

@@ -56,8 +56,8 @@ from ..domain.lifecycle import (
     missing_bases,
     model_holds,
     next_step,
-    of_the_plan,
     owes_design,
+    plan_blockers,
     reopened,
     verified,
     verify_blockers,
@@ -1122,7 +1122,7 @@ def _plannable(
         _printed(of_specs)
         raise NotYetError(f"`{change_id}` is not planned: a living spec does not read. Fix it first")
     # What must be right before tasks are worth drafting: everything but the tasks themselves.
-    blocking = [held for held in assessed.findings if held.severity == "ERROR" and not of_the_plan(held)]
+    blocking = plan_blockers(assessed.findings)
     if blocking or change.brief is None:
         _printed(blocking)
         raise NotYetError(f"`{change_id}` is not planned: fix the errors above first")
@@ -1447,12 +1447,12 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
     if assessed.state.status == "archived":
         raise NotYetError(f"`{args.id}` is archived: there is nothing left to check")
     held = assessed.state.check
-    if args.no_model and held is not None and model_holds(assessed.state, assessed.seen):
+    errors = [found for found in assessed.findings if found.severity == "ERROR"]
+    # An error stands: the check by code alone below says it, and leaves a model's check as it is. Found by the code
+    # review: refused here, the error that held the model's pass went unseen.
+    if args.no_model and held is not None and not errors and model_holds(assessed.state, assessed.seen):
         if check_stands(assessed.state, assessed.seen):
             why = "its files have not changed since, and a check by code alone does not replace it"
-        elif errors := [found for found in assessed.findings if found.severity == "ERROR"]:
-            _printed(errors)  # found by the code review: the error that holds the model's pass went unseen
-            why = f"only a model clears what a model found: fix the errors above, then run `{PROG} check {args.id}`"
         else:
             why = f"only a model clears what a model found: `{PROG} check {args.id}` asks the model again"
         print(
@@ -1460,7 +1460,7 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
             file=sys.stderr,
         )
         return EXIT_FINDINGS if held.blocking else EXIT_OK
-    if any(held.severity == "ERROR" for held in assessed.findings):
+    if errors:
         print(f"{PROG}: fix what the check lists first: the model's pass waits for files that read", file=sys.stderr)
     made = _check_made(workspace, args.id, specs, assessed, no_model=args.no_model)
     if made.failure:
@@ -1853,12 +1853,12 @@ def _then_planned(
     waiting = [held for held in found if held.code == _OPEN_POINT]
     # Found by the code review: a base kept that no longer holds is an error the plan refuses; asked anyway, the
     # revision ended as an engine failure, naming a `plan` that refused again.
-    blocked = [held for held in found if held.severity == "ERROR" and not of_the_plan(held)]
+    blocked = plan_blockers(found)
     if waiting or keep or review or blocked:
         count = len(waiting)
         print(f"tokens    {_spent(ledger)}")
         if blocked:
-            _printed(_from_root(change_id, blocked))
+            _printed(blocked)
             print("plan      waits: the errors above are fixed first")
         elif waiting:
             print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")

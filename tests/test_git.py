@@ -8,6 +8,7 @@ import stat
 import pytest
 from conftest import _git, repository
 
+from adk_spec.domain.text import sha256_of
 from adk_spec.workspace import git as layer
 from adk_spec.workspace.git import GitError, diff, diffs, files, git, head, is_repository, on_path, resolves
 
@@ -59,7 +60,6 @@ def test_the_works_fingerprint_text_is_the_same_once_it_is_added_or_committed(tm
 def test_the_works_fingerprint_is_the_same_once_a_crlf_file_is_committed_as_it_is(tmp_path) -> None:
     """Asked by the code review: a file with CRLF ends, committed by a git that keeps them, shows `\\r` lines in the
     diff that it did not show untracked. The fingerprint is taken of the text with its line ends settled."""
-    from adk_spec.domain.text import sha256_of
 
     base = repository(tmp_path, {"z.py": "x = 1\n"})
     _git(tmp_path, "config", "core.autocrlf", "false")

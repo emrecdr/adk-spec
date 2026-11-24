@@ -232,22 +232,20 @@ def test_a_requirement_with_no_verdict_is_asked_for_again(tmp_path, capsys, fake
     assert "REQ-AUTH-001" in capsys.readouterr().err and len(fake_provider.requests) == 3
 
 
-def test_two_verdicts_for_a_requirement_not_asked_about_are_left_out(tmp_path, fake_provider) -> None:
-    """Found by the code review: a stray ID given twice spent the three tries, where a verdict for any other
-    requirement is left out."""
+@pytest.mark.parametrize(
+    "extra",
+    [
+        [{**CANNED_VERDICTS["verdicts"][0], "id": "REQ-AUTH-099"}] * 2,  # a requirement not asked about, twice
+        [CANNED_VERDICTS["verdicts"][0]],  # one verdict given again, alike
+    ],
+    ids=["a-stranger-twice", "one-alike-twice"],
+)
+def test_a_verdict_given_twice_that_disagrees_with_nothing_asked_stands(tmp_path, fake_provider, extra) -> None:
+    """Found by the code review: a stray ID given twice, or a `met` repeated as it was, spent the three tries, though
+    nothing that was asked disagreed."""
     approved_in_a_repository(tmp_path)
     implemented(tmp_path)
-    stray = {**CANNED_VERDICTS["verdicts"][0], "id": "REQ-AUTH-099"}
-    fake_provider.answers_when(VERIFY, {"verdicts": [*CANNED_VERDICTS["verdicts"], stray, stray]})
-    assert run(tmp_path, "verify", "passkeys") == 0 and len(fake_provider.requests) == 1
-
-
-def test_one_verdict_given_twice_alike_stands(tmp_path, fake_provider) -> None:
-    """Found by the code review: a `met` repeated as it was spent the three tries, though nothing disagreed."""
-    approved_in_a_repository(tmp_path)
-    implemented(tmp_path)
-    verdicts = CANNED_VERDICTS["verdicts"]
-    fake_provider.answers_when(VERIFY, {"verdicts": [*verdicts, verdicts[0]]})
+    fake_provider.answers_when(VERIFY, {"verdicts": [*CANNED_VERDICTS["verdicts"], *extra]})
     assert run(tmp_path, "verify", "passkeys") == 0 and len(fake_provider.requests) == 1
 
 
