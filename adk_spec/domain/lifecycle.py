@@ -186,7 +186,9 @@ def model_holds(state: ChangeState, files: Mapping[str, str]) -> bool:
     held = state.check
     if held is None or held.model is None:
         return False
-    return check_stands(state, files) or (DEMANDS[state.tier].checked and held.blocking > 0)
+    # The model's own count alone: one an older adk-spec recorded held the code's findings too, and is not known.
+    found = held.model_blocking or 0
+    return check_stands(state, files) or (DEMANDS[state.tier].checked and found > 0)
 
 
 def checked(
@@ -196,16 +198,17 @@ def checked(
     files: Mapping[str, str],
     at: str,
     model: str | None = None,
+    judged: Sequence[Finding] = (),
 ) -> ChangeState:
     """The state with a check recorded: the fingerprints of the files it read, how many of `findings` block an
-    approval, and the model that judged, none where code alone did. A model's check is given the model's own findings
-    alone: what the code finds, every approval asks again, live. Found by the code review: counted with them, a
-    warning fixed since held the check as the model's. A check by code alone records nothing over a model's that
-    `model_holds` keeps."""
+    approval, the model that judged, none where code alone did, and of a model's check how many of the blocking
+    findings are the model's own, `judged`: what holds a check by code alone back, by `model_holds`. A check by code
+    alone records nothing over a model's that `model_holds` keeps."""
     if model is None and model_holds(state, files):
         return state
-    stopped = len(blocking(state, findings))
-    return state.model_copy(update={"check": Checked(at=at, files=dict(files), blocking=stopped, model=model)})
+    stopped, own = len(blocking(state, findings)), len(blocking(state, judged)) if model is not None else None
+    held = Checked(at=at, files=dict(files), blocking=stopped, model=model, model_blocking=own)
+    return state.model_copy(update={"check": held})
 
 
 def blocking(state: ChangeState, findings: Sequence[Finding]) -> list[Finding]:

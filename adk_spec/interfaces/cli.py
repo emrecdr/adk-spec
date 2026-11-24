@@ -1457,8 +1457,7 @@ def _check_made(
     if model is None and model_holds(assessed.state, read):  # its report stands with it: found by the cleanup review
         return _Checked(every, "", dropped, ledger)
     path = workspace.write_report(change_id, "check.md", report)
-    counted = every if model is None else judged  # a model's check counts what the model found
-    workspace.save_state(checked(assessed.state, counted, files=read, at=at, model=model))
+    workspace.save_state(checked(assessed.state, every, files=read, at=at, model=model, judged=judged))
     return _Checked(every, workspace.shown(path), dropped, ledger)
 
 
@@ -1476,10 +1475,7 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
         if check_stands(assessed.state, assessed.seen):
             why = "its files have not changed since, and a check by code alone does not replace it"
         else:
-            why = (  # found by the code review: an older adk-spec's count may hold the code's warnings as well
-                f"only a model clears what a model found: `{PROG} check {args.id}` asks the model again. A check an "
-                "older adk-spec recorded may count the code's own warnings too"
-            )
+            why = f"only a model clears what a model found: `{PROG} check {args.id}` asks the model again"
         print(
             f"{PROG}: the check of `{args.id}` by {held.model} stands, with {held.blocking} blocking: {why}",
             file=sys.stderr,

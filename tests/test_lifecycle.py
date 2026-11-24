@@ -339,17 +339,40 @@ def test_a_revision_keeps_each_recorded_base_and_records_only_a_new_one() -> Non
     assert kept_bases(held, deltas, living) == {"REQ-AUTH-002": "sha256:old", "REQ-AUTH-001": fingerprint(one)}
 
 
-def test_a_models_check_counts_the_blocking_findings_of_the_model_alone() -> None:
+def test_a_models_check_records_what_the_model_found_apart_from_the_code() -> None:
     """Found by the code review: on the strict tier a check counted the code's warnings among the model's, and a
-    warning fixed since still held a check by code alone, as if the model had found it. The code's findings are
-    asked again, live, by every approval."""
-    from adk_spec.domain.lifecycle import blocking, checked, model_holds
+    warning fixed since held a check by code alone, as if the model had found it. A model's check now records the
+    model's own count beside the whole one, and a check by code alone gives way only to that."""
+    from adk_spec.domain.lifecycle import checked, model_holds
 
     strict = DRAFT.model_copy(update={"tier": "strict"})
     warning = Finding(severity="WARNING", code="tasks.no-verify", message="m")
     critical = Finding(severity="ERROR", code="check.contradiction", message="m")
-    assert blocking(strict, [warning]), "a warning blocks on the strict tier, asked live by every approval"
-    held = checked(strict, [], files={"a": "1"}, at=AT, model="m")  # the model found nothing
-    assert held.check.blocking == 0 and not model_holds(held, {"a": "2"})
-    held = checked(strict, [critical], files={"a": "1"}, at=AT, model="m")
-    assert held.check.blocking == 1 and model_holds(held, {"a": "2"})
+    held = checked(strict, [warning], files={"a": "1"}, at=AT, model="m", judged=[])  # the model found nothing
+    assert (held.check.blocking, held.check.model_blocking) == (1, 0) and not model_holds(held, {"a": "2"})
+    held = checked(strict, [warning, critical], files={"a": "1"}, at=AT, model="m", judged=[critical])
+    assert (held.check.blocking, held.check.model_blocking) == (2, 1) and model_holds(held, {"a": "2"})
+    assert model_holds(held, {"a": "1"}), "a model's check of the same files stands, whatever it found"
+
+
+def test_a_check_an_older_adk_spec_recorded_holds_only_while_its_files_stand() -> None:
+    """Found by the code review: an older adk-spec counted the code's warnings into a model's check, so read as the
+    model's own, a strict change could be held for good once no model was at hand. Such a record says nothing of
+    what the model alone found: it holds as it did before, while its files are the same."""
+    from adk_spec.domain.lifecycle import model_holds
+    from adk_spec.domain.model import Checked
+
+    older = DRAFT.model_copy(
+        update={"tier": "strict", "check": Checked(at=AT, files={"a": "1"}, blocking=1, model="m")}
+    )
+    assert model_holds(older, {"a": "1"}) and not model_holds(older, {"a": "2"})
+
+
+def test_a_check_by_code_alone_is_written_as_an_older_adk_spec_reads_it() -> None:
+    """The model's count is written only where a model judged: a check by code alone stays readable by an older
+    adk-spec, which refuses a field it does not know."""
+    from adk_spec.domain.lifecycle import checked
+
+    alone = checked(DRAFT, [], files={"a": "1"}, at=AT)
+    judged = checked(DRAFT, [], files={"a": "1"}, at=AT, model="m", judged=[])
+    assert "model_blocking" not in alone.model_dump_json() and '"model_blocking":0' in judged.model_dump_json()

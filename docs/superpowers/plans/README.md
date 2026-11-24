@@ -443,10 +443,10 @@ and a step moves to code only where its output is a function of its input with n
   older adk-spec recorded is still accepted; a file whose text was not read is `file.unreadable`, and no command
   writes over it or hands out its IDs; only a model clears what a model found, and where no model can make the check
   again a reason sets it aside on a tier that takes one. An exclude pattern holding a backslash, git's escape too, is
-  now refused: write a glob character in brackets, `[[]`. A model's check now counts the model's own blocking
-  findings; one an older adk-spec recorded on a strict change may count the code's warnings too, which only a model's
-  check clears, as the refusal says. Telling the two apart would need a mark in `change.json` that every older
-  adk-spec refuses.
+  now refused: write a glob character in brackets, `[[]`. A model's check records how many of its blocking findings
+  are the model's own, `model_blocking` in `change.json`, and only that holds a check by code alone back: a check an
+  older adk-spec recorded, which counted the code's findings in, holds only while its files stand, as it did. The
+  field is written only where a model judged, so an older adk-spec still reads every change checked by code alone.
   The tools compared (OpenSpec 2.1, Spec Kit 1.4, Kiro, Tessl, BMAD 6.12, GSD, Traycer) suggest features that are
   the owner's to choose, recommended in this order: a diff of what each MODIFIED requirement changes, for the
   approver, in code alone; `verify` judging the work against the constitution as well, measured first; a tier raised
