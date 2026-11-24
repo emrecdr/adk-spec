@@ -390,6 +390,12 @@ archived `sign-in-with-a-passkey`: folded into auth
 
 `.spec/specs/auth/spec.md` now holds `REQ-AUTH-004`. Commit the change with the code it describes.
 
+`archive` also keeps the lines `verify` proved each requirement with, in `.spec/specs/auth/evidence.md`, one line
+each. Later, `validate` and `status` look for those lines in the code. A requirement none of whose lines is found,
+in its file or anywhere else in the repository, is noted as suspect: a refactor may have broken it. This is a note
+only, and it never fails CI. To clear it, verify a change that keeps the requirement, or delete its lines in a
+reviewed commit. A line from another repository is checked only where that repository is there.
+
 ## Use cases
 
 ### A small bug fix (`lean`)

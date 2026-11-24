@@ -8,10 +8,12 @@ folder that holds `.spec/`, as the change that proved it recorded it."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from .ids import REQ_ID
+from .model import Finding
+from .validate import finding
 from .verify import Verdict
 
 #: The longest quote kept, in characters, and how many are kept for one requirement.
@@ -89,6 +91,40 @@ def kept(
                 held.append(one)
         proofs += held[:QUOTES_A_REQUIREMENT]
     return _sorted(proofs)
+
+
+def folded(
+    living: Sequence[Proof], change: Sequence[Proof], *, replaced: frozenset[str], removed: frozenset[str]
+) -> list[Proof]:
+    """A capability's evidence once a change is archived: the `living` evidence of every requirement the change
+    leaves alone, and the `change`'s own for those it adds or modifies (`replaced`). A requirement it removes
+    keeps none."""
+    gone = replaced | removed
+    return _sorted([one for one in living if one.req not in gone] + [one for one in change if one.req in replaced])
+
+
+def suspects(proofs: Sequence[tuple[int, Proof]], holds: Callable[[Proof], bool | None], *, path: str) -> list[Finding]:
+    """A note for each requirement none of whose evidence is in the code: `holds` says of a proof whether its quote
+    is found (True), is not (False), or could not be looked for (None, which keeps its requirement from being
+    suspect). Each note points at the requirement's first line of `path`, the evidence file."""
+    held: dict[str, list[tuple[int, Proof]]] = {}
+    for line, one in proofs:
+        held.setdefault(one.req, []).append((line, one))
+    found = []
+    for req, lines in sorted(held.items()):
+        if all(holds(one) is False for _line, one in lines):
+            first, one = lines[0]
+            files = ", ".join(dict.fromkeys(proof.path for _line, proof in lines))
+            found.append(
+                finding(
+                    "spec.evidence-gone",
+                    f"{req} has none of its evidence left in the code ({files}, proved by {one.change}). Verify a "
+                    "change that keeps it, or delete its lines once that is reviewed.",
+                    path=path,
+                    line=first,
+                )
+            )
+    return found
 
 
 def _placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:

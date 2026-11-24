@@ -1,0 +1,105 @@
+"""Evidence on disk: a change's, folded in beside each living spec at archive, and the living evidence checked
+against the code, so that a requirement whose proving lines are gone from it is noted as suspect."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+
+from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
+from ..domain.model import ChangeState, Delta, Finding
+from ..domain.text import quoted_at
+from ..domain.validate import finding
+from .files import NotTextError, read_text
+from .git import GitError, grep, is_repository
+from .layout import CHANGES, EVIDENCE, SPECS, Workspace
+
+#: How many of the files a quote's search names are read whole to find it.
+ELSEWHERE_MAX = 20
+
+
+def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
+    """Whether `proof`'s quote is still in the code: in its file, or else in another file of its repository, so that
+    a moved function reads as moved. None where its repository is not there to look in, as another one is not in CI.
+    `root` is the folder that holds `.spec/`; `exclude`, the person's patterns, apply to its own repository."""
+    own = proof.repository == "."
+    folder = root if own else root / proof.repository
+    try:
+        if not folder.is_dir() or not is_repository(folder, trust=own):
+            return None
+        if _found(folder / proof.path, proof.quote):
+            return True
+        term = max(proof.quote.split(), key=len, default="")  # a fixed string git finds on one line
+        hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
+    except GitError:
+        return None
+    named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]
+    return any(_found(folder / path, proof.quote) for path in named)
+
+
+def _found(path: Path, quote: str) -> bool:
+    try:
+        return quoted_at(quote, read_text(path)) is not None
+    except NotTextError, OSError:
+        return False
+
+
+def evidence_findings(workspace: Workspace) -> list[Finding]:
+    """A note for each suspect requirement of every living spec, and for each evidence line that does not read."""
+    found: list[Finding] = []
+    exclude = workspace.config().exclude
+    for capability in workspace.capabilities():
+        path = workspace.home / SPECS / capability / EVIDENCE
+        if not path.is_file():
+            continue
+        shown = workspace.shown(path)
+        read, unread = _read(path)
+        if read is None:
+            found.append(
+                finding("spec.evidence-unreadable", "It is not UTF-8 text: nothing in it is checked.", path=shown)
+            )
+            continue
+        found += [
+            finding(
+                "spec.evidence-unreadable", "This line is no evidence entry: it is not checked.", path=shown, line=at
+            )
+            for at in unread
+        ]
+        found += suspects(read, lambda one: holds(workspace.root, one, exclude), path=shown)
+    return found
+
+
+def evidence_folded(
+    workspace: Workspace, state: ChangeState, deltas: Mapping[str, Delta]
+) -> tuple[dict[str, str], list[str]]:
+    """What an archive writes beside each living spec its change merges into, by path from `.spec/`, and the living
+    evidence files it leaves as they are because they do not read. The change's evidence counts only where it is of
+    the verification the change records: one written by a verification since superseded is left out."""
+    held = state.verification
+    mine, _unread = _read(workspace.home / CHANGES / state.id / EVIDENCE) if held else (None, [])
+    proofs = [one for _line, one in mine or [] if held and one.at == held.at]
+    files: dict[str, str] = {}
+    left: list[str] = []
+    for capability, delta in sorted(deltas.items()):
+        path = workspace.home / SPECS / capability / EVIDENCE
+        living, unread = _read(path) if path.is_file() else ([], [])
+        if living is None or unread:
+            left.append(workspace.shown(path))
+            continue
+        replaced = frozenset(req.id for req in (*delta.added, *delta.modified))
+        before = [one for _line, one in living]
+        after = folded(before, proofs, replaced=replaced, removed=frozenset(gone.id for gone in delta.removed))
+        if after != before:
+            files[f"{SPECS}/{capability}/{EVIDENCE}"] = render_evidence(capability, after)
+    return files, left
+
+
+def _read(path: Path) -> tuple[list[tuple[int, Proof]] | None, list[int]]:
+    """An evidence file's entries and the lines that are none; None for entries where it is no UTF-8 text or will
+    not open, and nothing where it is not there."""
+    try:
+        return parse_evidence(read_text(path))
+    except FileNotFoundError:
+        return [], []
+    except NotTextError, OSError:
+        return None, []

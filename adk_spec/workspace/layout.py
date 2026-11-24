@@ -193,15 +193,19 @@ class Workspace:
                 specs[capability] = spec
         return specs, problems
 
-    def write_specs(self, specs: Mapping[str, Spec], *, state: ChangeState | None = None) -> None:
-        """Each spec written in its canonical form and, where given, a change's state beside them: every file, or
-        none, as far as the file system allows."""
-        files = {
+    def write_specs(
+        self, specs: Mapping[str, Spec], *, state: ChangeState | None = None, files: Mapping[str, str] | None = None
+    ) -> None:
+        """Each spec written in its canonical form and, where given, a change's state and other `files` beside them,
+        each by its path from `.spec/`: every file, or none, as far as the file system allows."""
+        written = {
             inside(self.home, SPECS, capability, SPEC_FILE): render_spec(spec) for capability, spec in specs.items()
         }
         if state is not None:
-            files[inside(self.home, CHANGES, state.id, STATE)] = state.model_dump_json(indent=2)
-        write_all(files)
+            written[inside(self.home, CHANGES, state.id, STATE)] = state.model_dump_json(indent=2)
+        for path, text in (files or {}).items():
+            written[inside(self.home, *path.split("/"))] = text
+        write_all(written)
 
     def _folder(self, change_id: str) -> Path:
         """The folder of an existing change."""

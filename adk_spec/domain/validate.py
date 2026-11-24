@@ -25,6 +25,10 @@ SEVERITY: dict[str, Severity] = {
     "syntax": "ERROR",
     "constitution.long": "WARNING",
     "spec.folder-mismatch": "ERROR",
+    # Notes, never a failure: a requirement none of whose kept evidence is in the code, and an evidence line that
+    # does not read. Raised once real use measures how often a refactor sets the first off (the owner, 2026-11-24).
+    "spec.evidence-gone": "INFO",
+    "spec.evidence-unreadable": "INFO",
     "spec.folder-bad-name": "ERROR",
     "spec.id-capability": "ERROR",
     "spec.id-duplicate": "ERROR",

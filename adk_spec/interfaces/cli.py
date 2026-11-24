@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -87,6 +88,7 @@ from ..workspace.context import (
     living_text,
     profile_text,
 )
+from ..workspace.evidence import evidence_findings, evidence_folded
 from ..workspace.files import NotTextError
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
@@ -584,6 +586,7 @@ def _validate(args: argparse.Namespace) -> int:
             continue
         if state.status != "archived":  # folded in, an archived change's delta has no base now: nothing to check
             found += _assessed(workspace, change_id, living, drift=False).findings
+    found += evidence_findings(workspace)  # notes: a requirement whose proving lines are gone from the code
     stops = failed(found, strict=args.strict)
     if args.json:
         print(json.dumps({"findings": [held.model_dump() for held in found], "failed": stops}, indent=2))
@@ -625,7 +628,18 @@ def _status(args: argparse.Namespace) -> int:
             print(("\n" if at else "") + heading)
             for row in held:
                 print(f"  {row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
+    if not args.json:
+        _suspects_said(workspace)
     return EXIT_OK
+
+
+def _suspects_said(workspace: Workspace) -> None:
+    """One line for each capability holding a requirement whose evidence is gone from the code: `validate` names
+    them."""
+    gone = Counter(held.path for held in evidence_findings(workspace) if held.code == "spec.evidence-gone")
+    for path, count in sorted(gone.items()):
+        capability = Path(path or "").parent.name
+        print(f"{capability}: {count} requirement{'' if count == 1 else 's'} suspect ({PROG} validate lists them)")
 
 
 def _rebase(args: argparse.Namespace) -> int:
@@ -857,8 +871,12 @@ def _archive(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
         return EXIT_FINDINGS
-    workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}))
+    # The lines that proved each requirement, beside its living spec: the next change and `validate` read them.
+    files, left = evidence_folded(workspace, state, loaded.change.deltas)
+    workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}), files=files)
     print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
+    for shown in left:
+        print(f"kept      {shown}: it does not read, so this change's evidence was not added to it")
     return EXIT_OK
 
 
