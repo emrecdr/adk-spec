@@ -110,8 +110,13 @@ BODY = "MIIEow0BAAKCAQEA7x1yQ9"
     ],
 )
 def test_a_text_holds_a_key_where_a_line_begins_with_a_private_keys_first_line(text: str, held: bool) -> None:
-    """A key's own file has its first line at a line's start. Code that names that line in a string is still read."""
+    """A key's own file has its first line at a line's start. Code that names that line in a string is still read.
+    Every key it finds holds one of the words a large file is searched for first: found by the fourth audit, the two
+    were lists of their own, and a key a new pattern found would have been passed over by the search."""
+    from adk_spec.domain.secrets import KEY_WORDS
+
     assert holds_a_key(text) is held
+    assert not held or any(word in text.encode() for word in KEY_WORDS)
 
 
 #: A private key's lines, as a person pastes part of one: base64, sixty-four characters a line.
@@ -247,3 +252,26 @@ def test_code_after_a_header_only_named_keeps_its_comment_lines() -> None:
     for text, kept in ((named, ("#endif", "// TODO", " */", "# noqa")), (bare, ("+#\n", "+// ", "+ *", "+x = 1"))):
         for scrubbed, _count in (scrub(text), scrub_lines(text)):
             assert all(line in scrubbed for line in kept), scrubbed
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "//registry.npmjs.org/:_authToken=0b1c2d3e-4f5a-" + "6b7c-8d9e-0f1a2b3c4d5e",
+        "//npm.example.com/:_auth=dXNlcjpwYXNzMTIzNDU2Nzg=",
+        "//pkgs.dev.azure.com/org/_packaging/feed/npm/registry/:_password=cGFzczEyMzQ1Njc4OTA=",
+        "//registry.npmjs.org/:_password=aHVudGVyaHVudGVy",
+        '//x.example.com/:_auth="YWJjOmRlZjQ1Ng1234=="',
+    ],
+)
+def test_an_npmrc_registry_credential_is_hidden(secret: str) -> None:
+    """Found by an outside audit: a registry line of `.npmrc` matched no shape, and a tracked one reached a model.
+    Found by the code review: a value with no digit, or in quotes as npm reads them, still did; the key names a
+    credential, so no digit is asked of its value."""
+    hidden, count = scrub(f"+{secret}\n")
+    assert count == 1 and secret.split("=", 1)[1] not in hidden and "[REDACTED]" in hidden
+
+
+def test_an_npmrc_line_that_names_a_variable_is_kept() -> None:
+    line = "//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n"
+    assert scrub(line) == (line, 0)

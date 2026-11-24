@@ -32,7 +32,7 @@ from ..domain.lifecycle import approval_files, owes_design
 from ..domain.model import Change, ChangeState, Finding, GrammarError, Spec, Tier
 from ..domain.spec_md import parse_spec, render_spec
 from ..domain.tasks_md import parse_tasks
-from ..domain.validate import finding, validate_change
+from ..domain.validate import UNREAD, finding, validate_change
 from .config import DEFAULT, Config, load_config
 from .files import NotTextError, read_text, write_all, write_text
 from .paths import PathError, inside
@@ -68,8 +68,6 @@ The rules every change in this repository follows. Keep it short, and give each 
 
 ## Repository structure
 """
-#: A finding that says a file is missing, and the file whose own fault makes it untrue.
-_MISSING = {"change.missing-brief": BRIEF, "change.missing-tasks": TASKS, "change.no-deltas": SPECS}
 
 
 class WorkspaceError(ValueError):
@@ -108,8 +106,8 @@ def findings_of(loaded: LoadedChange, living: Mapping[str, Spec], unreadable: Co
     for held in validate_change(loaded.change, living):
         if held.path in blind:
             continue
-        file = _MISSING.get(held.code)
-        if file and any(path == file or path.startswith(f"{file}/") for path in unread):
+        # A file that did not read is not also missing: a finding about it, or about the folder it stands in, waits.
+        if held.path and any(path == held.path or path.startswith(f"{held.path}/") for path in unread):
             continue
         found.append(held)
     # With any living spec or one of the change's own deltas unread, what a task may name is unknown: a task may
@@ -246,7 +244,8 @@ class Workspace:
             if archived:
                 continue
             for capability in self._holding(folder / SPECS, SPEC_FILE):
-                text = _text_or_bytes(folder / SPECS / capability / SPEC_FILE)
+                # One that will not open stops the command: found by the code review, its IDs went free.
+                text = (folder / SPECS / capability / SPEC_FILE).read_bytes().decode("utf-8", errors="replace")
                 taken.update(spelled.group(0) for spelled in REQ_ID.finditer(text))
         return taken
 
@@ -391,9 +390,12 @@ def _text_or_bytes(path: Path) -> str:
     """A file's text for a fingerprint. One that is not UTF-8 is read with its bad bytes replaced: the loader names
     its fault as a finding, and its fingerprint must not stop every other change from being read."""
     try:
-        return read_text(path)
-    except NotTextError:
-        return path.read_bytes().decode("utf-8", errors="replace")
+        try:
+            return read_text(path)
+        except NotTextError:
+            return path.read_bytes().decode("utf-8", errors="replace")
+    except OSError as exc:  # found by the fourth audit: one file that would not open stopped every command
+        return f"(the file could not be opened: {exc.strerror or exc})"
 
 
 def _misnamed(why: str, shown: str) -> Finding:
@@ -413,7 +415,10 @@ def _read[T](path: Path, parse: Callable[[str], T], shown: str, problems: list[F
     try:
         text = read_text(path)
     except NotTextError as exc:
-        problems.append(finding("syntax", str(exc), path=shown))
+        problems.append(finding(UNREAD, str(exc), path=shown))
+        return None
+    except OSError as exc:  # held open by another program, or a cloud placeholder: one file, not every change
+        problems.append(finding(UNREAD, f"the file could not be opened: {exc.strerror or exc}", path=shown))
         return None
     return _parsed(text, parse, shown, problems)
 

@@ -31,7 +31,7 @@ def _refusing(findings: list[Finding]) -> tuple[Finding, ...]:
 def apply_delta(living: Spec | None, delta: Delta, *, bases: Mapping[str, str], change: str) -> Spec:
     """The living spec with `delta` folded in, `living` being None where the change creates the capability.
     `MergeError` where it is refused; nothing is changed then."""
-    if refused := _refusing(validate_delta(delta, living, bases)):
+    if refused := _refusing(validate_delta(delta, living, bases, change)):
         raise MergeError(refused)
     gone = {removal.id: removal for removal in delta.removed}
     replaced = {req.id: req for req in delta.modified}

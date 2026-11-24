@@ -90,7 +90,10 @@ def test_a_strict_propose_stops_after_the_brief_and_the_specs(tmp_path, capsys, 
     assert not (folder / "tasks.md").exists() and not (folder / "design.md").exists()
     assert asked(fake_provider, TASKS) == 0 and asked(fake_provider, DESIGN) == 0
     out = capsys.readouterr().out
-    assert "plan      waits: a strict change is read first" in out and "run `adk-spec plan ledger`" in out
+    assert "plan      waits: the change is read before it is planned" in out
+    # Found by the cleanup review: the sentence was said twice, and the `next` line dropped the command's flags.
+    assert "next      read brief.md and the specs, then run `adk-spec plan ledger" in out
+    assert out.count("read brief.md and the specs") == 1
 
 
 def test_plan_goes_on_after_the_stop_and_drafts_a_design(tmp_path, fake_provider) -> None:
@@ -209,7 +212,7 @@ def test_the_stop_names_plan_with_no_explore_where_the_person_gave_it(tmp_path, 
     seeded(tmp_path)
     capsys.readouterr()
     assert strict_proposed(tmp_path) == 0
-    assert "then `adk-spec plan ledger --no-explore`" in capsys.readouterr().out
+    assert "then run `adk-spec plan ledger --no-explore`" in capsys.readouterr().out
 
 
 def test_approving_again_a_strict_change_two_names_approved_changes_nothing(tmp_path, capsys, fake_provider) -> None:
@@ -243,9 +246,10 @@ def test_an_open_point_or_an_error_comes_before_the_design_a_plan_drafts() -> No
     state = ChangeState(id="c", tier="strict", needs_design=True)
     design = held("change.missing-design")
     settled = next_step(state, [design, held("brief.marker-unresolved")], []).phrase
-    assert settled == f"settle the open point in brief.md, then run `adk-spec plan {state.id}`"
+    read_first = "read brief.md and the specs, then run `adk-spec plan c`"
+    assert settled == f"settle the open point in brief.md, then {read_first}"
     assert next_step(state, [design, held("delta.empty", "ERROR")], []).phrase == "fix what `adk-spec validate c` lists"
-    assert next_step(state, [design], []).phrase == "run `adk-spec plan c`"
+    assert next_step(state, [design], []).phrase == "read brief.md and the specs, then run `adk-spec plan c`"
 
 
 def test_a_strict_check_report_counts_a_warning_as_blocking() -> None:
@@ -275,6 +279,24 @@ def test_plan_keeps_a_design_a_person_wrote_on_a_strict_change(tmp_path, fake_pr
     assert read_text(folder / "design.md") == mine and asked(fake_provider, DESIGN) == 0
 
 
+def test_an_approved_strict_change_revised_as_it_stands_names_the_step_that_changes_it(
+    tmp_path, capsys, fake_provider
+) -> None:
+    """Found by the code review: revised as it stood, an approved strict change was said to wait for a plan, which
+    refuses an approved change, beside a next line to implement it; and its kept line named no step."""
+    planned(tmp_path, fake_provider)
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
+    assert run(tmp_path, "approve", "ledger", "--by", "ben") == 0
+    tasks = tmp_path / FOLDER / "tasks.md"
+    write_text(tasks, read_text(tasks).replace("- [ ]", "- [x]", 1))
+    capsys.readouterr()
+    assert run(tmp_path, "propose", "Keep it as it is.", "--id", "ledger", "--no-input") == 0
+    out = capsys.readouterr().out
+    assert state_of(tmp_path, "ledger")["status"] == "approved" and "plan      waits" not in out
+    step = "a task is ticked: to change it, edit tasks.md, then run `adk-spec approve ledger` again"
+    assert f"kept      tasks.md: {step}" in out
+
+
 def test_a_strict_revision_with_a_ticked_task_names_the_plan_that_goes_on(tmp_path, capsys, fake_provider) -> None:
     """Found by the review: the stop named a `plan` that a ticked task refuses, and one that reads the code."""
     planned(tmp_path, fake_provider)
@@ -282,4 +304,9 @@ def test_a_strict_revision_with_a_ticked_task_names_the_plan_that_goes_on(tmp_pa
     write_text(tasks, read_text(tasks).replace("- [ ]", "- [x]", 1))
     capsys.readouterr()
     assert run(tmp_path, "propose", "Also keep the old invoice numbers.", "--id", "ledger", "--no-input") == 0
-    assert "then `adk-spec plan ledger --replace --no-explore`" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "kept      tasks.md: a task is ticked. `adk-spec plan ledger --replace" in out
+    # Found by the code review: the next line named `plan --replace`, which throws ticked work away, where `status`
+    # named another step.
+    (step,) = [line for line in out.splitlines() if line.startswith("next ")]
+    assert "--replace" not in step

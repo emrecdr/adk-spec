@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 Severity = Literal["ERROR", "WARNING", "INFO"]
 Tier = Literal["lean", "standard", "strict"]
@@ -152,12 +152,18 @@ class Approval(_Held):
 
 class Checked(_Held):
     """What a check of a change read and found: each file's fingerprint as it stood, how many findings block an
-    approval, and the model that judged, none where code alone did."""
+    approval, the model that judged, none where code alone did, and how many of the blocking findings the model made
+    itself. That last is none where code alone judged, or where an older adk-spec recorded the check, which counted
+    the code's findings into the model's: found by the code review, read as the model's own, they held a strict
+    change for good."""
 
     at: str
     files: dict[str, str]
     blocking: int
     model: str | None = None
+    #: Left out of the record where there is none, so that a check by code alone stays one an older adk-spec reads,
+    #: which refuses a field it does not know.
+    model_blocking: int | None = Field(default=None, exclude_if=lambda held: held is None)
 
 
 #: What a run of a project's tests that passed came to: every other outcome says why it did not.

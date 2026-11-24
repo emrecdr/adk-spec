@@ -21,6 +21,7 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
+from ..domain.verify import parts_of_diff
 from .layout import ROOT_NAME
 from .process import Completed, TimedOut, on_path, run
 from .skill import SKILL_PARTS
@@ -45,10 +46,10 @@ _SETTLED = {
     "diff.noprefix": "false",  # a diff's paths are read by their `a/` and `b/`
     "diff.mnemonicPrefix": "false",
 }
-_PLAIN = ("--no-color", "--no-ext-diff", "--no-textconv", "-M")
+_PLAIN = ("--no-color", "--no-ext-diff", "--no-textconv")
 #: The folder's own files, without this package's tree or the skill `init` writes: a pathspec git reads from the
 #: folder it runs in. Found by the code review: listed with the code, the skill's rules read as the code's own.
-_HERE = ("--", ".", f":(exclude){ROOT_NAME}", f":(exclude){'/'.join(SKILL_PARTS[:-1])}")
+_HERE = ("--", ".", f":(exclude,icase){ROOT_NAME}", f":(exclude,icase){'/'.join(SKILL_PARTS[:-1])}")
 
 
 class GitError(Exception):
@@ -220,23 +221,45 @@ def grep(root: Path, term: str, *, exclude: Sequence[str], trust: bool = True) -
 
 
 def diff(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", trust: bool = True) -> str:
-    """`base` against the working tree under `root`, as one unified diff with paths from `root`. A file git does
-    not track yet reads as added: new work is new files, and a person may not have added them. `.spec/` is left
-    out. `GitError` where `base` names no commit, or too many files are neither tracked nor ignored."""
+    """`base` against the working tree under `root`, as a stage is shown it: the first of `diffs`."""
+    return diffs(root, base, exclude=exclude, prefix=prefix, trust=trust)[0]
+
+
+def diffs(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", trust: bool = True) -> tuple[str, str]:
+    """`base` against the working tree under `root`: one unified diff with paths from `root`, a moved file in it as
+    a move, as a stage is shown it; and the text the work's fingerprint is taken of, which git's index does not
+    move. A file git does not track yet reads as added: new work is new files, and a person may not have added them.
+    `.spec/` is left out. `GitError` where `base` names no commit, or too many files are neither tracked nor ignored."""
     commit = resolves(root, base, trust=trust)
     if commit is None:
         raise GitError(f"`{base}` names no commit in {root}")
     # Paths as `a/` and `b/` say, whatever a person's settings say, and under `prefix` for another repository's diff.
     named = (f"--src-prefix=a/{prefix}", f"--dst-prefix=b/{prefix}")
-    changed = git(root, "diff", *_PLAIN, *named, "--relative", commit, *_here(exclude), trust=trust)
+    # Two runs of git, one for each text: a write between them, by a watcher say, is accepted, as one between the
+    # verdicts and the fingerprint would be by any single run.
+    changed = git(root, "diff", *_PLAIN, "-M", *named, "--relative", commit, *_here(exclude), trust=trust)
+    unmoved = git(root, "diff", *_PLAIN, "--no-renames", *named, "--relative", commit, *_here(exclude), trust=trust)
     new = _listed(root, "--others", "--exclude-standard", exclude=exclude, trust=trust)
     if len(new) > UNTRACKED_MAX:
         raise GitError(
             f"{len(new):,} files under {root} are neither tracked nor ignored. Add them to git, or ignore what is "
             "no source, such as a virtual environment or a build folder"
         )
-    added = [
+    added = "".join(
         git(root, "diff", *_PLAIN, *named, "--no-index", "--", "/dev/null", path, ok=(0, 1), trust=trust)
         for path in new
-    ]
-    return changed + "".join(added)
+    )
+    return changed + added, _settled(unmoved + added)
+
+
+def _settled(text: str) -> str:
+    """A diff as the work's fingerprint is taken of it: a moved file as a deletion and an addition, no `index` line,
+    whose names are as short as the repository allows, and each file's part in order. Found by the fourth audit: a
+    new file came after every tracked one until it was added, and a moved file read as a move once it was, so a
+    change verified and then committed read as drifted. The diff a stage is shown keeps a move short. Lines are
+    broken at a newline alone: `splitlines` breaks at a form feed too, and a line's tail could pass for a header."""
+    kept = (
+        "\n".join(line for line in part.split("\n") if not line.startswith("index "))
+        for _n, part in parts_of_diff(text)
+    )
+    return "".join(sorted(kept))

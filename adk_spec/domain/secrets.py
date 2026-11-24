@@ -348,6 +348,18 @@ _GENERIC = (
         ),
         r"\1[REDACTED]",
     ),
+    (
+        # An `.npmrc` registry's credential, `//host/path/:_authToken=`, `_auth=` or `_password=`, bare or in quotes:
+        # the key names a credential, so no digit is asked of the value. Not the reference project's: found by an
+        # outside audit, a tracked `.npmrc` matched no shape.
+        "generic_secret",
+        re.compile(
+            r"(?im)^([+ -]?[^\S\n]*//[^\s=]{1,200}?:_(?:authToken|auth|password)[^\S\n]*=[^\S\n]*[\"']?)"
+            + _STAND_IN
+            + r"([^\s\"'#]{8,})"
+        ),
+        r"\1[REDACTED]",
+    ),
     ("generic_secret", _QUERY_SECRET, r"\1[REDACTED]"),  # a URL's query parameter, `?api_key=...`, holding a digit
     ("generic_secret", _HEADER, r"\1[REDACTED]"),  # an authorization header's token, holding a digit
 )
@@ -426,6 +438,11 @@ def scrub_lines(text: str, *, cut: bool = False) -> tuple[str, int]:
 #: fewer openings than the scrub takes, a file quoting or commenting out a key was not withheld, and a hunk from the
 #: middle of its key, with no header, was sent.
 _KEY_BEGINS_A_LINE = re.compile(r"(?m)^" + _ANY_LEAD + r"(?:" + _KEY_HEADER + r"|PuTTY-User-Key-File-[23]:)")
+
+
+#: The words every key `holds_a_key` finds holds, which a file too large to read whole is searched for first. Found by
+#: the fourth audit: the search had its own list, and a key a new pattern found would have been passed over by it.
+KEY_WORDS: tuple[bytes, ...] = (b"PRIVATE KEY", b"PuTTY-User-Key-File-")
 
 
 def holds_a_key(text: str) -> bool:

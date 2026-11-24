@@ -34,7 +34,8 @@ make the change easy, then make the easy change.
 Let each group after it deliver something that can be seen working on its own, through every part it needs, not one
 layer at a time.
 A task is one step with one result. Put the task that writes a test before the task whose code it tests.
-Name the requirement IDs each task serves, exactly as the deltas spell them. A setup task names none.
+Name the requirement IDs each task serves, exactly as the deltas spell them. A setup task names none. A requirement
+the change removes is served by the task that takes its code out.
 Give each task one way its result is checked: a command to run, or what to look at.
 A test checks behaviour at the highest seam the repository already has, a command, an endpoint or a public function,
 and names it.

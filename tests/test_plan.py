@@ -79,8 +79,11 @@ def test_plan_refuses_a_change_that_is_no_draft_and_spends_nothing(tmp_path, cap
     seeded(tmp_path)
     approved(tmp_path)
     capsys.readouterr()
-    assert run(tmp_path, "plan", "passkeys", "--replace") == 1 and "approved" in capsys.readouterr().err
-    assert fake_provider.requests == []
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 1
+    said = capsys.readouterr().err
+    assert "approved" in said and fake_provider.requests == []
+    # Found by the fourth audit: the refusal named no way to change what an approved change asks.
+    assert 'adk-spec propose "<what changes>" --id passkeys' in said and "tasks.md" in said
 
 
 def test_plan_refuses_a_change_whose_brief_or_deltas_have_an_error(tmp_path, capsys, fake_provider) -> None:
@@ -233,7 +236,8 @@ def test_the_fakes_default_tasks_serve_what_the_requests_deltas_owe() -> None:
     assert tasks_serving(shown(DELTA)) is CANNED_TASKS, "the sample change owes what the canned tasks name"
     other = "# Delta: billing-export\n\n## ADDED Requirements\n\n### REQ-BILLING-EXPORT-007: Export\n\n"
     other += "## MODIFIED Requirements\n\n### REQ-AUTH-002: Lock\n\n## REMOVED Requirements\n\n### REQ-AUTH-001: Old\n"
-    assert named(tasks_serving(shown(other))) == {"REQ-BILLING-EXPORT-007", "REQ-AUTH-002"}, "what is removed owes none"
+    owed = {"REQ-BILLING-EXPORT-007", "REQ-AUTH-002", "REQ-AUTH-001"}
+    assert named(tasks_serving(shown(other))) == owed, "what is removed is owed the task that takes it out"
     assert tasks_serving("no deltas are shown here") is CANNED_TASKS
 
 
@@ -612,3 +616,13 @@ def test_the_plan_command_after_a_stop_reads_the_code_where_no_context_was_writt
     assert _plan_command(ws, "passkeys", None, True) == "`adk-spec plan passkeys --no-explore`"
     (tmp_path / ".spec/changes/passkeys/context.md").write_text("# Context: passkeys\n", encoding="utf-8")
     assert _plan_command(ws, "passkeys", None, False) == "`adk-spec plan passkeys --no-explore`"
+
+
+def test_plan_on_a_verified_change_names_a_new_change_not_a_revision(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: the refusal named `propose --id`, which refuses a verified change in its turn."""
+    ws = seeded(tmp_path)
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"status": "verified"}))
+    capsys.readouterr()
+    assert run(tmp_path, "plan", "passkeys") == 1
+    said = capsys.readouterr().err
+    assert "--id" not in said and "Propose a new change" in said and fake_provider.requests == []

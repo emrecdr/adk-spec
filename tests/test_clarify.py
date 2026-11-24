@@ -266,6 +266,7 @@ def test_a_spent_ceiling_asks_the_person_nothing(tmp_path, monkeypatch, capsys, 
     told = capsys.readouterr()
     assert ASKED not in told.out and "A line answers" not in told.out
     assert "token ceiling of 100 is spent" in told.err and "open points were not put to you" in told.err
+    assert "raise [limits] max_tokens in .spec/config.toml" in told.err, "found by the fourth audit: no fix was named"
     assert len(fake_provider.requests) == 1 and not (tmp_path / ".spec/changes/spent").exists()
 
 

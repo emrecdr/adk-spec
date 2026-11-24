@@ -84,12 +84,12 @@ def verdicts(**changed) -> dict:
 
 def test_a_diff_is_read_as_the_lines_it_adds_and_removes_by_file() -> None:
     read_ = lines_of_diff(DIFF)
-    assert read_["src/auth.py"] == (
-        ["    return passkey(user)", "    return account.failures >= 3"],
-        ["    return password(user)", "    return account.failures >= 5"],
+    assert read_["src/auth.py"] == (  # two runs, a line both sides hold between them
+        [["    return passkey(user)"], ["    return account.failures >= 3"]],
+        [["    return password(user)"], ["    return account.failures >= 5"]],
     )
-    assert read_["src/old.py"] == ([], ["LEGACY = True"]), "a deleted file is known by the name it had"
-    assert read_["src/new.py"] == (["+++ b/not/a/header", "NEW = True"], []), "a line of content is no header"
+    assert read_["src/old.py"] == ([], [["LEGACY = True"]]), "a deleted file is known by the name it had"
+    assert read_["src/new.py"] == ([["+++ b/not/a/header", "NEW = True"]], []), "a line of content is no header"
 
 
 def test_a_diff_is_split_by_file_and_is_whole_again_when_put_together() -> None:
@@ -117,6 +117,58 @@ def test_met_stands_only_on_a_line_the_diff_holds_on_the_right_side() -> None:
     assert "no quoted line is in the diff" in got[1].reason and got[2].evidence == (
         ("src/auth.py", "return passkey(user)"),
     )
+
+
+def test_a_quote_stitched_from_lines_apart_is_no_evidence() -> None:
+    """Found by the fourth audit: the lines a diff adds were joined across hunks and the lines between, so a `met`
+    stood on code that is nowhere in the file as quoted: here the check between the two lines is left out."""
+    stitched = """\
+diff --git a/src/pay.py b/src/pay.py
+--- a/src/pay.py
++++ b/src/pay.py
+@@ -1,2 +1,3 @@
++def charge(card):
+     if card is None:
++        raise NotImplementedError
+@@ -40,1 +41,2 @@
++def refund(card):
+"""
+    met = {"id": "REQ-PAY-001", "verdict": "met", "reason": "Said."}
+    for quote in ("def charge(card): raise NotImplementedError", "raise NotImplementedError def refund(card):"):
+        draft = VerdictsDraft.model_validate(
+            {"verdicts": [{**met, "evidence": [{"path": "src/pay.py", "quote": quote}]}]}
+        )
+        (got,) = grounded(draft, stitched, added=frozenset({"REQ-PAY-001"}), removed=frozenset())
+        assert got.verdict == "unclear", quote
+
+
+def test_a_quote_across_a_blank_line_both_sides_hold_is_evidence() -> None:
+    """Found by the code review: two functions added around a blank line the file had were two runs, and a quote of
+    both, as the file holds them, was no evidence."""
+    added = (
+        "diff --git a/src/pay.py b/src/pay.py\n--- a/src/pay.py\n+++ b/src/pay.py\n"
+        "@@ -1,1 +1,4 @@\n+def a():\n+    pass\n \n+def b():\n"
+    )
+    met = {
+        "id": "REQ-PAY-001",
+        "verdict": "met",
+        "reason": "Said.",
+        "evidence": [{"path": "src/pay.py", "quote": "def a(): pass def b():"}],
+    }
+    (got,) = grounded(
+        VerdictsDraft.model_validate({"verdicts": [met]}), added, added=frozenset({"REQ-PAY-001"}), removed=frozenset()
+    )
+    assert got.verdict == "met"
+
+
+def test_verdicts_that_agree_are_weighed_on_all_their_evidence() -> None:
+    """Found by the code review: a `met` given twice, its first quote nowhere and its second in the diff, stood on
+    the first alone, and came out `unclear`."""
+    real = CANNED_VERDICTS["verdicts"][0]
+    invented = {**real, "evidence": [{"path": "src/auth.py", "quote": "lock_account(user) never happens"}]}
+    draft = VerdictsDraft.model_validate({"verdicts": [invented, real]})
+    (got,) = grounded(draft, DIFF, added=frozenset({real["id"]}), removed=frozenset())
+    assert got.verdict == "met"
 
 
 def test_an_unmet_verdict_is_kept_as_it_is_given() -> None:
@@ -188,6 +240,45 @@ def test_a_requirement_with_no_verdict_is_asked_for_again(tmp_path, capsys, fake
     fake_provider.answers_when(VERIFY, {"verdicts": CANNED_VERDICTS["verdicts"][:2]})
     assert run(tmp_path, "verify", "passkeys") == 3
     assert "REQ-AUTH-001" in capsys.readouterr().err and len(fake_provider.requests) == 3
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        [{**CANNED_VERDICTS["verdicts"][0], "id": "REQ-AUTH-099"}] * 2,  # a requirement not asked about, twice
+        [CANNED_VERDICTS["verdicts"][0]],  # one verdict given again, alike
+    ],
+    ids=["a-stranger-twice", "one-alike-twice"],
+)
+def test_a_verdict_given_twice_that_disagrees_with_nothing_asked_stands(tmp_path, fake_provider, extra) -> None:
+    """Found by the code review: a stray ID given twice, or a `met` repeated as it was, spent the three tries, though
+    nothing that was asked disagreed."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    fake_provider.answers_when(VERIFY, {"verdicts": [*CANNED_VERDICTS["verdicts"], *extra]})
+    assert run(tmp_path, "verify", "passkeys") == 0 and len(fake_provider.requests) == 1
+
+
+def test_two_verdicts_for_one_requirement_are_sent_back(tmp_path, capsys, fake_provider) -> None:
+    """Found by the fourth audit: a `met` and an `unmet` for one requirement, and the first one stood."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    verdicts = CANNED_VERDICTS["verdicts"]
+    twice = {**verdicts[0], "verdict": "unmet", "evidence": []}
+    fake_provider.answers_when(VERIFY, {"verdicts": [*verdicts, twice]})
+    assert run(tmp_path, "verify", "passkeys") == 3
+    said = capsys.readouterr().err
+    assert "verify.verdict-twice" in said and verdicts[0]["id"] in said and len(fake_provider.requests) == 3
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_verify_with_no_test_command_says_so_on_screen(tmp_path, capsys) -> None:
+    """Found by the fourth audit: only reports/verify.md said no test ran, and a `met` read as tested."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys") == 0
+    assert "tests     none named: set [verify] test in .spec/config.toml" in capsys.readouterr().out
 
 
 def test_the_diff_reaches_the_model_between_markers(tmp_path, fake_provider) -> None:
@@ -450,6 +541,41 @@ def test_a_verified_change_whose_diff_holds_a_key_file_has_not_drifted(tmp_path)
     write_text(tmp_path / "keys/live.pem", PEM.replace("MIIEow3", "MIINew3"))
     assert run(tmp_path, "verify", "passkeys") == 0
     assert state_of(tmp_path, "passkeys")["status"] == "verified"
+    assert run(tmp_path, "archive", "passkeys") == 0
+
+
+def test_a_change_verified_then_committed_is_archived(tmp_path) -> None:
+    """Found by the fourth audit: the work's fingerprint moved with git's index, and `archive` refused."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    write_text(tmp_path / "src/added.py", "ADDED = True\n")
+    assert run(tmp_path, "verify", "passkeys") == 0
+    repository_commit(tmp_path, "the work")
+    assert run(tmp_path, "archive", "passkeys") == 0
+
+
+def test_a_change_verified_by_an_older_adk_spec_has_not_drifted(tmp_path) -> None:
+    """Found by the code review: an older adk-spec recorded the fingerprint of the diff a stage was shown, and every
+    change it verified read as drifted after the upgrade, to be paid for again."""
+    from adk_spec.domain.text import sha256_of
+    from adk_spec.workspace.git import diff
+
+    ws, commit = approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    state = ws.load_change("passkeys").change.state
+    older = state.verification.model_copy(update={"diff": sha256_of(diff(tmp_path, commit, exclude=()))})
+    ws.save_state(state.model_copy(update={"verification": older}))
+    assert run(tmp_path, "archive", "passkeys") == 0
+
+
+def test_a_key_file_written_again_after_verify_moves_nothing_judged(tmp_path) -> None:
+    """Found by the code review: the fingerprint was taken of the key file the model was never shown, and a test run
+    that wrote the key again read as drift."""
+    with_a_key(tmp_path, tier="standard")
+    implemented(tmp_path)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    write_text(tmp_path / "keys/live.pem", PEM.replace("MIIEow3", "MIINew3"))
     assert run(tmp_path, "archive", "passkeys") == 0
 
 

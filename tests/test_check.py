@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 from conftest import CANNED_FINDINGS, on_the_fake, run, seeded
-from samples import BRIEF, DELTA, SPEC, TASKS
+from samples import BRIEF, DELTA, SPEC, TASKS, tasks_for
 
 from adk_spec.domain.check import coverage, coverage_of, nameable, owed
 from adk_spec.domain.convert import to_findings
@@ -42,7 +42,7 @@ def test_a_requirement_no_task_names_is_found() -> None:
 
 
 def test_a_task_naming_an_id_nothing_holds_is_found() -> None:
-    found = coverage(parse_tasks(TASKS), owed=frozenset(), nameable=frozenset({"REQ-AUTH-004"}))
+    found = coverage(parse_tasks(TASKS), owed=frozenset(), nameable=frozenset({"REQ-AUTH-004", "REQ-AUTH-001"}))
     assert [(f.code, f.severity) for f in found] == [("check.task-unknown-requirement", "ERROR")]
     assert "T002" in found[0].message and "REQ-AUTH-002" in found[0].message
 
@@ -232,6 +232,23 @@ def test_approve_with_no_provider_says_so_and_names_the_way_without_one(tmp_path
     assert state(ws).check is None and state(ws).approval is None
 
 
+def test_approve_with_no_provider_names_no_way_a_models_finding_refuses(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    """Found by the code review: with a model's blocking check stale and no provider, `approve` named
+    `check --no-model`, which refuses to clear what a model found, and the person went round in a loop."""
+    standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nOne word more.\n")
+    monkeypatch.delenv("GOOGLE_API_KEY")
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 2
+    err = capsys.readouterr().err
+    assert "--no-model" not in err and "only a model clears" in err
+
+
 def test_approve_calls_no_model_where_a_file_does_not_read(tmp_path, capsys, fake_provider) -> None:
     ws = standard(tmp_path)
     delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
@@ -323,6 +340,37 @@ def test_a_check_by_code_alone_does_not_clear_what_a_model_found(tmp_path, capsy
     held = state(ws).check
     assert (held.blocking, held.model) == (1, "fake on gemini")
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+
+
+def test_a_check_by_code_alone_after_an_edit_does_not_clear_what_a_model_found(tmp_path, capsys, fake_provider) -> None:
+    """Found by the fourth audit: once any file the check read was edited, `check --no-model` recorded a check by
+    code alone over the model's, and an approval went through with the model's blocking finding never fixed, on
+    the strict tier too, where nothing may be set aside. Only a model clears what a model found."""
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nOne word more.\n")
+    capsys.readouterr()
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 1
+    assert "asks the model again" in capsys.readouterr().err
+    held = state(ws).check
+    assert (held.blocking, held.model) == (1, "fake on gemini")
+    asked = len(fake_provider.requests)
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    assert len(fake_provider.requests) > asked, "the approval asked the model again"
+
+
+def test_a_check_by_code_alone_leaves_the_report_of_the_model_it_does_not_replace(tmp_path, fake_provider) -> None:
+    """Found by the cleanup review: with an error in the files, `check` ran by code alone, kept the model's record,
+    and wrote its own report over the model's, which then no longer listed what blocked."""
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    before = read_text(tmp_path / REPORT)
+    write_text(tmp_path / ".spec/changes/passkeys/tasks.md", "# Tasks\n\nNot a task.\n")
+    assert run(tmp_path, "check", "passkeys") == 1
+    assert read_text(tmp_path / REPORT) == before and state(ws).check.model == "fake on gemini"
 
 
 def test_a_living_spec_that_does_not_read_makes_no_task_a_stranger(tmp_path, capsys) -> None:
@@ -463,3 +511,54 @@ def test_a_refused_approval_counts_nothing_the_finding_above_it_says(tmp_path, c
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
     said = capsys.readouterr().err
     assert "`passkeys` is not approved: the finding above blocks it" in said and "findings block it" not in said
+
+
+def test_a_lean_changes_old_check_does_not_hold_a_check_by_code_alone(tmp_path, fake_provider) -> None:
+    """Found by the code review: a lean change owes no check, yet a model's old blocking check made every
+    `check --no-model` end with exit 1 after the files were fixed."""
+    seeded(tmp_path)  # lean
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nFixed.\n")
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+
+
+def test_a_reason_sets_aside_a_models_finding_a_check_cannot_be_made_again_for(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    """Found by the code review, twice: with a model's blocking check stale and no model to make it again, a standard
+    change could never be approved. The person was shown that finding: a reason they give sets it aside, recorded."""
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nFixed.\n")
+    monkeypatch.delenv("GOOGLE_API_KEY")
+    capsys.readouterr()
+    why = "the model is out of reach, and the contradiction is fixed"
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer", "--override", why) == 0
+    assert state(ws).approval.override == why and "sets aside" in capsys.readouterr().out
+
+
+def test_a_requirement_the_change_removes_is_owed_a_task() -> None:
+    """Found by an outside audit, and the owner's choice: `verify` asks a removed requirement for the lines that took
+    it out, yet no task was owed to take them out, so the work could pass the plan and fail its verification."""
+    from adk_spec.domain.model import Change, ChangeState
+
+    tasks = parse_tasks(tasks_for("REQ-AUTH-004", "REQ-AUTH-002"))
+    change = Change(state=ChangeState(id="passkeys", tier="lean"), brief=None, deltas=DELTAS, tasks=tasks)
+    assert [f.code for f in coverage_of(change, LIVING) if "REQ-AUTH-001" in f.message] == ["check.requirement-no-task"]
+
+
+@pytest.mark.parametrize("status", ["approved", "verified"])
+def test_a_change_approved_before_a_removed_requirement_was_owed_a_task_keeps_its_approval(status: str) -> None:
+    """Found by the code review: a change an older adk-spec approved without a task for what it removes was sent back,
+    to be approved and verified again, although its archive would pass. An approval this adk-spec gives was owed it."""
+    from adk_spec.domain.model import Change, ChangeState
+
+    tasks = parse_tasks(tasks_for("REQ-AUTH-004", "REQ-AUTH-002"))
+    change = Change(
+        state=ChangeState(id="passkeys", tier="lean", status=status), brief=None, deltas=DELTAS, tasks=tasks
+    )
+    assert coverage_of(change, LIVING) == []

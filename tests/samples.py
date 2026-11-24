@@ -102,7 +102,7 @@ TASKS = """\
 - [ ] T001 [REQ-AUTH-004] Write the failing passkey sign-in test
   - files: tests/test_passkey.py
   - verify: uv run pytest tests/test_passkey.py
-- [x] T002 [P] [REQ-AUTH-004, REQ-AUTH-002] Implement the passkey handler
+- [x] T002 [P] [REQ-AUTH-004, REQ-AUTH-002, REQ-AUTH-001] Implement the passkey handler
   - files: src/auth/passkey.py, src/auth/lockout.py
   - verify: uv run pytest tests/test_passkey.py tests/test_lockout.py
 - [ ] T003 Update the sign-in page copy

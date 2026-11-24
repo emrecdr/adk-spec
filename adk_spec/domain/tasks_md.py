@@ -79,7 +79,8 @@ def render_tasks(groups: Sequence[TaskGroup], *, unchecked: bool = False) -> str
         for task in group.tasks:
             box = "x" if task.done and not unchecked else " "
             beside = " [P]" if task.parallel else ""
-            named = f" [{', '.join(task.requirements)}]" if task.requirements else ""
+            # An empty list is written where the description opens with a bracket, which would read as the list.
+            named = f" [{', '.join(task.requirements)}]" if task.requirements or task.description[:1] == "[" else ""
             lines.append(f"- [{box}] {task.id}{beside}{named} {task.description}")
             if task.files:
                 lines.append(f"  - files: {', '.join(task.files)}")

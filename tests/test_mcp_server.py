@@ -158,6 +158,8 @@ async def test_a_command_that_fails_is_a_failed_call_and_says_how_it_ended(tmp_p
     with pytest.raises(ToolError) as failed:
         await mcp_server.ran(tmp_path, ["check", "--", "pk"])
     assert "two findings block it" in str(failed.value) and "ended with exit 1" in str(failed.value)
+    # Found by the fourth audit: exit 1 is a command's answer, findings or a refusal, and was read as a failure.
+    assert "an answer: act on what it says before calling it again" in str(failed.value)
 
 
 @pytest.mark.asyncio
@@ -241,3 +243,8 @@ def test_the_skill_init_writes_keeps_the_rules_the_server_gives() -> None:
     tools and one for a terminal, had drifted, and the skill left naming another repository to the assistant."""
     for said in ("adk-spec approve", "adk-spec archive", "--with", "tasks.md", "- [x]", "context.md", "voids"):
         assert said in INSTRUCTIONS and said in SKILL_TEXT, said
+    # Found by the fourth audit: a `propose` measured at 321 s outlasts an assistant's shell, 120 s by default; a lean
+    # change owes no verification; and a strict change's plan waits for the person to read its brief.
+    for said in ("take minutes", "status", "strict"):
+        assert said in INSTRUCTIONS and said in SKILL_TEXT, said
+    assert "background" in SKILL_TEXT and "Then call verify" not in INSTRUCTIONS

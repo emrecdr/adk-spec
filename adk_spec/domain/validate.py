@@ -16,6 +16,10 @@ from .ids import REQ_ID, capability_of, slug_problem
 from .model import Brief, Change, Delta, Finding, Requirement, Severity, Spec, TaskGroup
 from .spec_md import fingerprint
 
+#: The code of a file whose text was not read, one that would not open or is no UTF-8: no command writes over it.
+#: Found by the code review: a task list not read was taken for one with no box ticked, and drafted again.
+UNREAD = "file.unreadable"
+
 #: Every rule's severity. The owner's to set: which faults stop work, and which only show.
 SEVERITY: dict[str, Severity] = {
     "syntax": "ERROR",
@@ -52,6 +56,7 @@ SEVERITY: dict[str, Severity] = {
     "brief.marker-malformed": "ERROR",
     "brief.marker-unresolved": "WARNING",
     "change.unreadable": "ERROR",
+    UNREAD: "ERROR",
     "change.missing-brief": "ERROR",
     "change.no-deltas": "ERROR",
     "change.missing-tasks": "WARNING",
@@ -135,7 +140,7 @@ def validate_spec(spec: Spec) -> list[Finding]:
     return found
 
 
-def validate_delta(delta: Delta, living: Spec | None, bases: Mapping[str, str]) -> list[Finding]:
+def validate_delta(delta: Delta, living: Spec | None, bases: Mapping[str, str], change: str = "<id>") -> list[Finding]:
     """What a delta shows against the living spec it changes, `None` where the change creates the capability, and
     against the fingerprints recorded when it was based."""
     found = []
@@ -168,7 +173,7 @@ def validate_delta(delta: Delta, living: Spec | None, bases: Mapping[str, str]) 
         if req.id in taken
     ]
     for target in targets:
-        found += _of_target(target.id, held, bases, delta.capability)
+        found += _of_target(target.id, held, bases, delta.capability, change)
     found += [
         finding(
             "delta.drops-scenario",
@@ -215,7 +220,7 @@ def _of_purpose(delta: Delta, living: Spec | None) -> list[Finding]:
 
 
 def _of_target(
-    req_id: str, held: Mapping[str, Requirement], bases: Mapping[str, str], capability: str
+    req_id: str, held: Mapping[str, Requirement], bases: Mapping[str, str], capability: str, change: str
 ) -> list[Finding]:
     """What a modified or removed ID shows: it must be in the living spec, and unchanged there since it was based."""
     if req_id not in held:
@@ -230,7 +235,8 @@ def _of_target(
         return [
             finding(
                 "delta.base-missing",
-                f"No base is recorded for {req_id}: `adk-spec approve` records what the delta was written against.",
+                f"No base is recorded for {req_id}: `adk-spec approve {change}` records what the delta was written "
+                "against.",
             )
         ]
     if bases[req_id] != fingerprint(held[req_id]):
@@ -238,7 +244,7 @@ def _of_target(
             finding(
                 "delta.base-stale",
                 f"{req_id} changed in the living spec after this delta was based on it. Read the current "
-                "requirement, update the delta, then run `adk-spec rebase`.",
+                f"requirement, update the delta, then run `adk-spec rebase {change}`.",
             )
         ]
     return []
@@ -322,14 +328,17 @@ def validate_change(change: Change, living: Mapping[str, Spec]) -> list[Finding]
         no_delta = "The change holds no delta. Add specs/<capability>/spec.md, or set skip_specs where no spec changes."
         about("specs", [finding("change.no-deltas", no_delta)])
     for capability, delta in sorted(change.deltas.items()):
-        about(f"specs/{capability}/spec.md", validate_delta(delta, living.get(capability), change.state.bases))
+        found_in = validate_delta(delta, living.get(capability), change.state.bases, change.state.id)
+        about(f"specs/{capability}/spec.md", found_in)
+    # `plan` drafts for a draft alone: found by the code review, an approved change was sent to a `plan` that refused.
+    plan = f"`adk-spec plan {change.state.id}` drafts" if change.state.status == "draft" else ""
     groups = change.tasks or ()
     if not any(group.tasks for group in groups):
-        no_tasks = "The change has no task. Plan its tasks in tasks.md before approval."
+        no_tasks = f"The change has no task: {f'{plan} them' if plan else 'write them in tasks.md'}."
         about("tasks.md", [finding("change.missing-tasks", no_tasks)])
     else:
         about("tasks.md", validate_tasks(groups))
     if change.state.needs_design and change.design is None:
-        owed = "The change owes a design and has none. `adk-spec plan` drafts it."
+        owed = f"The change owes a design and has none: {f'{plan} it' if plan else 'write design.md'}."
         about("design.md", [finding("change.missing-design", owed)])
     return found

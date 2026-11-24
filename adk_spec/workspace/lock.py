@@ -98,10 +98,10 @@ def _left(path: Path) -> bool:
     """Whether the lock was left by a process of this machine that has ended. A lock that names no machine, as an
     older adk-spec's, or names another machine, or a running process, is not: on a shared drive its run may be on
     another machine."""
-    words = _said(path).split()
-    if len(words) < 2 or not words[0].isdigit():
+    pid, apart, node = _said(path).strip().partition(" ")  # a machine's name may hold a space: found by an audit
+    if not apart or not pid.isdigit():
         return False
-    return words[1] == platform.node() and not _alive(int(words[0]))
+    return node == platform.node() and not _alive(int(pid))
 
 
 def _alive(pid: int) -> bool:

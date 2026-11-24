@@ -44,7 +44,7 @@ def _mode_for(path: Path) -> int:
     A temporary file is made owner-only, and moved into place it would narrow what it replaced."""
     if path.exists():
         return path.stat().st_mode & 0o777
-    mask = os.umask(0)
+    mask = os.umask(0o077)  # found by the fourth audit: asked with 0, a file made meanwhile was anyone's to write
     os.umask(mask)
     return 0o666 & ~mask
 

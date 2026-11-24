@@ -45,11 +45,14 @@ def _change(
     skip_specs: bool = False,
     drop: tuple[str, ...] = (),
     needs_design: bool = False,
+    status: str = "draft",
 ) -> list[Finding]:
     """The findings of the valid change with one of its files, its bases or a flag replaced, or a file dropped."""
     parsed = parse_delta(delta)
     held = BASES if bases is None else bases
-    state = ChangeState(id="passkeys", tier="lean", bases=held, skip_specs=skip_specs, needs_design=needs_design)
+    state = ChangeState(
+        id="passkeys", tier="lean", bases=held, skip_specs=skip_specs, needs_design=needs_design, status=status
+    )
     change = Change(
         state=state,
         brief=None if "brief" in drop else parse_brief(brief),
@@ -134,6 +137,7 @@ def test_every_code_has_a_case_and_a_severity() -> None:
         "spec.folder-bad-name",
         "delta.living-unreadable",
         "change.unreadable",  # the command's, of a change whose state does not read: its case is in test_cli.py
+        "file.unreadable",  # the loader's, of a file that would not open: its cases are in test_cli and test_revise
     }
 
 
@@ -172,3 +176,27 @@ def test_a_requirement_with_no_statement_is_an_error_and_not_also_a_missing_obli
     """Deferred by the review: a requirement holding a header and scenarios alone was only a warning."""
     found = CASES["spec.statement-empty"]()
     assert [(f.code, f.severity) for f in found] == [("spec.statement-empty", "ERROR")]
+
+
+def test_a_missing_task_list_or_design_names_the_command_that_drafts_it() -> None:
+    """Found by the fourth audit: "Plan its tasks in tasks.md" read as "write them by hand", and the design's
+    sentence named `adk-spec plan` with no change."""
+    (tasks,) = [found.message for found in _change(drop=("tasks",)) if found.code == "change.missing-tasks"]
+    (design,) = [found.message for found in _change(needs_design=True) if found.code == "change.missing-design"]
+    for said in (tasks, design):
+        assert "`adk-spec plan passkeys` drafts" in said, said
+
+
+def test_an_approved_change_missing_its_tasks_is_told_to_write_them_not_to_plan() -> None:
+    """Found by the code review: `plan` drafts no task for an approved change, and the sentence named it."""
+    (said,) = [f.message for f in _change(drop=("tasks",), status="approved") if f.code == "change.missing-tasks"]
+    assert "adk-spec plan" not in said and "tasks.md" in said
+
+
+def test_a_bases_step_names_the_change_it_is_for() -> None:
+    """Found by an outside audit: the sentences named `rebase` and `approve` with no change, which both need."""
+    (stale,) = [
+        f.message for f in _change(bases={"REQ-AUTH-002": "sha256:" + "0" * 64}) if f.code == "delta.base-stale"
+    ]
+    missing = next(f.message for f in _change(bases={}) if f.code == "delta.base-missing")
+    assert "`adk-spec rebase passkeys`" in stale and "`adk-spec approve passkeys`" in missing

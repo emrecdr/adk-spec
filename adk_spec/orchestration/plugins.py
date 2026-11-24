@@ -114,7 +114,7 @@ class UsageLedger(BasePlugin):
         if self.ceiling is None or self.total.total < self.ceiling:
             return None
         held = self._held or f"the run's token ceiling of {self.ceiling:,}"
-        return f"{CEILING}: {held} is spent"
+        return f"{CEILING}: {held} is spent; raise [limits] max_tokens in .spec/config.toml"
 
     @contextlib.contextmanager
     def held_to_half(self, part: str) -> Generator[None]:

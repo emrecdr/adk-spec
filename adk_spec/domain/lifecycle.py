@@ -16,6 +16,7 @@ from .model import PASSED, Approval, ChangeState, Checked, Delta, Finding, Gramm
 from .spec_md import fingerprint
 from .tasks_md import parse_tasks, render_tasks
 from .text import sha256_of
+from .validate import UNREAD
 
 #: Findings that block an approval whatever their severity: an open point, or no plan. A base that is missing does
 #: not: an approval records it, since it is a function of the delta and the living spec as they stand.
@@ -40,6 +41,13 @@ def missing_bases(state: ChangeState, deltas: Mapping[str, Delta], living: Mappi
     it now. A base that is recorded is never among them, whether it still holds or not: one that moved is the
     guard against two changes to one requirement, and a person must read what the requirement says now."""
     return {req: held for req, held in capture_bases(deltas, living).items() if req not in state.bases}
+
+
+def kept_bases(held: Mapping[str, str], deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> dict[str, str]:
+    """The bases of a change revised: each requirement its deltas still modify or remove keeps the base recorded
+    for it in `held`, whether it still holds or not, as `missing_bases` says; one newly aimed at is recorded as the
+    living spec holds it now. Found by the fourth audit: a revision recorded every base afresh."""
+    return {req: held.get(req, now) for req, now in capture_bases(deltas, living).items()}
 
 
 def _as_approved(path: str, text: str) -> str:
@@ -170,16 +178,36 @@ def check_stands(state: ChangeState, files: Mapping[str, str]) -> bool:
     return state.check is not None and state.check.model is not None and state.check.files == dict(files)
 
 
+def model_holds(state: ChangeState, files: Mapping[str, str]) -> bool:
+    """Whether a check by code alone leaves the change's last check as it is: a model's that stands, or, on a tier
+    that owes a check, a model's that found something blocking, files edited since or not. Found by the fourth
+    audit: after any edit, a check by code alone replaced the model's, and the approval went through with its
+    blocking finding never fixed, on the strict tier too. Only a model clears what a model found."""
+    held = state.check
+    if held is None or held.model is None:
+        return False
+    # The model's own count alone: one an older adk-spec recorded held the code's findings too, and is not known.
+    return check_stands(state, files) or (DEMANDS[state.tier].checked and bool(held.model_blocking))
+
+
 def checked(
-    state: ChangeState, findings: Sequence[Finding], *, files: Mapping[str, str], at: str, model: str | None = None
+    state: ChangeState,
+    findings: Sequence[Finding],
+    *,
+    files: Mapping[str, str],
+    at: str,
+    model: str | None = None,
+    judged: Sequence[Finding] = (),
 ) -> ChangeState:
-    """The state with a check recorded: the fingerprints of the files it read, how many of its findings block an
-    approval, and the model that judged, none where code alone did. A check by code alone of files a model has
-    judged records nothing: the model's check stands, with whatever it found."""
-    if model is None and check_stands(state, files):
+    """The state with a check recorded: the fingerprints of the files it read, how many of `findings` block an
+    approval, the model that judged, none where code alone did, and of a model's check how many of the blocking
+    findings are the model's own, `judged`: what holds a check by code alone back, by `model_holds`. A check by code
+    alone records nothing over a model's that `model_holds` keeps."""
+    if model is None and model_holds(state, files):
         return state
-    stopped = len(blocking(state, findings))
-    return state.model_copy(update={"check": Checked(at=at, files=dict(files), blocking=stopped, model=model)})
+    own = len(blocking(state, judged)) if model is not None else None
+    held = Checked(at=at, files=dict(files), blocking=len(blocking(state, findings)), model=model, model_blocking=own)
+    return state.model_copy(update={"check": held})
 
 
 def blocking(state: ChangeState, findings: Sequence[Finding]) -> list[Finding]:
@@ -230,14 +258,15 @@ def approval_checks_first(check: Sequence[Finding]) -> bool:
     """Whether an approval makes a change's check before it decides: `check` is what `check_blockers` gives, and
     the check is missing or stale. The one statement of that rule: the command asks it, and the next step follows
     it. A reason given with `--override` answers only a check a person was shown, so it is not applied where this
-    is true: the check it would answer is made in the same run."""
+    is true: the check it would answer is made in the same run, or, where a model's cannot be, the one shown before."""
     return any(owed.code in _MADE_BY_APPROVAL for owed in check)
 
 
 def check_stops(check: Sequence[Finding], *, override: bool = False) -> list[Finding]:
     """What of a change's check stops its approval: all that `check_blockers` gives, less a blocking finding where
     a person set it aside with `override`. A check never made, or made of other files, is not a finding to set
-    aside: an approval makes it first, as `approval_checks_first` says."""
+    aside: an approval makes it first, as `approval_checks_first` says, and only where a model's check that found
+    something blocking cannot be made again does a reason set that aside, said where the check is made."""
     return [owed for owed in check if not (override and owed.code == "check.blocking")]
 
 
@@ -355,31 +384,42 @@ def settled_by_plan(found: Finding, *, started: bool = False) -> bool:
     return found.code in _OWED_BY_PLAN or (found.code in _UNMATCHED and not started)
 
 
-def of_the_plan(found: Finding) -> bool:
-    """Whether a finding is about what `plan` writes, so that it does not stop `plan`: the task list, which it drafts
-    again, or a design owed and missing."""
+def plan_blockers(findings: Sequence[Finding]) -> list[Finding]:
+    """The errors that stop a plan being drafted now: every ERROR but one about what `plan` writes, the task list,
+    which it drafts again, or a design owed and missing. A list that was not read is no list a plan may draft over:
+    its ticked boxes are unknown. One rule for `plan` and for the plan `propose` goes on to."""
+    return [found for found in findings if found.severity == "ERROR" and not _of_the_plan(found)]
+
+
+def _of_the_plan(found: Finding) -> bool:
     named = (found.path or "").rsplit("/", 1)[-1]
-    return found.code in _OWED_BY_PLAN or named == TASKS_FILE
+    return found.code != UNREAD and (found.code in _OWED_BY_PLAN or named == TASKS_FILE)
 
 
 #: What a person does about a check that found something blocking, in which `{cid}` is the change.
 _FIX_THE_CHECK = "fix what reports/check.md lists, then run `adk-spec approve {cid}`"
+#: What a person does about what the files themselves block.
+_FIX_THE_FILES = "fix what `adk-spec validate {cid}` lists"
 #: What holds a draft, the first that applies first: the code of what holds it, who acts on it, and the phrase, in
 #: which `{cid}` is the change. An ERROR comes before everything, since the files it is in will change; an open
 #: point before the plan, since its answer shapes the design and the tasks; and the plan before the check, which
 #: reads it. A check that is missing or stale holds nothing: the approval makes it.
 _HOLDS: tuple[tuple[str, Actor, str], ...] = (
-    (_ERROR, "you", "fix what `adk-spec validate {cid}` lists"),
+    (_ERROR, "you", _FIX_THE_FILES),
     ("brief.marker-unresolved", "you", "settle the open point in brief.md, then {after}"),
     (_PLAN, "run", "run `adk-spec plan {cid}`"),
     ("check.blocking", "you", _FIX_THE_CHECK),
 )
-#: What may hold a draft once its open point is settled: the holds after it.
-_AFTER_A_POINT = _HOLDS[[code for code, _actor, _phrase in _HOLDS].index("brief.marker-unresolved") + 1 :]
+#: Where an open point stands among the holds: what may hold a draft once it is settled are the holds after it.
+_POINT = [code for code, _actor, _phrase in _HOLDS].index("brief.marker-unresolved")
+#: The holds of a tier whose change is read before it is planned: the plan is then the person's step. Found by the
+#: fourth audit: the stop before a strict change's plan was listed as ready to run.
+_READ_FIRST: tuple[str, Actor, str] = (_PLAN, "you", "read brief.md and the specs, then run `adk-spec plan {cid}`")
+_HOLDS_READ_FIRST = tuple(_READ_FIRST if hold[0] == _PLAN else hold for hold in _HOLDS)
 
 
 def _after_approval(
-    state: ChangeState, errors: bool, stale: Sequence[str], check: Sequence[Finding], drifted: bool
+    state: ChangeState, findings: Sequence[Finding], stale: Sequence[str], check: Sequence[Finding], drifted: bool
 ) -> Step:
     """The next step of a change that was approved: approved again where its files changed since, and then the
     work, its verification and its archive."""
@@ -387,10 +427,12 @@ def _after_approval(
     if stale and any(owed.code == "check.blocking" for owed in check):
         # The approval was asked again, made the check of the edited files, and was stopped by what it found.
         return Step("you", _FIX_THE_CHECK.format(cid=cid))
+    if stale and approve_blockers(state, findings):  # found by the fourth audit: "approve again", refused, a loop
+        return Step("you", f"{_FIX_THE_FILES.format(cid=cid)}, then run `adk-spec approve {cid}` again")
     if stale:  # the edit that voided the approval made a check stale as well, which the approval makes again
         return Step("you", f"{', '.join(stale)} changed since the approval: run `adk-spec approve {cid}` again")
-    if errors:  # a base that moved, a spec that no longer reads
-        return Step("you", f"fix what `adk-spec validate {cid}` lists")
+    if any(found.severity == "ERROR" for found in findings):  # a base that moved, a spec that no longer reads
+        return Step("you", _FIX_THE_FILES.format(cid=cid))
     if state.status == "verified" and drifted and DEMANDS[state.tier].verified:
         return Step("run", f"run `adk-spec verify {cid}` again: the work changed since it was verified")
     if state.status == "verified":
@@ -416,31 +458,24 @@ def next_step(
     cid = state.id
     if state.status == "archived":
         return Step("done", "nothing: archived")
-    errors = any(found.severity == "ERROR" for found in findings)
     if state.status in ("approved", "verified"):
-        return _after_approval(state, errors, stale, check, drifted)
+        return _after_approval(state, findings, stale, check, drifted)
     # What `plan` settles holds a draft after an open point, whose answer the plan waits for, not before it.
     plan = [found for found in findings if settled_by_plan(found, started=started)]
     held = {found.code for found in (*findings, *check)} | ({_PLAN} if plan else set())
     held |= {_ERROR for found in findings if found.severity == "ERROR" and found not in plan}
     # Every next step names the command that comes after it, the hold after an open point included: found by the
     # third audit, three did not, and by the code review, "then approve" where a blocking check would refuse it.
-    rest = [phrase for code, _actor, phrase in _AFTER_A_POINT if code in held]
+    holds = _HOLDS_READ_FIRST if DEMANDS[state.tier].read_first else _HOLDS
+    rest = [phrase for code, _actor, phrase in holds[_POINT + 1 :] if code in held]
     after = rest[0].format(cid=cid) if rest else f"run `adk-spec approve {cid}`"
-    for code, actor, phrase in _HOLDS:
+    for code, actor, phrase in holds:
         if code in held:
             return Step(actor, phrase.format(cid=cid, after=after))
     # What blocks an approval and has no step of its own. A check the approval makes itself is no such thing.
     left = [owed for owed in check if owed.code not in _MADE_BY_APPROVAL]
     if approve_blockers(state, findings) or check_stops(left):
-        return Step("you", f"fix what `adk-spec validate {cid}` lists")
+        return Step("you", _FIX_THE_FILES.format(cid=cid))
     if first := first_of_two(state, stale):
         return Step("you", f"have someone other than {first.by} run `adk-spec approve {cid}`")
     return Step("you", f"run `adk-spec approve {cid}`")
-
-
-def next_action(
-    state: ChangeState, findings: Sequence[Finding], stale: Sequence[str], *, check: Sequence[Finding] = ()
-) -> str:
-    """What a person does next with a change, in one phrase."""
-    return next_step(state, findings, stale, check=check).phrase

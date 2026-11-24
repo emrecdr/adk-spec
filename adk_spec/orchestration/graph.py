@@ -486,11 +486,17 @@ def build_verify_app(*, ledger: UsageLedger, required: frozenset[str], recorder:
     of `required`. Whether a verdict stands is decided afterwards, against the diff."""
 
     def check_verdicts(state: Mapping[str, Any]) -> list[str]:
-        given = {one.id.strip() for one in VerdictsDraft.model_validate(state[verify_stage.KEY]).verdicts}
-        missing = sorted(required - given)
-        return (
-            [f"no verdict was given for {', '.join(missing)}. Give one for each requirement listed."] if missing else []
-        )
+        said: dict[str, set[str]] = {}  # each requirement's verdicts, as given
+        for one in VerdictsDraft.model_validate(state[verify_stage.KEY]).verdicts:
+            said.setdefault(one.id.strip(), set()).add(one.verdict)
+        sent = []
+        if missing := sorted(required - said.keys()):
+            listed = "Give one for each requirement listed."
+            sent.append(coded("verify.no-verdict", f"no verdict was given for {', '.join(missing)}. {listed}"))
+        # Found by the fourth audit: a `met` and an `unmet` for one requirement, and the first one stood.
+        if twice := sorted(req for req in required & said.keys() if len(said[req]) > 1):
+            sent.append(coded("verify.verdict-twice", f"{', '.join(twice)} had verdicts that disagree. Give one each."))
+        return sent
 
     verify, verify_gate = verify_stage.build_verify(), checked(verify_stage.KEY, check_verdicts)
     edges: list[Any] = [("START", verify, verify_gate), (verify_gate, {OK: _ended, AGAIN: verify, GIVE_UP: _ended})]

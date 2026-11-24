@@ -422,6 +422,54 @@ and a step moves to code only where its output is a function of its input with n
     and Claude Code is reported to send no progress token, so a heartbeat would be cosmetic in VS Code alone.
   - **The tier recorded in an approval.** It catches only an accidental edit of `change.json`, which a hand edit could
     already forge, and a new field makes every older adk-spec refuse the file.
+- **The fourth audit, 24 November 2026**: five read-only reviewers (two of hardening, architecture, the terminal's
+  use, and the tools adk-spec is measured against), each finding then checked against the code, and the confirmed
+  ones fixed test first on the branch `audit4`. Fixed: the work's diff no longer moves with git's index, so a change
+  verified and then committed no longer reads as drifted; a revision keeps each base it recorded; a check by code
+  alone no longer clears a model's blocking finding after an edit; an exclude pattern with a backslash is refused;
+  a revision refuses to delete a delta that does not read and names each one it takes out; an approved change
+  edited into an error no longer loops on `approve`; a strict change's read-first stop is the person's; a task
+  opening with a bracket round-trips; a `met` quote stitched across hunks is no evidence; two verdicts for one
+  requirement are sent back; the check is told to quote the change's own words for a rule it breaks, and `approve`
+  says what it dropped; the skill and the server say the model commands take minutes and to follow the step
+  `status` names; `verify` says when it ran no test; one list of key words for the key search; the folded tree is
+  capped; `init --refresh --no-explore` adds what needs no model; the chat is given the profile; a file that will
+  not open is a finding; smaller messages and bounds. Skipped, with reasons: a constitution of any size (validate
+  warns past 16,000 characters), lessons quoting a model's words (fenced, short, and seen in git), Gemini's other
+  finish reasons asked again (no Gemini run measured yet), a softer stop for a cancelled MCP command, one regex for
+  the library globs (decided before), `--root` after the command (the README says where it goes).
+  Three cleanup reviews and three code reviews followed on the branch, each finding fixed test first. Of note: the
+  work's fingerprint is taken of a text of its own, so the diff a model is shown keeps a move short; a fingerprint an
+  older adk-spec recorded is still accepted; a file whose text was not read is `file.unreadable`, and no command
+  writes over it or hands out its IDs; only a model clears what a model found, and where no model can make the check
+  again a reason sets it aside on a tier that takes one. An exclude pattern holding a backslash, git's escape too, is
+  now refused: write a glob character in brackets, `[[]`. A model's check records how many of its blocking findings
+  are the model's own, `model_blocking` in `change.json`, and only that holds a check by code alone back: a check an
+  older adk-spec recorded, which counted the code's findings in, holds only while its files stand, as it did. The
+  field is written only where a model judged, so an older adk-spec still reads every change checked by code alone.
+  An outside audit's report of 24 November 2026 was then checked against the branch, finding by finding: confirmed
+  and fixed, a registry credential in `.npmrc` scrubbed; `propose --id` reading the change under the lock; a `.venv`
+  whose `lib` is a link read as no environment; `.spec/` and the skill left out in any case; the `rebase` and
+  `approve` steps naming their change; `.` listing the repository's files without its libraries; the assumptions
+  counted as a list counts them; a lock left by a machine whose name holds a space taken over; and, the owner's
+  choice, a requirement a change removes owed the task that takes its code out. Refuted or decided before, with the
+  reasons checked: CRLF drift, the cost of `status`, the armour checksum, the inline key header, splitting `cli.py`,
+  the lock's marker and its hold while asking, and exit 1 as a failed call.
+  The fifth and last cleanup and code review closed the loop. Fixed, test first: a registry credential in `.npmrc`
+  is hidden with no digit asked of it and in quotes; a change approved before a removed requirement was owed a task
+  keeps its approval, the rule holding for drafts; a strict change revised once approved is not said to wait for a
+  plan, and its kept line names `approve`. Left, with reasons: a revision that newly owes a design while a task is
+  ticked names a `plan` that refuses (rare, and nothing is lost: `plan` says why); `adk web` stops at import where
+  another change's delta will not open (as every command does, decided in the fourth review); an older adk-spec reads
+  work this one verified as drifted (a team keeps one version); the assumptions' count of prose beside a list; the
+  server's note on exit 2 not naming a lock held by another run (the lock's own message says to wait for it).
+  A second outside report and the research in `docs/reports/Spec tool feature opportunities.md` were compared, and
+  five features chosen, none needing a model call or a new command, in this order: for the approver, a diff of each
+  requirement a change modifies and the open changes that touch it too; unmet verdicts written as the next work;
+  `verify`'s evidence kept beside each living spec, a requirement whose evidence is gone from the code flagged as
+  suspect; `validate` reading a voided approval and drifted work in CI, with annotations; a pull request's summary
+  and a changelog at archive. Measured first, with the owner's go-ahead: `verify` judging the work against the
+  constitution, and a tier raised after the reading; tests mapped to requirements reverses a decided non-goal.
 - **A second way to use adk-spec, beside the terminal**: decided on 22 November 2026, as recommended. It is an MCP
   server for coding assistants, phase 14 above.
 - **A change file written by a newer adk-spec**: decided on 22 November 2026, as recommended. An older adk-spec keeps
@@ -431,7 +479,7 @@ and a step moves to code only where its output is a function of its input with n
 ## The owner's, outside any phase
 
 - A smoke run on the Gemini arm. It needs a `GOOGLE_API_KEY`.
-- The gate on a Windows machine. The CI workflow has a Windows job, and the repository has no remote.
+- The gate on a Windows machine. The CI workflow has a Windows job, which waits on the GitHub account's billing.
 - A Windows job object, to stop what a passing test run leaves running there; until then it runs on, and only a run
   past its time, or interrupted, is stopped on Windows. It waits for a Windows machine to test it on.
 - Two items of the outside audit of 22 November 2026, deferred with their reasons. Untracked files diffed in Python

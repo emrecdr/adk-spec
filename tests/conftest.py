@@ -12,12 +12,13 @@ shows (`survey_quoting`).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import shutil
 import stat
-from collections.abc import AsyncGenerator, Iterator
+from collections.abc import AsyncGenerator, Generator, Iterator
 from pathlib import Path
 
 import pytest
@@ -101,7 +102,7 @@ CANNED_TASKS = {
                 },
                 {
                     "description": "Implement the passkey handler",
-                    "requirements": ["REQ-AUTH-004", "REQ-AUTH-002"],
+                    "requirements": ["REQ-AUTH-004", "REQ-AUTH-002", "REQ-AUTH-001"],
                     "files": ["src/auth/passkey.py"],
                     "verify": "uv run pytest tests/test_passkey.py",
                     "parallel": False,
@@ -180,24 +181,18 @@ def canned_for(schema: type[BaseModel]) -> dict:
 
 
 #: A delta's section headings and requirement headings, the ID as the domain's own grammar spells one.
-_OWED = re.compile(
-    rf"^## (?P<section>ADDED|MODIFIED|REMOVED) Requirements\s*$|^### (?P<req>{REQ_ID.pattern}):", re.MULTILINE
-)
+_OWED = re.compile(rf"^### (?P<req>{REQ_ID.pattern}):", re.MULTILINE)
 
 
 def tasks_serving(instruction: str) -> dict:
-    """The canned tasks, naming the requirements the deltas of `instruction` add or modify where those are not the
-    canned ones: a task list must serve what its change owes, and a change `propose` drafts owes IDs of its own."""
+    """The canned tasks, naming the requirements the deltas of `instruction` add, modify or remove where those are not
+    the canned ones: a task list must serve what its change owes, and a change `propose` drafts owes IDs of its own."""
     try:
         deltas = between(instruction, "deltas")
     except ValueError:
         return CANNED_TASKS
-    section, owed = "", []
-    for found in _OWED.finditer(deltas):
-        if found["section"]:
-            section = found["section"]
-        elif section != "REMOVED" and found["req"] not in owed:
-            owed.append(found["req"])
+    # Every requirement a delta names, a removed one owed the task that takes its code out.
+    owed = list(dict.fromkeys(found["req"] for found in _OWED.finditer(deltas)))
     named = {req for group in CANNED_TASKS["groups"] for task in group["tasks"] for req in task["requirements"]}
     if not owed or set(owed) == named:
         return CANNED_TASKS
@@ -592,3 +587,16 @@ def python_environment(root: Path, files: dict[str, str] | None = None, *, windo
     listed = [*held, "httpx-0.28.1.dist-info/METADATA", "httpx/__pycache__/x.cpython-314.pyc", "../../bin/httpx"]
     (info / "RECORD").write_text("".join(f"{path},sha256=x,1\n" for path in listed), encoding="utf-8")
     return site
+
+
+@contextlib.contextmanager
+def shut(path: Path) -> Generator[None]:
+    """`path` with no mode at all while the block runs, as a file another program holds or a cloud placeholder is:
+    skipped where the account reads it anyway (Windows, root, an ACL), and given its mode back after."""
+    path.chmod(0)
+    try:
+        if os.access(path, os.R_OK):
+            pytest.skip("this account reads a file with no mode")
+        yield
+    finally:
+        path.chmod(0o644)

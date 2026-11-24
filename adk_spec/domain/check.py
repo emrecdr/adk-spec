@@ -17,8 +17,16 @@ from .validate import finding
 
 
 def owed(deltas: Mapping[str, Delta]) -> frozenset[str]:
-    """Every requirement a change adds or modifies: each is owed a task."""
+    """Every requirement a change adds or modifies: each is owed a verdict the diff's added lines ground, as each a
+    change removes is owed one its removed lines ground."""
     return frozenset(req.id for delta in deltas.values() for req in (*delta.added, *delta.modified))
+
+
+def tasked(deltas: Mapping[str, Delta]) -> frozenset[str]:
+    """Every requirement a change's task list owes a task: what it adds or modifies, and what it removes, whose code
+    a task takes out. Found by an outside audit, the owner's choice: `verify` asks a removed requirement for the
+    lines that took it out, and no task was owed to take them out."""
+    return owed(deltas) | removed(deltas)
 
 
 def removed(deltas: Mapping[str, Delta]) -> frozenset[str]:
@@ -30,7 +38,7 @@ def nameable(deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> frozens
     """Every requirement a task of the change may name: what it adds, modifies or removes, and what any living
     spec holds. A task may serve a requirement the change leaves alone and must keep true."""
     held = {req.id for spec in living.values() for req in spec.requirements}
-    return owed(deltas) | removed(deltas) | held
+    return tasked(deltas) | held
 
 
 def coverage(groups: Sequence[TaskGroup], *, owed: frozenset[str], nameable: frozenset[str]) -> list[Finding]:
@@ -61,5 +69,8 @@ def coverage_of(change: Change, living: Mapping[str, Spec]) -> list[Finding]:
     groups = change.tasks or ()
     if not any(group.tasks for group in groups):
         return []
-    found = coverage(groups, owed=owed(change.deltas), nameable=nameable(change.deltas, living))
+    # A removed requirement is owed a task where the change is still drafted: found by the code review, one an older
+    # adk-spec approved without it was sent back to be approved and verified again. An approval given now was owed it.
+    serves = tasked(change.deltas) if change.state.status == "draft" else owed(change.deltas)
+    found = coverage(groups, owed=serves, nameable=nameable(change.deltas, living))
     return [held.model_copy(update={"path": TASKS_FILE}) for held in found]

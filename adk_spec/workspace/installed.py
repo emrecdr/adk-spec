@@ -77,10 +77,12 @@ def _site(root: Path) -> tuple[str, Path] | None:
         venv = root / where
         if not _folder(venv):
             continue
-        if _folder(windows := venv / "Lib" / "site-packages"):
+        # Each folder on the way reached through no link: found by an outside audit, a `lib` linked out of the
+        # repository was read as its own environment.
+        if _folder(venv / "Lib") and _folder(windows := venv / "Lib" / "site-packages"):
             return where, windows
-        for site in sorted((venv / "lib").glob("python3*/site-packages")):
-            if _folder(site):
+        for site in sorted((venv / "lib").glob("python3*/site-packages")) if _folder(venv / "lib") else ():
+            if _folder(site.parent) and _folder(site):
                 return where, site
     return None
 

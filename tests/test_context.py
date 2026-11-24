@@ -86,6 +86,19 @@ def test_a_tree_within_the_limit_is_every_path_and_past_it_folders_with_counts()
     assert len(lines) == 7, "the first line, then one a folder"
 
 
+def test_a_tree_of_more_folders_than_the_limit_is_folded_again_and_cut_with_a_count() -> None:
+    """Found by the fourth audit: a monorepo of 3,000 packages gave 3,000 folder lines to every stage told the tree."""
+    from adk_spec.workspace.context import TREE_MAX_PATHS, tree_text
+
+    paths = [f"packages/p{n}/src/a.py" for n in range(TREE_MAX_PATHS * 2)] + [f"apps/a{n}/x.py" for n in range(3)]
+    lines = lines_of(tree_text(paths))
+    assert lines[0].startswith(f"{len(paths):,} files: too many to list") and "one level deep" in lines[0]
+    assert lines[1:] == ["apps/ (3 files)", f"packages/ ({TREE_MAX_PATHS * 2:,} files)"]
+    many = [f"p{n}/src/a.py" for n in range(TREE_MAX_PATHS + 5)]
+    lines = lines_of(tree_text(many))
+    assert len(lines) == TREE_MAX_PATHS + 2 and lines[-1] == "and 5 more folders"
+
+
 def test_the_profile_is_read_as_it_stands_and_cut_past_its_cap(tmp_path, monkeypatch) -> None:
     ws = Workspace.init(tmp_path)
     assert profile_text(ws) == ""

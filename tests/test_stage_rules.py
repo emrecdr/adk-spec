@@ -40,6 +40,13 @@ def test_the_check_finds_a_requirement_that_softens_the_brief_or_could_never_fai
     assert "a THEN no run could show false" in told
 
 
+def test_the_check_quotes_the_changes_own_words_for_a_rule_it_breaks() -> None:
+    """Found by the fourth audit: a finding that quoted the rule, or the living spec, named no file of the change,
+    and code, which looks for a quote in the change's files alone, dropped it: blocking findings lost unsaid."""
+    told = " ".join(str(build_check().instruction).split())
+    assert "quote the change's own words that break it" in told and "name the rule or the requirement" in told
+
+
 def test_the_brief_names_as_few_capabilities_as_hold_the_change() -> None:
     """Found live, phase 15: a brief that named three capabilities for one small change left the deltas stage
     unable to give each a requirement."""

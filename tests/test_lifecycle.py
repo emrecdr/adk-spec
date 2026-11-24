@@ -15,7 +15,7 @@ from adk_spec.domain.lifecycle import (
     archive_blockers,
     capture_bases,
     check_stops,
-    next_action,
+    next_step,
 )
 from adk_spec.domain.model import ChangeState, Delta, Finding
 from adk_spec.domain.spec_md import fingerprint, parse_spec
@@ -31,6 +31,11 @@ OTHER = Finding(severity="WARNING", code="spec.no-shall", message="m")
 #: Errors of the task list alone, which `plan` settles: measured live after a revision, and found by review.
 NO_TASK = Finding(severity="ERROR", code="check.requirement-no-task", message="m", path="tasks.md")
 TASKS_SYNTAX = Finding(severity="ERROR", code="syntax", message="m", path="tasks.md")
+
+
+def phrase(state: ChangeState, findings: list[Finding], stale: list[str], **held) -> str:
+    """What a person does next with a change, in one phrase."""
+    return next_step(state, findings, stale, **held).phrase
 
 
 def approved(tier: str = "lean") -> ChangeState:
@@ -92,6 +97,11 @@ def test_what_an_archive_waits_for() -> None:
 SETTLE_THEN_PLAN = "settle the open point in brief.md, then run `adk-spec plan passkeys`"
 
 
+AGAIN_AFTER_A_FIX = "fix what `adk-spec validate passkeys` lists, then run `adk-spec approve passkeys` again"
+#: Found by the fourth audit: a strict change's stop before its plan was listed as ready to run.
+READ_THEN_PLAN = "read brief.md and the specs, then run `adk-spec plan passkeys`"
+
+
 @pytest.mark.parametrize(
     ("state", "findings", "stale", "said"),
     [
@@ -109,6 +119,10 @@ SETTLE_THEN_PLAN = "settle the open point in brief.md, then run `adk-spec plan p
         (DRAFT, [OTHER], ["approval"], "run `adk-spec approve passkeys`"),
         (DRAFT, [], ["approval"], "run `adk-spec approve passkeys`"),
         (approved(), [], ["tasks.md"], "tasks.md changed since the approval: run `adk-spec approve passkeys` again"),
+        # Found by the fourth audit: "approve again" while an error stood, which the approval refused, in a loop.
+        (approved(), [NO_TASK], ["specs/auth/spec.md"], AGAIN_AFTER_A_FIX),
+        (approved(), [MARKER], ["brief.md"], AGAIN_AFTER_A_FIX),  # a warning that blocks: by the cleanup review
+        (DRAFT.model_copy(update={"tier": "strict"}), [NO_TASKS], ["approval"], READ_THEN_PLAN),
         (approved(), [], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
         (approved(), [ERROR], [], "fix what `adk-spec validate passkeys` lists"),
         (approved(), [OTHER], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
@@ -118,7 +132,7 @@ SETTLE_THEN_PLAN = "settle the open point in brief.md, then run `adk-spec plan p
     ],
 )
 def test_the_next_step_is_named_for_every_state(state, findings, stale, said) -> None:
-    assert next_action(state, findings, stale) == said
+    assert phrase(state, findings, stale) == said
 
 
 def test_a_line_slipped_in_above_an_approved_one_voids_the_approval() -> None:
@@ -153,12 +167,12 @@ def test_a_draft_with_nothing_else_owed_is_sent_to_its_approval_which_checks_fir
     from adk_spec.domain.model import Checked
 
     never = ChangeState(id="passkeys", tier="standard")
-    assert next_action(never, [], ["approval"], check=check_blockers(never, FILES)) == "run `adk-spec approve passkeys`"
+    assert phrase(never, [], ["approval"], check=check_blockers(never, FILES)) == "run `adk-spec approve passkeys`"
     found = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=1)})
-    step = next_action(found, [], ["approval"], check=check_blockers(found, FILES))
+    step = phrase(found, [], ["approval"], check=check_blockers(found, FILES))
     assert step == "fix what reports/check.md lists, then run `adk-spec approve passkeys`"
     clean = never.model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
-    assert next_action(clean, [], ["approval"], check=check_blockers(clean, FILES)) == "run `adk-spec approve passkeys`"
+    assert phrase(clean, [], ["approval"], check=check_blockers(clean, FILES)) == "run `adk-spec approve passkeys`"
 
 
 @pytest.mark.parametrize(
@@ -167,6 +181,7 @@ def test_a_draft_with_nothing_else_owed_is_sent_to_its_approval_which_checks_fir
         (DRAFT, [ERROR], "you"),
         (DRAFT, [MARKER], "you"),
         (DRAFT, [NO_TASKS], "run"),
+        (DRAFT.model_copy(update={"tier": "strict"}), [NO_TASKS], "you"),  # a strict change is read before its plan
         (DRAFT, [NO_BASE], "you"),
         (DRAFT, [], "you"),  # an approval is a person's decision
         (approved(), [], "you"),  # the work itself
@@ -175,11 +190,8 @@ def test_a_draft_with_nothing_else_owed_is_sent_to_its_approval_which_checks_fir
     ],
 )
 def test_each_next_step_says_who_takes_it(state, findings, actor) -> None:
-    from adk_spec.domain.lifecycle import next_step
-
     stale = [] if state.approval else ["approval"]
-    step = next_step(state, findings, stale)
-    assert step.actor == actor and step.phrase == next_action(state, findings, stale)
+    assert next_step(state, findings, stale).actor == actor
 
 
 def test_a_check_that_is_owed_is_the_approvals_to_make_and_one_that_blocks_is_yours() -> None:
@@ -199,13 +211,13 @@ def test_whatever_blocks_an_approval_has_a_next_step_of_its_own_or_falls_to_vali
 
     for code in lifecycle.BLOCKS_APPROVAL:  # each has a step of its own, never the approval it blocks
         held = Finding(severity="WARNING", code=code, message="m")
-        assert next_action(DRAFT, [held], ["approval"]) != "run `adk-spec approve passkeys`", code
+        assert phrase(DRAFT, [held], ["approval"]) != "run `adk-spec approve passkeys`", code
     unlisted = Finding(severity="WARNING", code="a.code-with-no-step", message="m")
-    assert next_action(DRAFT, [unlisted], ["approval"]) == "run `adk-spec approve passkeys`"
+    assert phrase(DRAFT, [unlisted], ["approval"]) == "run `adk-spec approve passkeys`"
     lifecycle_blocks = lifecycle.BLOCKS_APPROVAL
     try:
         lifecycle.BLOCKS_APPROVAL = frozenset({*lifecycle_blocks, "a.code-with-no-step"})
-        assert next_action(DRAFT, [unlisted], ["approval"]) == "fix what `adk-spec validate passkeys` lists"
+        assert phrase(DRAFT, [unlisted], ["approval"]) == "fix what `adk-spec validate passkeys` lists"
     finally:
         lifecycle.BLOCKS_APPROVAL = lifecycle_blocks
 
@@ -250,7 +262,7 @@ def test_a_standard_change_edited_after_approval_is_sent_to_approve_again_which_
 
     state = approved("standard").model_copy(update={"check": Checked(at="t", files=FILES, blocking=0)})
     owed = check_blockers(state, {**FILES, "tasks.md": "sha256:edited"})
-    said = next_action(state, [], ["tasks.md"], check=owed)
+    said = phrase(state, [], ["tasks.md"], check=owed)
     assert said == "tasks.md changed since the approval: run `adk-spec approve passkeys` again", (
         "`approve` checks first, by itself"
     )
@@ -280,7 +292,7 @@ def test_a_check_code_no_rule_knows_is_never_sent_to_an_approval_that_would_refu
 
     odd = Finding(severity="ERROR", code="check.some-new-code", message="m")
     never = ChangeState(id="passkeys", tier="standard")
-    assert next_action(never, [], ["approval"], check=[odd]) == "fix what `adk-spec validate passkeys` lists"
+    assert phrase(never, [], ["approval"], check=[odd]) == "fix what `adk-spec validate passkeys` lists"
 
 
 def test_an_approved_change_edited_and_found_blocking_is_sent_to_the_report_not_to_approve_again() -> None:
@@ -291,15 +303,13 @@ def test_an_approved_change_edited_and_found_blocking_is_sent_to_the_report_not_
 
     edited = {**FILES, "tasks.md": "sha256:edited"}
     state = approved("standard").model_copy(update={"check": Checked(at="t", files=edited, blocking=2)})
-    said = next_action(state, [], ["tasks.md"], check=check_blockers(state, edited))
+    said = phrase(state, [], ["tasks.md"], check=check_blockers(state, edited))
     assert said == "fix what reports/check.md lists, then run `adk-spec approve passkeys`"
 
 
 def test_a_task_list_with_a_ticked_box_is_fixed_by_hand_not_by_plan() -> None:
     """Found by review: after a revision of a change whose task was ticked, the next line said `plan`, which a
     ticked task refuses: drafting the list again would throw the work away."""
-    from adk_spec.domain.lifecycle import next_step
-
     assert next_step(DRAFT, [NO_TASK], ["approval"]).phrase == "run `adk-spec plan passkeys`"
     begun = next_step(DRAFT, [NO_TASK], ["approval"], started=True).phrase
     assert begun == "fix what `adk-spec validate passkeys` lists"
@@ -312,8 +322,57 @@ def test_an_open_point_names_what_holds_the_change_after_it_a_blocking_check_too
     from adk_spec.domain.model import Checked
 
     found = ChangeState(id="passkeys", tier="standard", check=Checked(at="t", files=FILES, blocking=1))
-    step = next_action(found, [MARKER], ["approval"], check=check_blockers(found, FILES))
+    step = phrase(found, [MARKER], ["approval"], check=check_blockers(found, FILES))
     assert step == f"settle the open point in brief.md, then {_FIXED}"
 
 
 _FIXED = "fix what reports/check.md lists, then run `adk-spec approve passkeys`"
+
+
+def test_a_revision_keeps_each_recorded_base_and_records_only_a_new_one() -> None:
+    """Found by the fourth audit: a revision recorded every base afresh, and a stale one was lost."""
+    from adk_spec.domain.lifecycle import kept_bases
+
+    deltas, living = {"auth": parse_delta(DELTA)}, {"auth": parse_spec(SPEC)}
+    one, _two = parse_spec(SPEC).requirements
+    held = {"REQ-AUTH-002": "sha256:old", "REQ-AUTH-009": "sha256:untouched"}
+    assert kept_bases(held, deltas, living) == {"REQ-AUTH-002": "sha256:old", "REQ-AUTH-001": fingerprint(one)}
+
+
+def test_a_models_check_records_what_the_model_found_apart_from_the_code() -> None:
+    """Found by the code review: on the strict tier a check counted the code's warnings among the model's, and a
+    warning fixed since held a check by code alone, as if the model had found it. A model's check now records the
+    model's own count beside the whole one, and a check by code alone gives way only to that."""
+    from adk_spec.domain.lifecycle import checked, model_holds
+
+    strict = DRAFT.model_copy(update={"tier": "strict"})
+    warning = Finding(severity="WARNING", code="tasks.no-verify", message="m")
+    critical = Finding(severity="ERROR", code="check.contradiction", message="m")
+    held = checked(strict, [warning], files={"a": "1"}, at=AT, model="m", judged=[])  # the model found nothing
+    assert (held.check.blocking, held.check.model_blocking) == (1, 0) and not model_holds(held, {"a": "2"})
+    held = checked(strict, [warning, critical], files={"a": "1"}, at=AT, model="m", judged=[critical])
+    assert (held.check.blocking, held.check.model_blocking) == (2, 1) and model_holds(held, {"a": "2"})
+    assert model_holds(held, {"a": "1"}), "a model's check of the same files stands, whatever it found"
+
+
+def test_a_check_an_older_adk_spec_recorded_holds_only_while_its_files_stand() -> None:
+    """Found by the code review: an older adk-spec counted the code's warnings into a model's check, so read as the
+    model's own, a strict change could be held for good once no model was at hand. Such a record says nothing of
+    what the model alone found: it holds as it did before, while its files are the same."""
+    from adk_spec.domain.lifecycle import model_holds
+    from adk_spec.domain.model import Checked
+
+    older = DRAFT.model_copy(
+        update={"tier": "strict", "check": Checked(at=AT, files={"a": "1"}, blocking=1, model="m")}
+    )
+    assert model_holds(older, {"a": "1"}) and not model_holds(older, {"a": "2"})
+
+
+def test_a_check_by_code_alone_is_written_as_an_older_adk_spec_reads_it() -> None:
+    """The model's count is written only where a model judged: a check by code alone stays readable by an older
+    adk-spec, which refuses a field it does not know."""
+    from adk_spec.domain.lifecycle import checked
+
+    alone = checked(DRAFT, [], files={"a": "1"}, at=AT)
+    judged = checked(DRAFT, [], files={"a": "1"}, at=AT, model="m", judged=[])
+    assert "model_blocking" not in alone.model_dump_json() and '"model_blocking":0' in judged.model_dump_json()

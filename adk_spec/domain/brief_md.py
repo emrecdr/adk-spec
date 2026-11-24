@@ -67,7 +67,19 @@ def assumption_count(text: str) -> int:
     `propose` say how many there are to check before approving."""
     for marker in markers(text):
         text = text.replace(marker, "")
+    lines = [line.strip() for line in text.strip().split("\n") if line.strip()]
+    # Found by an outside audit: a list's items without full stops were one, a numbered list counted its numbers as
+    # sentences, and "None." was one.
+    if len(lines) == 1 and _NO_ASSUMPTION.fullmatch(lines[0]):
+        return 0
+    if items := [line for line in lines if _LIST_ITEM.match(line)]:
+        return len(items)
     return len([one for one in re.split(r"(?<=[.!?])\s+", text.strip()) if one.strip()])
+
+
+#: A line that says there is no assumption; and one that opens an item of a list, bulleted or numbered.
+_NO_ASSUMPTION = re.compile(r"(?i)(?:none|n/?a|no assumptions?)\.?")
+_LIST_ITEM = re.compile(r"(?:[-*]|\d+[.)])\s")
 
 
 def parse_brief(text: str) -> Brief:

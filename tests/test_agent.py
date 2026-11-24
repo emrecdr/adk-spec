@@ -7,7 +7,7 @@ import importlib
 import sys
 
 import pytest
-from conftest import ROOT, between, on_the_fake, seeded, sent_to
+from conftest import ROOT, between, on_the_fake, seeded, sent_to, shut
 from google.adk.apps.app import App
 from google.adk.cli.utils.agent_loader import AgentLoader
 from google.adk.runners import InMemoryRunner
@@ -117,6 +117,16 @@ async def test_the_chat_drafts_with_the_lessons_as_propose_does(tmp_path, monkey
     assert "- Mine." in deltas
 
 
+def test_the_chat_loads_where_the_profile_will_not_open(tmp_path, monkeypatch) -> None:
+    """Found by the code review: the chat read the profile once it was given it, and one that would not open
+    stopped it loading."""
+    ws = seeded(tmp_path)
+    profile = ws.home / "profile.md"
+    profile.write_text("# This repository\n")
+    with shut(profile):
+        assert loaded(tmp_path, monkeypatch).root_agent is not None
+
+
 def test_the_chat_loads_where_the_lessons_file_is_no_text(tmp_path, monkeypatch) -> None:
     """Found by the review: a lessons file written as UTF-16, as PowerShell 5.1 writes, stopped the chat loading."""
     ws = seeded(tmp_path)
@@ -131,3 +141,13 @@ async def test_the_chat_tells_the_brief_what_triage_sized_as_propose_does(tmp_pa
     seeded(tmp_path)
     await said(loaded(tmp_path, monkeypatch), REQUEST)
     assert between(sent_to(fake_provider, "You write the brief"), "sized") == "auth"
+
+
+@pytest.mark.asyncio
+async def test_the_chat_drafts_with_the_profile_as_propose_does(tmp_path, monkeypatch, fake_provider) -> None:
+    """Found by the fourth audit: `propose` gave the brief and the deltas the repository's profile, and the chat,
+    which drafts as `propose --no-input` drafts, did not."""
+    ws = seeded(tmp_path)
+    (ws.home / "profile.md").write_text("# This repository\n\nSessions live in Redis, keyed by user.\n")
+    await said(loaded(tmp_path, monkeypatch), REQUEST)
+    assert "Sessions live in Redis, keyed by user." in str(sent_to(fake_provider, "You write the brief"))
