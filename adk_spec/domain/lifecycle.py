@@ -440,8 +440,26 @@ def _after_approval(
     if state.verification and not state.verification.tests_passed:
         why = f'`adk-spec verify {cid} --override "<why>"`'
         return Step("you", f"the tests failed: fix them and run `adk-spec verify {cid}`, or {why}")
+    if unmet := _unmet(state):
+        return unmet
     last = "verify" if DEMANDS[state.tier].verified else "archive"
     return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
+
+
+#: How many unmet requirements the next step names; `reports/remaining.md` holds every one.
+UNMET_NAMED = 3
+
+
+def _unmet(state: ChangeState) -> Step | None:
+    """The step after a verification that did not show every requirement met: the work its report names. Found by
+    the research on the tools compared: the step said "implement tasks.md" whatever the verdicts said."""
+    held = state.verification
+    unmet = sorted(req_id for req_id, said in held.verdicts.items() if said != "met") if held else []
+    if not unmet:
+        return None
+    more = len(unmet) - UNMET_NAMED
+    named = ", ".join(unmet[:UNMET_NAMED]) + (f" and {more} more" if more > 0 else "")
+    return Step("you", f"{named} unmet: work from reports/remaining.md, then run `adk-spec verify {state.id}`")
 
 
 def next_step(

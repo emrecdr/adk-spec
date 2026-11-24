@@ -49,6 +49,8 @@ STATE, BRIEF, DESIGN, TASKS, SPEC_FILE = "change.json", "brief.md", "design.md",
 REPORTS = "reports"
 #: The approver's view of a change, under its `reports/`.
 REVIEW = "review.md"
+#: What a verification left to do, under its `reports/`.
+REMAINING = "remaining.md"
 #: What a reading of the repository's code found for a change. Supporting material: no approval covers it.
 CONTEXT = "context.md"
 #: The writer's lock, and the marker a run makes while it takes over a lock left behind: a run's own, ignored by git.
@@ -321,6 +323,10 @@ class Workspace:
     def write_report(self, change_id: str, name: str, text: str) -> Path:
         """A generated report of a change, under its `reports/` folder: written whole, replacing the one before."""
         return self.write_into(change_id, {f"{REPORTS}/{name}": text})[0]
+
+    def drop_report(self, change_id: str, name: str) -> None:
+        """A generated report of a change removed, where there is one: what it said no longer holds."""
+        (self._folder(change_id) / REPORTS / name).unlink(missing_ok=True)
 
     def learn(self, sent_back: Iterable[tuple[str, str]]) -> None:
         """Each of `sent_back`, a stage and a problem its gate sent back that the next try fixed, noted in the lessons

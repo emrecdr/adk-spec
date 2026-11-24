@@ -372,6 +372,12 @@ in the diff; anything else is `unclear`, so missing or invented evidence never r
 keeps the change from being verified. Run `verify` as often as you like while you work; `--override "<your reason>"`
 verifies a change you judge done although a requirement is not shown met.
 
+Where a requirement is not shown met, `verify` also writes `reports/remaining.md`, and the `next` line names the
+requirements and the file. For each requirement it lists, first, what code found: a task ticked although its
+requirement is unmet, and the files a task named that the work never touched. Then it gives the model's reason,
+marked as words that code has not checked. Point your coding assistant at it, then verify again. The file is removed
+once every requirement is met.
+
 ### 6. Archive
 
 ```shell

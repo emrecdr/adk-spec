@@ -64,6 +64,7 @@ from ..domain.lifecycle import (
 )
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
+from ..domain.remaining import remaining, render_remaining
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
 from ..domain.review_md import render_review, review_said
 from ..domain.secrets import scrub, scrub_lines
@@ -71,7 +72,7 @@ from ..domain.spec_md import render_spec
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import UNREAD, failed, finding, validate_spec
-from ..domain.verify import TestRun, Verdict, grounded
+from ..domain.verify import TestRun, Verdict, grounded, parts_of_diff
 from ..workspace.config import ConfigError
 from ..workspace.context import (
     CONSTITUTION_MAX_CHARS,
@@ -93,6 +94,7 @@ from ..workspace.layout import (
     CONSTITUTION,
     LESSONS,
     PROFILE,
+    REMAINING,
     REVIEW,
     ROOT_NAME,
     SPEC_FILE,
@@ -1679,11 +1681,18 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     )
     reason = after.verification.override if after.verification else None
     report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases, tests=runs)
-    path = workspace.write_report(args.id, "verify.md", report)
+    wrote = [workspace.write_report(args.id, "verify.md", report)]
+    # What is left is written where the next step points: found by the research, the step ignored the verdicts.
+    touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
+    left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []
+    if left:
+        wrote.append(workspace.write_report(args.id, REMAINING, render_remaining(args.id, left)))
+    else:
+        workspace.drop_report(args.id, REMAINING)
     workspace.save_state(after)
     for one in verdicts:
         print(f"{one.verdict:<8}  {one.id}  {one.reason}")
-    print(f"wrote     {workspace.shown(path)}")
+    print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
     _say_next(workspace, args.id, specs, drift=False)  # found by the fourth audit: the diff was made a third time
