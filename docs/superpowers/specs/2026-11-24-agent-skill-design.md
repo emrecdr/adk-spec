@@ -33,9 +33,8 @@ the CLI, the cloud agent) and by Claude Code from `.claude/skills/<name>/SKILL.m
   a reading never takes its rules for the code's own, and `verify` never judges it as new work.
 - Left for later, from the code review: a refresh writes the skill again where a person deleted it on purpose; a
   marker of its having been offered once would be new state for a rare case.
-- Left for later, from the cleanup review: `init --refresh` refuses `--no-explore`, so a workspace made before the
-  skill gets it only with a new reading. Letting `--refresh --no-explore` write what is missing and read nothing is a
-  few lines, but changes what that pair of options means, for the few workspaces made before this change.
+- Left for later by the cleanup review, then built by the fourth audit: `init --refresh --no-explore` writes what
+  is missing and reads nothing, so a workspace made before the skill gets it with no model call.
 
 ## Non-goals
 

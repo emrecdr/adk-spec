@@ -15,12 +15,13 @@ ledger has no ceiling here, since it would count every chat of a process that st
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from .orchestration.graph import Known, build_chat_app
 from .orchestration.plugins import UsageLedger
-from .orchestration.stages import CAPABILITIES, CONSTITUTION, LESSONS_TEXT
-from .workspace.context import capability_index, constitution_text, lessons_text
+from .orchestration.stages import CAPABILITIES, CONSTITUTION, LESSONS_TEXT, PROFILE_TEXT
+from .workspace.context import capability_index, constitution_text, lessons_text, profile_text
 from .workspace.files import NotTextError
 from .workspace.layout import Workspace, WorkspaceError
 
@@ -31,21 +32,27 @@ def _known() -> tuple[Known, dict[str, str]]:
     try:
         workspace = Workspace.find(Path.cwd())
     except WorkspaceError:
-        return Known(living={}, taken=frozenset()), {CAPABILITIES: "", CONSTITUTION: "", LESSONS_TEXT: ""}
+        return Known(living={}, taken=frozenset()), {
+            CAPABILITIES: "",
+            CONSTITUTION: "",
+            LESSONS_TEXT: "",
+            PROFILE_TEXT: "",
+        }
     specs, _problems = workspace.specs()
     told = {
         CAPABILITIES: capability_index(specs),
         CONSTITUTION: constitution_text(workspace),
-        LESSONS_TEXT: _lessons(workspace),
+        LESSONS_TEXT: _readable(lessons_text, workspace),
+        PROFILE_TEXT: _readable(profile_text, workspace),  # found by the fourth audit: `propose` gave it, the chat not
     }
     return Known(living=specs, taken=frozenset(workspace.taken(specs))), told
 
 
-def _lessons(workspace: Workspace) -> str:
-    """The lessons as a chat's drafts read them, or none where the file is no text: a file a person edits by hand,
-    as PowerShell 5.1 writes UTF-16, does not stop the chat loading."""
+def _readable(read: Callable[[Workspace], str], workspace: Workspace) -> str:
+    """A file of the workspace as a chat's drafts read it, or none where it is no text: a file a person edits by
+    hand, as PowerShell 5.1 writes UTF-16, does not stop the chat loading."""
     try:
-        return lessons_text(workspace)
+        return read(workspace)
     except NotTextError:
         return ""
 

@@ -306,3 +306,13 @@ def test_a_change_file_a_newer_adk_spec_wrote_is_refused_saying_why(tmp_path) ->
     with pytest.raises(WorkspaceError, match="was written by a newer adk-spec: it holds `reviewers`") as raised:
         ws.load_change("passkeys")
     assert "upgrade adk-spec" in str(raised.value)
+
+
+def test_the_config_init_writes_shows_where_the_test_command_goes_and_names_none(tmp_path) -> None:
+    """Found by the fourth audit: with no test command named, `verify` ran no test and said nothing of it."""
+    from adk_spec.workspace.files import read_text
+    from adk_spec.workspace.layout import Workspace
+
+    ws = Workspace.init(tmp_path)
+    text = read_text(tmp_path / ".spec/config.toml")
+    assert '# [verify]\n# test = ["uv", "run", "pytest", "-q"]' in text and ws.config().test == ()

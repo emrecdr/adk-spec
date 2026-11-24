@@ -422,6 +422,26 @@ and a step moves to code only where its output is a function of its input with n
     and Claude Code is reported to send no progress token, so a heartbeat would be cosmetic in VS Code alone.
   - **The tier recorded in an approval.** It catches only an accidental edit of `change.json`, which a hand edit could
     already forge, and a new field makes every older adk-spec refuse the file.
+- **The fourth audit, 24 November 2026**: five read-only reviewers (two of hardening, architecture, the terminal's
+  use, and the tools adk-spec is measured against), each finding then checked against the code, and the confirmed
+  ones fixed test first on the branch `audit4`. Fixed: the work's diff no longer moves with git's index, so a change
+  verified and then committed no longer reads as drifted; a revision keeps each base it recorded; a check by code
+  alone no longer clears a model's blocking finding after an edit; an exclude pattern with a backslash is refused;
+  a revision refuses to delete a delta that does not read and names each one it takes out; an approved change
+  edited into an error no longer loops on `approve`; a strict change's read-first stop is the person's; a task
+  opening with a bracket round-trips; a `met` quote stitched across hunks is no evidence; two verdicts for one
+  requirement are sent back; the check is told to quote the change's own words for a rule it breaks, and `approve`
+  says what it dropped; the skill and the server say the model commands take minutes and to follow the step
+  `status` names; `verify` says when it ran no test; one list of key words for the key search; the folded tree is
+  capped; `init --refresh --no-explore` adds what needs no model; the chat is given the profile; a file that will
+  not open is a finding; smaller messages and bounds. Skipped, with reasons: a constitution of any size (validate
+  warns past 16,000 characters), lessons quoting a model's words (fenced, short, and seen in git), Gemini's other
+  finish reasons asked again (no Gemini run measured yet), a softer stop for a cancelled MCP command, one regex for
+  the library globs (decided before), `--root` after the command (the README says where it goes).
+  The tools compared (OpenSpec 2.1, Spec Kit 1.4, Kiro, Tessl, BMAD 6.12, GSD, Traycer) suggest features that are
+  the owner's to choose, recommended in this order: a diff of what each MODIFIED requirement changes, for the
+  approver, in code alone; `verify` judging the work against the constitution as well, measured first; a tier raised
+  after the reading where the code shows more risk; `validate` codes for a voided approval and drifted work in CI.
 - **A second way to use adk-spec, beside the terminal**: decided on 22 November 2026, as recommended. It is an MCP
   server for coding assistants, phase 14 above.
 - **A change file written by a newer adk-spec**: decided on 22 November 2026, as recommended. An older adk-spec keeps

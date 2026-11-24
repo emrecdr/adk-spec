@@ -65,6 +65,15 @@ context.md and design.md in its folder, then work through tasks.md in order, tes
 Then call status and do the step it names: verify, where the change owes a verification."""
 
 
+#: What each way a command ends says to an assistant. Found by the fourth audit: exit 1, findings or a refusal, is
+#: the command's answer, and was read as a failure and asked again.
+_ENDINGS = {
+    1: ", which is an answer: read the lines above, and do not call it again",
+    2: ": the command or the workspace's settings were not right",
+    3: ": the model or its provider failed",
+}
+
+
 def command(root: Path, *args: str) -> list[str]:
     """The command line that runs adk-spec on the workspace at `root`: `-P` keeps the folder it starts in, the
     person's repository, off the import path."""
@@ -92,7 +101,9 @@ async def ran(root: Path, argv: list[str]) -> str:
     finally:
         RUNNING.discard(process)
     if done.returncode != 0:
-        raise ToolError(_said(done.stdout, f"adk-spec ended with exit {done.returncode}"))
+        raise ToolError(
+            _said(done.stdout, f"adk-spec ended with exit {done.returncode}{_ENDINGS.get(done.returncode, '')}")
+        )
     return _said(done.stdout, "") or "(adk-spec finished, and printed nothing)"
 
 

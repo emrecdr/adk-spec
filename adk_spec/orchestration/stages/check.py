@@ -24,8 +24,10 @@ a contradiction between two files; wording in a requirement or a task that allow
 promises that no requirement delivers; a requirement that softens a number, an order or a negative the brief gives;
 a THEN no run could show false; one requirement stated twice; a rule of the repository the change breaks.
 Report every fault you find. One finding does not excuse the next.
-Report only what you can point to. For each finding, name one file by the path given above it and copy from it the
-exact text the finding is about: a line or a phrase, word for word.
+Report only what you can point to. For each finding, name one file of the change by the path given above it and copy
+from it the exact text the finding is about: a line or a phrase, word for word. Where the change breaks a rule of the
+repository or contradicts a living spec, quote the change's own words that break it, and name the rule or the
+requirement in your message: the rules and the living specs are no file of the change.
 critical means the change would be built wrong as it stands. warning means worth a look. note is a remark.
 Leave out what a check of structure finds without you: a missing section, a malformed ID, a requirement with no
 task. An empty list is a good answer."""

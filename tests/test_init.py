@@ -162,12 +162,16 @@ def test_a_refresh_drafts_while_the_constitution_is_still_the_template(tmp_path,
     assert "\n## Drafted from the code\n" in read_text(tmp_path / RULES)
 
 
-@pytest.mark.usefixtures("fake_provider")
-def test_refresh_with_no_explore_is_refused(tmp_path, capsys) -> None:
+def test_refresh_with_no_explore_writes_what_needs_no_model_and_reads_nothing(tmp_path, capsys, fake_provider) -> None:
+    """Found by the fourth audit and the skill's code review: a workspace made before the skill could be given it
+    only by a reading, which called a model and rewrote the profile."""
     repository(tmp_path, FILES)
     assert run(tmp_path, "init", "--no-explore") == 0
-    assert run(tmp_path, "init", "--refresh", "--no-explore") == 2
-    assert "--refresh" in capsys.readouterr().err
+    (tmp_path / SKILL).unlink()
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    said = capsys.readouterr().out
+    assert f"wrote     {SKILL}" in said and "reading" not in said and fake_provider.requests == []
 
 
 def test_init_asks_for_the_whole_repository_and_for_conventions_as_rules(tmp_path, fake_provider) -> None:

@@ -128,7 +128,17 @@ def tree_text(paths: Sequence[str]) -> str:
     short in silence would hide the files a task needs."""
     if len(paths) <= TREE_MAX_PATHS:
         return "\n".join(paths)
-    folders = Counter("/".join(path.split("/")[:-1][:2]) or "." for path in paths)
-    lines = [f"{len(paths):,} files: too many to list. Each folder, two levels deep, with the files under it:"]
-    lines += [f"{folder}/ ({count:,} file{'' if count == 1 else 's'})" for folder, count in sorted(folders.items())]
+    deep, folders = "two levels", _folders(paths, 2)
+    if len(folders) > TREE_MAX_PATHS:  # found by the fourth audit: a monorepo's folders were as many as its files
+        deep, folders = "one level", _folders(paths, 1)
+    kept = sorted(sorted(folders.items(), key=lambda held: -held[1])[:TREE_MAX_PATHS])  # the largest, by name
+    lines = [f"{len(paths):,} files: too many to list. Each folder, {deep} deep, with the files under it:"]
+    lines += [f"{folder}/ ({count:,} file{'' if count == 1 else 's'})" for folder, count in kept]
+    if more := len(folders) - len(kept):
+        lines.append(f"and {more:,} more folder{'' if more == 1 else 's'}")
     return "\n".join(lines)
+
+
+def _folders(paths: Sequence[str], depth: int) -> Counter[str]:
+    """How many of `paths` stand under each folder `depth` levels deep: `.` for the files at the top."""
+    return Counter("/".join(path.split("/")[:-1][:depth]) or "." for path in paths)

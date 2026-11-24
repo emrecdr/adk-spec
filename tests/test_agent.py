@@ -131,3 +131,13 @@ async def test_the_chat_tells_the_brief_what_triage_sized_as_propose_does(tmp_pa
     seeded(tmp_path)
     await said(loaded(tmp_path, monkeypatch), REQUEST)
     assert between(sent_to(fake_provider, "You write the brief"), "sized") == "auth"
+
+
+@pytest.mark.asyncio
+async def test_the_chat_drafts_with_the_profile_as_propose_does(tmp_path, monkeypatch, fake_provider) -> None:
+    """Found by the fourth audit: `propose` gave the brief and the deltas the repository's profile, and the chat,
+    which drafts as `propose --no-input` drafts, did not."""
+    ws = seeded(tmp_path)
+    (ws.home / "profile.md").write_text("# This repository\n\nSessions live in Redis, keyed by user.\n")
+    await said(loaded(tmp_path, monkeypatch), REQUEST)
+    assert "Sessions live in Redis, keyed by user." in str(sent_to(fake_provider, "You write the brief"))

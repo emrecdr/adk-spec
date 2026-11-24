@@ -14,8 +14,6 @@ SLUG = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 SLUG_MAX = 40
 #: `REQ-`, the capability's slug in upper case, `-`, and a number of three digits or more.
 REQ_ID = re.compile(r"REQ-([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*)-(\d{3,})")
-#: `T` and three digits or more.
-TASK_ID = re.compile(r"T\d{3,}")
 
 
 def slug_problem(slug: str) -> str | None:

@@ -672,3 +672,11 @@ def test_the_tier_triage_chose_is_said_before_the_reading_spends(tmp_path, capsy
     assert "sized     lean: one small change\nexplored" in out
     assert proposed(tmp_path, "--tier", "lean", "--id", "named") == 0
     assert "sized" not in capsys.readouterr().out, "a tier named is not sized, nor said again"
+
+
+def test_a_proposal_that_reads_no_code_says_so(tmp_path, capsys, fake_provider) -> None:
+    """Found by the fourth audit: `init` said when there was no repository to read, and `propose` said nothing."""
+    seeded(tmp_path)  # a workspace with no git repository
+    fake_provider.answers_when("You size a change request", {"tier": "lean", "reason": "Small.", "capabilities": []})
+    run(tmp_path, "propose", "Let users sign in with a passkey.", "--no-input", "--id", "unread")
+    assert "explored  nothing: no git repository here, or no file in it" in capsys.readouterr().out

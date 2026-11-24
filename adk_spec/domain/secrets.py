@@ -428,6 +428,11 @@ def scrub_lines(text: str, *, cut: bool = False) -> tuple[str, int]:
 _KEY_BEGINS_A_LINE = re.compile(r"(?m)^" + _ANY_LEAD + r"(?:" + _KEY_HEADER + r"|PuTTY-User-Key-File-[23]:)")
 
 
+#: The words every key `holds_a_key` finds holds, which a file too large to read whole is searched for first. Found by
+#: the fourth audit: the search had its own list, and a key a new pattern found would have been passed over by it.
+KEY_WORDS: tuple[bytes, ...] = (b"PRIVATE KEY", b"PuTTY-User-Key-File-")
+
+
 def holds_a_key(text: str) -> bool:
     """Whether a line of `text` begins a private key.
 

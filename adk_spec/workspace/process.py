@@ -176,7 +176,8 @@ def _stopped(process: subprocess.Popen[bytes], windows: bool) -> None:
     """A process and every process it started, stopped: where it ended already, what it left in its session."""
     if windows:
         taskkill = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "taskkill.exe")
-        subprocess.run([taskkill, "/F", "/T", "/PID", str(process.pid)], capture_output=True, check=False)
+        with contextlib.suppress(subprocess.TimeoutExpired):  # found by the fourth audit: the stop itself was unbounded
+            subprocess.run([taskkill, "/F", "/T", "/PID", str(process.pid)], capture_output=True, timeout=DRAIN_S)
     else:
         with contextlib.suppress(ProcessLookupError):  # it ended on its own meanwhile
             os.killpg(process.pid, signal.SIGKILL)  # pyrefly: ignore[missing-attribute] - not on Windows, nor run there

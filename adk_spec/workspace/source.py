@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from itertools import zip_longest
 from pathlib import Path
 
-from ..domain.secrets import holds_a_key, scrub_lines
+from ..domain.secrets import KEY_WORDS, holds_a_key, scrub_lines
 from ..domain.text import lines_of, normalise, plain
 from ..domain.verify import parts_of_diff
 from .config import ConfigError, load_config
@@ -211,7 +211,7 @@ class _Repository:
             # that holds none is never read into memory. Found by the third audit: a file past the read cap, or one
             # saved as Latin-1, was taken to hold no key, and a hunk from a key's middle reached the diff.
             with target.open("rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as held:
-                if held.find(b"PRIVATE KEY") < 0 and held.find(b"PuTTY-User-Key-File-") < 0:
+                if all(held.find(word) < 0 for word in KEY_WORDS):
                     return False
                 if size > KEY_SEARCH_MAX_BYTES:  # key words in a file too large to read whole: withheld, as a key is
                     return True

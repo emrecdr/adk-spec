@@ -181,7 +181,11 @@ def _parser() -> _Top:
 
     init = commands.add_parser("init", help=f"make the {ROOT_NAME} tree in this repository, and describe its code")
     init.add_argument("--no-explore", action="store_true", help="read none of the repository's code")
-    init.add_argument("--refresh", action="store_true", help="read the code again, and rewrite the profile")
+    init.add_argument(
+        "--refresh",
+        action="store_true",
+        help="read the code again and rewrite the profile; with --no-explore, add only what is missing",
+    )
     init.set_defaults(handler=_init)
 
     new = commands.add_parser("new", help="start a change: its folder and its state file")
@@ -313,9 +317,9 @@ def _init(args: argparse.Namespace) -> int:
     """The `.spec` tree made, or found with `--refresh`; then the code read where it can be, a profile of the
     repository written, and the rules already true of the code drafted into the constitution while it is still the
     template. The tree is made first: no model, and no failure of one, ever leaves the person without it, and a
-    first `init` ends well whatever the reading came to. A refresh owes the profile, and says where it wrote none."""
-    if args.refresh and args.no_explore:
-        raise UsageError("--refresh reads the code again, and --no-explore reads none: give one of them")
+    first `init` ends well whatever the reading came to. A refresh owes the profile, and says where it wrote none;
+    with `--no-explore` it writes only what needs no model and is missing, as the skill of a workspace made before it.
+    """
     if args.refresh:
         workspace = _workspace(args)
     else:
@@ -486,9 +490,10 @@ def _drifted(workspace: Workspace, state: ChangeState) -> bool:
         return True
 
 
-def _say_next(workspace: Workspace, change_id: str, living: dict[str, Spec]) -> None:
-    """The line every command that changes a change ends on: what comes next, read from the files as they now are."""
-    print(f"next      {_assessed(workspace, change_id, living).step.phrase}")
+def _say_next(workspace: Workspace, change_id: str, living: dict[str, Spec], *, drift: bool = True) -> None:
+    """The line every command that changes a change ends on: what comes next, read from the files as they now are.
+    Without `drift`, git is not asked whether the work moved: `verify` has just measured it."""
+    print(f"next      {_assessed(workspace, change_id, living, drift=drift).step.phrase}")
 
 
 def _of_specs(workspace: Workspace) -> tuple[dict[str, Spec], list[Finding]]:
@@ -665,6 +670,8 @@ def _approve(args: argparse.Namespace) -> int:
         _printed(stopped)
         count = len(made.findings)
         print(f"checked   {made.report}: {count} finding{'' if count == 1 else 's'}, {len(stopped)} blocking")
+        if made.dropped:  # found by the fourth audit: said by `check` alone, never by the check `approve` makes
+            print(f"note      {left_out(made.dropped)}")
         print(f"tokens    {_spent(made.ledger)}")
         assessed = _assessed(workspace, args.id, living)
     # A reason sets aside only what a person was shown: a check recorded before this run, never one it made.
@@ -1247,7 +1254,8 @@ def _code_read(
     from ..orchestration.stages import TREE
 
     source = _source(workspace, repositories, installed=True)
-    if source is None or not source.paths:
+    if source is None or not source.paths:  # found by the fourth audit: said by `init` alone
+        print("explored  nothing: no git repository here, or no file in it")
         return None
     # Asked after only once there is code to read: a plan outside a repository needs no reading model.
     if why := require_ready(roles=ROLES):
@@ -1598,7 +1606,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     print(f"wrote     {workspace.shown(path)}")
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
-    _say_next(workspace, args.id, specs)
+    _say_next(workspace, args.id, specs, drift=False)  # found by the fourth audit: the diff was made a third time
     return EXIT_OK if after.status == "verified" else EXIT_FINDINGS
 
 
@@ -1629,6 +1637,8 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     ever run."""
     config = workspace.config()
     asked = [("", workspace.root, config.test, config.test_timeout)] if config.test else []
+    if not asked and not source.tests():  # found by the fourth audit: a `met` read as tested, with no test run
+        print("tests     none named: set [verify] test in .spec/config.toml")
     runs = []
     for name, root, argv, timeout in [*asked, *source.tests()]:
         print(f"testing   {f'{name}: ' if name else ''}{scrub(' '.join(argv))[0]}")
@@ -2152,5 +2162,5 @@ def run() -> int:
     try:
         return main(sys.argv[1:])
     except KeyboardInterrupt:
-        print(f"{PROG}: interrupted", file=sys.stderr)
+        print(f"{PROG}: interrupted. `{PROG} status` says where things stand", file=sys.stderr)
         return EXIT_INTERRUPTED

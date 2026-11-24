@@ -325,11 +325,11 @@ def validate_change(change: Change, living: Mapping[str, Spec]) -> list[Finding]
         about(f"specs/{capability}/spec.md", validate_delta(delta, living.get(capability), change.state.bases))
     groups = change.tasks or ()
     if not any(group.tasks for group in groups):
-        no_tasks = "The change has no task. Plan its tasks in tasks.md before approval."
+        no_tasks = f"The change has no task: `adk-spec plan {change.state.id}` drafts them, before approval."
         about("tasks.md", [finding("change.missing-tasks", no_tasks)])
     else:
         about("tasks.md", validate_tasks(groups))
     if change.state.needs_design and change.design is None:
-        owed = "The change owes a design and has none. `adk-spec plan` drafts it."
+        owed = f"The change owes a design and has none: `adk-spec plan {change.state.id}` drafts it."
         about("design.md", [finding("change.missing-design", owed)])
     return found

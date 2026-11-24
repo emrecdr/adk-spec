@@ -394,6 +394,8 @@ def _text_or_bytes(path: Path) -> str:
         return read_text(path)
     except NotTextError:
         return path.read_bytes().decode("utf-8", errors="replace")
+    except OSError as exc:  # found by the fourth audit: one file that would not open stopped every command
+        return f"(the file could not be opened: {exc.strerror or exc})"
 
 
 def _misnamed(why: str, shown: str) -> Finding:
@@ -414,6 +416,9 @@ def _read[T](path: Path, parse: Callable[[str], T], shown: str, problems: list[F
         text = read_text(path)
     except NotTextError as exc:
         problems.append(finding("syntax", str(exc), path=shown))
+        return None
+    except OSError as exc:  # held open by another program, or a cloud placeholder: one file, not every change
+        problems.append(finding("syntax", f"the file could not be opened: {exc.strerror or exc}", path=shown))
         return None
     return _parsed(text, parse, shown, problems)
 

@@ -16,6 +16,10 @@ DEFAULT = """\
 [project]
 # The tier a new change gets where none is named: lean, standard or strict.
 default_tier = "standard"
+
+# The command `verify` runs the project's tests with: none is run until one is named here.
+# [verify]
+# test = ["uv", "run", "pytest", "-q"]
 """
 
 

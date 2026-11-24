@@ -225,6 +225,16 @@ def test_two_verdicts_for_one_requirement_are_sent_back(tmp_path, capsys, fake_p
     assert "verify.verdict-twice" in said and verdicts[0]["id"] in said and len(fake_provider.requests) == 3
 
 
+@pytest.mark.usefixtures("fake_provider")
+def test_verify_with_no_test_command_says_so_on_screen(tmp_path, capsys) -> None:
+    """Found by the fourth audit: only reports/verify.md said no test ran, and a `met` read as tested."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys") == 0
+    assert "tests     none named: set [verify] test in .spec/config.toml" in capsys.readouterr().out
+
+
 def test_the_diff_reaches_the_model_between_markers(tmp_path, fake_provider) -> None:
     from adk_spec.orchestration.stages import BOUNDARY
 

@@ -213,14 +213,15 @@ Then:
 
 1. **Read `.spec/constitution.md`**: keep the rules that are true and wanted, edit or delete the rest. Every stage
    of every change reads it, so keep it short (under 16,000 characters).
-2. **Name your test command** in `.spec/config.toml`, so that `verify` runs it (see [Settings](#settings-reference)).
+2. **Name your test command** in `.spec/config.toml`, so that `verify` runs it (see [Settings](#settings-reference)):
+   until one is named, `verify` runs none and says so.
 3. **Commit** `.spec/` and the skill: `git add .spec .claude/skills/adk-spec && git commit -m "Add adk-spec"`.
    Where `.gitignore` leaves out `.claude/`, add the skill with `git add -f .claude/skills/adk-spec`.
 
 `init --no-explore` makes the tree with no model call; `init --refresh` reads the code again later and rewrites the
 profile, and writes the skill into a repository that has none, as one set up before adk-spec wrote it. That reading
-calls a model: to add the skill alone, copy `.claude/skills/adk-spec/` from a repository that has it. adk-spec reads
-the skill as none of your code, as it reads `.spec/`.
+calls a model: `init --refresh --no-explore` adds the skill alone, with no model call. adk-spec reads the skill as
+none of your code, as it reads `.spec/`.
 
 ## Your first change, step by step
 
@@ -455,8 +456,9 @@ revised   added REQ-AUTH-005; changed nothing; dropped nothing
 
 It keeps the tier, `context.md` and every edit the request does not reach; a requirement that keeps its name keeps
 its ID. The tasks are drafted again unless one is ticked. A revised change is a draft again, to be approved again.
-Or edit the files yourself and run `adk-spec plan <id>` (add `--replace` to redraft a task list that has a ticked
-box). A verified or archived change is not revised: propose a new one.
+Or, on a draft, edit the files yourself and run `adk-spec plan <id>` (add `--replace` to redraft a task list that has
+a ticked box); `plan` drafts no task for an approved change, whose new tasks you write in `tasks.md` or revise with
+`propose --id`. A verified or archived change is not revised: propose a new one.
 
 ### A feature across repositories
 
@@ -470,7 +472,7 @@ adk-spec propose "Let users sign in with a passkey." --with ../shop-web --with m
 
 The reading covers them all, `approve` records where the work begins in each, and `verify` runs each repository's
 own test command and judges the work in all of them. `--with PATH` names a repository after its folder,
-`--with NAME=PATH` names it yourself. Forgot one? `adk-spec plan <id> --with ../other` adds it.
+`--with NAME=PATH` names it yourself. Forgot one? On a draft, `adk-spec plan <id> --with ../other` adds it.
 
 ### From VS Code with Copilot, or Claude Code
 
@@ -577,13 +579,14 @@ Exit codes: `0` done, `1` a step was refused or found what stops it (a check, a 
 
 ## Command reference
 
-Every command runs in the repository it is started in (or `--root <folder>`).
+Every command runs in the repository it is started in (or `--root <folder>`, given before the command:
+`adk-spec --root ../api status`).
 
 | Command | Options | Calls a model |
 |---|---|---|
 | `init` | `--no-explore` read no code · `--refresh` read the code again, rewrite the profile | yes, unless `--no-explore` |
 | `propose "<request>"` | `--id ID` name the change, or revise the open change `ID` · `--tier lean\|standard\|strict` · `--no-input` ask nothing · `--no-explore` read no code · `--with PATH` or `--with NAME=PATH` another repository (repeatable) | yes |
-| `approve <id>` | `--by NAME` who approves (default: this account) · `--strict` refuse on a warning too · `--override REASON` approve despite a blocking finding | for a standard change whose check is missing or stale |
+| `approve <id>` | `--by NAME` who approves (default: this account) · `--strict` refuse on a warning too · `--override REASON` approve despite a blocking finding | for a standard or strict change whose check is missing or stale |
 | `verify <id>` | `--base REF` the commit the work started from, or `NAME=REF` for another repository · `--override REASON` verify although a requirement is not shown met | yes |
 | `archive <id>` | | no |
 | `status` | `--all` archived changes too · `--json` | no |
@@ -596,7 +599,8 @@ Every command runs in the repository it is started in (or `--root <folder>`).
 | `models` | `--json` | no (reads the provider's list) |
 | `smoke` | `--check` say whether the arm is ready, send nothing · `--model MODEL` · `--request TEXT` · `--json` | yes, unless `--check` |
 
-`plan`, `check`, `rebase`, `validate` and `new` redo one step by itself; a normal change never needs them.
+`plan`, `check`, `rebase`, `validate` and `new` redo one step by itself; a standard change rarely needs them, and a
+strict one, or one with a point left open, is planned with `plan` once you have read it.
 
 ## Settings reference
 
@@ -767,8 +771,8 @@ A file that holds a private key is treated as an excluded path is, with nothing 
 
 ### What a command costs, and what it sends
 
-`propose`, `verify`, `plan` and `check` call a model, and `approve` does where a standard change's check is not
-current. `[limits] max_tokens` in `.spec/config.toml` caps what one command may spend: once that much is spent no
+`propose`, `verify`, `plan` and `check` call a model, and `approve` does where a standard or strict change's check is
+not current. `[limits] max_tokens` in `.spec/config.toml` caps what one command may spend: once that much is spent no
 further call is sent, so a command overshoots by its last call at most, and `propose` asks no question whose answer
 it could not use. A ceiling below twice what the reading costs reads less: some 80,000 tokens leaves a `propose` on
 a repository of a few hundred files room for all of it.

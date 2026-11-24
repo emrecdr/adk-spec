@@ -110,8 +110,13 @@ BODY = "MIIEow0BAAKCAQEA7x1yQ9"
     ],
 )
 def test_a_text_holds_a_key_where_a_line_begins_with_a_private_keys_first_line(text: str, held: bool) -> None:
-    """A key's own file has its first line at a line's start. Code that names that line in a string is still read."""
+    """A key's own file has its first line at a line's start. Code that names that line in a string is still read.
+    Every key it finds holds one of the words a large file is searched for first: found by the fourth audit, the two
+    were lists of their own, and a key a new pattern found would have been passed over by the search."""
+    from adk_spec.domain.secrets import KEY_WORDS
+
     assert holds_a_key(text) is held
+    assert not held or any(word in text.encode() for word in KEY_WORDS)
 
 
 #: A private key's lines, as a person pastes part of one: base64, sixty-four characters a line.
