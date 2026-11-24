@@ -38,7 +38,7 @@ def _known() -> tuple[Known, dict[str, str]]:
     specs, _problems = workspace.specs()
     told = {
         CAPABILITIES: capability_index(specs),
-        CONSTITUTION: _readable(constitution_text, workspace),
+        CONSTITUTION: constitution_text(workspace),  # the repository's rules: refused loudly, as every command does
         LESSONS_TEXT: _readable(lessons_text, workspace),
         PROFILE_TEXT: _readable(profile_text, workspace),  # found by the fourth audit: `propose` gave it, the chat not
     }

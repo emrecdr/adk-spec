@@ -650,13 +650,13 @@ with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists t
   not revised: propose a new one.
 
 - **`approve`** records who approved, when, and the fingerprint of each file. A later edit voids it; ticking a
-  task does not. The name is a recorded claim, not an authentication. On a standard change it first makes the
-  check, where none is current: code checks structure and that every requirement has a task, and a model looks for
+  task does not. The name is a recorded claim, not an authentication. On a standard or strict change it first makes
+  the check, where none is current: code checks structure and that every requirement has a task, and a model looks for
   what takes a reading, such as two files that contradict each other. Each finding must quote the text it is about,
   and one whose quote is not in the file it names is left out. A blocking finding stops the approval: fix it and
   approve again, or approve with `--override "<your reason>"`, which is recorded. An override answers only a finding
   you were already shown, never one of the same run. Where no model is set up, `adk-spec check <id> --no-model`
-  checks by code alone.
+  checks by code alone; it never clears what a model's check found blocking, which a model checks again.
 
   Where you edited a file adk-spec drafted, `approve` names it once, so that you can write what you corrected in
   `.spec/lessons.md`.

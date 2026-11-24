@@ -16,11 +16,11 @@ from .ids import REQ_ID, capability_of, slug_problem
 from .model import Brief, Change, Delta, Finding, Requirement, Severity, Spec, TaskGroup
 from .spec_md import fingerprint
 
-#: Every rule's severity. The owner's to set: which faults stop work, and which only show.
 #: The code of a file whose text was not read, one that would not open or is no UTF-8: no command writes over it.
 #: Found by the code review: a task list not read was taken for one with no box ticked, and drafted again.
 UNREAD = "file.unreadable"
 
+#: Every rule's severity. The owner's to set: which faults stop work, and which only show.
 SEVERITY: dict[str, Severity] = {
     "syntax": "ERROR",
     "constitution.long": "WARNING",

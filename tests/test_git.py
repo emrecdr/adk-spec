@@ -56,6 +56,20 @@ def test_the_works_fingerprint_text_is_the_same_once_it_is_added_or_committed(tm
     assert diffs(tmp_path, base, exclude=())[1] == before
 
 
+def test_the_works_fingerprint_is_the_same_once_a_crlf_file_is_committed_as_it_is(tmp_path) -> None:
+    """Asked by the code review: a file with CRLF ends, committed by a git that keeps them, shows `\\r` lines in the
+    diff that it did not show untracked. The fingerprint is taken of the text with its line ends settled."""
+    from adk_spec.domain.text import sha256_of
+
+    base = repository(tmp_path, {"z.py": "x = 1\n"})
+    _git(tmp_path, "config", "core.autocrlf", "false")
+    (tmp_path / "new.txt").write_bytes(b"a\r\nb\r\n")
+    before = diffs(tmp_path, base, exclude=())[1]
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "the work")
+    assert sha256_of(diffs(tmp_path, base, exclude=())[1]) == sha256_of(before)
+
+
 def test_a_diff_of_a_subfolder_names_paths_from_that_folder(tmp_path) -> None:
     base = repository(tmp_path, {"service/src/app.py": "a = 1\n", "other/x.py": "x = 1\n"})
     (tmp_path / "service/src/app.py").write_text("a = 2\n", encoding="utf-8")

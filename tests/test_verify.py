@@ -242,6 +242,15 @@ def test_two_verdicts_for_a_requirement_not_asked_about_are_left_out(tmp_path, f
     assert run(tmp_path, "verify", "passkeys") == 0 and len(fake_provider.requests) == 1
 
 
+def test_one_verdict_given_twice_alike_stands(tmp_path, fake_provider) -> None:
+    """Found by the code review: a `met` repeated as it was spent the three tries, though nothing disagreed."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    verdicts = CANNED_VERDICTS["verdicts"]
+    fake_provider.answers_when(VERIFY, {"verdicts": [*verdicts, verdicts[0]]})
+    assert run(tmp_path, "verify", "passkeys") == 0 and len(fake_provider.requests) == 1
+
+
 def test_two_verdicts_for_one_requirement_are_sent_back(tmp_path, capsys, fake_provider) -> None:
     """Found by the fourth audit: a `met` and an `unmet` for one requirement, and the first one stood."""
     approved_in_a_repository(tmp_path)
@@ -549,6 +558,16 @@ def test_a_change_verified_by_an_older_adk_spec_has_not_drifted(tmp_path) -> Non
     state = ws.load_change("passkeys").change.state
     older = state.verification.model_copy(update={"diff": sha256_of(diff(tmp_path, commit, exclude=()))})
     ws.save_state(state.model_copy(update={"verification": older}))
+    assert run(tmp_path, "archive", "passkeys") == 0
+
+
+def test_a_key_file_written_again_after_verify_moves_nothing_judged(tmp_path) -> None:
+    """Found by the code review: the fingerprint was taken of the key file the model was never shown, and a test run
+    that wrote the key again read as drift."""
+    with_a_key(tmp_path, tier="standard")
+    implemented(tmp_path)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    write_text(tmp_path / "keys/live.pem", PEM.replace("MIIEow3", "MIINew3"))
     assert run(tmp_path, "archive", "passkeys") == 0
 
 

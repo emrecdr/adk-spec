@@ -69,7 +69,12 @@ The rules every change in this repository follows. Keep it short, and give each 
 ## Repository structure
 """
 #: A finding that says a file is missing, and the file whose own fault makes it untrue.
-_MISSING = {"change.missing-brief": BRIEF, "change.missing-tasks": TASKS, "change.no-deltas": SPECS}
+_MISSING = {
+    "change.missing-brief": BRIEF,
+    "change.missing-tasks": TASKS,
+    "change.missing-design": DESIGN,
+    "change.no-deltas": SPECS,
+}
 
 
 class WorkspaceError(ValueError):

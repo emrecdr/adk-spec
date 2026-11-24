@@ -204,7 +204,7 @@ def test_a_revision_keeps_each_base_it_recorded_and_records_only_a_new_one(tmp_p
     fake_provider.answers_when(
         DELTAS, {"deltas": [{**delta, "modified": [{"id": "REQ-AUTH-002", "requirement": lock}]}]}
     )
-    assert revised(tmp_path) == 0
+    assert revised(tmp_path) == 1, "the base that moved holds the plan until `rebase`"
     bases = state_of(tmp_path, "passkeys")["bases"]
     assert bases["REQ-AUTH-002"] == "b0" and bases["REQ-AUTH-001"] not in ("", "b0")
 
@@ -298,4 +298,20 @@ def test_a_task_list_that_is_no_utf8_text_is_never_drafted_over(tmp_path, capsys
     assert revised(tmp_path) == 1
     assert run(tmp_path, "plan", "passkeys", "--replace") == 1
     assert tasks.read_bytes() == held and "file.unreadable" in capsys.readouterr().out
+    assert not any(TASKS_STAGE in str(r.config.system_instruction) for r in fake_provider.requests)
+
+
+def test_a_revision_whose_base_moved_holds_its_plan_and_names_the_step(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: a kept base that no longer held was an error the plan refused, so the revision
+    ended as an engine failure, exit 3, naming a `plan` that refused again until `rebase`."""
+    ws = unticked(tmp_path)
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"bases": {"REQ-AUTH-002": "b0"}}))
+    lock = {**PASSKEY, "name": "Lock after failures", "statement": "The system MUST lock an account after three."}
+    modified = [{"id": "REQ-AUTH-002", "requirement": lock}]
+    delta = {"capability": "auth", "purpose": "", "added": [PASSKEY], "modified": modified, "removed": []}
+    fake_provider.answers_when(DELTAS, {"deltas": [delta]})
+    capsys.readouterr()
+    assert revised(tmp_path) == 1
+    out = capsys.readouterr().out
+    assert "ERROR delta.base-stale" in out and "next      fix what `adk-spec validate passkeys` lists" in out
     assert not any(TASKS_STAGE in str(r.config.system_instruction) for r in fake_provider.requests)

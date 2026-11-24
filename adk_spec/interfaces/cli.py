@@ -1125,7 +1125,7 @@ def _plannable(
     blocking = [held for held in assessed.findings if held.severity == "ERROR" and not of_the_plan(held)]
     if blocking or change.brief is None:
         _printed(blocking)
-        raise NotYetError(f"`{change_id}` is not planned: its brief and deltas have errors. Fix them first")
+        raise NotYetError(f"`{change_id}` is not planned: fix the errors above first")
     return change.brief
 
 
@@ -1450,6 +1450,9 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
     if args.no_model and held is not None and model_holds(assessed.state, assessed.seen):
         if check_stands(assessed.state, assessed.seen):
             why = "its files have not changed since, and a check by code alone does not replace it"
+        elif errors := [found for found in assessed.findings if found.severity == "ERROR"]:
+            _printed(errors)  # found by the code review: the error that holds the model's pass went unseen
+            why = f"only a model clears what a model found: fix the errors above, then run `{PROG} check {args.id}`"
         else:
             why = f"only a model clears what a model found: `{PROG} check {args.id}` asks the model again"
         print(
@@ -1664,7 +1667,7 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     config = workspace.config()
     asked = [("", workspace.root, config.test, config.test_timeout)] if config.test else []
     every = [*asked, *source.tests()]
-    if not every:  # found by the fourth audit: a `met` read as tested, with no test run
+    if not asked:  # found by the fourth audit: a `met` read as tested, with no test run here
         print("tests     none named: set [verify] test in .spec/config.toml")
     runs = []
     for name, root, argv, timeout in every:
@@ -1846,11 +1849,18 @@ def _then_planned(
     An open point comes before it, since its answer shapes the tasks: none is drafted on a guess. A revised change
     keeps its task list where `keep` says why. A change of a tier that reads first stops here for a person to read its
     brief and specs: `review` is the command that goes on."""
-    waiting = [held for held in _assessed(workspace, change_id, specs).findings if held.code == _OPEN_POINT]
-    if waiting or keep or review:
+    found = _assessed(workspace, change_id, specs).findings
+    waiting = [held for held in found if held.code == _OPEN_POINT]
+    # Found by the code review: a base kept that no longer holds is an error the plan refuses; asked anyway, the
+    # revision ended as an engine failure, naming a `plan` that refused again.
+    blocked = [held for held in found if held.severity == "ERROR" and not of_the_plan(held)]
+    if waiting or keep or review or blocked:
         count = len(waiting)
         print(f"tokens    {_spent(ledger)}")
-        if waiting:
+        if blocked:
+            _printed(_from_root(change_id, blocked))
+            print("plan      waits: the errors above are fixed first")
+        elif waiting:
             print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
             _open_said(unasked)
         elif review:
@@ -1858,7 +1868,7 @@ def _then_planned(
         if keep:
             print(f"kept      tasks.md: {keep}")
         _say_next(workspace, change_id, specs, plan=review)  # the step `status` names, with the plan's flags
-        return EXIT_OK
+        return EXIT_FINDINGS if blocked else EXIT_OK
     # The change is written by now: a plan that does not end well leaves it a draft, and `plan` finishes it.
     try:
         made = _plan_made(  # the code was read before the brief, or is not to be: the plan reads none

@@ -511,3 +511,14 @@ def test_a_refused_approval_counts_nothing_the_finding_above_it_says(tmp_path, c
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
     said = capsys.readouterr().err
     assert "`passkeys` is not approved: the finding above blocks it" in said and "findings block it" not in said
+
+
+def test_a_lean_changes_old_check_does_not_hold_a_check_by_code_alone(tmp_path, fake_provider) -> None:
+    """Found by the code review: a lean change owes no check, yet a model's old blocking check made every
+    `check --no-model` end with exit 1 after the files were fixed."""
+    seeded(tmp_path)  # lean
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nFixed.\n")
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0

@@ -431,7 +431,8 @@ class Source:
                 raise SourceError(f"{self.why_not(name)}: the work cannot be judged on part of it")
             made.append(diffs(one.root, commit, exclude=one.exclude, prefix=one.full(""), trust=False))
         text, held = self.without_keys("".join(shown for shown, _settled in made))
-        return Work(text, held, sha256_of("".join(settled for _shown, settled in made)))
+        # Of what a model may be shown alone: found by the code review, a key file written again read as drift.
+        return Work(text, held, sha256_of(self.without_keys("".join(settled for _shown, settled in made))[0]))
 
     def tests(self) -> list[tuple[str, Path, tuple[str, ...], int]]:
         """Each other repository's own test command, by its name, in its folder, with its timeout: the command

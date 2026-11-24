@@ -184,7 +184,8 @@ def model_holds(state: ChangeState, files: Mapping[str, str]) -> bool:
     code alone replaced the model's, and the approval went through with its blocking finding never fixed, on the
     strict tier too. Only a model clears what a model found."""
     held = state.check
-    return held is not None and held.model is not None and (check_stands(state, files) or held.blocking > 0)
+    owed = DEMANDS[state.tier].checked  # found by the code review: a lean change owes no check to hold
+    return held is not None and held.model is not None and (check_stands(state, files) or (owed and held.blocking > 0))
 
 
 def checked(

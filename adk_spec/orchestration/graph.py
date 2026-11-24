@@ -14,7 +14,6 @@ here: the command holds the terminal, and nothing of the state's keys.
 
 from __future__ import annotations
 
-from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -487,14 +486,18 @@ def build_verify_app(*, ledger: UsageLedger, required: frozenset[str], recorder:
     of `required`. Whether a verdict stands is decided afterwards, against the diff."""
 
     def check_verdicts(state: Mapping[str, Any]) -> list[str]:
-        given = [one.id.strip() for one in VerdictsDraft.model_validate(state[verify_stage.KEY]).verdicts]
+        verdicts = VerdictsDraft.model_validate(state[verify_stage.KEY]).verdicts
+        given = [one.id.strip() for one in verdicts]
         sent = []
         if missing := sorted(required - set(given)):
             listed = "Give one for each requirement listed."
             sent.append(coded("verify.no-verdict", f"no verdict was given for {', '.join(missing)}. {listed}"))
         # Found by the fourth audit: a `met` and an `unmet` for one requirement, and the first one stood.
-        if twice := sorted(one for one, times in Counter(given).items() if times > 1 and one in required):
-            sent.append(coded("verify.verdict-twice", f"{', '.join(twice)} had more than one verdict. Give each one."))
+        said: dict[str, set[str]] = {}
+        for one in verdicts:
+            said.setdefault(one.id.strip(), set()).add(one.verdict)
+        if twice := sorted(req for req, held in said.items() if len(held) > 1 and req in required):
+            sent.append(coded("verify.verdict-twice", f"{', '.join(twice)} had verdicts that disagree. Give one each."))
         return sent
 
     verify, verify_gate = verify_stage.build_verify(), checked(verify_stage.KEY, check_verdicts)
