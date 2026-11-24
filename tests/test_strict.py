@@ -279,6 +279,24 @@ def test_plan_keeps_a_design_a_person_wrote_on_a_strict_change(tmp_path, fake_pr
     assert read_text(folder / "design.md") == mine and asked(fake_provider, DESIGN) == 0
 
 
+def test_an_approved_strict_change_revised_as_it_stands_names_the_step_that_changes_it(
+    tmp_path, capsys, fake_provider
+) -> None:
+    """Found by the code review: revised as it stood, an approved strict change was said to wait for a plan, which
+    refuses an approved change, beside a next line to implement it; and its kept line named no step."""
+    planned(tmp_path, fake_provider)
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
+    assert run(tmp_path, "approve", "ledger", "--by", "ben") == 0
+    tasks = tmp_path / FOLDER / "tasks.md"
+    write_text(tasks, read_text(tasks).replace("- [ ]", "- [x]", 1))
+    capsys.readouterr()
+    assert run(tmp_path, "propose", "Keep it as it is.", "--id", "ledger", "--no-input") == 0
+    out = capsys.readouterr().out
+    assert state_of(tmp_path, "ledger")["status"] == "approved" and "plan      waits" not in out
+    step = "a task is ticked: to change it, edit tasks.md, then run `adk-spec approve ledger` again"
+    assert f"kept      tasks.md: {step}" in out
+
+
 def test_a_strict_revision_with_a_ticked_task_names_the_plan_that_goes_on(tmp_path, capsys, fake_provider) -> None:
     """Found by the review: the stop named a `plan` that a ticked task refuses, and one that reads the code."""
     planned(tmp_path, fake_provider)

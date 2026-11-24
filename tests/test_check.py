@@ -549,3 +549,16 @@ def test_a_requirement_the_change_removes_is_owed_a_task() -> None:
     tasks = parse_tasks(tasks_for("REQ-AUTH-004", "REQ-AUTH-002"))
     change = Change(state=ChangeState(id="passkeys", tier="lean"), brief=None, deltas=DELTAS, tasks=tasks)
     assert [f.code for f in coverage_of(change, LIVING) if "REQ-AUTH-001" in f.message] == ["check.requirement-no-task"]
+
+
+@pytest.mark.parametrize("status", ["approved", "verified"])
+def test_a_change_approved_before_a_removed_requirement_was_owed_a_task_keeps_its_approval(status: str) -> None:
+    """Found by the code review: a change an older adk-spec approved without a task for what it removes was sent back,
+    to be approved and verified again, although its archive would pass. An approval this adk-spec gives was owed it."""
+    from adk_spec.domain.model import Change, ChangeState
+
+    tasks = parse_tasks(tasks_for("REQ-AUTH-004", "REQ-AUTH-002"))
+    change = Change(
+        state=ChangeState(id="passkeys", tier="lean", status=status), brief=None, deltas=DELTAS, tasks=tasks
+    )
+    assert coverage_of(change, LIVING) == []

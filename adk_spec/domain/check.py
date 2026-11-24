@@ -69,5 +69,8 @@ def coverage_of(change: Change, living: Mapping[str, Spec]) -> list[Finding]:
     groups = change.tasks or ()
     if not any(group.tasks for group in groups):
         return []
-    found = coverage(groups, owed=tasked(change.deltas), nameable=nameable(change.deltas, living))
+    # A removed requirement is owed a task where the change is still drafted: found by the code review, one an older
+    # adk-spec approved without it was sent back to be approved and verified again. An approval given now was owed it.
+    serves = tasked(change.deltas) if change.state.status == "draft" else owed(change.deltas)
+    found = coverage(groups, owed=serves, nameable=nameable(change.deltas, living))
     return [held.model_copy(update={"path": TASKS_FILE}) for held in found]

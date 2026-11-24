@@ -455,10 +455,21 @@ and a step moves to code only where its output is a function of its input with n
   choice, a requirement a change removes owed the task that takes its code out. Refuted or decided before, with the
   reasons checked: CRLF drift, the cost of `status`, the armour checksum, the inline key header, splitting `cli.py`,
   the lock's marker and its hold while asking, and exit 1 as a failed call.
-  The tools compared (OpenSpec 2.1, Spec Kit 1.4, Kiro, Tessl, BMAD 6.12, GSD, Traycer) suggest features that are
-  the owner's to choose, recommended in this order: a diff of what each MODIFIED requirement changes, for the
-  approver, in code alone; `verify` judging the work against the constitution as well, measured first; a tier raised
-  after the reading where the code shows more risk; `validate` codes for a voided approval and drifted work in CI.
+  The fifth and last cleanup and code review closed the loop. Fixed, test first: a registry credential in `.npmrc`
+  is hidden with no digit asked of it and in quotes; a change approved before a removed requirement was owed a task
+  keeps its approval, the rule holding for drafts; a strict change revised once approved is not said to wait for a
+  plan, and its kept line names `approve`. Left, with reasons: a revision that newly owes a design while a task is
+  ticked names a `plan` that refuses (rare, and nothing is lost: `plan` says why); `adk web` stops at import where
+  another change's delta will not open (as every command does, decided in the fourth review); an older adk-spec reads
+  work this one verified as drifted (a team keeps one version); the assumptions' count of prose beside a list; the
+  server's note on exit 2 not naming a lock held by another run (the lock's own message says to wait for it).
+  A second outside report and the research in `docs/reports/Spec tool feature opportunities.md` were compared, and
+  five features chosen, none needing a model call or a new command, in this order: for the approver, a diff of each
+  requirement a change modifies and the open changes that touch it too; unmet verdicts written as the next work;
+  `verify`'s evidence kept beside each living spec, a requirement whose evidence is gone from the code flagged as
+  suspect; `validate` reading a voided approval and drifted work in CI, with annotations; a pull request's summary
+  and a changelog at archive. Measured first, with the owner's go-ahead: `verify` judging the work against the
+  constitution, and a tier raised after the reading; tests mapped to requirements reverses a decided non-goal.
 - **A second way to use adk-spec, beside the terminal**: decided on 22 November 2026, as recommended. It is an MCP
   server for coding assistants, phase 14 above.
 - **A change file written by a newer adk-spec**: decided on 22 November 2026, as recommended. An older adk-spec keeps
@@ -468,7 +479,7 @@ and a step moves to code only where its output is a function of its input with n
 ## The owner's, outside any phase
 
 - A smoke run on the Gemini arm. It needs a `GOOGLE_API_KEY`.
-- The gate on a Windows machine. The CI workflow has a Windows job, and the repository has no remote.
+- The gate on a Windows machine. The CI workflow has a Windows job, which waits on the GitHub account's billing.
 - A Windows job object, to stop what a passing test run leaves running there; until then it runs on, and only a run
   past its time, or interrupted, is stopped on Windows. It waits for a Windows machine to test it on.
 - Two items of the outside audit of 22 November 2026, deferred with their reasons. Untracked files diffed in Python

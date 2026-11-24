@@ -349,11 +349,12 @@ _GENERIC = (
         r"\1[REDACTED]",
     ),
     (
-        # An `.npmrc` registry's credential, `//host/path/:_authToken=`, `_auth=` or `_password=`, holding a digit.
-        # Not the reference project's: found by an outside audit, a tracked `.npmrc` matched no shape.
+        # An `.npmrc` registry's credential, `//host/path/:_authToken=`, `_auth=` or `_password=`, bare or in quotes:
+        # the key names a credential, so no digit is asked of the value. Not the reference project's: found by an
+        # outside audit, a tracked `.npmrc` matched no shape.
         "generic_secret",
         re.compile(
-            r"(?im)^([+ -]?[^\S\n]*//[^\s=]{1,200}?:_(?:authToken|auth|password)[^\S\n]*=[^\S\n]*)(?=[^\s#]*\d)"
+            r"(?im)^([+ -]?[^\S\n]*//[^\s=]{1,200}?:_(?:authToken|auth|password)[^\S\n]*=[^\S\n]*[\"']?)"
             + _STAND_IN
             + r"([^\s\"'#]{8,})"
         ),

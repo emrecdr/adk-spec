@@ -260,10 +260,14 @@ def test_code_after_a_header_only_named_keeps_its_comment_lines() -> None:
         "//registry.npmjs.org/:_authToken=0b1c2d3e-4f5a-" + "6b7c-8d9e-0f1a2b3c4d5e",
         "//npm.example.com/:_auth=dXNlcjpwYXNzMTIzNDU2Nzg=",
         "//pkgs.dev.azure.com/org/_packaging/feed/npm/registry/:_password=cGFzczEyMzQ1Njc4OTA=",
+        "//registry.npmjs.org/:_password=aHVudGVyaHVudGVy",
+        '//x.example.com/:_auth="YWJjOmRlZjQ1Ng1234=="',
     ],
 )
 def test_an_npmrc_registry_credential_is_hidden(secret: str) -> None:
-    """Found by an outside audit: a registry line of `.npmrc` matched no shape, and a tracked one reached a model."""
+    """Found by an outside audit: a registry line of `.npmrc` matched no shape, and a tracked one reached a model.
+    Found by the code review: a value with no digit, or in quotes as npm reads them, still did; the key names a
+    credential, so no digit is asked of its value."""
     hidden, count = scrub(f"+{secret}\n")
     assert count == 1 and secret.split("=", 1)[1] not in hidden and "[REDACTED]" in hidden
 

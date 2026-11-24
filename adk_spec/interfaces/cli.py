@@ -1820,8 +1820,12 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
         _context_said(workspace, kept.change, read)
     keep = _tasks_kept(workspace, change, changed) if change else None
     change_id = kept.change or ""
-    # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs.
-    review = _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first else None
+    # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs. Not an
+    # approved change, which `plan` refuses: found by the code review, said to wait beside a step to implement it.
+    drafted = workspace.state(change_id).status == "draft"
+    review = (
+        _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first and drafted else None
+    )
     # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
     planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None}
     # With no question asked, each open point is printed with its suggestion, for an assistant to put to the person.
@@ -1861,7 +1865,7 @@ def _tasks_kept(workspace: Workspace, change: Change, changed: bool) -> str | No
     # was sent to a `plan` that refused.
     if workspace.state(cid).status == "draft":
         return f"{why}. `{PROG} plan {cid}{flags}` drafts it again"
-    return f"{why}. a task added by hand is approved again"
+    return f"{why}: to change it, edit tasks.md, then run `{PROG} approve {cid}` again"
 
 
 def _then_planned(
