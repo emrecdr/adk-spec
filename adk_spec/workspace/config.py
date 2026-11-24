@@ -3,7 +3,6 @@ or a wrong value is refused by name, never passed over in silence."""
 
 from __future__ import annotations
 
-import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -111,16 +110,11 @@ def _verifying(path: Path, verify: object) -> tuple[tuple[str, ...], int]:
 def _pattern(one: str) -> bool:
     """Whether `one` is a pattern git takes for a path under the workspace's root: some text on one line, with no
     colon at its start, which git reads as an instruction of its own, and no way out of the root, which git refuses,
-    so that every file would then be listed and read with nothing said, and no backslash between folders, which git
-    reads as an escape: found by the fourth audit, `config\\secrets\\**`, as Windows writes a path, kept nothing
-    out. A backslash before a character a glob gives a meaning, `\\[` say, is the escape git reads it as."""
+    so that every file would then be listed and read with nothing said, and no backslash: found by the fourth audit,
+    `config\\secrets\\**`, as Windows writes a path, kept nothing out, and before `*` a separator cannot be told
+    from git's escape, which the installed libraries' match does not read. A glob character is written in brackets."""
     inside = not one.startswith(("//", ":")) and ".." not in one.split("/")  # one slash anchors it, as in .gitignore
-    escapes_only = "\\" not in _ESCAPE.sub("", one)
-    return bool(one.strip()) and one.isprintable() and one == one.strip() and inside and escapes_only
-
-
-#: A backslash that escapes a character a glob gives a meaning, which git reads as that character alone.
-_ESCAPE = re.compile(r"\\[*?\[\]\\!# ]")
+    return bool(one.strip()) and one.isprintable() and one == one.strip() and inside and "\\" not in one
 
 
 def _excluded(path: Path, held: dict[str, object]) -> tuple[str, ...]:
@@ -132,7 +126,8 @@ def _excluded(path: Path, held: dict[str, object]) -> tuple[str, ...]:
     if not good:
         raise ConfigError(
             f"{path} sets exclude to `{value}`: a list of patterns, each a path from the workspace's root as git "
-            'reads one, with `/` between folders, such as ["vendor/**", "**/*.pem"]'
+            'reads one, with `/` between folders and a glob character in brackets, such as ["vendor/**", "**/*.pem", '
+            '"logs/run[[]1[]].txt"]'
         )
     return tuple(value)
 

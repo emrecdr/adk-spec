@@ -6,7 +6,7 @@ import json
 import os
 
 import pytest
-from conftest import approved, held_open_from, run, seeded, state_of
+from conftest import approved, held_open_from, run, seeded, shut, state_of
 from samples import BRIEF, DELTA, SPEC, tasks_for
 
 from adk_spec.domain.spec_md import parse_spec
@@ -286,24 +286,19 @@ def test_one_unreadable_file_does_not_hide_the_other_changes(tmp_path, capsys) -
     assert [row["id"] for row in json.loads(capsys.readouterr().out)["changes"]] == ["passkeys", "second"]
     assert run(tmp_path, "validate") == 1
     out = capsys.readouterr().out
-    assert "ERROR syntax .spec/changes/passkeys/brief.md" in out and ".spec/changes/second/" in out
+    assert "ERROR file.unreadable .spec/changes/passkeys/brief.md" in out and ".spec/changes/second/" in out
 
 
-@pytest.mark.skipif(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0), reason="POSIX modes")
 def test_a_file_that_cannot_be_opened_is_a_finding_and_hides_no_change(tmp_path, capsys) -> None:
     """Found by the fourth audit: a file held open by another program, or a cloud placeholder, raised `OSError`,
     and `status` listed no change at all."""
     ws = seeded(tmp_path)
     ws.new_change("second", "lean")
-    tasks = tmp_path / ".spec/changes/passkeys/tasks.md"
-    tasks.chmod(0)
-    try:
+    with shut(tmp_path / ".spec/changes/passkeys/tasks.md"):
         assert run(tmp_path, "status", "--json") == 0
         assert [row["id"] for row in json.loads(capsys.readouterr().out)["changes"]] == ["passkeys", "second"]
         assert run(tmp_path, "validate") == 1
         assert "ERROR file.unreadable .spec/changes/passkeys/tasks.md" in capsys.readouterr().out
-    finally:
-        tasks.chmod(0o644)
 
 
 def test_rebase_says_which_base_it_dropped(tmp_path, capsys) -> None:

@@ -32,7 +32,7 @@ from ..domain.lifecycle import approval_files, owes_design
 from ..domain.model import Change, ChangeState, Finding, GrammarError, Spec, Tier
 from ..domain.spec_md import parse_spec, render_spec
 from ..domain.tasks_md import parse_tasks
-from ..domain.validate import finding, validate_change
+from ..domain.validate import UNREAD, finding, validate_change
 from .config import DEFAULT, Config, load_config
 from .files import NotTextError, read_text, write_all, write_text
 from .paths import PathError, inside
@@ -411,20 +411,15 @@ def _misplaced(titled: str, folder: str, shown: str) -> Finding:
     )
 
 
-#: The code of a file that would not open, which no command writes over: found by the code review, a task list that
-#: would not open read as one with no box ticked, and was drafted again over the ticked work.
-UNOPENED = "file.unreadable"
-
-
 def _read[T](path: Path, parse: Callable[[str], T], shown: str, problems: list[Finding]) -> T | None:
     """`path` read and parsed, or None with its fault added to `problems`."""
     try:
         text = read_text(path)
     except NotTextError as exc:
-        problems.append(finding("syntax", str(exc), path=shown))
+        problems.append(finding(UNREAD, str(exc), path=shown))
         return None
     except OSError as exc:  # held open by another program, or a cloud placeholder: one file, not every change
-        problems.append(finding(UNOPENED, f"the file could not be opened: {exc.strerror or exc}", path=shown))
+        problems.append(finding(UNREAD, f"the file could not be opened: {exc.strerror or exc}", path=shown))
         return None
     return _parsed(text, parse, shown, problems)
 

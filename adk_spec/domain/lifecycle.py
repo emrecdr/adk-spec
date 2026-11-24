@@ -16,6 +16,7 @@ from .model import PASSED, Approval, ChangeState, Checked, Delta, Finding, Gramm
 from .spec_md import fingerprint
 from .tasks_md import parse_tasks, render_tasks
 from .text import sha256_of
+from .validate import UNREAD
 
 #: Findings that block an approval whatever their severity: an open point, or no plan. A base that is missing does
 #: not: an approval records it, since it is a function of the delta and the living spec as they stand.
@@ -376,7 +377,7 @@ def of_the_plan(found: Finding) -> bool:
     again, or a design owed and missing."""
     named = (found.path or "").rsplit("/", 1)[-1]
     # A list that would not open is no list a plan may draft over: its ticked boxes are unknown.
-    return found.code != "file.unreadable" and (found.code in _OWED_BY_PLAN or named == TASKS_FILE)
+    return found.code != UNREAD and (found.code in _OWED_BY_PLAN or named == TASKS_FILE)
 
 
 #: What a person does about a check that found something blocking, in which `{cid}` is the change.
@@ -395,8 +396,10 @@ _HOLDS: tuple[tuple[str, Actor, str], ...] = (
 )
 #: Where an open point stands among the holds: what may hold a draft once it is settled are the holds after it.
 _POINT = [code for code, _actor, _phrase in _HOLDS].index("brief.marker-unresolved")
-#: The plan's hold on a tier whose change is read before it is planned: the person's step.
+#: The holds of a tier whose change is read before it is planned: the plan is then the person's step. Found by the
+#: fourth audit: the stop before a strict change's plan was listed as ready to run.
 _READ_FIRST: tuple[str, Actor, str] = (_PLAN, "you", "read brief.md and the specs, then run `adk-spec plan {cid}`")
+_HOLDS_READ_FIRST = tuple(_READ_FIRST if hold[0] == _PLAN else hold for hold in _HOLDS)
 
 
 def _after_approval(
@@ -447,9 +450,7 @@ def next_step(
     held |= {_ERROR for found in findings if found.severity == "ERROR" and found not in plan}
     # Every next step names the command that comes after it, the hold after an open point included: found by the
     # third audit, three did not, and by the code review, "then approve" where a blocking check would refuse it.
-    holds = _HOLDS
-    if DEMANDS[state.tier].read_first:  # found by the fourth audit: the stop before the plan was listed as ready to run
-        holds = tuple(_READ_FIRST if hold[0] == _PLAN else hold for hold in _HOLDS)
+    holds = _HOLDS_READ_FIRST if DEMANDS[state.tier].read_first else _HOLDS
     rest = [phrase for code, _actor, phrase in holds[_POINT + 1 :] if code in held]
     after = rest[0].format(cid=cid) if rest else f"run `adk-spec approve {cid}`"
     for code, actor, phrase in holds:

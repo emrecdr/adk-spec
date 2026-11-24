@@ -87,7 +87,7 @@ def test_a_file_that_is_not_utf8_is_a_finding_and_no_crash(tmp_path) -> None:
     ws = seeded(tmp_path)
     (tmp_path / ".spec" / "changes" / "passkeys" / "brief.md").write_bytes("# x\n".encode("utf-16"))
     (problem,) = ws.load_change("passkeys").problems
-    assert (problem.code, problem.path) == ("syntax", "brief.md") and "UTF-8" in problem.message
+    assert (problem.code, problem.path) == ("file.unreadable", "brief.md") and "UTF-8" in problem.message
 
 
 def test_a_living_spec_titled_for_another_folder_is_a_finding(tmp_path) -> None:
@@ -318,12 +318,11 @@ def test_the_config_init_writes_shows_where_the_test_command_goes_and_names_none
     assert '# [verify]\n# test = ["uv", "run", "pytest", "-q"]' in text and ws.config().test == ()
 
 
-def test_a_backslash_that_escapes_a_glob_character_is_kept(tmp_path) -> None:
-    """Found by the code review: every backslash was refused, the escapes git reads among them."""
-    from adk_spec.workspace.files import write_text
-    from adk_spec.workspace.layout import Workspace
-
+def test_a_backslash_is_refused_and_the_way_to_write_a_glob_character_is_named(tmp_path) -> None:
+    """Found by the cleanup review: a backslash kept as git's escape let `tests\\**` through, as Windows writes a
+    folder, which kept nothing out; and the installed libraries' match reads no escape. Brackets work in both."""
     ws = Workspace.init(tmp_path)
-    held = '[project]\ndefault_tier = "lean"\n\n[repository]\nexclude = ["data/run\\\\[0-9\\\\].log"]\n'
+    held = '[project]\ndefault_tier = "lean"\n\n[repository]\nexclude = ["tests\\\\**"]\n'
     write_text(tmp_path / ".spec/config.toml", held)
-    assert ws.config().exclude == ("data/run\\[0-9\\].log",)
+    with pytest.raises(ConfigError, match=r"\[\[\]1\[\]\]"):
+        ws.config()

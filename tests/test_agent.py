@@ -4,11 +4,10 @@ it, shows the drafts, and writes nothing."""
 from __future__ import annotations
 
 import importlib
-import os
 import sys
 
 import pytest
-from conftest import ROOT, between, on_the_fake, seeded, sent_to
+from conftest import ROOT, between, on_the_fake, seeded, sent_to, shut
 from google.adk.apps.app import App
 from google.adk.cli.utils.agent_loader import AgentLoader
 from google.adk.runners import InMemoryRunner
@@ -118,18 +117,14 @@ async def test_the_chat_drafts_with_the_lessons_as_propose_does(tmp_path, monkey
     assert "- Mine." in deltas
 
 
-@pytest.mark.skipif(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0), reason="POSIX modes")
 def test_the_chat_loads_where_the_profile_will_not_open(tmp_path, monkeypatch) -> None:
     """Found by the code review: the chat read the profile once it was given it, and one that would not open
     stopped it loading."""
     ws = seeded(tmp_path)
     profile = ws.home / "profile.md"
     profile.write_text("# This repository\n")
-    profile.chmod(0)
-    try:
+    with shut(profile):
         assert loaded(tmp_path, monkeypatch).root_agent is not None
-    finally:
-        profile.chmod(0o644)
 
 
 def test_the_chat_loads_where_the_lessons_file_is_no_text(tmp_path, monkeypatch) -> None:

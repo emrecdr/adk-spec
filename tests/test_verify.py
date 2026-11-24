@@ -529,14 +529,11 @@ def test_a_verified_change_whose_diff_holds_a_key_file_has_not_drifted(tmp_path)
 
 def test_a_change_verified_then_committed_is_archived(tmp_path) -> None:
     """Found by the fourth audit: the work's fingerprint moved with git's index, and `archive` refused."""
-    from conftest import _git
-
     approved_in_a_repository(tmp_path)
     implemented(tmp_path)
     write_text(tmp_path / "src/added.py", "ADDED = True\n")
     assert run(tmp_path, "verify", "passkeys") == 0
-    _git(tmp_path, "add", "-A")
-    _git(tmp_path, "commit", "-q", "-m", "the work")
+    repository_commit(tmp_path, "the work")
     assert run(tmp_path, "archive", "passkeys") == 0
 
 

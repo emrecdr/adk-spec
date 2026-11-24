@@ -36,9 +36,9 @@ type Runs = list[list[str]]
 
 def lines_of_diff(diff: str) -> dict[str, tuple[Runs, Runs]]:
     """By file: the runs of lines a unified diff adds and the runs it removes, each line without its sign. A run
-    ends at a line both sides hold, or at a hunk's end: found by the fourth audit, the lines of a side were joined
-    across both, and a quote stitched from lines apart stood as evidence. A file is known by its new name, and one
-    that was deleted by the name it had."""
+    ends at a line both sides hold that has a word, which a quote cannot skip as it skips a blank one, or at a hunk's
+    end: found by the fourth audit, the lines of a side were joined across both, and a quote stitched from lines
+    apart stood as evidence. A file is known by its new name, and one that was deleted by the name it had."""
     files: dict[str, tuple[Runs, Runs]] = {}
     old = new = None
     sides: tuple[Runs, Runs] | None = None

@@ -69,7 +69,7 @@ from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
-from ..domain.validate import failed, finding, validate_spec
+from ..domain.validate import UNREAD, failed, finding, validate_spec
 from ..domain.verify import TestRun, Verdict, grounded
 from ..workspace.config import ConfigError
 from ..workspace.context import (
@@ -95,7 +95,6 @@ from ..workspace.layout import (
     ROOT_NAME,
     SPEC_FILE,
     SPECS,
-    UNOPENED,
     LoadedChange,
     Workspace,
     WorkspaceError,
@@ -492,7 +491,7 @@ def _drifted(workspace: Workspace, state: ChangeState) -> bool:
         return True
     # Or the fingerprint an older adk-spec recorded, of the diff as a stage is shown it: found by the code review,
     # every change it verified read as drifted after the upgrade.
-    return held.diff not in (work.fingerprint, sha256_of(work.text))
+    return held.diff != work.fingerprint and held.diff != sha256_of(work.text)
 
 
 def _living(workspace: Workspace, refused: str) -> dict[str, Spec]:
@@ -505,10 +504,15 @@ def _living(workspace: Workspace, refused: str) -> dict[str, Spec]:
     return living
 
 
-def _say_next(workspace: Workspace, change_id: str, living: dict[str, Spec], *, drift: bool = True) -> None:
+def _say_next(
+    workspace: Workspace, change_id: str, living: dict[str, Spec], *, drift: bool = True, plan: str | None = None
+) -> None:
     """The line every command that changes a change ends on: what comes next, read from the files as they now are.
-    Without `drift`, git is not asked whether the work moved: `verify` has just measured it."""
-    print(f"next      {_assessed(workspace, change_id, living, drift=drift).step.phrase}")
+    Without `drift`, git is not asked whether the work moved: `verify` has just measured it. A `plan` the step names
+    is said as `plan` gives it, with the flags this run's plan goes on with: found by the cleanup review, a second
+    wording of the step named a plan its holds refused."""
+    phrase = _assessed(workspace, change_id, living, drift=drift).step.phrase
+    print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
 
 
 def _of_specs(workspace: Workspace) -> tuple[dict[str, Spec], list[Finding]]:
@@ -641,10 +645,12 @@ def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec]
         return _check_made(workspace, change_id, living, assessed, no_model=False)
     except (UsageError, ContextTooLargeError) as exc:  # no provider, or more than a model is given to read
         # Found by the code review: `check --no-model` was named where it refuses, a model's finding standing.
-        way = f": put that right, or run `{PROG} check {change_id} --no-model` and approve again"
+        way = f"or run `{PROG} check {change_id} --no-model` and approve again"
         if model_holds(assessed.state, assessed.seen):
-            way = ", and only a model clears what the model's check found: put that right, then approve again"
-        raise UsageError(f"{exc}. `approve` checks a {assessed.state.tier} change first{way}") from exc
+            way = "then approve again: only a model clears what a model found"
+        raise UsageError(
+            f"{exc}. `approve` checks a {assessed.state.tier} change first: put that right, {way}"
+        ) from exc
 
 
 def _refused(change_id: str, blockers: list[Finding]) -> int:
@@ -1099,15 +1105,13 @@ def _plannable(
     task list has begun and replacing it was not asked for, or what the tasks are drafted from does not read."""
     change, state = assessed.loaded.change, assessed.state
     if state.status != "draft":  # new tasks would void what was approved
-        way = (  # found by the code review: `propose --id` refuses a change whose work was judged
-            f'to change what it asks, run `{PROG} propose "<what changes>" --id {change_id}`; to add a task, write it '
-            "in tasks.md"
-            if state.status == "approved"
-            else "propose a new change for what is still wanted"
-        )
-        raise NotYetError(
-            f"`{change_id}` is {state.status}: a plan is drafted while a change is a draft. {way[0].upper()}{way[1:]}"
-        )
+        way = "Propose a new change for what is still wanted"  # `propose --id` refuses a change whose work was judged
+        if state.status == "approved":
+            way = (
+                f'To change what it asks, run `{PROG} propose "<what changes>" --id {change_id}`; to add a task, write '
+            )
+            way += "it in tasks.md"
+        raise NotYetError(f"`{change_id}` is {state.status}: a plan is drafted while a change is a draft. {way}")
     started = _ticked(workspace, change)
     if started and not replace:  # work has begun on this list: it is not thrown away unasked
         raise NotYetError(
@@ -1722,9 +1726,7 @@ def _revising(workspace: Workspace, change_id: str | None) -> Change | None:
     change = loaded.change
     # Found by the fourth audit: a delta that did not read was unknown to the revision, which deleted it; and by the
     # code review, a file that would not open read as empty, and was written over.
-    if unread := [
-        held for held in loaded.problems if (held.path or "").startswith(f"{SPECS}/") or held.code == UNOPENED
-    ]:
+    if unread := [held for held in loaded.problems if (held.path or "").startswith(f"{SPECS}/") or held.code == UNREAD]:
         _printed(_from_root(change_id, unread))
         raise NotYetError(
             f"`{change_id}` is not revised: a revision would write over a file that does not read. Fix it first"
@@ -1809,13 +1811,12 @@ def _open_said(unasked: Sequence[Mapping[str, str]]) -> None:
 
 
 def _plan_command(workspace: Workspace, change_id: str, change: Change | None, no_explore: bool) -> str:
-    """The `plan` that goes on after a stop: with `--replace` where a revised change's task is ticked, and with
-    `--no-explore` where the person gave it, the change is revised, or a `context.md` is there to keep. Found by
-    review: said always, it kept a plan from reading where propose's reading wrote nothing."""
-    flags = [" --replace"] if change is not None and _ticked(workspace, change) else []
+    """The `plan` that goes on after a stop, with `--no-explore` where the person gave it, the change is revised, or
+    a `context.md` is there to keep. Found by review: said always, it kept a plan from reading where propose's reading
+    wrote nothing. Never with `--replace`: a ticked list is the person's to throw away, as the `kept` line says."""
     there = (workspace.home / CHANGES / change_id / CONTEXT_FILE).is_file()
-    flags += [" --no-explore"] if no_explore or change is not None or there else []
-    return f"`{PROG} plan {change_id}{''.join(flags)}`"
+    flags = " --no-explore" if no_explore or change is not None or there else ""
+    return f"`{PROG} plan {change_id}{flags}`"
 
 
 def _tasks_kept(workspace: Workspace, change: Change, changed: bool) -> str | None:
@@ -1856,10 +1857,7 @@ def _then_planned(
             print("plan      waits: the change is read before it is planned")
         if keep:
             print(f"kept      tasks.md: {keep}")
-        if review and not waiting and not keep:  # the step `status` names, with the flags the plan goes on with
-            print(f"next      read brief.md and the specs, then run {review}")
-        else:
-            _say_next(workspace, change_id, specs)
+        _say_next(workspace, change_id, specs, plan=review)  # the step `status` names, with the plan's flags
         return EXIT_OK
     # The change is written by now: a plan that does not end well leaves it a draft, and `plan` finishes it.
     try:

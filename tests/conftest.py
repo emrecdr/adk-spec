@@ -12,12 +12,13 @@ shows (`survey_quoting`).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import shutil
 import stat
-from collections.abc import AsyncGenerator, Iterator
+from collections.abc import AsyncGenerator, Generator, Iterator
 from pathlib import Path
 
 import pytest
@@ -592,3 +593,16 @@ def python_environment(root: Path, files: dict[str, str] | None = None, *, windo
     listed = [*held, "httpx-0.28.1.dist-info/METADATA", "httpx/__pycache__/x.cpython-314.pyc", "../../bin/httpx"]
     (info / "RECORD").write_text("".join(f"{path},sha256=x,1\n" for path in listed), encoding="utf-8")
     return site
+
+
+@contextlib.contextmanager
+def shut(path: Path) -> Generator[None]:
+    """`path` with no mode at all while the block runs, as a file another program holds or a cloud placeholder is:
+    skipped where the account reads it anyway (Windows, root, an ACL), and given its mode back after."""
+    path.chmod(0)
+    try:
+        if os.access(path, os.R_OK):
+            pytest.skip("this account reads a file with no mode")
+        yield
+    finally:
+        path.chmod(0o644)

@@ -38,7 +38,7 @@ def _known() -> tuple[Known, dict[str, str]]:
     specs, _problems = workspace.specs()
     told = {
         CAPABILITIES: capability_index(specs),
-        CONSTITUTION: constitution_text(workspace),
+        CONSTITUTION: _readable(constitution_text, workspace),
         LESSONS_TEXT: _readable(lessons_text, workspace),
         PROFILE_TEXT: _readable(profile_text, workspace),  # found by the fourth audit: `propose` gave it, the chat not
     }

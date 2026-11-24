@@ -17,6 +17,10 @@ from .model import Brief, Change, Delta, Finding, Requirement, Severity, Spec, T
 from .spec_md import fingerprint
 
 #: Every rule's severity. The owner's to set: which faults stop work, and which only show.
+#: The code of a file whose text was not read, one that would not open or is no UTF-8: no command writes over it.
+#: Found by the code review: a task list not read was taken for one with no box ticked, and drafted again.
+UNREAD = "file.unreadable"
+
 SEVERITY: dict[str, Severity] = {
     "syntax": "ERROR",
     "constitution.long": "WARNING",
@@ -52,7 +56,7 @@ SEVERITY: dict[str, Severity] = {
     "brief.marker-malformed": "ERROR",
     "brief.marker-unresolved": "WARNING",
     "change.unreadable": "ERROR",
-    "file.unreadable": "ERROR",
+    UNREAD: "ERROR",
     "change.missing-brief": "ERROR",
     "change.no-deltas": "ERROR",
     "change.missing-tasks": "WARNING",
@@ -324,19 +328,15 @@ def validate_change(change: Change, living: Mapping[str, Spec]) -> list[Finding]
         about("specs", [finding("change.no-deltas", no_delta)])
     for capability, delta in sorted(change.deltas.items()):
         about(f"specs/{capability}/spec.md", validate_delta(delta, living.get(capability), change.state.bases))
+    # `plan` drafts for a draft alone: found by the code review, an approved change was sent to a `plan` that refused.
+    plan = f"`adk-spec plan {change.state.id}` drafts" if change.state.status == "draft" else ""
     groups = change.tasks or ()
     if not any(group.tasks for group in groups):
-        drafts = (
-            f"`adk-spec plan {change.state.id}` drafts them"
-            if change.state.status == "draft"
-            else "write them in tasks.md"
-        )
-        no_tasks = f"The change has no task: {drafts}, before approval."
+        no_tasks = f"The change has no task: {f'{plan} them' if plan else 'write them in tasks.md'}."
         about("tasks.md", [finding("change.missing-tasks", no_tasks)])
     else:
         about("tasks.md", validate_tasks(groups))
     if change.state.needs_design and change.design is None:
-        drafts = f"`adk-spec plan {change.state.id}` drafts it" if change.state.status == "draft" else "write design.md"
-        owed = f"The change owes a design and has none: {drafts}."
+        owed = f"The change owes a design and has none: {f'{plan} it' if plan else 'write design.md'}."
         about("design.md", [finding("change.missing-design", owed)])
     return found
