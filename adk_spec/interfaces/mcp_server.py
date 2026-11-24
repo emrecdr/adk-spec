@@ -52,7 +52,8 @@ models. propose drafts a change from a request, or, given the id of an open chan
 points the brief leaves open come back in its output, so ask the person, then revise with propose and the change's
 id. plan drafts a change's tasks again; check checks its files; verify judges the work against each requirement;
 status lists the open changes and what comes next; validate checks the files' structure. propose and plan call a
-model several times and take minutes, propose the most: call them once per request, never to poll. A change that
+model several times and take minutes, propose the most: call them once per request, never to poll. A strict change's
+plan waits for the person to read its brief and specs: call plan for it once they say so. A change that
 spans other repositories is started by the person in a terminal, with `adk-spec propose --with`; the tools then keep
 them.
 
@@ -61,7 +62,7 @@ tell them to run `adk-spec approve <id>` in a terminal, and once it is verified 
 approve, archive or set a finding aside for them. Once it is approved, implement it: read brief.md, the specs,
 context.md and design.md in its folder, then work through tasks.md in order, test first, and tick each task's box,
 `- [x]`, when it is done. Ticking a box keeps the approval; any other edit of the change's files voids the approval.
-Then call verify with the change's id."""
+Then call status and do the step it names: verify, where the change owes a verification."""
 
 
 def command(root: Path, *args: str) -> list[str]:

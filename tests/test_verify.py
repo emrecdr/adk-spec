@@ -84,9 +84,9 @@ def verdicts(**changed) -> dict:
 
 def test_a_diff_is_read_as_the_lines_it_adds_and_removes_by_file() -> None:
     read_ = lines_of_diff(DIFF)
-    assert read_["src/auth.py"] == (
-        ["    return passkey(user)", "    return account.failures >= 3"],
-        ["    return password(user)", "    return account.failures >= 5"],
+    assert read_["src/auth.py"] == (  # two runs apart, with a line no quote holds between them
+        ["    return passkey(user)", "\x00", "    return account.failures >= 3"],
+        ["    return password(user)", "\x00", "    return account.failures >= 5"],
     )
     assert read_["src/old.py"] == ([], ["LEGACY = True"]), "a deleted file is known by the name it had"
     assert read_["src/new.py"] == (["+++ b/not/a/header", "NEW = True"], []), "a line of content is no header"
@@ -117,6 +117,29 @@ def test_met_stands_only_on_a_line_the_diff_holds_on_the_right_side() -> None:
     assert "no quoted line is in the diff" in got[1].reason and got[2].evidence == (
         ("src/auth.py", "return passkey(user)"),
     )
+
+
+def test_a_quote_stitched_from_lines_apart_is_no_evidence() -> None:
+    """Found by the fourth audit: the lines a diff adds were joined across hunks and the lines between, so a `met`
+    stood on code that is nowhere in the file as quoted: here the check between the two lines is left out."""
+    stitched = """\
+diff --git a/src/pay.py b/src/pay.py
+--- a/src/pay.py
++++ b/src/pay.py
+@@ -1,2 +1,3 @@
++def charge(card):
+     if card is None:
++        raise NotImplementedError
+@@ -40,1 +41,2 @@
++def refund(card):
+"""
+    met = {"id": "REQ-PAY-001", "verdict": "met", "reason": "Said."}
+    for quote in ("def charge(card): raise NotImplementedError", "raise NotImplementedError def refund(card):"):
+        draft = VerdictsDraft.model_validate(
+            {"verdicts": [{**met, "evidence": [{"path": "src/pay.py", "quote": quote}]}]}
+        )
+        (got,) = grounded(draft, stitched, added=frozenset({"REQ-PAY-001"}), removed=frozenset())
+        assert got.verdict == "unclear", quote
 
 
 def test_an_unmet_verdict_is_kept_as_it_is_given() -> None:
@@ -188,6 +211,18 @@ def test_a_requirement_with_no_verdict_is_asked_for_again(tmp_path, capsys, fake
     fake_provider.answers_when(VERIFY, {"verdicts": CANNED_VERDICTS["verdicts"][:2]})
     assert run(tmp_path, "verify", "passkeys") == 3
     assert "REQ-AUTH-001" in capsys.readouterr().err and len(fake_provider.requests) == 3
+
+
+def test_two_verdicts_for_one_requirement_are_sent_back(tmp_path, capsys, fake_provider) -> None:
+    """Found by the fourth audit: a `met` and an `unmet` for one requirement, and the first one stood."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    verdicts = CANNED_VERDICTS["verdicts"]
+    twice = {**verdicts[0], "verdict": "unmet", "evidence": []}
+    fake_provider.answers_when(VERIFY, {"verdicts": [*verdicts, twice]})
+    assert run(tmp_path, "verify", "passkeys") == 3
+    said = capsys.readouterr().err
+    assert "verify.verdict-twice" in said and verdicts[0]["id"] in said and len(fake_provider.requests) == 3
 
 
 def test_the_diff_reaches_the_model_between_markers(tmp_path, fake_provider) -> None:

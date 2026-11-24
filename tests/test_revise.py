@@ -191,6 +191,23 @@ def test_a_capability_the_revision_no_longer_touches_loses_its_delta(tmp_path, f
     assert not (specs / "auth").exists() and (specs / "sessions/spec.md").is_file()
 
 
+def test_a_revision_keeps_each_base_it_recorded_and_records_only_a_new_one(tmp_path, fake_provider) -> None:
+    """Found by the fourth audit: a revision recorded every base afresh, so a requirement another change had since
+    altered lost its stale base, its warning with it, and the archive wrote over the other change's words. A base
+    is the guard against two changes to one requirement, and only `rebase` records one anew."""
+    ws = seeded(tmp_path)  # a task is ticked: no plan is drafted, which a stale base would hold
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"bases": {"REQ-AUTH-002": "b0"}}))
+    lock = {**PASSKEY, "name": "Lock after failures", "statement": "The system MUST lock an account after three."}
+    removed = [{"id": "REQ-AUTH-001", "reason": "Passwords are retired."}]
+    delta = {"capability": "auth", "purpose": "", "added": [PASSKEY], "removed": removed}
+    fake_provider.answers_when(
+        DELTAS, {"deltas": [{**delta, "modified": [{"id": "REQ-AUTH-002", "requirement": lock}]}]}
+    )
+    assert revised(tmp_path) == 0
+    bases = state_of(tmp_path, "passkeys")["bases"]
+    assert bases["REQ-AUTH-002"] == "b0" and bases["REQ-AUTH-001"] not in ("", "b0")
+
+
 @pytest.mark.parametrize("status", ["verified", "archived"])
 def test_a_verified_or_archived_change_is_not_revised(tmp_path, capsys, fake_provider, status) -> None:
     ws = unticked(tmp_path)
@@ -213,14 +230,27 @@ def test_a_requirement_the_change_adds_restated_as_modified_stays_added(tmp_path
     assert delta.index("## ADDED Requirements") < delta.index("REQ-AUTH-004") and "MODIFIED" not in delta
 
 
-@pytest.mark.usefixtures("fake_provider")
-def test_a_delta_off_its_grammar_of_a_capability_no_longer_touched_is_taken_out(tmp_path) -> None:
-    """Found by the review: a delta that did not read was never known to the change, and stayed behind."""
-    seeded(tmp_path)  # a task is ticked: tasks.md is kept, and no plan is drafted
+def test_a_delta_off_its_grammar_holds_the_revision_and_is_never_deleted(tmp_path, capsys, fake_provider) -> None:
+    """Found by the fourth audit: a delta a person was still writing did not read, so the revision knew nothing of
+    it, deleted it with its folder, and said it dropped nothing. The first review had found it left behind: it is
+    neither, and the person settles it first."""
+    seeded(tmp_path)
     broken = tmp_path / ".spec/changes/passkeys/specs/sessions/spec.md"
     write_text(broken, "# Delta: sessions\n\nHalf written.\n")
+    assert revised(tmp_path) == 1
+    said = capsys.readouterr()
+    assert "specs/sessions/spec.md:3" in said.out and "is not revised" in said.err and fake_provider.requests == []
+    assert broken.is_file()
+
+
+def test_a_delta_the_revision_takes_out_is_named(tmp_path, capsys, fake_provider) -> None:
+    seeded(tmp_path)  # a task is ticked: tasks.md is kept, and no plan is drafted
+    fake_provider.answers_when(BRIEF, {**CANNED_BRIEF, "capabilities": ["sessions"]})
+    session = {**PASSKEY, "name": "Keep a session", "statement": "The system SHALL keep a session for a day."}
+    fake_provider.answers_when(DELTAS, adding(session, capability="sessions", purpose="How sessions are kept."))
+    capsys.readouterr()
     assert revised(tmp_path) == 0
-    assert not broken.exists() and (tmp_path / DELTA).is_file()
+    assert "removed   .spec/changes/passkeys/specs/auth/spec.md" in capsys.readouterr().out
 
 
 @pytest.mark.usefixtures("fake_provider")

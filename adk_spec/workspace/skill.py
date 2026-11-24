@@ -43,15 +43,15 @@ Run them in the repository. Where the shell does not find `adk-spec`, ask the pe
 - `adk-spec verify <id>`: runs the project's tests and judges the work against each requirement.
 - `adk-spec validate`: checks the structure of the specs.
 
-`propose`, `plan`, `check` and `verify` call a model and cost time and tokens: run each once for a request, never to
-poll.
+`propose`, `plan`, `check` and `verify` call a model, cost tokens and take minutes, `propose` the most: run each with
+your longest timeout or in the background, wait for it to end, and run it once for a request, never to poll.
 
 ## What stays the person's
 
 Never run `adk-spec approve`, `adk-spec archive`, `adk-spec init`, any command with `--override`, or one that names
 another repository with `--with`. Approving, archiving and setting a finding aside record the person's own decision,
 and another repository's code would be sent to a model: when a change needs one of them, tell the person the command
-to run.
+to run. A strict change's plan waits for the person to read its brief and specs: run `plan` for it once they say so.
 
 ## Implementing an approved change
 
@@ -60,7 +60,8 @@ to run.
 2. Work through `tasks.md` in order, test first.
 3. Tick each task's box, `- [ ]` to `- [x]`, once it is done. Ticking keeps the approval; any other edit of the
    change's files voids it, so change no other file in `.spec/`.
-4. Run `adk-spec verify <id>`, and work on what it finds `unmet` or `unclear`.
+4. Run `adk-spec status` and do the step it names: `adk-spec verify <id>` where the change owes a verification, and
+   work on what it finds `unmet` or `unclear`.
 """
 
 

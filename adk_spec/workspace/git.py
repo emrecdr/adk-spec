@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import functools
 import os
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -45,7 +46,9 @@ _SETTLED = {
     "diff.noprefix": "false",  # a diff's paths are read by their `a/` and `b/`
     "diff.mnemonicPrefix": "false",
 }
-_PLAIN = ("--no-color", "--no-ext-diff", "--no-textconv", "-M")
+#: A diff whose text is the work's alone, whatever git's index holds: a moved file as a deletion and an addition,
+#: as it reads before it is added, and every object named in full, as a large repository would otherwise widen.
+_PLAIN = ("--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--full-index")
 #: The folder's own files, without this package's tree or the skill `init` writes: a pathspec git reads from the
 #: folder it runs in. Found by the code review: listed with the code, the skill's rules read as the code's own.
 _HERE = ("--", ".", f":(exclude){ROOT_NAME}", f":(exclude){'/'.join(SKILL_PARTS[:-1])}")
@@ -239,4 +242,12 @@ def diff(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", tru
         git(root, "diff", *_PLAIN, *named, "--no-index", "--", "/dev/null", path, ok=(0, 1), trust=trust)
         for path in new
     ]
-    return changed + "".join(added)
+    return _in_order(changed + "".join(added))
+
+
+def _in_order(text: str) -> str:
+    """A diff with each file's part in the order of its heading. Found by the fourth audit: a new file came after
+    every tracked one until it was added, so the work's fingerprint changed with `git add` and a verified change
+    that was then committed read as drifted."""
+    parts = [part for part in re.split(r"(?m)^(?=diff --git )", text) if part]
+    return "".join(sorted(parts, key=lambda part: part.split("\n", 1)[0]))

@@ -6,7 +6,7 @@ import os
 import stat
 
 import pytest
-from conftest import repository
+from conftest import _git, repository
 
 from adk_spec.workspace import git as layer
 from adk_spec.workspace.git import GitError, diff, files, git, head, is_repository, on_path, resolves
@@ -37,6 +37,22 @@ def test_a_file_git_does_not_track_yet_reads_as_added(tmp_path) -> None:
     assert files(tmp_path, exclude=()) == [".gitignore", "src/app.py", "src/new.py"], (
         "what git tracks or would: nothing ignored"
     )
+
+
+def test_the_diff_of_the_work_is_the_same_once_it_is_added_or_committed(tmp_path) -> None:
+    """Found by the fourth audit: a new file read as untracked came after every tracked one, and a moved file as a
+    deletion and an addition until it was added, then as a rename. The work's fingerprint moved with git's index,
+    so a change verified and then committed read as drifted, and `archive` refused it."""
+    base = repository(tmp_path, {"z.py": "x = 1\n", "old.py": "def f():\n    return 1\n"})
+    (tmp_path / "z.py").write_text("x = 2\n", encoding="utf-8")
+    (tmp_path / "a.py").write_text("y = 1\n", encoding="utf-8")
+    (tmp_path / "old.py").rename(tmp_path / "moved.py")
+    before = diff(tmp_path, base, exclude=())
+    _git(tmp_path, "add", "-A")
+    assert diff(tmp_path, base, exclude=()) == before
+    _git(tmp_path, "commit", "-q", "-m", "the work")
+    assert diff(tmp_path, base, exclude=()) == before
+    assert "+def f():" in before and "-def f():" in before, "a moved file shows what it holds"
 
 
 def test_a_diff_of_a_subfolder_names_paths_from_that_folder(tmp_path) -> None:

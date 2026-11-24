@@ -101,3 +101,14 @@ def test_a_briefs_assumptions_are_counted_by_sentence_its_open_points_aside() ->
     assert assumption_count("Only fetch_orders changes. Retries are on a timeout alone!\n\nNo logging is added.") == 3
     assert assumption_count("Browsers support WebAuthn.\n\n[NEEDS CLARIFICATION: Which browsers are in scope?]") == 1
     assert assumption_count("") == 0
+
+
+def test_a_task_whose_description_opens_with_a_bracket_reads_back_as_written() -> None:
+    """Found by the fourth audit: `[Setup] create the module`, on a task that names no requirement, read back with
+    `Setup` as its requirement, so the tasks gate sent it back three times and `plan` gave up."""
+    from adk_spec.domain.model import Task, TaskGroup
+
+    for parallel in (False, True):
+        task = Task(id="T001", done=False, parallel=parallel, requirements=(), description="[Setup] create it")
+        groups = (TaskGroup(title="Setup", tasks=(task,)),)
+        assert parse_tasks(render_tasks(groups)) == groups

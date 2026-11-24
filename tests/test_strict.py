@@ -245,7 +245,7 @@ def test_an_open_point_or_an_error_comes_before_the_design_a_plan_drafts() -> No
     settled = next_step(state, [design, held("brief.marker-unresolved")], []).phrase
     assert settled == f"settle the open point in brief.md, then run `adk-spec plan {state.id}`"
     assert next_step(state, [design, held("delta.empty", "ERROR")], []).phrase == "fix what `adk-spec validate c` lists"
-    assert next_step(state, [design], []).phrase == "run `adk-spec plan c`"
+    assert next_step(state, [design], []).phrase == "read brief.md and the specs, then run `adk-spec plan c`"
 
 
 def test_a_strict_check_report_counts_a_warning_as_blocking() -> None:

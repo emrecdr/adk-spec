@@ -244,7 +244,17 @@ def test_a_table_written_as_a_value_is_refused_and_not_read_as_empty(tmp_path, l
 
 
 @pytest.mark.parametrize(
-    "value", ['"vendor/**"', "[3]", '[""]', '[":(top)secret"]', '["a\\nb"]', '["//vendor/**"]', '["src/../../x/**"]']
+    "value",
+    [
+        '"vendor/**"',
+        "[3]",
+        '[""]',
+        '[":(top)secret"]',
+        '["a\\nb"]',
+        '["//vendor/**"]',
+        '["src/../../x/**"]',
+        "['config\\secrets\\**']",  # found by the fourth audit: git reads a backslash as an escape
+    ],
 )
 def test_exclude_must_be_a_list_of_patterns(tmp_path, value) -> None:
     """A pattern is handed to git as a path to leave out. One that opens with `:` would be read by git as an

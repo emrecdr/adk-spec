@@ -325,6 +325,25 @@ def test_a_check_by_code_alone_does_not_clear_what_a_model_found(tmp_path, capsy
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
 
 
+def test_a_check_by_code_alone_after_an_edit_does_not_clear_what_a_model_found(tmp_path, capsys, fake_provider) -> None:
+    """Found by the fourth audit: once any file the check read was edited, `check --no-model` recorded a check by
+    code alone over the model's, and an approval went through with the model's blocking finding never fixed, on
+    the strict tier too, where nothing may be set aside. Only a model clears what a model found."""
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nOne word more.\n")
+    capsys.readouterr()
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 1
+    assert "asks the model again" in capsys.readouterr().err
+    held = state(ws).check
+    assert (held.blocking, held.model) == (1, "fake on gemini")
+    asked = len(fake_provider.requests)
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    assert len(fake_provider.requests) > asked, "the approval asked the model again"
+
+
 def test_a_living_spec_that_does_not_read_makes_no_task_a_stranger(tmp_path, capsys) -> None:
     """Found by the code review: with another capability's spec unreadable, a task that rightly named one of its
     requirements was said to name a requirement no living spec holds."""

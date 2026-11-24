@@ -79,8 +79,11 @@ def test_plan_refuses_a_change_that_is_no_draft_and_spends_nothing(tmp_path, cap
     seeded(tmp_path)
     approved(tmp_path)
     capsys.readouterr()
-    assert run(tmp_path, "plan", "passkeys", "--replace") == 1 and "approved" in capsys.readouterr().err
-    assert fake_provider.requests == []
+    assert run(tmp_path, "plan", "passkeys", "--replace") == 1
+    said = capsys.readouterr().err
+    assert "approved" in said and fake_provider.requests == []
+    # Found by the fourth audit: the refusal named no way to change what an approved change asks.
+    assert 'adk-spec propose "<what changes>" --id passkeys' in said and "tasks.md" in said
 
 
 def test_plan_refuses_a_change_whose_brief_or_deltas_have_an_error(tmp_path, capsys, fake_provider) -> None:

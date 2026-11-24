@@ -106,9 +106,10 @@ def _verifying(path: Path, verify: object) -> tuple[tuple[str, ...], int]:
 def _pattern(one: str) -> bool:
     """Whether `one` is a pattern git takes for a path under the workspace's root: some text on one line, with no
     colon at its start, which git reads as an instruction of its own, and no way out of the root, which git refuses,
-    so that every file would then be listed and read with nothing said."""
+    so that every file would then be listed and read with nothing said, and no backslash, which git reads as an
+    escape: found by the fourth audit, `config\\secrets\\**`, as Windows writes a path, kept nothing out."""
     inside = not one.startswith(("//", ":")) and ".." not in one.split("/")  # one slash anchors it, as in .gitignore
-    return bool(one.strip()) and one.isprintable() and one == one.strip() and inside
+    return bool(one.strip()) and one.isprintable() and one == one.strip() and inside and "\\" not in one
 
 
 def _excluded(path: Path, held: dict[str, object]) -> tuple[str, ...]:
@@ -120,7 +121,7 @@ def _excluded(path: Path, held: dict[str, object]) -> tuple[str, ...]:
     if not good:
         raise ConfigError(
             f"{path} sets exclude to `{value}`: a list of patterns, each a path from the workspace's root as git "
-            'reads one, such as ["vendor/**", "**/*.pem"]'
+            'reads one, with `/` between folders, such as ["vendor/**", "**/*.pem"]'
         )
     return tuple(value)
 

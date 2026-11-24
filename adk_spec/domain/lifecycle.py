@@ -170,13 +170,22 @@ def check_stands(state: ChangeState, files: Mapping[str, str]) -> bool:
     return state.check is not None and state.check.model is not None and state.check.files == dict(files)
 
 
+def model_holds(state: ChangeState, files: Mapping[str, str]) -> bool:
+    """Whether a check by code alone leaves the change's last check as it is: a model's that stands, or a model's
+    that found something blocking, files edited since or not. Found by the fourth audit: after any edit, a check by
+    code alone replaced the model's, and the approval went through with its blocking finding never fixed, on the
+    strict tier too. Only a model clears what a model found."""
+    held = state.check
+    return held is not None and held.model is not None and (check_stands(state, files) or held.blocking > 0)
+
+
 def checked(
     state: ChangeState, findings: Sequence[Finding], *, files: Mapping[str, str], at: str, model: str | None = None
 ) -> ChangeState:
     """The state with a check recorded: the fingerprints of the files it read, how many of its findings block an
-    approval, and the model that judged, none where code alone did. A check by code alone of files a model has
-    judged records nothing: the model's check stands, with whatever it found."""
-    if model is None and check_stands(state, files):
+    approval, and the model that judged, none where code alone did. A check by code alone records nothing over a
+    model's that `model_holds` keeps."""
+    if model is None and model_holds(state, files):
         return state
     stopped = len(blocking(state, findings))
     return state.model_copy(update={"check": Checked(at=at, files=dict(files), blocking=stopped, model=model)})
@@ -387,6 +396,8 @@ def _after_approval(
     if stale and any(owed.code == "check.blocking" for owed in check):
         # The approval was asked again, made the check of the edited files, and was stopped by what it found.
         return Step("you", _FIX_THE_CHECK.format(cid=cid))
+    if stale and errors:  # found by the fourth audit: "approve again" while an error stood, refused in a loop
+        return Step("you", f"fix what `adk-spec validate {cid}` lists, then run `adk-spec approve {cid}` again")
     if stale:  # the edit that voided the approval made a check stale as well, which the approval makes again
         return Step("you", f"{', '.join(stale)} changed since the approval: run `adk-spec approve {cid}` again")
     if errors:  # a base that moved, a spec that no longer reads
@@ -428,6 +439,9 @@ def next_step(
     rest = [phrase for code, _actor, phrase in _AFTER_A_POINT if code in held]
     after = rest[0].format(cid=cid) if rest else f"run `adk-spec approve {cid}`"
     for code, actor, phrase in _HOLDS:
+        if code == _PLAN and code in held and DEMANDS[state.tier].read_first:
+            # Found by the fourth audit: the stop before a strict change's plan was listed as ready to run.
+            return Step("you", f"read brief.md and the specs, then run `adk-spec plan {cid}`")
         if code in held:
             return Step(actor, phrase.format(cid=cid, after=after))
     # What blocks an approval and has no step of its own. A check the approval makes itself is no such thing.
@@ -437,10 +451,3 @@ def next_step(
     if first := first_of_two(state, stale):
         return Step("you", f"have someone other than {first.by} run `adk-spec approve {cid}`")
     return Step("you", f"run `adk-spec approve {cid}`")
-
-
-def next_action(
-    state: ChangeState, findings: Sequence[Finding], stale: Sequence[str], *, check: Sequence[Finding] = ()
-) -> str:
-    """What a person does next with a change, in one phrase."""
-    return next_step(state, findings, stale, check=check).phrase

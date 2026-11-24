@@ -48,9 +48,23 @@ def lines_of_diff(diff: str) -> dict[str, tuple[list[str], list[str]]]:
             in_hunk = True
             if sides is None and (name := new or old):
                 sides = files.setdefault(name, ([], []))
+            _apart(sides)
         elif in_hunk and sides is not None and line[:1] in "+-" and line:
             sides[0 if line[0] == "+" else 1].append(line[1:])
+        elif in_hunk:  # a line both sides hold: the lines either side of it are no one run
+            _apart(sides)
     return files
+
+
+#: The line set between two runs of a side: one no quote holds, since `plain` reads it as a space. Found by the fourth
+#: audit: runs apart were joined, and a quote stitched from them stood as evidence.
+_APART = "\x00"
+
+
+def _apart(sides: tuple[list[str], list[str]] | None) -> None:
+    for side in sides or ():
+        if side and side[-1] != _APART:
+            side.append(_APART)
 
 
 def parts_of_diff(diff: str) -> list[tuple[str | None, str]]:

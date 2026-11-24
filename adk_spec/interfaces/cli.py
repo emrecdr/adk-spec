@@ -53,6 +53,7 @@ from ..domain.lifecycle import (
     edited_drafts,
     first_of_two,
     missing_bases,
+    model_holds,
     next_step,
     of_the_plan,
     owes_design,
@@ -1082,7 +1083,10 @@ def _plannable(
     task list has begun and replacing it was not asked for, or what the tasks are drafted from does not read."""
     change, state = assessed.loaded.change, assessed.state
     if state.status != "draft":  # new tasks would void what was approved
-        raise NotYetError(f"`{change_id}` is {state.status}: a plan is drafted while a change is a draft")
+        raise NotYetError(
+            f"`{change_id}` is {state.status}: a plan is drafted while a change is a draft. To change what it asks, "
+            f'run `{PROG} propose "<what changes>" --id {change_id}`; to add a task, write it in tasks.md'
+        )
     started = _ticked(workspace, change)
     if started and not replace:  # work has begun on this list: it is not thrown away unasked
         raise NotYetError(
@@ -1418,10 +1422,13 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
     if assessed.state.status == "archived":
         raise NotYetError(f"`{args.id}` is archived: there is nothing left to check")
     held = assessed.state.check
-    if args.no_model and held is not None and check_stands(assessed.state, assessed.seen):
+    if args.no_model and held is not None and model_holds(assessed.state, assessed.seen):
+        if check_stands(assessed.state, assessed.seen):
+            why = "its files have not changed since, and a check by code alone does not replace it"
+        else:
+            why = f"only a model clears what a model found: `{PROG} check {args.id}` asks the model again"
         print(
-            f"{PROG}: the check of `{args.id}` by {held.model} stands, with {held.blocking} blocking: its files have "
-            "not changed since, and a check by code alone does not replace it",
+            f"{PROG}: the check of `{args.id}` by {held.model} stands, with {held.blocking} blocking: {why}",
             file=sys.stderr,
         )
         return EXIT_FINDINGS if held.blocking else EXIT_OK
@@ -1678,7 +1685,14 @@ def _revising(workspace: Workspace, change_id: str | None) -> Change | None:
     or archived change is refused: its work was judged against what it says."""
     if not change_id or change_id not in workspace.changes():
         return None
-    change = workspace.load_change(change_id).change
+    loaded = workspace.load_change(change_id)
+    change = loaded.change
+    # Found by the fourth audit: a delta that did not read was unknown to the revision, which deleted it.
+    if unread := [found for found in loaded.problems if (found.path or "").startswith(f"{SPECS}/")]:
+        _printed(_from_root(change_id, unread))
+        raise NotYetError(
+            f"`{change_id}` is not revised: a revision would take out a delta that does not read. Fix it first"
+        )
     if (status := change.state.status) in ("verified", "archived"):
         raise NotYetError(
             f"`{change_id}` is {status}: a change whose work was judged is not revised. Propose a new change for "
@@ -1866,6 +1880,8 @@ def _rewritten(
     print(f"revised   {said}")
     if change.state.approval is not None and not same:
         print(f"the approval is void: read what changed, then run `{PROG} approve {change.state.id}` again")
+    for name in gone:  # a person's file, taken out: said by name, never in silence
+        print(f"removed   {workspace.shown(folder / name)}")
     _said_written(workspace, folder, files, "")
     return bool(added or changed or dropped)
 
@@ -2005,8 +2021,11 @@ def _written(
 
     made = drafted(state, known)
     files = files_of(made)
+    # A base recorded before is kept, whether it still holds or not, as `missing_bases` says: found by the fourth
+    # audit, a revision recorded each afresh, and another change's edit of a requirement was lost at the archive.
+    held = change.state.bases if change is not None else {}
     fields: dict[str, Any] = {
-        "bases": capture_bases(made.deltas, known.living),
+        "bases": {req: held.get(req, base) for req, base in capture_bases(made.deltas, known.living).items()},
         "needs_design": owes_design(tier, made.needs_design),
         "repositories": dict(repositories),
     }

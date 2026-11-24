@@ -241,3 +241,8 @@ def test_the_skill_init_writes_keeps_the_rules_the_server_gives() -> None:
     tools and one for a terminal, had drifted, and the skill left naming another repository to the assistant."""
     for said in ("adk-spec approve", "adk-spec archive", "--with", "tasks.md", "- [x]", "context.md", "voids"):
         assert said in INSTRUCTIONS and said in SKILL_TEXT, said
+    # Found by the fourth audit: a `propose` measured at 321 s outlasts an assistant's shell, 120 s by default; a lean
+    # change owes no verification; and a strict change's plan waits for the person to read its brief.
+    for said in ("take minutes", "status", "strict"):
+        assert said in INSTRUCTIONS and said in SKILL_TEXT, said
+    assert "background" in SKILL_TEXT and "Then call verify" not in INSTRUCTIONS
