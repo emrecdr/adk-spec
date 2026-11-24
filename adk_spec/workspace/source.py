@@ -371,8 +371,8 @@ class Source:
         self._libraries = {
             one.scheme: _Repository(one.scheme, one.root, one.paths, (), scheme=one.scheme) for one in installed
         }
-        #: Every path a stage may name: this repository's, then each other's under its name, then each library's.
         self._own = [one.full(path) for one in repositories for path in one.paths]
+        #: Every path a stage may name: this repository's, then each other's under its name, then each library's.
         self.paths = [*self._own, *(one.full(path) for one in self._libraries.values() for path in one.paths)]
         self._listed = frozenset(self.paths)
         #: The other repositories that were read, and a line for each one that was not.

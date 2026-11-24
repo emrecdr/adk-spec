@@ -229,7 +229,7 @@ def _parser() -> _Top:
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
     propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code")
     propose.add_argument("--with", dest="with_", action="append", default=[], metavar="PATH", help=WITH_HELP)
-    propose.set_defaults(handler=_propose)
+    propose.set_defaults(handler=_drafting(_propose))
 
     plan = commands.add_parser("plan", help="draft a change's tasks again, and its design where one is owed")
     plan.add_argument("id", help="the change")
@@ -964,24 +964,21 @@ def _spent(ledger: Any) -> str:
     return f"{stages}: {ledger.total.total:,} total" if stages else "nothing"
 
 
-def _propose(args: argparse.Namespace) -> int:
-    _load_env()
-    workspace = _workspace(args)
-    # The change is read under the lock: found by an outside audit, read before it, a command that ended in between
-    # was undone in silence by the revision's older copy.
-    with lock_held(workspace):
-        change = _revising(workspace, args.id)  # an open change that `--id` names is revised, not taken
-        if args.id and change is None:
-            workspace.free(args.id)  # a name that cannot be taken is refused before anything is spent
-        args.tier = _tier_of(args, change)  # decided once, here: the run starts at the brief where it is known
-        # Every role of the whole command, asked before anything is spent. A known tier is not asked of triage.
-        from ..orchestration.explore import ROLES as READING
-        from ..orchestration.models import require_ready
+def _propose(args: argparse.Namespace, workspace: Workspace) -> int:
+    """`propose`, under the lock from its first read: found by an outside audit, a change read before the lock was
+    undone in silence by the revision's older copy, where a command ended in between."""
+    change = _revising(workspace, args.id)  # an open change that `--id` names is revised, not taken
+    if args.id and change is None:
+        workspace.free(args.id)  # a name that cannot be taken is refused before anything is spent
+    args.tier = _tier_of(args, change)  # decided once, here: the run starts at the brief where it is known
+    # Every role of the whole command, asked before anything is spent. A known tier is not asked of triage.
+    from ..orchestration.explore import ROLES as READING
+    from ..orchestration.models import require_ready
 
-        drafting = ("brief", "deltas", "design", "tasks", *(() if args.no_explore else READING))
-        if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
-            raise UsageError(why)
-        return _proposed(args, workspace, change)
+    drafting = ("brief", "deltas", "design", "tasks", *(() if args.no_explore else READING))
+    if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
+        raise UsageError(why)
+    return _proposed(args, workspace, change)
 
 
 def _drafting(handler: Callable[[argparse.Namespace, Workspace], int]) -> Callable[[argparse.Namespace], int]:
@@ -1854,16 +1851,17 @@ def _tasks_kept(workspace: Workspace, change: Change, changed: bool) -> str | No
     """Why a revised change keeps its task list as it stands, and how to draft it again; nothing where it is drafted
     again. A ticked box is never lost, and a list whose requirements did not change is not paid for again."""
     cid = change.state.id
+    if _ticked(workspace, change):
+        why, flags = "a task is ticked", " --replace"
+    elif not changed and change.tasks is not None:
+        why, flags = "no requirement changed", ""
+    else:
+        return None
     # `plan` drafts for a draft alone: found by the code review, an approved change the revision left as it stood
     # was sent to a `plan` that refused.
-    draft = workspace.state(cid).status == "draft"
-    if _ticked(workspace, change):
-        how = f"`{PROG} plan {cid} --replace` drafts it again" if draft else "a task added by hand is approved again"
-        return f"a task is ticked. {how}"
-    if not changed and change.tasks is not None:
-        how = f"`{PROG} plan {cid}` drafts it again" if draft else "a task added by hand is approved again"
-        return f"no requirement changed. {how}"
-    return None
+    if workspace.state(cid).status == "draft":
+        return f"{why}. `{PROG} plan {cid}{flags}` drafts it again"
+    return f"{why}. a task added by hand is approved again"
 
 
 def _then_planned(

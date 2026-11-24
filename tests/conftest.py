@@ -181,9 +181,7 @@ def canned_for(schema: type[BaseModel]) -> dict:
 
 
 #: A delta's section headings and requirement headings, the ID as the domain's own grammar spells one.
-_OWED = re.compile(
-    rf"^## (?P<section>ADDED|MODIFIED|REMOVED) Requirements\s*$|^### (?P<req>{REQ_ID.pattern}):", re.MULTILINE
-)
+_OWED = re.compile(rf"^### (?P<req>{REQ_ID.pattern}):", re.MULTILINE)
 
 
 def tasks_serving(instruction: str) -> dict:
@@ -193,10 +191,8 @@ def tasks_serving(instruction: str) -> dict:
         deltas = between(instruction, "deltas")
     except ValueError:
         return CANNED_TASKS
-    owed: list[str] = []
-    for found in _OWED.finditer(deltas):  # a removed requirement is owed the task that takes its code out
-        if not found["section"] and found["req"] not in owed:
-            owed.append(found["req"])
+    # Every requirement a delta names, a removed one owed the task that takes its code out.
+    owed = list(dict.fromkeys(found["req"] for found in _OWED.finditer(deltas)))
     named = {req for group in CANNED_TASKS["groups"] for task in group["tasks"] for req in task["requirements"]}
     if not owed or set(owed) == named:
         return CANNED_TASKS

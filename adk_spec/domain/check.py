@@ -17,7 +17,8 @@ from .validate import finding
 
 
 def owed(deltas: Mapping[str, Delta]) -> frozenset[str]:
-    """Every requirement a change adds or modifies: each is owed a task."""
+    """Every requirement a change adds or modifies: each is owed a verdict the diff's added lines ground, as each a
+    change removes is owed one its removed lines ground."""
     return frozenset(req.id for delta in deltas.values() for req in (*delta.added, *delta.modified))
 
 
@@ -37,7 +38,7 @@ def nameable(deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> frozens
     """Every requirement a task of the change may name: what it adds, modifies or removes, and what any living
     spec holds. A task may serve a requirement the change leaves alone and must keep true."""
     held = {req.id for spec in living.values() for req in spec.requirements}
-    return owed(deltas) | removed(deltas) | held
+    return tasked(deltas) | held
 
 
 def coverage(groups: Sequence[TaskGroup], *, owed: frozenset[str], nameable: frozenset[str]) -> list[Finding]:

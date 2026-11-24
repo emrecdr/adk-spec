@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 from conftest import CANNED_FINDINGS, on_the_fake, run, seeded
-from samples import BRIEF, DELTA, SPEC, TASKS
+from samples import BRIEF, DELTA, SPEC, TASKS, tasks_for
 
 from adk_spec.domain.check import coverage, coverage_of, nameable, owed
 from adk_spec.domain.convert import to_findings
@@ -546,6 +546,6 @@ def test_a_requirement_the_change_removes_is_owed_a_task() -> None:
     it out, yet no task was owed to take them out, so the work could pass the plan and fail its verification."""
     from adk_spec.domain.model import Change, ChangeState
 
-    tasks = parse_tasks(TASKS.replace("REQ-AUTH-001, ", "").replace(", REQ-AUTH-001", "").replace("[REQ-AUTH-001]", ""))
+    tasks = parse_tasks(tasks_for("REQ-AUTH-004", "REQ-AUTH-002"))
     change = Change(state=ChangeState(id="passkeys", tier="lean"), brief=None, deltas=DELTAS, tasks=tasks)
     assert [f.code for f in coverage_of(change, LIVING) if "REQ-AUTH-001" in f.message] == ["check.requirement-no-task"]

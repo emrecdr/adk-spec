@@ -187,8 +187,7 @@ def model_holds(state: ChangeState, files: Mapping[str, str]) -> bool:
     if held is None or held.model is None:
         return False
     # The model's own count alone: one an older adk-spec recorded held the code's findings too, and is not known.
-    found = held.model_blocking or 0
-    return check_stands(state, files) or (DEMANDS[state.tier].checked and found > 0)
+    return check_stands(state, files) or (DEMANDS[state.tier].checked and bool(held.model_blocking))
 
 
 def checked(
@@ -206,8 +205,8 @@ def checked(
     alone records nothing over a model's that `model_holds` keeps."""
     if model is None and model_holds(state, files):
         return state
-    stopped, own = len(blocking(state, findings)), len(blocking(state, judged)) if model is not None else None
-    held = Checked(at=at, files=dict(files), blocking=stopped, model=model, model_blocking=own)
+    own = len(blocking(state, judged)) if model is not None else None
+    held = Checked(at=at, files=dict(files), blocking=len(blocking(state, findings)), model=model, model_blocking=own)
     return state.model_copy(update={"check": held})
 
 

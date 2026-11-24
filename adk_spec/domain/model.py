@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer
+from pydantic import BaseModel, ConfigDict, Field
 
 Severity = Literal["ERROR", "WARNING", "INFO"]
 Tier = Literal["lean", "standard", "strict"]
@@ -161,16 +161,9 @@ class Checked(_Held):
     files: dict[str, str]
     blocking: int
     model: str | None = None
-    model_blocking: int | None = None
-
-    @model_serializer(mode="wrap")
-    def _written(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
-        """The record as written: the model's own count left out where there is none, so that a check by code
-        alone stays one an older adk-spec reads, which refuses a field it does not know."""
-        held = handler(self)
-        if held.get("model_blocking") is None:
-            held.pop("model_blocking", None)
-        return held
+    #: Left out of the record where there is none, so that a check by code alone stays one an older adk-spec reads,
+    #: which refuses a field it does not know.
+    model_blocking: int | None = Field(default=None, exclude_if=lambda held: held is None)
 
 
 #: What a run of a project's tests that passed came to: every other outcome says why it did not.
