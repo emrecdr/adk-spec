@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from conftest import seeded
+from conftest import seeded, shut
 from samples import BRIEF, DELTA, SPEC, TASKS
 
 from adk_spec.domain.brief_md import parse_brief
@@ -331,8 +331,6 @@ def test_a_backslash_is_refused_and_the_way_to_write_a_glob_character_is_named(t
 def test_the_ids_of_a_delta_that_will_not_open_are_never_taken_for_free(tmp_path) -> None:
     """Found by the code review: a delta that would not open read as a placeholder, so its IDs were handed out again
     to a new change. It stops the command, as it did, until it opens."""
-    from conftest import shut
-
     ws = seeded(tmp_path)
     with shut(tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"), pytest.raises(PermissionError):
         ws.taken(ws.specs()[0])

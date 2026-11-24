@@ -196,15 +196,15 @@ def checked(
     files: Mapping[str, str],
     at: str,
     model: str | None = None,
-    judged: Sequence[Finding] | None = None,
 ) -> ChangeState:
-    """The state with a check recorded: the fingerprints of the files it read, how many findings block an approval,
-    and the model that judged, none where code alone did. A model's check counts the model's own, `judged`: what the
-    code finds every approval asks again, live, and counted here a fixed warning held the check as the model's, found
-    by the code review. A check by code alone records nothing over a model's that `model_holds` keeps."""
+    """The state with a check recorded: the fingerprints of the files it read, how many of `findings` block an
+    approval, and the model that judged, none where code alone did. A model's check is given the model's own findings
+    alone: what the code finds, every approval asks again, live. Found by the code review: counted with them, a
+    warning fixed since held the check as the model's. A check by code alone records nothing over a model's that
+    `model_holds` keeps."""
     if model is None and model_holds(state, files):
         return state
-    stopped = len(blocking(state, findings if model is None or judged is None else judged))
+    stopped = len(blocking(state, findings))
     return state.model_copy(update={"check": Checked(at=at, files=dict(files), blocking=stopped, model=model)})
 
 
@@ -256,14 +256,15 @@ def approval_checks_first(check: Sequence[Finding]) -> bool:
     """Whether an approval makes a change's check before it decides: `check` is what `check_blockers` gives, and
     the check is missing or stale. The one statement of that rule: the command asks it, and the next step follows
     it. A reason given with `--override` answers only a check a person was shown, so it is not applied where this
-    is true: the check it would answer is made in the same run."""
+    is true: the check it would answer is made in the same run, or, where a model's cannot be, the one shown before."""
     return any(owed.code in _MADE_BY_APPROVAL for owed in check)
 
 
 def check_stops(check: Sequence[Finding], *, override: bool = False) -> list[Finding]:
     """What of a change's check stops its approval: all that `check_blockers` gives, less a blocking finding where
     a person set it aside with `override`. A check never made, or made of other files, is not a finding to set
-    aside: an approval makes it first, as `approval_checks_first` says."""
+    aside: an approval makes it first, as `approval_checks_first` says, and only where a model's check that found
+    something blocking cannot be made again does a reason set that aside, said where the check is made."""
     return [owed for owed in check if not (override and owed.code == "check.blocking")]
 
 

@@ -315,3 +315,11 @@ def test_a_revision_whose_base_moved_holds_its_plan_and_names_the_step(tmp_path,
     assert "ERROR delta.base-stale .spec/changes/passkeys/specs/auth/spec.md" in out
     assert "next      fix what `adk-spec validate passkeys` lists" in out
     assert not any(TASKS_STAGE in str(r.config.system_instruction) for r in fake_provider.requests)
+
+
+def test_a_delta_that_is_no_utf8_text_is_named_once(tmp_path, capsys, fake_provider) -> None:
+    """Found by the cleanup review: a delta not read was both a delta's fault and a file not read, and said twice."""
+    seeded(tmp_path)
+    (tmp_path / DELTA).write_bytes(read_text(tmp_path / DELTA).encode("utf-16"))
+    assert revised(tmp_path) == 1 and fake_provider.requests == []
+    assert capsys.readouterr().out.count("ERROR file.unreadable .spec/changes/passkeys/specs/auth/spec.md") == 1

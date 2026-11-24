@@ -106,9 +106,12 @@ def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed:
     sides = lines_of_diff(diff)
     given: dict[str, VerdictDraft] = {}
     for one in draft.verdicts:
-        held = given.setdefault(one.id.strip(), one)
-        if held is not one and held.verdict == one.verdict:  # found by the code review: weighed on the first alone
-            given[one.id.strip()] = held.model_copy(update={"evidence": [*held.evidence, *one.evidence]})
+        req_id, held = one.id.strip(), given.get(one.id.strip())
+        if held is None:
+            given[req_id] = one
+        elif held.verdict == one.verdict:  # found by the code review: weighed on the first alone; each quote once
+            more = [piece for piece in one.evidence if piece not in held.evidence]
+            given[req_id] = held.model_copy(update={"evidence": [*held.evidence, *more]})
     verdicts = []
     for req_id in sorted(added | removed):
         one = given.get(req_id)

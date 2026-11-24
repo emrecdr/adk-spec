@@ -606,7 +606,9 @@ def _rebase(args: argparse.Namespace) -> int:
         print(f"{PROG}: `{args.id}` is archived already: nothing to rebase", file=sys.stderr)
         return EXIT_FINDINGS
     living = _living(workspace, f"`{args.id}` is not rebased")  # or every base on an unread spec would be dropped
-    if unread := _deltas_unread(loaded):  # found by the code review: a delta not read held no base, all dropped
+    if unread := [
+        held for held in loaded.problems if _of_a_delta(held)
+    ]:  # found by the code review: a delta not read held no base, all dropped
         _printed(_from_root(args.id, unread))
         raise NotYetError(f"`{args.id}` is not rebased: a delta does not read, and its bases would be dropped")
     held = capture_bases(loaded.change.deltas, living)
@@ -653,7 +655,7 @@ def _checked_first(
         return _check_made(workspace, change_id, living, assessed, no_model=False)
     except (UsageError, ContextTooLargeError) as exc:
         tier, held = assessed.state.tier, model_holds(assessed.state, assessed.seen)
-        if held and override and DEMANDS[tier].override:
+        if held and override:  # a tier that takes no reason refused one before this
             print(f"note      the check was not made again: {exc}. Your reason sets aside what the model's check found")
             return None
         # Found by the code review: `check --no-model` was named where it refuses, a model's finding standing.
@@ -664,24 +666,15 @@ def _checked_first(
         raise UsageError(f"{exc}. `approve` checks a {tier} change first: put that right, {way}") from exc
 
 
-def _made_first(
-    args: argparse.Namespace, workspace: Workspace, living: dict[str, Spec], assessed: Assessed
-) -> tuple[Assessed, bool] | int:
-    """The check an approval makes first, said: the assessment after it, and whether the person's reason set aside a
-    model's check that could not be made again; or the exit code, where the check did not finish."""
-    made = _checked_first(workspace, args.id, living, assessed, args.override)
-    if made is None:
-        return assessed, True
-    if made.failure:
-        return _unfinished(f"the check did not finish, and nothing was approved: {made.failure}", made.ledger)
-    stopped = blocking(assessed.state, made.findings)
+def _said_check(made: _Checked, state: ChangeState) -> None:
+    """The check an approval made, said: what blocks, how many findings, what was left out, what it cost."""
+    stopped = blocking(state, made.findings)
     _printed(stopped)
     count = len(made.findings)
     print(f"checked   {made.report}: {count} finding{'' if count == 1 else 's'}, {len(stopped)} blocking")
     if made.dropped:  # found by the fourth audit: said by `check` alone, never by the check `approve` makes
         print(f"note      {left_out(made.dropped)}")
     print(f"tokens    {_spent(made.ledger)}")
-    return _assessed(workspace, args.id, living), False
 
 
 def _refused(change_id: str, blockers: list[Finding]) -> int:
@@ -707,12 +700,14 @@ def _approve(args: argparse.Namespace) -> int:
     # What the files themselves block comes first: no model is asked about files that are going to change.
     if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
         return _refused(args.id, blockers)
-    first, aside = approval_checks_first(assessed.unchecked), False
-    if first:
-        after = _made_first(args, workspace, living, assessed)
-        if isinstance(after, int):
-            return after
-        assessed, aside = after
+    first = approval_checks_first(assessed.unchecked)
+    made = _checked_first(workspace, args.id, living, assessed, args.override) if first else None
+    if made is not None:
+        if made.failure:
+            return _unfinished(f"the check did not finish, and nothing was approved: {made.failure}", made.ledger)
+        _said_check(made, assessed.state)
+        assessed = _assessed(workspace, args.id, living)
+    aside = first and made is None  # a model's check that could not be made again, set aside by a reason
     # A reason sets aside only what a person was shown: a check recorded before this run, never one it made.
     if not aside and (blockers := check_stops(assessed.unchecked, override=bool(args.override) and not first)):
         if args.override and first:
@@ -1133,8 +1128,8 @@ def _plannable(
         if state.status == "approved":
             way = (
                 f'To change what it asks, run `{PROG} propose "<what changes>" --id {change_id}`; to add a task, write '
+                "it in tasks.md, then approve it again"
             )
-            way += "it in tasks.md, then approve it again"
         raise NotYetError(f"`{change_id}` is {state.status}: a plan is drafted while a change is a draft. {way}")
     started = _ticked(workspace, change)
     if started and not replace:  # work has begun on this list: it is not thrown away unasked
@@ -1460,7 +1455,8 @@ def _check_made(
     if model is None and model_holds(assessed.state, read):  # its report stands with it: found by the cleanup review
         return _Checked(every, "", dropped, ledger)
     path = workspace.write_report(change_id, "check.md", report)
-    workspace.save_state(checked(assessed.state, every, files=read, at=at, model=model, judged=judged))
+    counted = every if model is None else judged  # a model's check counts what the model found
+    workspace.save_state(checked(assessed.state, counted, files=read, at=at, model=model))
     return _Checked(every, workspace.shown(path), dropped, ledger)
 
 
@@ -1744,9 +1740,9 @@ def _tier_of(args: argparse.Namespace, change: Change | None) -> Tier | None:
     return args.tier
 
 
-def _deltas_unread(loaded: LoadedChange) -> list[Finding]:
-    """The faults of a change's deltas that did not read: a delta no command that writes the change knows of."""
-    return [held for held in loaded.problems if (held.path or "").startswith(f"{SPECS}/")]
+def _of_a_delta(held: Finding) -> bool:
+    """Whether a fault is of a change's delta: one that did not read is known to no command that writes the change."""
+    return (held.path or "").startswith(f"{SPECS}/")
 
 
 def _revising(workspace: Workspace, change_id: str | None) -> Change | None:
@@ -1758,7 +1754,7 @@ def _revising(workspace: Workspace, change_id: str | None) -> Change | None:
     change = loaded.change
     # Found by the fourth audit: a delta that did not read was unknown to the revision, which deleted it; and by the
     # code review, a file that would not open read as empty, and was written over.
-    if unread := [*_deltas_unread(loaded), *(held for held in loaded.problems if held.code == UNREAD)]:
+    if unread := [held for held in loaded.problems if _of_a_delta(held) or held.code == UNREAD]:
         _printed(_from_root(change_id, unread))
         raise NotYetError(
             f"`{change_id}` is not revised: a revision would write over a file that does not read. Fix it first"
