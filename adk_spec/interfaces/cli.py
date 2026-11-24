@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 from ..domain.brief_md import assumption_count, parse_brief, render_brief
-from ..domain.check import nameable, owed, removed
+from ..domain.check import nameable, owed, removed, tasked
 from ..domain.context_md import (
     PARTIAL,
     PROFILE_HEADING,
@@ -817,7 +817,7 @@ def _archive(args: argparse.Namespace) -> int:
         if any(held.code == "delta.base-stale" for held in refused):
             print(
                 f"{PROG}: the living spec changed after this delta was based on it: read the current requirement, "
-                f"update the delta, then run {PROG} rebase and approve again",
+                f"update the delta, then run `{PROG} rebase {args.id}` and approve again",
                 file=sys.stderr,
             )
         return EXIT_FINDINGS
@@ -967,18 +967,20 @@ def _spent(ledger: Any) -> str:
 def _propose(args: argparse.Namespace) -> int:
     _load_env()
     workspace = _workspace(args)
-    change = _revising(workspace, args.id)  # an open change that `--id` names is revised, not taken
-    if args.id and change is None:
-        workspace.free(args.id)  # a name that cannot be taken is refused before anything is spent
-    args.tier = _tier_of(args, change)  # decided once, here: the run starts at the brief where it is known
-    # Every role of the whole command, asked before anything is spent. A known tier is not asked of triage.
-    from ..orchestration.explore import ROLES as READING
-    from ..orchestration.models import require_ready
-
-    drafting = ("brief", "deltas", "design", "tasks", *(() if args.no_explore else READING))
-    if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
-        raise UsageError(why)
+    # The change is read under the lock: found by an outside audit, read before it, a command that ended in between
+    # was undone in silence by the revision's older copy.
     with lock_held(workspace):
+        change = _revising(workspace, args.id)  # an open change that `--id` names is revised, not taken
+        if args.id and change is None:
+            workspace.free(args.id)  # a name that cannot be taken is refused before anything is spent
+        args.tier = _tier_of(args, change)  # decided once, here: the run starts at the brief where it is known
+        # Every role of the whole command, asked before anything is spent. A known tier is not asked of triage.
+        from ..orchestration.explore import ROLES as READING
+        from ..orchestration.models import require_ready
+
+        drafting = ("brief", "deltas", "design", "tasks", *(() if args.no_explore else READING))
+        if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
+            raise UsageError(why)
         return _proposed(args, workspace, change)
 
 
@@ -1210,7 +1212,7 @@ def _plan_made(
     }
     if change.design and not drafts_design:  # a design a person wrote, or one the change does not owe
         seed[DESIGN_TEXT] = change.design.strip()
-    serves = {"owed": owed(change.deltas), "nameable": nameable(change.deltas, specs)}
+    serves = {"owed": tasked(change.deltas), "nameable": nameable(change.deltas, specs)}
     if ledger is None:  # one ceiling for the reading and the drafting: they are one command's
         ledger = UsageLedger(workspace.config().max_tokens or None)
     said, context = _read_code(workspace, change_id, seed, ledger, held) if explore else ("", None)

@@ -236,7 +236,8 @@ def test_the_fakes_default_tasks_serve_what_the_requests_deltas_owe() -> None:
     assert tasks_serving(shown(DELTA)) is CANNED_TASKS, "the sample change owes what the canned tasks name"
     other = "# Delta: billing-export\n\n## ADDED Requirements\n\n### REQ-BILLING-EXPORT-007: Export\n\n"
     other += "## MODIFIED Requirements\n\n### REQ-AUTH-002: Lock\n\n## REMOVED Requirements\n\n### REQ-AUTH-001: Old\n"
-    assert named(tasks_serving(shown(other))) == {"REQ-BILLING-EXPORT-007", "REQ-AUTH-002"}, "what is removed owes none"
+    owed = {"REQ-BILLING-EXPORT-007", "REQ-AUTH-002", "REQ-AUTH-001"}
+    assert named(tasks_serving(shown(other))) == owed, "what is removed is owed the task that takes it out"
     assert tasks_serving("no deltas are shown here") is CANNED_TASKS
 
 

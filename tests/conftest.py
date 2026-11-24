@@ -102,7 +102,7 @@ CANNED_TASKS = {
                 },
                 {
                     "description": "Implement the passkey handler",
-                    "requirements": ["REQ-AUTH-004", "REQ-AUTH-002"],
+                    "requirements": ["REQ-AUTH-004", "REQ-AUTH-002", "REQ-AUTH-001"],
                     "files": ["src/auth/passkey.py"],
                     "verify": "uv run pytest tests/test_passkey.py",
                     "parallel": False,
@@ -187,17 +187,15 @@ _OWED = re.compile(
 
 
 def tasks_serving(instruction: str) -> dict:
-    """The canned tasks, naming the requirements the deltas of `instruction` add or modify where those are not the
-    canned ones: a task list must serve what its change owes, and a change `propose` drafts owes IDs of its own."""
+    """The canned tasks, naming the requirements the deltas of `instruction` add, modify or remove where those are not
+    the canned ones: a task list must serve what its change owes, and a change `propose` drafts owes IDs of its own."""
     try:
         deltas = between(instruction, "deltas")
     except ValueError:
         return CANNED_TASKS
-    section, owed = "", []
-    for found in _OWED.finditer(deltas):
-        if found["section"]:
-            section = found["section"]
-        elif section != "REMOVED" and found["req"] not in owed:
+    owed: list[str] = []
+    for found in _OWED.finditer(deltas):  # a removed requirement is owed the task that takes its code out
+        if not found["section"] and found["req"] not in owed:
             owed.append(found["req"])
     named = {req for group in CANNED_TASKS["groups"] for task in group["tasks"] for req in task["requirements"]}
     if not owed or set(owed) == named:

@@ -42,7 +42,7 @@ def test_a_requirement_no_task_names_is_found() -> None:
 
 
 def test_a_task_naming_an_id_nothing_holds_is_found() -> None:
-    found = coverage(parse_tasks(TASKS), owed=frozenset(), nameable=frozenset({"REQ-AUTH-004"}))
+    found = coverage(parse_tasks(TASKS), owed=frozenset(), nameable=frozenset({"REQ-AUTH-004", "REQ-AUTH-001"}))
     assert [(f.code, f.severity) for f in found] == [("check.task-unknown-requirement", "ERROR")]
     assert "T002" in found[0].message and "REQ-AUTH-002" in found[0].message
 
@@ -539,3 +539,13 @@ def test_a_reason_sets_aside_a_models_finding_a_check_cannot_be_made_again_for(
     why = "the model is out of reach, and the contradiction is fixed"
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer", "--override", why) == 0
     assert state(ws).approval.override == why and "sets aside" in capsys.readouterr().out
+
+
+def test_a_requirement_the_change_removes_is_owed_a_task() -> None:
+    """Found by an outside audit, and the owner's choice: `verify` asks a removed requirement for the lines that took
+    it out, yet no task was owed to take them out, so the work could pass the plan and fail its verification."""
+    from adk_spec.domain.model import Change, ChangeState
+
+    tasks = parse_tasks(TASKS.replace("REQ-AUTH-001, ", "").replace(", REQ-AUTH-001", "").replace("[REQ-AUTH-001]", ""))
+    change = Change(state=ChangeState(id="passkeys", tier="lean"), brief=None, deltas=DELTAS, tasks=tasks)
+    assert [f.code for f in coverage_of(change, LIVING) if "REQ-AUTH-001" in f.message] == ["check.requirement-no-task"]

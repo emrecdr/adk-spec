@@ -163,7 +163,7 @@ def test_an_archive_writes_no_capability_when_one_refuses(tmp_path) -> None:
     ws.write_specs({"billing": parse_spec(SPEC.replace("# auth", "# billing").replace("REQ-AUTH", "REQ-BILLING"))})
     billing = DELTA.replace("# Delta: auth", "# Delta: billing").replace("REQ-AUTH", "REQ-BILLING")
     write_text(tmp_path / ".spec/changes/passkeys/specs/billing/spec.md", billing)
-    served = ("REQ-AUTH-004", "REQ-AUTH-002", "REQ-BILLING-004", "REQ-BILLING-002")
+    served = ("REQ-AUTH-004", "REQ-AUTH-002", "REQ-AUTH-001", "REQ-BILLING-004", "REQ-BILLING-002", "REQ-BILLING-001")
     write_text(tmp_path / ".spec/changes/passkeys/tasks.md", tasks_for(*served))
     approved(tmp_path)
     spec = tmp_path / ".spec/specs/billing/spec.md"
@@ -234,7 +234,7 @@ def test_an_archive_that_cannot_write_one_file_changes_none_and_says_so(tmp_path
     ws.write_specs({"billing": parse_spec(SPEC.replace("# auth", "# billing").replace("REQ-AUTH", "REQ-BILLING"))})
     billing = DELTA.replace("# Delta: auth", "# Delta: billing").replace("REQ-AUTH", "REQ-BILLING")
     write_text(tmp_path / ".spec/changes/passkeys/specs/billing/spec.md", billing)
-    served = ("REQ-AUTH-004", "REQ-AUTH-002", "REQ-BILLING-004", "REQ-BILLING-002")
+    served = ("REQ-AUTH-004", "REQ-AUTH-002", "REQ-AUTH-001", "REQ-BILLING-004", "REQ-BILLING-002", "REQ-BILLING-001")
     write_text(tmp_path / ".spec/changes/passkeys/tasks.md", tasks_for(*served))
     approved(tmp_path)
     before = (living_bytes(tmp_path), living_bytes(tmp_path, "billing"), state_of(tmp_path))

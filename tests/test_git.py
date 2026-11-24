@@ -70,6 +70,12 @@ def test_the_works_fingerprint_is_the_same_once_a_crlf_file_is_committed_as_it_i
     assert sha256_of(diffs(tmp_path, base, exclude=())[1]) == sha256_of(before)
 
 
+def test_a_spec_folder_spelled_in_another_case_is_left_out_as_spec_is(tmp_path) -> None:
+    """Found by an outside audit: `.Spec/`, renamed so on a system that reads it as `.spec/`, was listed as code."""
+    repository(tmp_path, {".Spec/config.toml": "x = 1\n", "src/a.py": "a = 1\n"})
+    assert files(tmp_path, exclude=()) == ["src/a.py"]
+
+
 def test_a_diff_of_a_subfolder_names_paths_from_that_folder(tmp_path) -> None:
     base = repository(tmp_path, {"service/src/app.py": "a = 1\n", "other/x.py": "x = 1\n"})
     (tmp_path / "service/src/app.py").write_text("a = 2\n", encoding="utf-8")

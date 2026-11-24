@@ -31,7 +31,8 @@ Say each thing once, and nothing the statements kept so far already say.
 Where something that matters is not in what you were shown, ask for it: a file by its path, a folder to list, or a
 word to search for. Ask only for what would change a statement. Empty lists are a good answer.
 Where it turns on how an installed library behaves, ask for the library's file, python:<path> or node:<path>, its path
-inside the environment as the list of libraries shows, or for the library to list its files."""
+inside the environment as the list of libraries shows, or for python:<name> or node:<name> as a folder, to list the
+library's files."""
 
 
 def build_survey() -> LlmAgent:

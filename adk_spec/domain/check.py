@@ -21,6 +21,13 @@ def owed(deltas: Mapping[str, Delta]) -> frozenset[str]:
     return frozenset(req.id for delta in deltas.values() for req in (*delta.added, *delta.modified))
 
 
+def tasked(deltas: Mapping[str, Delta]) -> frozenset[str]:
+    """Every requirement a change's task list owes a task: what it adds or modifies, and what it removes, whose code
+    a task takes out. Found by an outside audit, the owner's choice: `verify` asks a removed requirement for the
+    lines that took it out, and no task was owed to take them out."""
+    return owed(deltas) | removed(deltas)
+
+
 def removed(deltas: Mapping[str, Delta]) -> frozenset[str]:
     """Every requirement a change removes."""
     return frozenset(gone.id for delta in deltas.values() for gone in delta.removed)
@@ -61,5 +68,5 @@ def coverage_of(change: Change, living: Mapping[str, Spec]) -> list[Finding]:
     groups = change.tasks or ()
     if not any(group.tasks for group in groups):
         return []
-    found = coverage(groups, owed=owed(change.deltas), nameable=nameable(change.deltas, living))
+    found = coverage(groups, owed=tasked(change.deltas), nameable=nameable(change.deltas, living))
     return [held.model_copy(update={"path": TASKS_FILE}) for held in found]

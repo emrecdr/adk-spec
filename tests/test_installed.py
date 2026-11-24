@@ -255,3 +255,15 @@ def test_a_pattern_in_capitals_keeps_a_librarys_files_out_as_it_keeps_the_reposi
     assert "leftpad" not in source.tree() and "react 19.2.0" in source.tree()
     (found,) = environments(root, exclude=("*.PEM",))
     assert "leftpad/KEY.PEM" not in found.paths and "leftpad/index.js" in found.paths
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a link needs a privilege on Windows that a test run does not hold")
+@pytest.mark.parametrize("linked", ["lib", "lib/python3.14"])
+def test_an_environment_reached_through_a_linked_folder_is_not_read(tmp_path, linked) -> None:
+    """Found by an outside audit: a `.venv/lib` linked out of the repository was read as its own environment."""
+    root = _repository(tmp_path / "repository")
+    python_environment(tmp_path / "elsewhere")
+    link = root / ".venv" / linked
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(tmp_path / "elsewhere" / ".venv" / linked, target_is_directory=True)
+    assert environments(root) == []

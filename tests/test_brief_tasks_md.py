@@ -45,7 +45,7 @@ def test_parse_reads_each_tasks_fields() -> None:
     one, two, three = group.tasks
     assert group.title == "1. Passkey sign-in"
     assert (one.id, one.done, one.parallel, one.requirements) == ("T001", False, False, ("REQ-AUTH-004",))
-    assert (two.done, two.parallel, two.requirements) == (True, True, ("REQ-AUTH-004", "REQ-AUTH-002"))
+    assert (two.done, two.parallel, two.requirements) == (True, True, ("REQ-AUTH-004", "REQ-AUTH-002", "REQ-AUTH-001"))
     assert two.files == ("src/auth/passkey.py", "src/auth/lockout.py")
     assert one.verify == "uv run pytest tests/test_passkey.py" and one.description.startswith("Write the failing")
     assert (three.requirements, three.files, three.verify) == ((), (), "read the page")
@@ -112,3 +112,22 @@ def test_a_task_whose_description_opens_with_a_bracket_reads_back_as_written() -
         task = Task(id="T001", done=False, parallel=parallel, requirements=(), description="[Setup] create it")
         groups = (TaskGroup(title="Setup", tasks=(task,)),)
         assert parse_tasks(render_tasks(groups)) == groups
+
+
+@pytest.mark.parametrize(
+    ("text", "count"),
+    [
+        ("None.", 0),
+        ("No assumptions.", 0),
+        ("- one\n- two\n- three", 3),
+        ("* one\n* two", 2),
+        ("1. First.\n2. Second.", 2),
+        ("Node 20. Python 3.14 is used.", 2),
+    ],
+)
+def test_assumptions_are_counted_as_a_list_counts_them_or_by_sentence(text: str, count: int) -> None:
+    """Found by an outside audit: a list's items without full stops were one, "None." was one, and a numbered list
+    counted its numbers as sentences."""
+    from adk_spec.domain.brief_md import assumption_count
+
+    assert assumption_count(text) == count

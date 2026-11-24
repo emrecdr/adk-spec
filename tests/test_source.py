@@ -523,3 +523,18 @@ def test_a_changed_file_past_the_search_cap_is_withheld_only_where_it_holds_key_
     path.write_text(path.read_text(encoding="utf-8").replace("MIIEow3", "MIINew3"), encoding="utf-8", newline="\n")
     kept, withheld = Source.of(tmp_path, exclude=()).without_keys(diff(tmp_path, commit, exclude=()))
     assert withheld == ("conf/big.txt",) and "data/big.csv" in kept
+
+
+def test_the_whole_repository_listed_holds_none_of_its_libraries(tmp_path) -> None:
+    """Found by an outside audit: `.` listed the installed libraries' files with the repository's, and a stage paid
+    for them. A library is listed by its own name, which the stage is told."""
+    from conftest import python_environment
+
+    from adk_spec.workspace.installed import environments
+    from adk_spec.workspace.source import _libraries_shown
+
+    repository(tmp_path, {".gitignore": ".venv/\n", "app.py": "a = 1\n"})
+    python_environment(tmp_path)
+    got = Source.of(tmp_path, exclude=(), installed=True).gathered([], ["."], [])
+    assert "app.py" in got.shown and "python:" not in got.shown
+    assert "python:<name>" in _libraries_shown(environments(tmp_path))

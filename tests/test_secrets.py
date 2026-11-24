@@ -252,3 +252,22 @@ def test_code_after_a_header_only_named_keeps_its_comment_lines() -> None:
     for text, kept in ((named, ("#endif", "// TODO", " */", "# noqa")), (bare, ("+#\n", "+// ", "+ *", "+x = 1"))):
         for scrubbed, _count in (scrub(text), scrub_lines(text)):
             assert all(line in scrubbed for line in kept), scrubbed
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "//registry.npmjs.org/:_authToken=0b1c2d3e-4f5a-" + "6b7c-8d9e-0f1a2b3c4d5e",
+        "//npm.example.com/:_auth=dXNlcjpwYXNzMTIzNDU2Nzg=",
+        "//pkgs.dev.azure.com/org/_packaging/feed/npm/registry/:_password=cGFzczEyMzQ1Njc4OTA=",
+    ],
+)
+def test_an_npmrc_registry_credential_is_hidden(secret: str) -> None:
+    """Found by an outside audit: a registry line of `.npmrc` matched no shape, and a tracked one reached a model."""
+    hidden, count = scrub(f"+{secret}\n")
+    assert count == 1 and secret.split("=", 1)[1] not in hidden and "[REDACTED]" in hidden
+
+
+def test_an_npmrc_line_that_names_a_variable_is_kept() -> None:
+    line = "//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n"
+    assert scrub(line) == (line, 0)

@@ -59,7 +59,7 @@ def _fake_arm(monkeypatch) -> None:
 def unticked(root):
     """The seeded change, with no task ticked: one a revision may plan again."""
     ws = seeded(root)
-    write_text(root / TASKS, tasks_for("REQ-AUTH-004", "REQ-AUTH-002"))
+    write_text(root / TASKS, tasks_for("REQ-AUTH-004", "REQ-AUTH-002", "REQ-AUTH-001"))
     return ws
 
 
@@ -335,3 +335,20 @@ def test_an_approved_change_revised_as_it_stands_names_no_plan_that_refuses(tmp_
     assert run(tmp_path, "propose", "Keep it as it is.", "--id", "fresh", "--no-input") == 0
     (kept,) = [line for line in capsys.readouterr().out.splitlines() if line.startswith("kept ")]
     assert "adk-spec plan" not in kept and "approve" in kept
+
+
+def test_a_revision_reads_the_change_under_the_lock(tmp_path, monkeypatch, fake_provider) -> None:
+    """Found by an outside audit: the change was read before the lock was taken, and a command finishing in between
+    was undone in silence by the revision's older copy."""
+    from adk_spec.interfaces import cli
+    from adk_spec.workspace.lock import LOCK
+
+    ws = seeded(tmp_path)
+    reading = cli._revising
+
+    def held(workspace, change_id):
+        assert (ws.home / LOCK).is_file(), "the change was read before the lock was taken"
+        return reading(workspace, change_id)
+
+    monkeypatch.setattr(cli, "_revising", held)
+    assert revised(tmp_path) == 0 and fake_provider.requests

@@ -447,6 +447,14 @@ and a step moves to code only where its output is a function of its input with n
   are the model's own, `model_blocking` in `change.json`, and only that holds a check by code alone back: a check an
   older adk-spec recorded, which counted the code's findings in, holds only while its files stand, as it did. The
   field is written only where a model judged, so an older adk-spec still reads every change checked by code alone.
+  An outside audit's report of 24 November 2026 was then checked against the branch, finding by finding: confirmed
+  and fixed, a registry credential in `.npmrc` scrubbed; `propose --id` reading the change under the lock; a `.venv`
+  whose `lib` is a link read as no environment; `.spec/` and the skill left out in any case; the `rebase` and
+  `approve` steps naming their change; `.` listing the repository's files without its libraries; the assumptions
+  counted as a list counts them; a lock left by a machine whose name holds a space taken over; and, the owner's
+  choice, a requirement a change removes owed the task that takes its code out. Refuted or decided before, with the
+  reasons checked: CRLF drift, the cost of `status`, the armour checksum, the inline key header, splitting `cli.py`,
+  the lock's marker and its hold while asking, and exit 1 as a failed call.
   The tools compared (OpenSpec 2.1, Spec Kit 1.4, Kiro, Tessl, BMAD 6.12, GSD, Traycer) suggest features that are
   the owner's to choose, recommended in this order: a diff of what each MODIFIED requirement changes, for the
   approver, in code alone; `verify` judging the work against the constitution as well, measured first; a tier raised

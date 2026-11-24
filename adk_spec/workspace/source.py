@@ -268,7 +268,7 @@ def _libraries_shown(installed: Sequence[Environment]) -> str:
     one. A library a distribution names apart from its import, as PyYAML's `yaml`, says the import too."""
     lines = [
         "=== installed libraries, read offline: name a file as python:<path> or node:<path>, its path inside the "
-        "environment as the example shows, or a library to list it"
+        "environment as the example shows, and a folder as python:<name> or node:<name> to list a library"
     ]
     for one in installed:
         named = []
@@ -372,7 +372,8 @@ class Source:
             one.scheme: _Repository(one.scheme, one.root, one.paths, (), scheme=one.scheme) for one in installed
         }
         #: Every path a stage may name: this repository's, then each other's under its name, then each library's.
-        self.paths = [one.full(path) for one in (*repositories, *self._libraries.values()) for path in one.paths]
+        self._own = [one.full(path) for one in repositories for path in one.paths]
+        self.paths = [*self._own, *(one.full(path) for one in self._libraries.values() for path in one.paths)]
         self._listed = frozenset(self.paths)
         #: The other repositories that were read, and a line for each one that was not.
         self.names = tuple(self._others)
@@ -567,7 +568,9 @@ class Source:
     def _folder(self, asked: str, got: _Round) -> None:
         folder = self._canonical(asked.strip()).strip("/")
         whole = folder in ("", ".")
-        under = self.paths if whole else [path for path in self.paths if path.startswith(f"{folder}/")]
+        # The repository's own files alone where it is listed whole: found by an outside audit, `.` listed the
+        # installed libraries' too. A library is listed by its own name.
+        under = self._own if whole else [path for path in self.paths if path.startswith(f"{folder}/")]
         if not under:
             got.left_out.append(f"{_named(asked, '(no folder)')}/: git lists nothing under it")
             return

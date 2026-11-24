@@ -348,6 +348,17 @@ _GENERIC = (
         ),
         r"\1[REDACTED]",
     ),
+    (
+        # An `.npmrc` registry's credential, `//host/path/:_authToken=`, `_auth=` or `_password=`, holding a digit.
+        # Not the reference project's: found by an outside audit, a tracked `.npmrc` matched no shape.
+        "generic_secret",
+        re.compile(
+            r"(?im)^([+ -]?[^\S\n]*//[^\s=]{1,200}?:_(?:authToken|auth|password)[^\S\n]*=[^\S\n]*)(?=[^\s#]*\d)"
+            + _STAND_IN
+            + r"([^\s\"'#]{8,})"
+        ),
+        r"\1[REDACTED]",
+    ),
     ("generic_secret", _QUERY_SECRET, r"\1[REDACTED]"),  # a URL's query parameter, `?api_key=...`, holding a digit
     ("generic_secret", _HEADER, r"\1[REDACTED]"),  # an authorization header's token, holding a digit
 )
