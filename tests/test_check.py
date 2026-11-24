@@ -344,6 +344,18 @@ def test_a_check_by_code_alone_after_an_edit_does_not_clear_what_a_model_found(t
     assert len(fake_provider.requests) > asked, "the approval asked the model again"
 
 
+def test_a_check_by_code_alone_leaves_the_report_of_the_model_it_does_not_replace(tmp_path, fake_provider) -> None:
+    """Found by the cleanup review: with an error in the files, `check` ran by code alone, kept the model's record,
+    and wrote its own report over the model's, which then no longer listed what blocked."""
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    before = read_text(tmp_path / REPORT)
+    write_text(tmp_path / ".spec/changes/passkeys/tasks.md", "# Tasks\n\nNot a task.\n")
+    assert run(tmp_path, "check", "passkeys") == 1
+    assert read_text(tmp_path / REPORT) == before and state(ws).check.model == "fake on gemini"
+
+
 def test_a_living_spec_that_does_not_read_makes_no_task_a_stranger(tmp_path, capsys) -> None:
     """Found by the code review: with another capability's spec unreadable, a task that rightly named one of its
     requirements was said to name a requirement no living spec holds."""

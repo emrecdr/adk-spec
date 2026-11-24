@@ -32,12 +32,9 @@ def _known() -> tuple[Known, dict[str, str]]:
     try:
         workspace = Workspace.find(Path.cwd())
     except WorkspaceError:
-        return Known(living={}, taken=frozenset()), {
-            CAPABILITIES: "",
-            CONSTITUTION: "",
-            LESSONS_TEXT: "",
-            PROFILE_TEXT: "",
-        }
+        return Known(living={}, taken=frozenset()), dict.fromkeys(
+            (CAPABILITIES, CONSTITUTION, LESSONS_TEXT, PROFILE_TEXT), ""
+        )
     specs, _problems = workspace.specs()
     told = {
         CAPABILITIES: capability_index(specs),

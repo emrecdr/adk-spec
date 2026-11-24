@@ -9,7 +9,7 @@ import pytest
 from conftest import _git, repository
 
 from adk_spec.workspace import git as layer
-from adk_spec.workspace.git import GitError, diff, files, git, head, is_repository, on_path, resolves
+from adk_spec.workspace.git import GitError, diff, diffs, files, git, head, is_repository, on_path, resolves
 
 
 def changed(root) -> None:
@@ -39,20 +39,21 @@ def test_a_file_git_does_not_track_yet_reads_as_added(tmp_path) -> None:
     )
 
 
-def test_the_diff_of_the_work_is_the_same_once_it_is_added_or_committed(tmp_path) -> None:
+def test_the_works_fingerprint_text_is_the_same_once_it_is_added_or_committed(tmp_path) -> None:
     """Found by the fourth audit: a new file read as untracked came after every tracked one, and a moved file as a
     deletion and an addition until it was added, then as a rename. The work's fingerprint moved with git's index,
-    so a change verified and then committed read as drifted, and `archive` refused it."""
+    so a change verified and then committed read as drifted, and `archive` refused it. The diff a stage is shown
+    keeps a move short: shown whole, a refactor that moved files was past what `verify` is given."""
     base = repository(tmp_path, {"z.py": "x = 1\n", "old.py": "def f():\n    return 1\n"})
     (tmp_path / "z.py").write_text("x = 2\n", encoding="utf-8")
     (tmp_path / "a.py").write_text("y = 1\n", encoding="utf-8")
     (tmp_path / "old.py").rename(tmp_path / "moved.py")
-    before = diff(tmp_path, base, exclude=())
+    _shown, before = diffs(tmp_path, base, exclude=())
     _git(tmp_path, "add", "-A")
-    assert diff(tmp_path, base, exclude=()) == before
+    shown, staged = diffs(tmp_path, base, exclude=())
+    assert staged == before and "rename from old.py" in shown and "+def f():" not in shown
     _git(tmp_path, "commit", "-q", "-m", "the work")
-    assert diff(tmp_path, base, exclude=()) == before
-    assert "+def f():" in before and "-def f():" in before, "a moved file shows what it holds"
+    assert diffs(tmp_path, base, exclude=())[1] == before
 
 
 def test_a_diff_of_a_subfolder_names_paths_from_that_folder(tmp_path) -> None:
@@ -172,8 +173,6 @@ def test_a_refusal_of_gits_that_is_no_missing_repository_is_said_and_never_read_
 
 
 def test_a_repositorys_own_diff_settings_change_no_path(tmp_path) -> None:
-    from conftest import _git
-
     base = repository(tmp_path)
     _git(tmp_path, "config", "diff.noprefix", "true")
     _git(tmp_path, "config", "diff.mnemonicPrefix", "true")
@@ -231,7 +230,7 @@ def test_a_diff_names_its_paths_under_a_prefix(tmp_path) -> None:
     (tmp_path / "src/new.py").write_text("y = 1\n", encoding="utf-8")
     text = diff(tmp_path, base, exclude=(), prefix="api/")
     assert "diff --git a/api/src/app.py b/api/src/app.py" in text and "+++ b/api/src/new.py" in text
-    assert lines_of_diff(text)["api/src/app.py"] == (["x = 2"], ["x = 1"])
+    assert lines_of_diff(text)["api/src/app.py"] == ([["x = 2"]], [["x = 1"]])
 
 
 def test_another_repository_is_given_no_trust_of_its_own(tmp_path, monkeypatch) -> None:

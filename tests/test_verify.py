@@ -84,12 +84,12 @@ def verdicts(**changed) -> dict:
 
 def test_a_diff_is_read_as_the_lines_it_adds_and_removes_by_file() -> None:
     read_ = lines_of_diff(DIFF)
-    assert read_["src/auth.py"] == (  # two runs apart, with a line no quote holds between them
-        ["    return passkey(user)", "\x00", "    return account.failures >= 3"],
-        ["    return password(user)", "\x00", "    return account.failures >= 5"],
+    assert read_["src/auth.py"] == (  # two runs, a line both sides hold between them
+        [["    return passkey(user)"], ["    return account.failures >= 3"]],
+        [["    return password(user)"], ["    return account.failures >= 5"]],
     )
-    assert read_["src/old.py"] == ([], ["LEGACY = True"]), "a deleted file is known by the name it had"
-    assert read_["src/new.py"] == (["+++ b/not/a/header", "NEW = True"], []), "a line of content is no header"
+    assert read_["src/old.py"] == ([], [["LEGACY = True"]]), "a deleted file is known by the name it had"
+    assert read_["src/new.py"] == ([["+++ b/not/a/header", "NEW = True"]], []), "a line of content is no header"
 
 
 def test_a_diff_is_split_by_file_and_is_whole_again_when_put_together() -> None:

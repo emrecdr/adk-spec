@@ -131,7 +131,7 @@ def tree_text(paths: Sequence[str]) -> str:
     deep, folders = "two levels", _folders(paths, 2)
     if len(folders) > TREE_MAX_PATHS:  # found by the fourth audit: a monorepo's folders were as many as its files
         deep, folders = "one level", _folders(paths, 1)
-    kept = sorted(sorted(folders.items(), key=lambda held: -held[1])[:TREE_MAX_PATHS])  # the largest, by name
+    kept = sorted(folders.most_common(TREE_MAX_PATHS))  # the largest, by name
     lines = [f"{len(paths):,} files: too many to list. Each folder, {deep} deep, with the files under it:"]
     lines += [f"{folder}/ ({count:,} file{'' if count == 1 else 's'})" for folder, count in kept]
     if more := len(folders) - len(kept):

@@ -90,7 +90,10 @@ def test_a_strict_propose_stops_after_the_brief_and_the_specs(tmp_path, capsys, 
     assert not (folder / "tasks.md").exists() and not (folder / "design.md").exists()
     assert asked(fake_provider, TASKS) == 0 and asked(fake_provider, DESIGN) == 0
     out = capsys.readouterr().out
-    assert "plan      waits: a strict change is read first" in out and "run `adk-spec plan ledger`" in out
+    assert "plan      waits: the change is read before it is planned" in out
+    # Found by the cleanup review: the sentence was said twice, and the `next` line dropped the command's flags.
+    assert "next      read brief.md and the specs, then run `adk-spec plan ledger" in out
+    assert out.count("read brief.md and the specs") == 1
 
 
 def test_plan_goes_on_after_the_stop_and_drafts_a_design(tmp_path, fake_provider) -> None:
@@ -209,7 +212,7 @@ def test_the_stop_names_plan_with_no_explore_where_the_person_gave_it(tmp_path, 
     seeded(tmp_path)
     capsys.readouterr()
     assert strict_proposed(tmp_path) == 0
-    assert "then `adk-spec plan ledger --no-explore`" in capsys.readouterr().out
+    assert "then run `adk-spec plan ledger --no-explore`" in capsys.readouterr().out
 
 
 def test_approving_again_a_strict_change_two_names_approved_changes_nothing(tmp_path, capsys, fake_provider) -> None:
@@ -282,4 +285,4 @@ def test_a_strict_revision_with_a_ticked_task_names_the_plan_that_goes_on(tmp_pa
     write_text(tasks, read_text(tasks).replace("- [ ]", "- [x]", 1))
     capsys.readouterr()
     assert run(tmp_path, "propose", "Also keep the old invoice numbers.", "--id", "ledger", "--no-input") == 0
-    assert "then `adk-spec plan ledger --replace --no-explore`" in capsys.readouterr().out
+    assert "then run `adk-spec plan ledger --replace --no-explore`" in capsys.readouterr().out

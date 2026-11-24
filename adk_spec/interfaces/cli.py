@@ -52,6 +52,7 @@ from ..domain.lifecycle import (
     checked,
     edited_drafts,
     first_of_two,
+    kept_bases,
     missing_bases,
     model_holds,
     next_step,
@@ -108,7 +109,7 @@ from ..workspace.paths import PathError
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
 from ..workspace.skill import SKILL_PARTS, write_skill
-from ..workspace.source import NAME, Source, SourceError, repositories_named
+from ..workspace.source import NAME, Source, SourceError, Work, repositories_named
 from ..workspace.tests import run_tests
 
 EXIT_OK = 0
@@ -485,9 +486,19 @@ def _drifted(workspace: Workspace, state: ChangeState) -> bool:
     if state.status != "verified" or held is None:
         return False
     try:
-        return sha256_of(_sources(workspace, state.repositories).work(held.base, held.bases)[0]) != held.diff
+        return _sources(workspace, state.repositories).work(held.base, held.bases).fingerprint != held.diff
     except GitError, SourceError:  # a repository gone, or no longer readable beside this one: not what was judged
         return True
+
+
+def _living(workspace: Workspace, refused: str) -> dict[str, Spec]:
+    """The living specs, every one of which reads. `NotYetError` where one does not, its faults printed first: a spec
+    that does not read would pass for a capability not yet there, and which requirements exist would be unknown."""
+    living, unread = workspace.specs()
+    if unread:
+        _printed(unread)
+        raise NotYetError(f"{refused}: a living spec does not read. Fix it first")
+    return living
 
 
 def _say_next(workspace: Workspace, change_id: str, living: dict[str, Spec], *, drift: bool = True) -> None:
@@ -585,11 +596,7 @@ def _rebase(args: argparse.Namespace) -> int:
     if state.status == "archived":
         print(f"{PROG}: `{args.id}` is archived already: nothing to rebase", file=sys.stderr)
         return EXIT_FINDINGS
-    living, of_specs = workspace.specs()
-    if of_specs:  # a spec that does not read would pass for one not there, and every base on it would be dropped
-        _printed(of_specs)
-        print(f"{PROG}: `{args.id}` is not rebased: a living spec does not read. Fix it first", file=sys.stderr)
-        return EXIT_FINDINGS
+    living = _living(workspace, f"`{args.id}` is not rebased")  # or every base on an unread spec would be dropped
     held = capture_bases(workspace.load_change(args.id).change.deltas, living)
     for req_id in sorted(held):
         was = state.bases.get(req_id)
@@ -648,10 +655,7 @@ def _approve(args: argparse.Namespace) -> int:
     """An approval, with what it needs done first: a base recorded where one is missing, and the check made where
     none is current. A person decides once; the tool's own work is no step of theirs."""
     workspace = _workspace(args)
-    living, of_specs = workspace.specs()
-    if of_specs:  # the code's check of coverage steps aside while a living spec is unread: nothing is approved so
-        _printed(of_specs)
-        raise NotYetError(f"`{args.id}` is not approved: a living spec does not read. Fix it first")
+    living = _living(workspace, f"`{args.id}` is not approved")  # coverage is unknown while a spec is unread
     _based(workspace, args.id, living)
     assessed = _assessed(workspace, args.id, living)
     demands = DEMANDS[assessed.state.tier]
@@ -1414,18 +1418,17 @@ def _check_made(
     report = render_check(
         change_id, at, _inside(change_id, every), model=model, dropped=dropped, warnings_block=warnings_block
     )
-    path = workspace.write_report(change_id, "check.md", report)
     read = {**approval_files(texts), **_beside(workspace, assessed.loaded.change, specs)}
+    if model is None and model_holds(assessed.state, read):  # its report stands with it: found by the cleanup review
+        return _Checked(every, "", dropped, ledger)
+    path = workspace.write_report(change_id, "check.md", report)
     workspace.save_state(checked(assessed.state, every, files=read, at=at, model=model))
     return _Checked(every, workspace.shown(path), dropped, ledger)
 
 
 def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
     """The `check` command: the check made, and what it found said."""
-    specs, of_specs = workspace.specs()
-    if of_specs:  # which requirements exist is unknown while a living spec is unread: coverage cannot be checked
-        _printed(of_specs)
-        raise NotYetError(f"`{args.id}` is not checked: a living spec does not read. Fix it first")
+    specs = _living(workspace, f"`{args.id}` is not checked")  # coverage is unknown while a spec is unread
     assessed = _assessed(workspace, args.id, specs)
     if assessed.state.status == "archived":
         raise NotYetError(f"`{args.id}` is archived: there is nothing left to check")
@@ -1446,7 +1449,8 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
     if made.failure:
         return _unfinished(f"the check did not finish, and nothing was recorded: {made.failure}", made.ledger)
     _printed(made.findings)
-    print(f"wrote     {made.report}")
+    if made.report:  # none where a model's check stands, with its report
+        print(f"wrote     {made.report}")
     if made.dropped:
         print(f"note      {left_out(made.dropped)}")
     if made.ledger is not None:
@@ -1536,10 +1540,10 @@ def _starts(named: Mapping[str, str], source: Source, state: ChangeState) -> dic
 
 def _work(
     args: argparse.Namespace, workspace: Workspace, state: ChangeState, source: Source
-) -> tuple[str, dict[str, str], str, tuple[str, ...]]:
-    """The commit a change's work is compared with here and in each other repository it names, the diff from them
-    to the working trees as a stage may be shown it, and the files left out of that diff for holding a private key.
-    `UsageError` where there is nothing to compare with; `NotYetError` where nothing was done that can be shown."""
+) -> tuple[str, dict[str, str], Work]:
+    """The commit a change's work is compared with here and in each other repository it names, and the work since
+    them. `UsageError` where there is nothing to compare with; `NotYetError` where nothing was done that can be
+    shown."""
     cid, root = state.id, workspace.root
     if not is_repository(root):
         raise UsageError(f"{root} is in no git repository: verify reads what changed since the approval")
@@ -1554,16 +1558,16 @@ def _work(
         raise UsageError(f"`{named}` names no commit in this repository")
     bases = _starts(others, source, state)
     # A file that holds a private key is no part of the work a model is shown, as an excluded path is none.
-    text, held = source.work(base, bases)
-    if not text.strip():
-        beside = f"{_key_files(held, ' ')}, and nothing else" if held else "nothing"
+    work = source.work(base, bases)
+    if not work.text.strip():
+        beside = f"{_key_files(work.held, ' ')}, and nothing else" if work.held else "nothing"
         raise NotYetError(f"{beside} under {root} changed since {base[:12]}: there is nothing to verify")
-    if len(text) > DIFF_MAX_CHARS:
+    if len(work.text) > DIFF_MAX_CHARS:
         raise UsageError(
-            f"the diff since {base[:12]} holds {len(text):,} characters, past the {DIFF_MAX_CHARS:,} a stage is "
-            "given. It is never cut. Verify a smaller change, or name a later commit with --base"
+            f"the diff since {base[:12]} holds {len(work.text):,} characters, past the {DIFF_MAX_CHARS:,} a stage "
+            "is given. It is never cut. Verify a smaller change, or name a later commit with --base"
         )
-    return base, bases, text, held
+    return base, bases, work
 
 
 def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
@@ -1571,7 +1575,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     verification recorded; the change is `verified` where every requirement is shown met, or a person says so
     with a reason."""
     specs, _of_living = workspace.specs()
-    assessed = _assessed(workspace, args.id, specs)
+    assessed = _assessed(workspace, args.id, specs, drift=False)  # the work is diffed below, once
     change, state = assessed.loaded.change, assessed.state
     if why := verify_blockers(state, assessed.stale):
         raise NotYetError(why[0])
@@ -1581,13 +1585,13 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
 
         if why := require_ready(roles=("verify",)):
             raise UsageError(why)
-    runs, base, bases, text = _tested_work(args, workspace, state)
+    runs, base, bases, work = _tested_work(args, workspace, state)
     verdicts: list[Verdict] = []
     ledger, model = None, None
     if added or gone:  # a change with no delta has no requirement to judge
         from ..orchestration.models import serving
 
-        verdicts, ledger, failure = _verdicts(workspace, change, text, added, gone, render_tests(runs))
+        verdicts, ledger, failure = _verdicts(workspace, change, work.text, added, gone, render_tests(runs))
         if failure:
             return _unfinished(f"the verification did not finish, and nothing was recorded: {failure}", ledger)
         model = serving("verify")
@@ -1595,7 +1599,15 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     said = {one.id: one.verdict for one in verdicts}
     ran = {run.name or ".": run.outcome for run in runs}
     after = verified(
-        state, said, base=base, diff=sha256_of(text), at=at, model=model, override=args.override, bases=bases, tests=ran
+        state,
+        said,
+        base=base,
+        diff=work.fingerprint,
+        at=at,
+        model=model,
+        override=args.override,
+        bases=bases,
+        tests=ran,
     )
     reason = after.verification.override if after.verification else None
     report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases, tests=runs)
@@ -1612,23 +1624,23 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
 
 def _tested_work(
     args: argparse.Namespace, workspace: Workspace, state: ChangeState
-) -> tuple[list[TestRun], str, dict[str, str], str]:
+) -> tuple[list[TestRun], str, dict[str, str], Work]:
     """The work a verification judges, and the runs of the tests before it: refused first where there is nothing
     to judge, then the tests, then the work read again, as it stands after them. A run may write to the work, a
     lock file say: judged and fingerprinted before it, the change would drift the moment it is verified."""
     source = _sources(workspace, state.repositories)
-    base, bases, text, held = _work(args, workspace, state, source)
+    base, bases, work = _work(args, workspace, state, source)
     for name, commit in bases.items():
         print(f"with      {name} from {state.repositories[name]}, since {commit[:12]}")
     runs = _tested(workspace, source)
     if runs:
-        judged = text
-        base, bases, text, held = _work(args, workspace, state, _sources(workspace, state.repositories))
-        if text != judged:
+        judged = work.text
+        base, bases, work = _work(args, workspace, state, _sources(workspace, state.repositories))
+        if work.text != judged:
             print("changed   the tests changed the work: it is judged as it stands after them")
-    if held:
-        print(f"left out  {_key_files(held, ': ')}")
-    return runs, base, bases, text
+    if work.held:
+        print(f"left out  {_key_files(work.held, ': ')}")
+    return runs, base, bases, work
 
 
 def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
@@ -1637,10 +1649,11 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     ever run."""
     config = workspace.config()
     asked = [("", workspace.root, config.test, config.test_timeout)] if config.test else []
-    if not asked and not source.tests():  # found by the fourth audit: a `met` read as tested, with no test run
+    every = [*asked, *source.tests()]
+    if not every:  # found by the fourth audit: a `met` read as tested, with no test run
         print("tests     none named: set [verify] test in .spec/config.toml")
     runs = []
-    for name, root, argv, timeout in [*asked, *source.tests()]:
+    for name, root, argv, timeout in every:
         print(f"testing   {f'{name}: ' if name else ''}{scrub(' '.join(argv))[0]}")
         done = run_tests(root, argv, timeout=timeout, name=name, without=frozenset(_FROM_ENV_FILE))
         took = "" if done.seconds is None else f" in {done.seconds:.1f} s"
@@ -1725,11 +1738,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
 
     held = change.state.repositories if change else {}
     repositories = _with_checked(workspace, args.with_, held, Path(args.root))  # checked before any call
-    specs, of_specs = workspace.specs()
-    if of_specs:  # a spec that does not read would pass for a capability not yet there
-        _printed(of_specs)
-        print(f"{PROG}: nothing was drafted: a living spec does not read. Fix it first", file=sys.stderr)
-        return EXIT_FINDINGS
+    specs = _living(workspace, "nothing was drafted")
     taken = frozenset(workspace.taken(specs))
     known = Known(living=specs, taken=taken, kept=kept_ids(change.deltas) if change else {})
     # One ledger for every run of this command: the count and the ceiling are the command's.
@@ -1775,7 +1784,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     # With no question asked, each open point is printed with its suggestion, for an assistant to put to the person.
     # Found by the third audit: the editor's tools promised them in the output, which held their count alone.
     unasked = questions_of(BriefDraft.model_validate(state[BRIEF_KEY]), every=True) if args.no_input else []
-    return _then_planned(workspace, change_id, specs, of_specs, ledger, **planned, unasked=unasked)
+    return _then_planned(workspace, change_id, specs, [], ledger, **planned, unasked=unasked)
 
 
 def _open_said(unasked: Sequence[Mapping[str, str]]) -> None:
@@ -1831,10 +1840,13 @@ def _then_planned(
             print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
             _open_said(unasked)
         elif review:
-            print(f"plan      waits: a strict change is read first. Read brief.md and the specs, then {review}")
+            print("plan      waits: the change is read before it is planned")
         if keep:
             print(f"kept      tasks.md: {keep}")
-        _say_next(workspace, change_id, specs)
+        if review and not waiting:  # the step `status` names, with the flags this run's plan goes on with
+            print(f"next      read brief.md and the specs, then run {review}")
+        else:
+            _say_next(workspace, change_id, specs)
         return EXIT_OK
     # The change is written by now: a plan that does not end well leaves it a draft, and `plan` finishes it.
     try:
@@ -2031,11 +2043,8 @@ def _written(
 
     made = drafted(state, known)
     files = files_of(made)
-    # A base recorded before is kept, whether it still holds or not, as `missing_bases` says: found by the fourth
-    # audit, a revision recorded each afresh, and another change's edit of a requirement was lost at the archive.
-    held = change.state.bases if change is not None else {}
     fields: dict[str, Any] = {
-        "bases": {req: held.get(req, base) for req, base in capture_bases(made.deltas, known.living).items()},
+        "bases": kept_bases(change.state.bases if change is not None else {}, made.deltas, known.living),
         "needs_design": owes_design(tier, made.needs_design),
         "repositories": dict(repositories),
     }

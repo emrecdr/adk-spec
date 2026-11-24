@@ -121,6 +121,7 @@ READ_THEN_PLAN = "read brief.md and the specs, then run `adk-spec plan passkeys`
         (approved(), [], ["tasks.md"], "tasks.md changed since the approval: run `adk-spec approve passkeys` again"),
         # Found by the fourth audit: "approve again" while an error stood, which the approval refused, in a loop.
         (approved(), [NO_TASK], ["specs/auth/spec.md"], AGAIN_AFTER_A_FIX),
+        (approved(), [MARKER], ["brief.md"], AGAIN_AFTER_A_FIX),  # a warning that blocks: by the cleanup review
         (DRAFT.model_copy(update={"tier": "strict"}), [NO_TASKS], ["approval"], READ_THEN_PLAN),
         (approved(), [], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
         (approved(), [ERROR], [], "fix what `adk-spec validate passkeys` lists"),
@@ -190,8 +191,7 @@ def test_a_draft_with_nothing_else_owed_is_sent_to_its_approval_which_checks_fir
 )
 def test_each_next_step_says_who_takes_it(state, findings, actor) -> None:
     stale = [] if state.approval else ["approval"]
-    step = next_step(state, findings, stale)
-    assert step.actor == actor and step.phrase == phrase(state, findings, stale)
+    assert next_step(state, findings, stale).actor == actor
 
 
 def test_a_check_that_is_owed_is_the_approvals_to_make_and_one_that_blocks_is_yours() -> None:
@@ -327,3 +327,13 @@ def test_an_open_point_names_what_holds_the_change_after_it_a_blocking_check_too
 
 
 _FIXED = "fix what reports/check.md lists, then run `adk-spec approve passkeys`"
+
+
+def test_a_revision_keeps_each_recorded_base_and_records_only_a_new_one() -> None:
+    """Found by the fourth audit: a revision recorded every base afresh, and a stale one was lost."""
+    from adk_spec.domain.lifecycle import kept_bases
+
+    deltas, living = {"auth": parse_delta(DELTA)}, {"auth": parse_spec(SPEC)}
+    one, _two = parse_spec(SPEC).requirements
+    held = {"REQ-AUTH-002": "sha256:old", "REQ-AUTH-009": "sha256:untouched"}
+    assert kept_bases(held, deltas, living) == {"REQ-AUTH-002": "sha256:old", "REQ-AUTH-001": fingerprint(one)}

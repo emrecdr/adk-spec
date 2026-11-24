@@ -14,6 +14,7 @@ here: the command holds the terminal, and nothing of the state's keys.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -492,7 +493,7 @@ def build_verify_app(*, ledger: UsageLedger, required: frozenset[str], recorder:
             listed = "Give one for each requirement listed."
             sent.append(coded("verify.no-verdict", f"no verdict was given for {', '.join(missing)}. {listed}"))
         # Found by the fourth audit: a `met` and an `unmet` for one requirement, and the first one stood.
-        if twice := sorted({one for one in given if given.count(one) > 1}):
+        if twice := sorted(one for one, times in Counter(given).items() if times > 1):
             sent.append(coded("verify.verdict-twice", f"{', '.join(twice)} had more than one verdict. Give each one."))
         return sent
 

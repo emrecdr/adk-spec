@@ -391,9 +391,10 @@ def _text_or_bytes(path: Path) -> str:
     """A file's text for a fingerprint. One that is not UTF-8 is read with its bad bytes replaced: the loader names
     its fault as a finding, and its fingerprint must not stop every other change from being read."""
     try:
-        return read_text(path)
-    except NotTextError:
-        return path.read_bytes().decode("utf-8", errors="replace")
+        try:
+            return read_text(path)
+        except NotTextError:
+            return path.read_bytes().decode("utf-8", errors="replace")
     except OSError as exc:  # found by the fourth audit: one file that would not open stopped every command
         return f"(the file could not be opened: {exc.strerror or exc})"
 

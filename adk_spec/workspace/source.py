@@ -34,14 +34,15 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from itertools import zip_longest
 from pathlib import Path
+from typing import NamedTuple
 
 from ..domain.secrets import KEY_WORDS, holds_a_key, scrub_lines
-from ..domain.text import lines_of, normalise, plain
+from ..domain.text import lines_of, normalise, plain, sha256_of
 from ..domain.verify import parts_of_diff
 from .config import ConfigError, load_config
 from .context import tree_text
 from .files import NotTextError, read_text
-from .git import GitError, diff, grep, head, is_repository, top
+from .git import GitError, diffs, grep, head, is_repository, top
 from .git import files as listed_by_git
 from .installed import Environment, environments
 from .layout import CONFIG, ROOT_NAME
@@ -77,6 +78,15 @@ _THROUGH = {"python": "site-packages/", "node": "node_modules/"}
 class SourceError(Exception):
     """A repository a change names that cannot stand beside this one, for a reason the person must fix: it is this
     repository by another path, or its name is no name, or is a folder here, so that its paths would mean two files."""
+
+
+class Work(NamedTuple):
+    """The work since a change began: its diff as a stage is shown it, the files left out of that for holding a
+    private key, and the fingerprint a verification records, which git's index does not move."""
+
+    text: str
+    held: tuple[str, ...]
+    fingerprint: str
 
 
 @dataclass(frozen=True)
@@ -412,16 +422,16 @@ class Source:
         """Why another repository was not read, as `missing` says it."""
         return next((line for line in self.missing if line.startswith(f"{name}: ")), f"{name}: it was not read")
 
-    def work(self, base: str, bases: Mapping[str, str]) -> tuple[str, tuple[str, ...]]:
-        """The diff of the work, from `base` here and from each of `bases` in the repository it names, under its
-        name, as a stage is shown it; and the files left out for holding a private key. `SourceError` for a
-        repository that was not read: the work is never judged on part of it."""
-        parts = [diff(self._here.root, base, exclude=self._here.exclude)]
+    def work(self, base: str, bases: Mapping[str, str]) -> Work:
+        """The work from `base` here and from each of `bases` in the repository it names, under its name.
+        `SourceError` for a repository that was not read: the work is never judged on part of it."""
+        made = [diffs(self._here.root, base, exclude=self._here.exclude)]
         for name, commit in bases.items():
             if (one := self._others.get(name)) is None:
                 raise SourceError(f"{self.why_not(name)}: the work cannot be judged on part of it")
-            parts.append(diff(one.root, commit, exclude=one.exclude, prefix=one.full(""), trust=False))
-        return self.without_keys("".join(parts))
+            made.append(diffs(one.root, commit, exclude=one.exclude, prefix=one.full(""), trust=False))
+        text, held = self.without_keys("".join(shown for shown, _settled in made))
+        return Work(text, held, sha256_of("".join(settled for _shown, settled in made)))
 
     def tests(self) -> list[tuple[str, Path, tuple[str, ...], int]]:
         """Each other repository's own test command, by its name, in its folder, with its timeout: the command

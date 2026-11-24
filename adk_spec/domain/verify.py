@@ -9,6 +9,7 @@ invented piece of evidence never reads as a pass.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from .drafts import VerdictsDraft
@@ -29,12 +30,18 @@ class Verdict:
     reason: str
 
 
-def lines_of_diff(diff: str) -> dict[str, tuple[list[str], list[str]]]:
-    """By file: the lines a unified diff adds and the lines it removes, each without its sign. A file is known by
-    its new name, and one that was deleted by the name it had."""
-    files: dict[str, tuple[list[str], list[str]]] = {}
+#: The lines one side of a diff holds, by run: lines next to each other in the file.
+type Runs = list[list[str]]
+
+
+def lines_of_diff(diff: str) -> dict[str, tuple[Runs, Runs]]:
+    """By file: the runs of lines a unified diff adds and the runs it removes, each line without its sign. A run
+    ends at a line both sides hold, or at a hunk's end: found by the fourth audit, the lines of a side were joined
+    across both, and a quote stitched from lines apart stood as evidence. A file is known by its new name, and one
+    that was deleted by the name it had."""
+    files: dict[str, tuple[Runs, Runs]] = {}
     old = new = None
-    sides: tuple[list[str], list[str]] | None = None
+    sides: tuple[Runs, Runs] | None = None
     in_hunk = False
     for line in lines_of(diff):
         if line.startswith("diff --git "):
@@ -50,21 +57,19 @@ def lines_of_diff(diff: str) -> dict[str, tuple[list[str], list[str]]]:
                 sides = files.setdefault(name, ([], []))
             _apart(sides)
         elif in_hunk and sides is not None and line[:1] in "+-" and line:
-            sides[0 if line[0] == "+" else 1].append(line[1:])
+            sides[0 if line[0] == "+" else 1][-1].append(line[1:])
         elif in_hunk:  # a line both sides hold: the lines either side of it are no one run
             _apart(sides)
-    return files
+    return {
+        name: ([run for run in added if run], [run for run in gone if run]) for name, (added, gone) in files.items()
+    }
 
 
-#: The line set between two runs of a side: one no quote holds, since `plain` reads it as a space. Found by the fourth
-#: audit: runs apart were joined, and a quote stitched from them stood as evidence.
-_APART = "\x00"
-
-
-def _apart(sides: tuple[list[str], list[str]] | None) -> None:
+def _apart(sides: tuple[Runs, Runs] | None) -> None:
+    """A new run begun on each side, where the last holds a line."""
     for side in sides or ():
-        if side and side[-1] != _APART:
-            side.append(_APART)
+        if not side or side[-1]:
+            side.append([])
 
 
 def parts_of_diff(diff: str) -> list[tuple[str | None, str]]:
@@ -88,9 +93,9 @@ def _path(named: str) -> str | None:
     return named[2:] if named[:2] in ("a/", "b/") else named
 
 
-def _shown(quote: str, lines: list[str]) -> bool:
-    """Whether `quote` is in `lines`, by the one test of a quote the package has."""
-    return quoted_at(quote, "\n".join(lines)) is not None
+def _shown(quote: str, runs: Runs) -> bool:
+    """Whether `quote` is in one run of `runs`, by the one test of a quote the package has."""
+    return any(quoted_at(quote, "\n".join(run)) is not None for run in runs)
 
 
 def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed: frozenset[str]) -> list[Verdict]:
@@ -123,7 +128,7 @@ def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed:
     return verdicts
 
 
-def _named(path: str, sides: dict[str, tuple[list[str], list[str]]]) -> str | None:
+def _named(path: str, sides: Mapping[str, object]) -> str | None:
     """The file of the diff a model named: as it is spelled there, or with a leading `a/`, `b/` or `./` it copied."""
     named = path.strip()
     for candidate in (named, named.removeprefix("./"), named[2:] if named[:2] in ("a/", "b/") else named):
