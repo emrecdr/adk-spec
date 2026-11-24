@@ -246,7 +246,8 @@ def test_an_open_point_or_an_error_comes_before_the_design_a_plan_drafts() -> No
     state = ChangeState(id="c", tier="strict", needs_design=True)
     design = held("change.missing-design")
     settled = next_step(state, [design, held("brief.marker-unresolved")], []).phrase
-    assert settled == f"settle the open point in brief.md, then run `adk-spec plan {state.id}`"
+    read_first = "read brief.md and the specs, then run `adk-spec plan c`"
+    assert settled == f"settle the open point in brief.md, then {read_first}"
     assert next_step(state, [design, held("delta.empty", "ERROR")], []).phrase == "fix what `adk-spec validate c` lists"
     assert next_step(state, [design], []).phrase == "read brief.md and the specs, then run `adk-spec plan c`"
 
@@ -285,4 +286,9 @@ def test_a_strict_revision_with_a_ticked_task_names_the_plan_that_goes_on(tmp_pa
     write_text(tasks, read_text(tasks).replace("- [ ]", "- [x]", 1))
     capsys.readouterr()
     assert run(tmp_path, "propose", "Also keep the old invoice numbers.", "--id", "ledger", "--no-input") == 0
-    assert "then run `adk-spec plan ledger --replace --no-explore`" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "kept      tasks.md: a task is ticked. `adk-spec plan ledger --replace" in out
+    # Found by the code review: the next line named `plan --replace`, which throws ticked work away, where `status`
+    # named another step.
+    (step,) = [line for line in out.splitlines() if line.startswith("next ")]
+    assert "--replace" not in step

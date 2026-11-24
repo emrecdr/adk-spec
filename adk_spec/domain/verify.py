@@ -58,7 +58,7 @@ def lines_of_diff(diff: str) -> dict[str, tuple[Runs, Runs]]:
             _apart(sides)
         elif in_hunk and sides is not None and line[:1] in "+-" and line:
             sides[0 if line[0] == "+" else 1][-1].append(line[1:])
-        elif in_hunk:  # a line both sides hold: the lines either side of it are no one run
+        elif in_hunk and line[1:].strip():  # a line both sides hold, other than a blank one, which a quote skips
             _apart(sides)
     return {
         name: ([run for run in added if run], [run for run in gone if run]) for name, (added, gone) in files.items()

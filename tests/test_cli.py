@@ -301,7 +301,7 @@ def test_a_file_that_cannot_be_opened_is_a_finding_and_hides_no_change(tmp_path,
         assert run(tmp_path, "status", "--json") == 0
         assert [row["id"] for row in json.loads(capsys.readouterr().out)["changes"]] == ["passkeys", "second"]
         assert run(tmp_path, "validate") == 1
-        assert "ERROR syntax .spec/changes/passkeys/tasks.md" in capsys.readouterr().out
+        assert "ERROR file.unreadable .spec/changes/passkeys/tasks.md" in capsys.readouterr().out
     finally:
         tasks.chmod(0o644)
 

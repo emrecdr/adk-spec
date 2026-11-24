@@ -45,11 +45,14 @@ def _change(
     skip_specs: bool = False,
     drop: tuple[str, ...] = (),
     needs_design: bool = False,
+    status: str = "draft",
 ) -> list[Finding]:
     """The findings of the valid change with one of its files, its bases or a flag replaced, or a file dropped."""
     parsed = parse_delta(delta)
     held = BASES if bases is None else bases
-    state = ChangeState(id="passkeys", tier="lean", bases=held, skip_specs=skip_specs, needs_design=needs_design)
+    state = ChangeState(
+        id="passkeys", tier="lean", bases=held, skip_specs=skip_specs, needs_design=needs_design, status=status
+    )
     change = Change(
         state=state,
         brief=None if "brief" in drop else parse_brief(brief),
@@ -134,6 +137,7 @@ def test_every_code_has_a_case_and_a_severity() -> None:
         "spec.folder-bad-name",
         "delta.living-unreadable",
         "change.unreadable",  # the command's, of a change whose state does not read: its case is in test_cli.py
+        "file.unreadable",  # the loader's, of a file that would not open: its cases are in test_cli and test_revise
     }
 
 
@@ -181,3 +185,9 @@ def test_a_missing_task_list_or_design_names_the_command_that_drafts_it() -> Non
     (design,) = [found.message for found in _change(needs_design=True) if found.code == "change.missing-design"]
     for said in (tasks, design):
         assert "`adk-spec plan passkeys` drafts" in said, said
+
+
+def test_an_approved_change_missing_its_tasks_is_told_to_write_them_not_to_plan() -> None:
+    """Found by the code review: `plan` drafts no task for an approved change, and the sentence named it."""
+    (said,) = [f.message for f in _change(drop=("tasks",), status="approved") if f.code == "change.missing-tasks"]
+    assert "adk-spec plan" not in said and "tasks.md" in said

@@ -3,6 +3,8 @@ kept by name, and what changed said."""
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from conftest import (
     BRIEF_WITH_A_MARKER,
@@ -272,3 +274,20 @@ def test_a_kept_task_list_is_said_beside_a_point_left_open(tmp_path, capsys, fak
     assert revised(tmp_path) == 0
     out = capsys.readouterr().out
     assert "plan      waits: the brief leaves 1 point open" in out and "kept      tasks.md: a task is ticked" in out
+
+
+@pytest.mark.skipif(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0), reason="POSIX modes")
+def test_a_file_that_will_not_open_is_never_written_over(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: a task list that would not open read as one with no box ticked, and a revision or
+    a plan wrote over it, ticked work and all."""
+    seeded(tmp_path)  # a task is ticked
+    tasks = tmp_path / TASKS
+    before = read_text(tasks)
+    tasks.chmod(0)
+    try:
+        assert revised(tmp_path) == 1
+        assert run(tmp_path, "plan", "passkeys", "--replace") == 1
+    finally:
+        tasks.chmod(0o644)
+    assert read_text(tasks) == before and "file.unreadable" in capsys.readouterr().out
+    assert not any("You break a change into tasks" in str(r.config.system_instruction) for r in fake_provider.requests)

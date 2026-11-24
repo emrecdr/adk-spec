@@ -68,9 +68,9 @@ Then call status and do the step it names: verify, where the change owes a verif
 #: What each way a command ends says to an assistant. Found by the fourth audit: exit 1, findings or a refusal, is
 #: the command's answer, and was read as a failure and asked again.
 _ENDINGS = {
-    1: ", which is an answer: read the lines above, and do not call it again",
+    1: ", which is an answer: act on what it says before calling it again",
     2: ": the command or the workspace's settings were not right",
-    3: ": the model or its provider failed",
+    3: ": the model, its provider or a file could not be used",
 }
 
 

@@ -50,7 +50,7 @@ def _readable(read: Callable[[Workspace], str], workspace: Workspace) -> str:
     hand, as PowerShell 5.1 writes UTF-16, does not stop the chat loading."""
     try:
         return read(workspace)
-    except NotTextError:
+    except NotTextError, OSError:  # found by the code review: a profile that would not open stopped the chat
         return ""
 
 

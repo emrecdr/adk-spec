@@ -615,3 +615,13 @@ def test_the_plan_command_after_a_stop_reads_the_code_where_no_context_was_writt
     assert _plan_command(ws, "passkeys", None, True) == "`adk-spec plan passkeys --no-explore`"
     (tmp_path / ".spec/changes/passkeys/context.md").write_text("# Context: passkeys\n", encoding="utf-8")
     assert _plan_command(ws, "passkeys", None, False) == "`adk-spec plan passkeys --no-explore`"
+
+
+def test_plan_on_a_verified_change_names_a_new_change_not_a_revision(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: the refusal named `propose --id`, which refuses a verified change in its turn."""
+    ws = seeded(tmp_path)
+    ws.save_state(ws.load_change("passkeys").change.state.model_copy(update={"status": "verified"}))
+    capsys.readouterr()
+    assert run(tmp_path, "plan", "passkeys") == 1
+    said = capsys.readouterr().err
+    assert "--id" not in said and "Propose a new change" in said and fake_provider.requests == []

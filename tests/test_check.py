@@ -232,6 +232,23 @@ def test_approve_with_no_provider_says_so_and_names_the_way_without_one(tmp_path
     assert state(ws).check is None and state(ws).approval is None
 
 
+def test_approve_with_no_provider_names_no_way_a_models_finding_refuses(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    """Found by the code review: with a model's blocking check stale and no provider, `approve` named
+    `check --no-model`, which refuses to clear what a model found, and the person went round in a loop."""
+    standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nOne word more.\n")
+    monkeypatch.delenv("GOOGLE_API_KEY")
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 2
+    err = capsys.readouterr().err
+    assert "--no-model" not in err and "only a model clears" in err
+
+
 def test_approve_calls_no_model_where_a_file_does_not_read(tmp_path, capsys, fake_provider) -> None:
     ws = standard(tmp_path)
     delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"

@@ -159,7 +159,7 @@ async def test_a_command_that_fails_is_a_failed_call_and_says_how_it_ended(tmp_p
         await mcp_server.ran(tmp_path, ["check", "--", "pk"])
     assert "two findings block it" in str(failed.value) and "ended with exit 1" in str(failed.value)
     # Found by the fourth audit: exit 1 is a command's answer, findings or a refusal, and was read as a failure.
-    assert "an answer: read the lines above, and do not call it again" in str(failed.value)
+    assert "an answer: act on what it says before calling it again" in str(failed.value)
 
 
 @pytest.mark.asyncio

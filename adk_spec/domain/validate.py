@@ -52,6 +52,7 @@ SEVERITY: dict[str, Severity] = {
     "brief.marker-malformed": "ERROR",
     "brief.marker-unresolved": "WARNING",
     "change.unreadable": "ERROR",
+    "file.unreadable": "ERROR",
     "change.missing-brief": "ERROR",
     "change.no-deltas": "ERROR",
     "change.missing-tasks": "WARNING",
@@ -325,11 +326,17 @@ def validate_change(change: Change, living: Mapping[str, Spec]) -> list[Finding]
         about(f"specs/{capability}/spec.md", validate_delta(delta, living.get(capability), change.state.bases))
     groups = change.tasks or ()
     if not any(group.tasks for group in groups):
-        no_tasks = f"The change has no task: `adk-spec plan {change.state.id}` drafts them, before approval."
+        drafts = (
+            f"`adk-spec plan {change.state.id}` drafts them"
+            if change.state.status == "draft"
+            else "write them in tasks.md"
+        )
+        no_tasks = f"The change has no task: {drafts}, before approval."
         about("tasks.md", [finding("change.missing-tasks", no_tasks)])
     else:
         about("tasks.md", validate_tasks(groups))
     if change.state.needs_design and change.design is None:
-        owed = f"The change owes a design and has none: `adk-spec plan {change.state.id}` drafts it."
+        drafts = f"`adk-spec plan {change.state.id}` drafts it" if change.state.status == "draft" else "write design.md"
+        owed = f"The change owes a design and has none: {drafts}."
         about("design.md", [finding("change.missing-design", owed)])
     return found

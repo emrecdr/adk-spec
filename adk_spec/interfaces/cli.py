@@ -95,6 +95,7 @@ from ..workspace.layout import (
     ROOT_NAME,
     SPEC_FILE,
     SPECS,
+    UNOPENED,
     LoadedChange,
     Workspace,
     WorkspaceError,
@@ -486,9 +487,12 @@ def _drifted(workspace: Workspace, state: ChangeState) -> bool:
     if state.status != "verified" or held is None:
         return False
     try:
-        return _sources(workspace, state.repositories).work(held.base, held.bases).fingerprint != held.diff
+        work = _sources(workspace, state.repositories).work(held.base, held.bases)
     except GitError, SourceError:  # a repository gone, or no longer readable beside this one: not what was judged
         return True
+    # Or the fingerprint an older adk-spec recorded, of the diff as a stage is shown it: found by the code review,
+    # every change it verified read as drifted after the upgrade.
+    return held.diff not in (work.fingerprint, sha256_of(work.text))
 
 
 def _living(workspace: Workspace, refused: str) -> dict[str, Spec]:
@@ -636,10 +640,11 @@ def _checked_first(workspace: Workspace, change_id: str, living: dict[str, Spec]
     try:
         return _check_made(workspace, change_id, living, assessed, no_model=False)
     except (UsageError, ContextTooLargeError) as exc:  # no provider, or more than a model is given to read
-        raise UsageError(
-            f"{exc}. `approve` checks a {assessed.state.tier} change first: put that right, or run "
-            f"`{PROG} check {change_id} --no-model` and approve again"
-        ) from exc
+        # Found by the code review: `check --no-model` was named where it refuses, a model's finding standing.
+        way = f": put that right, or run `{PROG} check {change_id} --no-model` and approve again"
+        if model_holds(assessed.state, assessed.seen):
+            way = ", and only a model clears what the model's check found: put that right, then approve again"
+        raise UsageError(f"{exc}. `approve` checks a {assessed.state.tier} change first{way}") from exc
 
 
 def _refused(change_id: str, blockers: list[Finding]) -> int:
@@ -1094,9 +1099,14 @@ def _plannable(
     task list has begun and replacing it was not asked for, or what the tasks are drafted from does not read."""
     change, state = assessed.loaded.change, assessed.state
     if state.status != "draft":  # new tasks would void what was approved
+        way = (  # found by the code review: `propose --id` refuses a change whose work was judged
+            f'to change what it asks, run `{PROG} propose "<what changes>" --id {change_id}`; to add a task, write it '
+            "in tasks.md"
+            if state.status == "approved"
+            else "propose a new change for what is still wanted"
+        )
         raise NotYetError(
-            f"`{change_id}` is {state.status}: a plan is drafted while a change is a draft. To change what it asks, "
-            f'run `{PROG} propose "<what changes>" --id {change_id}`; to add a task, write it in tasks.md'
+            f"`{change_id}` is {state.status}: a plan is drafted while a change is a draft. {way[0].upper()}{way[1:]}"
         )
     started = _ticked(workspace, change)
     if started and not replace:  # work has begun on this list: it is not thrown away unasked
@@ -1710,11 +1720,14 @@ def _revising(workspace: Workspace, change_id: str | None) -> Change | None:
         return None
     loaded = workspace.load_change(change_id)
     change = loaded.change
-    # Found by the fourth audit: a delta that did not read was unknown to the revision, which deleted it.
-    if unread := [found for found in loaded.problems if (found.path or "").startswith(f"{SPECS}/")]:
+    # Found by the fourth audit: a delta that did not read was unknown to the revision, which deleted it; and by the
+    # code review, a file that would not open read as empty, and was written over.
+    if unread := [
+        held for held in loaded.problems if (held.path or "").startswith(f"{SPECS}/") or held.code == UNOPENED
+    ]:
         _printed(_from_root(change_id, unread))
         raise NotYetError(
-            f"`{change_id}` is not revised: a revision would take out a delta that does not read. Fix it first"
+            f"`{change_id}` is not revised: a revision would write over a file that does not read. Fix it first"
         )
     if (status := change.state.status) in ("verified", "archived"):
         raise NotYetError(
@@ -1843,7 +1856,7 @@ def _then_planned(
             print("plan      waits: the change is read before it is planned")
         if keep:
             print(f"kept      tasks.md: {keep}")
-        if review and not waiting:  # the step `status` names, with the flags this run's plan goes on with
+        if review and not waiting and not keep:  # the step `status` names, with the flags the plan goes on with
             print(f"next      read brief.md and the specs, then run {review}")
         else:
             _say_next(workspace, change_id, specs)

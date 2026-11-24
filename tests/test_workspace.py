@@ -316,3 +316,14 @@ def test_the_config_init_writes_shows_where_the_test_command_goes_and_names_none
     ws = Workspace.init(tmp_path)
     text = read_text(tmp_path / ".spec/config.toml")
     assert '# [verify]\n# test = ["uv", "run", "pytest", "-q"]' in text and ws.config().test == ()
+
+
+def test_a_backslash_that_escapes_a_glob_character_is_kept(tmp_path) -> None:
+    """Found by the code review: every backslash was refused, the escapes git reads among them."""
+    from adk_spec.workspace.files import write_text
+    from adk_spec.workspace.layout import Workspace
+
+    ws = Workspace.init(tmp_path)
+    held = '[project]\ndefault_tier = "lean"\n\n[repository]\nexclude = ["data/run\\\\[0-9\\\\].log"]\n'
+    write_text(tmp_path / ".spec/config.toml", held)
+    assert ws.config().exclude == ("data/run\\[0-9\\].log",)

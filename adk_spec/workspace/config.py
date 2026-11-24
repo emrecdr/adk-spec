@@ -3,6 +3,7 @@ or a wrong value is refused by name, never passed over in silence."""
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -110,10 +111,16 @@ def _verifying(path: Path, verify: object) -> tuple[tuple[str, ...], int]:
 def _pattern(one: str) -> bool:
     """Whether `one` is a pattern git takes for a path under the workspace's root: some text on one line, with no
     colon at its start, which git reads as an instruction of its own, and no way out of the root, which git refuses,
-    so that every file would then be listed and read with nothing said, and no backslash, which git reads as an
-    escape: found by the fourth audit, `config\\secrets\\**`, as Windows writes a path, kept nothing out."""
+    so that every file would then be listed and read with nothing said, and no backslash between folders, which git
+    reads as an escape: found by the fourth audit, `config\\secrets\\**`, as Windows writes a path, kept nothing
+    out. A backslash before a character a glob gives a meaning, `\\[` say, is the escape git reads it as."""
     inside = not one.startswith(("//", ":")) and ".." not in one.split("/")  # one slash anchors it, as in .gitignore
-    return bool(one.strip()) and one.isprintable() and one == one.strip() and inside and "\\" not in one
+    escapes_only = "\\" not in _ESCAPE.sub("", one)
+    return bool(one.strip()) and one.isprintable() and one == one.strip() and inside and escapes_only
+
+
+#: A backslash that escapes a character a glob gives a meaning, which git reads as that character alone.
+_ESCAPE = re.compile(r"\\[*?\[\]\\!# ]")
 
 
 def _excluded(path: Path, held: dict[str, object]) -> tuple[str, ...]:

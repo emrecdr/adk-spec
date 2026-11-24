@@ -375,7 +375,8 @@ def of_the_plan(found: Finding) -> bool:
     """Whether a finding is about what `plan` writes, so that it does not stop `plan`: the task list, which it drafts
     again, or a design owed and missing."""
     named = (found.path or "").rsplit("/", 1)[-1]
-    return found.code in _OWED_BY_PLAN or named == TASKS_FILE
+    # A list that would not open is no list a plan may draft over: its ticked boxes are unknown.
+    return found.code != "file.unreadable" and (found.code in _OWED_BY_PLAN or named == TASKS_FILE)
 
 
 #: What a person does about a check that found something blocking, in which `{cid}` is the change.
@@ -392,8 +393,10 @@ _HOLDS: tuple[tuple[str, Actor, str], ...] = (
     (_PLAN, "run", "run `adk-spec plan {cid}`"),
     ("check.blocking", "you", _FIX_THE_CHECK),
 )
-#: What may hold a draft once its open point is settled: the holds after it.
-_AFTER_A_POINT = _HOLDS[[code for code, _actor, _phrase in _HOLDS].index("brief.marker-unresolved") + 1 :]
+#: Where an open point stands among the holds: what may hold a draft once it is settled are the holds after it.
+_POINT = [code for code, _actor, _phrase in _HOLDS].index("brief.marker-unresolved")
+#: The plan's hold on a tier whose change is read before it is planned: the person's step.
+_READ_FIRST: tuple[str, Actor, str] = (_PLAN, "you", "read brief.md and the specs, then run `adk-spec plan {cid}`")
 
 
 def _after_approval(
@@ -444,12 +447,13 @@ def next_step(
     held |= {_ERROR for found in findings if found.severity == "ERROR" and found not in plan}
     # Every next step names the command that comes after it, the hold after an open point included: found by the
     # third audit, three did not, and by the code review, "then approve" where a blocking check would refuse it.
-    rest = [phrase for code, _actor, phrase in _AFTER_A_POINT if code in held]
+    holds = _HOLDS
+    if DEMANDS[state.tier].read_first:  # found by the fourth audit: the stop before the plan was listed as ready to run
+        holds = tuple(_READ_FIRST if hold[0] == _PLAN else hold for hold in _HOLDS)
+    rest = [phrase for code, _actor, phrase in holds[_POINT + 1 :] if code in held]
     after = rest[0].format(cid=cid) if rest else f"run `adk-spec approve {cid}`"
-    for code, actor, phrase in _HOLDS:
+    for code, actor, phrase in holds:
         if code in held:
-            if code == _PLAN and DEMANDS[state.tier].read_first:  # found by the fourth audit: listed as ready to run
-                actor, phrase = "you", "read brief.md and the specs, then run `adk-spec plan {cid}`"
             return Step(actor, phrase.format(cid=cid, after=after))
     # What blocks an approval and has no step of its own. A check the approval makes itself is no such thing.
     left = [owed for owed in check if owed.code not in _MADE_BY_APPROVAL]

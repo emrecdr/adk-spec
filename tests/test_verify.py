@@ -142,6 +142,25 @@ diff --git a/src/pay.py b/src/pay.py
         assert got.verdict == "unclear", quote
 
 
+def test_a_quote_across_a_blank_line_both_sides_hold_is_evidence() -> None:
+    """Found by the code review: two functions added around a blank line the file had were two runs, and a quote of
+    both, as the file holds them, was no evidence."""
+    added = (
+        "diff --git a/src/pay.py b/src/pay.py\n--- a/src/pay.py\n+++ b/src/pay.py\n"
+        "@@ -1,1 +1,4 @@\n+def a():\n+    pass\n \n+def b():\n"
+    )
+    met = {
+        "id": "REQ-PAY-001",
+        "verdict": "met",
+        "reason": "Said.",
+        "evidence": [{"path": "src/pay.py", "quote": "def a(): pass def b():"}],
+    }
+    (got,) = grounded(
+        VerdictsDraft.model_validate({"verdicts": [met]}), added, added=frozenset({"REQ-PAY-001"}), removed=frozenset()
+    )
+    assert got.verdict == "met"
+
+
 def test_an_unmet_verdict_is_kept_as_it_is_given() -> None:
     unmet = {"id": "REQ-AUTH-004", "verdict": "unmet", "evidence": [], "reason": "Nothing calls passkey()."}
     (got,) = grounded(
@@ -211,6 +230,16 @@ def test_a_requirement_with_no_verdict_is_asked_for_again(tmp_path, capsys, fake
     fake_provider.answers_when(VERIFY, {"verdicts": CANNED_VERDICTS["verdicts"][:2]})
     assert run(tmp_path, "verify", "passkeys") == 3
     assert "REQ-AUTH-001" in capsys.readouterr().err and len(fake_provider.requests) == 3
+
+
+def test_two_verdicts_for_a_requirement_not_asked_about_are_left_out(tmp_path, fake_provider) -> None:
+    """Found by the code review: a stray ID given twice spent the three tries, where a verdict for any other
+    requirement is left out."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    stray = {**CANNED_VERDICTS["verdicts"][0], "id": "REQ-AUTH-099"}
+    fake_provider.answers_when(VERIFY, {"verdicts": [*CANNED_VERDICTS["verdicts"], stray, stray]})
+    assert run(tmp_path, "verify", "passkeys") == 0 and len(fake_provider.requests) == 1
 
 
 def test_two_verdicts_for_one_requirement_are_sent_back(tmp_path, capsys, fake_provider) -> None:
@@ -495,6 +524,34 @@ def test_a_verified_change_whose_diff_holds_a_key_file_has_not_drifted(tmp_path)
     write_text(tmp_path / "keys/live.pem", PEM.replace("MIIEow3", "MIINew3"))
     assert run(tmp_path, "verify", "passkeys") == 0
     assert state_of(tmp_path, "passkeys")["status"] == "verified"
+    assert run(tmp_path, "archive", "passkeys") == 0
+
+
+def test_a_change_verified_then_committed_is_archived(tmp_path) -> None:
+    """Found by the fourth audit: the work's fingerprint moved with git's index, and `archive` refused."""
+    from conftest import _git
+
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    write_text(tmp_path / "src/added.py", "ADDED = True\n")
+    assert run(tmp_path, "verify", "passkeys") == 0
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "the work")
+    assert run(tmp_path, "archive", "passkeys") == 0
+
+
+def test_a_change_verified_by_an_older_adk_spec_has_not_drifted(tmp_path) -> None:
+    """Found by the code review: an older adk-spec recorded the fingerprint of the diff a stage was shown, and every
+    change it verified read as drifted after the upgrade, to be paid for again."""
+    from adk_spec.domain.text import sha256_of
+    from adk_spec.workspace.git import diff
+
+    ws, commit = approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    state = ws.load_change("passkeys").change.state
+    older = state.verification.model_copy(update={"diff": sha256_of(diff(tmp_path, commit, exclude=()))})
+    ws.save_state(state.model_copy(update={"verification": older}))
     assert run(tmp_path, "archive", "passkeys") == 0
 
 

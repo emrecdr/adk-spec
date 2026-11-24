@@ -493,7 +493,7 @@ def build_verify_app(*, ledger: UsageLedger, required: frozenset[str], recorder:
             listed = "Give one for each requirement listed."
             sent.append(coded("verify.no-verdict", f"no verdict was given for {', '.join(missing)}. {listed}"))
         # Found by the fourth audit: a `met` and an `unmet` for one requirement, and the first one stood.
-        if twice := sorted(one for one, times in Counter(given).items() if times > 1):
+        if twice := sorted(one for one, times in Counter(given).items() if times > 1 and one in required):
             sent.append(coded("verify.verdict-twice", f"{', '.join(twice)} had more than one verdict. Give each one."))
         return sent
 

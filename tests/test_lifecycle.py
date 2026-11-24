@@ -123,6 +123,12 @@ READ_THEN_PLAN = "read brief.md and the specs, then run `adk-spec plan passkeys`
         (approved(), [NO_TASK], ["specs/auth/spec.md"], AGAIN_AFTER_A_FIX),
         (approved(), [MARKER], ["brief.md"], AGAIN_AFTER_A_FIX),  # a warning that blocks: by the cleanup review
         (DRAFT.model_copy(update={"tier": "strict"}), [NO_TASKS], ["approval"], READ_THEN_PLAN),
+        (
+            DRAFT.model_copy(update={"tier": "strict"}),
+            [NO_TASKS, MARKER],
+            ["approval"],
+            f"settle the open point in brief.md, then {READ_THEN_PLAN}",
+        ),
         (approved(), [], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
         (approved(), [ERROR], [], "fix what `adk-spec validate passkeys` lists"),
         (approved(), [OTHER], [], "implement tasks.md, then run `adk-spec archive passkeys`"),
