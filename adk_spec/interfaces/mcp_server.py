@@ -69,8 +69,8 @@ Then call status and do the step it names: verify, where the change owes a verif
 #: the command's answer, and was read as a failure and asked again.
 _ENDINGS = {
     1: ", which is an answer: act on what it says before calling it again",
-    2: ": the command or the workspace's settings were not right",
-    3: ": the model, its provider or a file could not be used",
+    2: ": refused, by a setting, by git, or for no model set up: put that right before calling again",
+    3: ": the model or its provider failed, or a file could not be read or written",
 }
 
 

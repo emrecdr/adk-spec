@@ -124,8 +124,9 @@ def constitution_text(workspace: Workspace) -> str:
 
 def tree_text(paths: Sequence[str]) -> str:
     """A repository's files for a stage to name real paths by: every path, one a line, or past `TREE_MAX_PATHS`
-    each folder two levels deep with the number of files under it, under a first line that says so. A list cut
-    short in silence would hide the files a task needs."""
+    each folder two levels deep with the number of files under it, under a first line that says so; one level deep
+    where those are too many still, and the largest `TREE_MAX_PATHS` of them, with how many more there are. A list
+    cut short in silence would hide the files a task needs."""
     if len(paths) <= TREE_MAX_PATHS:
         return "\n".join(paths)
     deep, folders = "two levels", _folders(paths, 2)

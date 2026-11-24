@@ -323,3 +323,15 @@ def test_a_delta_that_is_no_utf8_text_is_named_once(tmp_path, capsys, fake_provi
     (tmp_path / DELTA).write_bytes(read_text(tmp_path / DELTA).encode("utf-16"))
     assert revised(tmp_path) == 1 and fake_provider.requests == []
     assert capsys.readouterr().out.count("ERROR file.unreadable .spec/changes/passkeys/specs/auth/spec.md") == 1
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_an_approved_change_revised_as_it_stands_names_no_plan_that_refuses(tmp_path, capsys) -> None:
+    """Found by the code review: the kept line named `plan`, which drafts for a draft alone."""
+    seeded(tmp_path)
+    assert run(tmp_path, "propose", "Let users sign in with a passkey.", "--id", "fresh", "--no-input") == 0
+    approved(tmp_path, "fresh")
+    capsys.readouterr()
+    assert run(tmp_path, "propose", "Keep it as it is.", "--id", "fresh", "--no-input") == 0
+    (kept,) = [line for line in capsys.readouterr().out.splitlines() if line.startswith("kept ")]
+    assert "adk-spec plan" not in kept and "approve" in kept

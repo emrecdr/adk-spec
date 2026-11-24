@@ -1072,7 +1072,9 @@ def _optional(workspace: Workspace, read: Callable[[Workspace], str], name: str)
         return read(workspace)
     except NotTextError:
         print(f"left out  {workspace.shown(workspace.home / name)} is not UTF-8: no stage reads it")
-        return None
+    except OSError as exc:  # found by the code review: the chat left it out, and `propose` stopped on it
+        print(f"left out  {workspace.shown(workspace.home / name)} could not be opened: {exc.strerror or exc}")
+    return None
 
 
 def _with_checked(workspace: Workspace, given: Sequence[str], held: Mapping[str, str], here: Path) -> dict[str, str]:
@@ -1474,7 +1476,10 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
         if check_stands(assessed.state, assessed.seen):
             why = "its files have not changed since, and a check by code alone does not replace it"
         else:
-            why = f"only a model clears what a model found: `{PROG} check {args.id}` asks the model again"
+            why = (  # found by the code review: an older adk-spec's count may hold the code's warnings as well
+                f"only a model clears what a model found: `{PROG} check {args.id}` asks the model again. A check an "
+                "older adk-spec recorded may count the code's own warnings too"
+            )
         print(
             f"{PROG}: the check of `{args.id}` by {held.model} stands, with {held.blocking} blocking: {why}",
             file=sys.stderr,
@@ -1851,10 +1856,15 @@ def _tasks_kept(workspace: Workspace, change: Change, changed: bool) -> str | No
     """Why a revised change keeps its task list as it stands, and how to draft it again; nothing where it is drafted
     again. A ticked box is never lost, and a list whose requirements did not change is not paid for again."""
     cid = change.state.id
+    # `plan` drafts for a draft alone: found by the code review, an approved change the revision left as it stood
+    # was sent to a `plan` that refused.
+    draft = workspace.state(cid).status == "draft"
     if _ticked(workspace, change):
-        return f"a task is ticked. `{PROG} plan {cid} --replace` drafts it again"
+        how = f"`{PROG} plan {cid} --replace` drafts it again" if draft else "a task added by hand is approved again"
+        return f"a task is ticked. {how}"
     if not changed and change.tasks is not None:
-        return f"no requirement changed. `{PROG} plan {cid}` drafts it again"
+        how = f"`{PROG} plan {cid}` drafts it again" if draft else "a task added by hand is approved again"
+        return f"no requirement changed. {how}"
     return None
 
 

@@ -68,7 +68,6 @@ The rules every change in this repository follows. Keep it short, and give each 
 
 ## Repository structure
 """
-#: A finding that says a file is missing, and the file whose own fault makes it untrue.
 
 
 class WorkspaceError(ValueError):

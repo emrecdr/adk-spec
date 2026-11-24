@@ -680,3 +680,15 @@ def test_a_proposal_that_reads_no_code_says_so(tmp_path, capsys, fake_provider) 
     fake_provider.answers_when("You size a change request", {"tier": "lean", "reason": "Small.", "capabilities": []})
     run(tmp_path, "propose", "Let users sign in with a passkey.", "--no-input", "--id", "unread")
     assert "explored  nothing: no git repository here, or no file in it" in capsys.readouterr().out
+
+
+def test_a_profile_that_will_not_open_is_left_out_with_a_line(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review: the chat left out a profile that would not open, and `propose` stopped on it."""
+    from conftest import shut
+
+    ws = seeded(tmp_path)
+    (ws.home / "profile.md").write_text("# This repository\n")
+    fake_provider.answers_when("You size a change request", {"tier": "lean", "reason": "Small.", "capabilities": []})
+    with shut(ws.home / "profile.md"):
+        assert run(tmp_path, "propose", "Let users sign in with a passkey.", "--no-input", "--id", "shut") == 0
+    assert "left out  .spec/profile.md" in capsys.readouterr().out
