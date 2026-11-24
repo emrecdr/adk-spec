@@ -15,8 +15,9 @@ others show. The state file is the code's own, so one that does not read as it w
 from __future__ import annotations
 
 import contextlib
+import re
 import shutil
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from pydantic import ValidationError
 
 from ..domain.brief_md import parse_brief
 from ..domain.check import coverage_of
-from ..domain.delta_md import parse_delta
+from ..domain.delta_md import MODIFIED, REMOVED, parse_delta
 from ..domain.ids import REQ_ID, slug_problem
 from ..domain.lessons_md import TEMPLATE as LESSONS_TEMPLATE
 from ..domain.lessons_md import learned
@@ -46,6 +47,8 @@ LESSONS = "lessons.md"
 STATE, BRIEF, DESIGN, TASKS, SPEC_FILE = "change.json", "brief.md", "design.md", "tasks.md", "spec.md"
 #: The folder of a change's generated reports, which no approval fingerprints.
 REPORTS = "reports"
+#: The approver's view of a change, under its `reports/`.
+REVIEW = "review.md"
 #: What a reading of the repository's code found for a change. Supporting material: no approval covers it.
 CONTEXT = "context.md"
 #: The writer's lock, and the marker a run makes while it takes over a lock left behind: a run's own, ignored by git.
@@ -235,19 +238,40 @@ class Workspace:
 
         A delta is read as text, not parsed: one that is off its grammar, mid-edit, still holds the IDs it adds."""
         taken = {held.id for spec in specs.values() for held in (*spec.requirements, *spec.retired)}
+        for _change_id, text in self._open_deltas():
+            taken.update(spelled.group(0) for spelled in REQ_ID.finditer(text))
+        return taken
+
+    def touching(self, change_id: str) -> dict[str, list[str]]:
+        """Each requirement another open change modifies or removes, and those changes, sorted. A delta is read as
+        text, as `taken` reads it, but an ID counts only as a requirement's heading under the MODIFIED or REMOVED
+        section: one a statement mentions is not changed by it."""
+        held: dict[str, list[str]] = {}
+        for other, text in self._open_deltas():
+            if other == change_id:
+                continue
+            for req_id in _changed_in(text):
+                if other not in held.setdefault(req_id, []):
+                    held[req_id].append(other)
+        return {req_id: sorted(others) for req_id, others in held.items()}
+
+    def _open_deltas(self) -> Iterator[tuple[str, str]]:
+        """Each delta of each change not archived, as text, with its change: one that is off its grammar, mid-edit,
+        still holds its IDs. A change whose state does not read is taken to be open, so its IDs are never handed out
+        twice; a delta that will not open stops the command (found by the code review: its IDs went free)."""
         for change_id in self.changes():
             folder = self._folder(change_id)
             try:
                 archived = self._state(folder, change_id).status == "archived"  # history grows, and is not read
-            except WorkspaceError:  # one that does not read is taken to be open: its IDs are never handed out twice
+            except WorkspaceError:
                 archived = False
             if archived:
                 continue
             for capability in self._holding(folder / SPECS, SPEC_FILE):
-                # One that will not open stops the command: found by the code review, its IDs went free.
-                text = (folder / SPECS / capability / SPEC_FILE).read_bytes().decode("utf-8", errors="replace")
-                taken.update(spelled.group(0) for spelled in REQ_ID.finditer(text))
-        return taken
+                yield (
+                    change_id,
+                    (folder / SPECS / capability / SPEC_FILE).read_bytes().decode("utf-8", errors="replace"),
+                )
 
     def _placed(self, folder: Path, files: Mapping[str, str]) -> dict[Path, str]:
         """Each of `files` by the path it takes in `folder`. `WorkspaceError` for a path that leaves it."""
@@ -384,6 +408,21 @@ class Workspace:
         paths = [BRIEF, DESIGN, TASKS]
         paths += [f"{SPECS}/{capability}/{SPEC_FILE}" for capability in self._holding(folder / SPECS, SPEC_FILE)]
         return {path: _text_or_bytes(folder / path) for path in paths if (folder / path).is_file()}
+
+
+#: A requirement's heading in a delta.
+_HEADED = re.compile(rf"### ({REQ_ID.pattern}):")
+
+
+def _changed_in(text: str) -> list[str]:
+    """The IDs a delta's text heads under its MODIFIED and REMOVED sections."""
+    changed, section = [], None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            section = line.strip()
+        elif section in (MODIFIED, REMOVED) and (headed := _HEADED.match(line)):
+            changed.append(headed.group(1))
+    return changed
 
 
 def _text_or_bytes(path: Path) -> str:

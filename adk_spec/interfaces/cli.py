@@ -65,6 +65,7 @@ from ..domain.lifecycle import (
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
+from ..domain.review_md import render_review, review_said
 from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
 from ..domain.tasks_md import render_tasks
@@ -92,6 +93,7 @@ from ..workspace.layout import (
     CONSTITUTION,
     LESSONS,
     PROFILE,
+    REVIEW,
     ROOT_NAME,
     SPEC_FILE,
     SPECS,
@@ -511,8 +513,33 @@ def _say_next(
     Without `drift`, git is not asked whether the work moved: `verify` has just measured it. A `plan` the step names
     is said as `plan` gives it, with the flags this run's plan goes on with: found by the cleanup review, a second
     wording of the step named a plan its holds refused."""
-    phrase = _assessed(workspace, change_id, living, drift=drift).step.phrase
+    assessed = _assessed(workspace, change_id, living, drift=drift)
+    deltas = assessed.loaded.change.deltas
+    if assessed.state.status == "draft" and deltas:  # a draft waits on a person reading it: its view is made fresh
+        shown, overlaps = _view_written(workspace, change_id, deltas, living)
+        print(f"review    {shown}: {review_said(deltas, overlaps)}")
+    phrase = assessed.step.phrase
     print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
+
+
+def _view_written(
+    workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]
+) -> tuple[str, dict[str, list[str]]]:
+    """The approver's view of a change written again: where it is, as shown, and the overlaps it names."""
+    overlaps = _overlaps(workspace, change_id, deltas)
+    path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps))
+    return workspace.shown(path), overlaps
+
+
+def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
+    """Each requirement this change modifies or removes that another open change modifies or removes too. Nothing
+    where another change's delta will not open: the view is the approver's aid, and `archive` still stops."""
+    own = {req.id for delta in deltas.values() for req in (*delta.modified, *delta.removed)}
+    try:
+        touched = workspace.touching(change_id)
+    except OSError:
+        return {}
+    return {req_id: others for req_id, others in touched.items() if req_id in own}
 
 
 def _of_specs(workspace: Workspace) -> tuple[dict[str, Spec], list[Finding]]:
@@ -726,6 +753,9 @@ def _approve(args: argparse.Namespace) -> int:
     edited = edited_drafts(assessed.state, files)
     workspace.save_state(held)
     _said_approved(held, by, len(files))
+    if overlaps := _overlaps(workspace, args.id, assessed.loaded.change.deltas):
+        named = "; ".join(f"{req_id} ({', '.join(others)})" for req_id, others in sorted(overlaps.items()))
+        print(f"note      also changed by another open change: {named}. The second to archive stops until rebased")
     if edited:
         print(
             f"lessons   {', '.join(edited)} edited since drafted: say what you corrected in one line in "
@@ -815,9 +845,10 @@ def _archive(args: argparse.Namespace) -> int:
         _printed(refused)
         print(f"{PROG}: `{args.id}` is not archived, and no file was written", file=sys.stderr)
         if any(held.code == "delta.base-stale" for held in refused):
+            shown, _overlapping = _view_written(workspace, args.id, loaded.change.deltas, living)
             print(
-                f"{PROG}: the living spec changed after this delta was based on it: read the current requirement, "
-                f"update the delta, then run `{PROG} rebase {args.id}` and approve again",
+                f"{PROG}: the living spec changed after this delta was based on it: read {shown}, update the delta, "
+                f"then run `{PROG} rebase {args.id}` and approve again",
                 file=sys.stderr,
             )
         return EXIT_FINDINGS
