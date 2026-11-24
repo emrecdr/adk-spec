@@ -4,10 +4,10 @@ same one."""
 from __future__ import annotations
 
 import pytest
-from conftest import on_the_fake, run, seeded
+from conftest import approved, on_the_fake, run, seeded
 from samples import DELTA, SPEC
 
-from adk_spec.domain.delta_md import parse_delta
+from adk_spec.domain.delta_md import changed_ids, parse_delta
 from adk_spec.domain.review_md import render_review
 from adk_spec.domain.spec_md import parse_spec
 from adk_spec.workspace.files import read_text, write_text
@@ -89,15 +89,29 @@ def test_an_archived_change_is_no_overlap(tmp_path) -> None:
     assert ws.touching("passkeys") == {}
 
 
-def test_a_command_that_leaves_a_draft_to_be_read_writes_the_view(tmp_path, capsys) -> None:
+@pytest.mark.parametrize("command", [("rebase", "passkeys"), ("check", "passkeys", "--no-model")])
+def test_a_command_that_leaves_a_draft_to_be_read_writes_the_view(tmp_path, capsys, command) -> None:
     seeded(tmp_path)
-    for command in (("rebase", "passkeys"), ("check", "passkeys", "--no-model")):
-        (tmp_path / VIEW).unlink(missing_ok=True)
-        capsys.readouterr()
-        run(tmp_path, *command)
-        out = capsys.readouterr().out
-        assert (tmp_path / VIEW).is_file(), command
-        assert f"review    {VIEW}: 1 added, 1 modified, 1 removed" in out, command
+    capsys.readouterr()
+    run(tmp_path, *command)
+    assert (tmp_path / VIEW).is_file()
+    assert f"review    {VIEW}: 1 added, 1 modified, 1 removed" in capsys.readouterr().out
+
+
+def test_an_approved_change_edited_since_is_given_the_view_again(tmp_path) -> None:
+    """Found by the cleanup review: the view was written for a draft alone, and an approved change edited since owes
+    an approval as much."""
+    seeded(tmp_path)
+    approved(tmp_path)
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nAn edit after the approval.\n")
+    run(tmp_path, "check", "passkeys", "--no-model")
+    assert (tmp_path / VIEW).is_file()
+
+
+def test_a_heading_inside_a_fence_is_no_change() -> None:
+    fenced = OTHER.replace("### REQ-AUTH-002:", "```\n### REQ-AUTH-002:", 1).replace("ten failed", "ten failed\n```", 1)
+    assert changed_ids(OTHER) == ["REQ-AUTH-002"] and changed_ids(fenced) == []
 
 
 @pytest.mark.usefixtures("fake_provider")
@@ -111,7 +125,7 @@ def test_a_proposed_change_gets_its_view(tmp_path, capsys, monkeypatch) -> None:
 
 def test_an_approved_change_is_not_given_the_view_again(tmp_path) -> None:
     seeded(tmp_path)
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    approved(tmp_path)
     assert not (tmp_path / VIEW).is_file()
 
 
@@ -119,14 +133,14 @@ def test_approve_notes_another_open_change_on_the_same_requirement(tmp_path, cap
     ws = seeded(tmp_path)
     another(ws, OTHER)
     capsys.readouterr()
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    approved(tmp_path)
     (note,) = [line for line in capsys.readouterr().out.splitlines() if line.startswith("note ")]
     assert "REQ-AUTH-002" in note and "other" in note
 
 
 def test_archive_stopped_by_a_moved_base_names_the_view(tmp_path, capsys) -> None:
     seeded(tmp_path)
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    approved(tmp_path)
     write_text(tmp_path / ".spec/specs/auth/spec.md", SPEC.replace("five failed", "seven failed"))
     capsys.readouterr()
     assert run(tmp_path, "archive", "passkeys") == 1

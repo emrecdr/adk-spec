@@ -27,5 +27,6 @@ def changelog_entry(change_id: str, day: str, deltas: Mapping[str, Delta]) -> st
 
 def with_entry(text: str | None, entry: str) -> str:
     """The changelog `text` with `entry` first under its heading; a changelog where there is none."""
-    body = (text or "").removeprefix(HEADING).lstrip("\n") if text and text.startswith(HEADING) else (text or "")
+    text = text or ""
+    body = text.removeprefix(HEADING).lstrip("\n") if text.startswith(HEADING) else text
     return f"{HEADING}\n\n{entry}" + (f"\n{body}" if body.strip() else "")

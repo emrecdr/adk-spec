@@ -9,10 +9,11 @@ folder that holds `.spec/`, as the change that proved it recorded it."""
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 
 from .ids import REQ_ID
 from .model import Finding
+from .text import lines_of, normalise
 from .validate import finding
 from .verify import Verdict
 
@@ -49,10 +50,7 @@ def render_evidence(title: str, proofs: Sequence[Proof]) -> str:
         "commit, to clear it.",
         "",
     ]
-    lines += [
-        _ENTRY + _APART.join((one.req, one.repository, one.path, one.change, one.at, one.quote))
-        for one in _sorted(proofs)
-    ]
+    lines += [_ENTRY + _APART.join(astuple(one)) for one in _sorted(proofs)]  # in the order `Proof(*parts)` reads
     return "\n".join(lines) + "\n"
 
 
@@ -61,7 +59,7 @@ def parse_evidence(text: str) -> tuple[list[tuple[int, Proof]], list[int]]:
     note or a blank line aside, a line edited off the grammar is named rather than refused."""
     read: list[tuple[int, Proof]] = []
     unread: list[int] = []
-    for number, line in enumerate(text.splitlines(), 1):
+    for number, line in enumerate(lines_of(normalise(text)), 1):
         if not line.strip() or line.startswith((_TITLE, _NOTE)):
             continue
         parts = line.removeprefix(_ENTRY).split(_APART, 5) if line.startswith(_ENTRY) else []

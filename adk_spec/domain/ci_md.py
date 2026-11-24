@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from .model import Finding
 from .report_md import place
 from .secrets import scrub
+from .text import flat
 
 #: The workflow command each severity is said with.
 LEVELS = {"ERROR": "error", "WARNING": "warning", "INFO": "notice"}
@@ -56,4 +57,4 @@ def _property(text: str) -> str:
 
 def _cell(text: str) -> str:
     """A table cell: on one line, a pipe kept from ending it."""
-    return " ".join(text.split()).replace("|", "\\|")
+    return flat(text).replace("|", "\\|")

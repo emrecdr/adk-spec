@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from conftest import on_the_fake, run, seeded
+from conftest import approved, on_the_fake, run, seeded
 from samples import BRIEF, DELTA, tasks_for
 from test_review import MENTION
 from test_verify import REPORT, approved_in_a_repository, implemented
@@ -47,7 +47,7 @@ def test_verify_writes_the_summary_and_names_it_on_its_one_line(tmp_path, capsys
 
 def test_archive_writes_a_changelog_entry_newest_first(tmp_path) -> None:
     ws = seeded(tmp_path)
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    approved(tmp_path)
     assert run(tmp_path, "archive", "passkeys") == 0, "a lean change is archived without a verification"
     folder = ws.new_change("unlock", "lean")
     write_text(folder / "brief.md", BRIEF)
@@ -71,7 +71,7 @@ def test_a_persons_edits_below_the_heading_are_kept() -> None:
 
 def test_a_changelog_that_does_not_read_is_left_and_the_change_archived(tmp_path, capsys) -> None:
     seeded(tmp_path)
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    approved(tmp_path)
     (tmp_path / CHANGELOG).write_bytes(b"\xff\xfe not text")
     capsys.readouterr()
     assert run(tmp_path, "archive", "passkeys") == 0

@@ -9,7 +9,8 @@ import difflib
 from collections.abc import Mapping, Sequence
 
 from .model import Delta, Requirement, Spec
-from .spec_md import FENCE, render_requirement
+from .spec_md import render_requirement
+from .text import longest_backticks
 
 #: How many overlaps the line a command prints names; the view names every one.
 SAID = 3
@@ -44,12 +45,10 @@ def render_review(
 def review_said(deltas: Mapping[str, Delta], overlaps: Mapping[str, Sequence[str]]) -> str:
     """What a command says of the view on its one line: how many requirements each kind of change holds, and the
     first overlaps."""
-    counts = (
-        ("added", sum(len(delta.added) for delta in deltas.values())),
-        ("modified", sum(len(delta.modified) for delta in deltas.values())),
-        ("removed", sum(len(delta.removed) for delta in deltas.values())),
-    )
-    said = ", ".join(f"{count} {kind}" for kind, count in counts if count) or "no requirement"
+    counts = {
+        kind: sum(len(getattr(delta, kind)) for delta in deltas.values()) for kind in ("added", "modified", "removed")
+    }
+    said = ", ".join(f"{count} {kind}" for kind, count in counts.items() if count) or "no requirement"
     named = [f"{req_id} also changed by {', '.join(others)}" for req_id, others in sorted(overlaps.items())]
     if named:
         more = f", and {len(named) - SAID} more" if len(named) > SAID else ""
@@ -57,8 +56,15 @@ def review_said(deltas: Mapping[str, Delta], overlaps: Mapping[str, Sequence[str
     return said
 
 
+def _fenced(kind: str, lines: list[str]) -> list[str]:
+    """`lines` in a code fence longer than any run of backticks they hold, so a fence inside a statement, or a diff
+    line of one, cannot close it."""
+    fence = "`" * max(3, longest_backticks("\n".join(lines)) + 1)
+    return [fence + kind, *lines, fence, ""]
+
+
 def _whole(req: Requirement) -> list[str]:
-    return [FENCE + "markdown", render_requirement(req).rstrip("\n"), FENCE, ""]
+    return _fenced("markdown", render_requirement(req).rstrip("\n").split("\n"))
 
 
 def _changed(before: Requirement | None, after: Requirement, change_id: str) -> list[str]:
@@ -72,4 +78,4 @@ def _changed(before: Requirement | None, after: Requirement, change_id: str) -> 
         tofile=change_id,
         lineterm="",
     )
-    return [FENCE + "diff", *diff, FENCE, ""]
+    return _fenced("diff", list(diff))

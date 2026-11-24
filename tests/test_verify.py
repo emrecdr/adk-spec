@@ -78,6 +78,13 @@ def implemented(root) -> None:
     write_text(root / "src/auth.py", AFTER)
 
 
+def verified_in_a_repository(root) -> None:
+    """The seeded change approved in a repository, implemented, and verified with every requirement met."""
+    approved_in_a_repository(root)
+    implemented(root)
+    assert run(root, "verify", "passkeys") == 0
+
+
 def verdicts(**changed) -> dict:
     return {"verdicts": [{**one, **changed.get(one["id"][-3:], {})} for one in CANNED_VERDICTS["verdicts"]]}
 

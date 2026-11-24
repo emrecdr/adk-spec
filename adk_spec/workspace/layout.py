@@ -15,7 +15,6 @@ others show. The state file is the code's own, so one that does not read as it w
 from __future__ import annotations
 
 import contextlib
-import re
 import shutil
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -25,7 +24,7 @@ from pydantic import ValidationError
 
 from ..domain.brief_md import parse_brief
 from ..domain.check import coverage_of
-from ..domain.delta_md import MODIFIED, REMOVED, parse_delta
+from ..domain.delta_md import changed_ids, parse_delta
 from ..domain.ids import REQ_ID, slug_problem
 from ..domain.lessons_md import TEMPLATE as LESSONS_TEMPLATE
 from ..domain.lessons_md import learned
@@ -256,13 +255,11 @@ class Workspace:
         """Each requirement another open change modifies or removes, and those changes, sorted. A delta is read as
         text, as `taken` reads it, but an ID counts only as a requirement's heading under the MODIFIED or REMOVED
         section: one a statement mentions is not changed by it."""
-        held: dict[str, list[str]] = {}
+        held: dict[str, set[str]] = {}
         for other, text in self._open_deltas():
-            if other == change_id:
-                continue
-            for req_id in _changed_in(text):
-                if other not in held.setdefault(req_id, []):
-                    held[req_id].append(other)
+            if other != change_id:
+                for req_id in changed_ids(text):
+                    held.setdefault(req_id, set()).add(other)
         return {req_id: sorted(others) for req_id, others in held.items()}
 
     def _open_deltas(self) -> Iterator[tuple[str, str]]:
@@ -422,21 +419,6 @@ class Workspace:
         paths = [BRIEF, DESIGN, TASKS]
         paths += [f"{SPECS}/{capability}/{SPEC_FILE}" for capability in self._holding(folder / SPECS, SPEC_FILE)]
         return {path: _text_or_bytes(folder / path) for path in paths if (folder / path).is_file()}
-
-
-#: A requirement's heading in a delta.
-_HEADED = re.compile(rf"### ({REQ_ID.pattern}):")
-
-
-def _changed_in(text: str) -> list[str]:
-    """The IDs a delta's text heads under its MODIFIED and REMOVED sections."""
-    changed, section = [], None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            section = line.strip()
-        elif section in (MODIFIED, REMOVED) and (headed := _HEADED.match(line)):
-            changed.append(headed.group(1))
-    return changed
 
 
 def _text_or_bytes(path: Path) -> str:

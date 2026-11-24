@@ -57,6 +57,7 @@ from ..domain.lifecycle import (
     edited_drafts,
     first_of_two,
     kept_bases,
+    merge_gate,
     missing_bases,
     model_holds,
     next_step,
@@ -529,10 +530,11 @@ def _say_next(
     """The line every command that changes a change ends on: what comes next, read from the files as they now are.
     Without `drift`, git is not asked whether the work moved: `verify` has just measured it. A `plan` the step names
     is said as `plan` gives it, with the flags this run's plan goes on with: found by the cleanup review, a second
-    wording of the step named a plan its holds refused."""
+    wording of the step named a plan its holds refused. Where no approval covers the change's files, a person reads
+    it before approving: its view, `reports/review.md`, is written again first."""
     assessed = _assessed(workspace, change_id, living, drift=drift)
     deltas = assessed.loaded.change.deltas
-    if assessed.state.status == "draft" and deltas:  # a draft waits on a person reading it: its view is made fresh
+    if assessed.stale and deltas:  # a draft, or an approved change edited since: an approval is owed
         shown, overlaps = _view_written(workspace, change_id, deltas, living)
         print(f"review    {shown}: {review_said(deltas, overlaps)}")
     phrase = assessed.step.phrase
@@ -612,30 +614,10 @@ def _validate(args: argparse.Namespace) -> int:
 
 
 def _gated(workspace: Workspace, assessed: Assessed) -> list[Finding]:
-    """What a merge gate reads of a change beyond its own findings: an approval its files no longer match, and work
-    changed since it was verified. Made here alone: among the change's own findings, `approve` would weigh a void
-    approval's warning as blocking on the strict tier, and the approval that is its one remedy would be refused."""
+    """What a merge gate reads of a change beyond its own findings, `lifecycle.merge_gate`, pathed from the root."""
     state = assessed.state
-    folder = f"{ROOT_NAME}/{CHANGES}/{state.id}"
-    found = []
-    if assessed.stale and state.status in ("approved", "verified"):
-        moved = [path for path in assessed.stale if path not in ("approval", "bases")]
-        found.append(
-            finding(
-                "change.approval-void",
-                f"`{state.id}` changed since it was approved ({', '.join(assessed.stale)}): run `{PROG} approve "
-                f"{state.id}` again",
-                path=f"{folder}/{moved[0] if moved else STATE_FILE}",
-            )
-        )
-    drift = _drift(workspace, state)
-    if drift is None:
-        why = "it could not be compared with what was verified (a shallow clone, or a repository not there)"
-        found.append(finding("change.drift-unknown", f"The work of `{state.id}`: {why}", path=f"{folder}/{STATE_FILE}"))
-    elif drift:
-        said = f"The work changed since `{state.id}` was verified: run `{PROG} verify {state.id}` again"
-        found.append(finding("change.work-drifted", said, path=f"{folder}/{STATE_FILE}"))
-    return found
+    found = merge_gate(state, assessed.stale, _drift(workspace, state), record=STATE_FILE)
+    return _from_root(state.id, found)
 
 
 def _annotated(found: Sequence[Finding], *, failed: bool) -> None:
@@ -720,8 +702,7 @@ def _rebase(args: argparse.Namespace) -> int:
     else:
         workspace.save_state(reopened(state, bases=held))
         if state.approval is not None:
-            print(f"the approval is void: read what was stale, then run `{PROG} approve {args.id}` again")
-            return EXIT_OK
+            print("the approval is void: the bases were recorded anew")
     _say_next(workspace, args.id, living)  # it ends on what comes next, as every command that moves a change does
     return EXIT_OK
 

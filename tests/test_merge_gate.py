@@ -6,11 +6,14 @@ from __future__ import annotations
 import json
 
 import pytest
-from conftest import on_the_fake, run, seeded, state_of
+from conftest import approved, on_the_fake, run, seeded, state_of
+from test_evidence import validated
+from test_lifecycle import approved as approved_state
 from test_strict import planned
-from test_verify import approved_in_a_repository, implemented
+from test_verify import verified_in_a_repository
 
 from adk_spec.domain.ci_md import ROWS, annotation_lines, step_summary
+from adk_spec.domain.lifecycle import merge_gate, verified
 from adk_spec.domain.model import Finding
 from adk_spec.workspace.files import read_text, write_text
 
@@ -24,22 +27,16 @@ def _fake_arm(monkeypatch) -> None:
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
 
 
-def validated(root, capsys, *flags: str) -> tuple[int, str]:
-    capsys.readouterr()
-    code = run(root, "validate", *flags)
-    return code, capsys.readouterr().out
-
-
 def voided(root) -> None:
     """The seeded change approved, then its brief edited."""
     seeded(root)
-    assert run(root, "approve", "passkeys", "--by", "reviewer") == 0
+    approved(root)
     write_text(root / BRIEF, read_text(root / BRIEF) + "\nAn edit after the approval.\n")
 
 
 def test_a_voided_approval_is_a_warning_that_fails_strict(tmp_path, capsys) -> None:
     seeded(tmp_path)
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    approved(tmp_path)
     assert validated(tmp_path, capsys, "--strict")[0] == 0
     write_text(tmp_path / BRIEF, read_text(tmp_path / BRIEF) + "\nAn edit after the approval.\n")
     code, out = validated(tmp_path, capsys)
@@ -58,9 +55,7 @@ def test_a_voided_strict_approval_can_still_be_approved_again(tmp_path, fake_pro
 
 
 def test_drifted_work_is_a_warning(tmp_path, capsys) -> None:
-    approved_in_a_repository(tmp_path)
-    implemented(tmp_path)
-    assert run(tmp_path, "verify", "passkeys") == 0
+    verified_in_a_repository(tmp_path)
     assert "change.work-drifted" not in validated(tmp_path, capsys)[1]
     write_text(tmp_path / "src/auth.py", read_text(tmp_path / "src/auth.py") + "\n# a later edit\n")
     (drift,) = [line for line in validated(tmp_path, capsys)[1].splitlines() if "change.work-drifted" in line]
@@ -68,9 +63,7 @@ def test_drifted_work_is_a_warning(tmp_path, capsys) -> None:
 
 
 def test_work_that_cannot_be_compared_is_a_note_and_archive_still_refuses(tmp_path, capsys) -> None:
-    approved_in_a_repository(tmp_path)
-    implemented(tmp_path)
-    assert run(tmp_path, "verify", "passkeys") == 0
+    verified_in_a_repository(tmp_path)
     held = state_of(tmp_path)
     held["verification"]["base"] = "0" * 40  # a commit this clone does not hold, as a shallow one does not
     write_text(tmp_path / ".spec/changes/passkeys/change.json", json.dumps(held, indent=2))
@@ -121,3 +114,11 @@ def test_json_output_is_unchanged_by_github_actions(tmp_path, capsys, monkeypatc
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     found = json.loads(validated(tmp_path, capsys, "--json")[1])["findings"]
     assert "change.approval-void" in {held["code"] for held in found}
+
+
+def test_a_lean_changes_drift_is_not_gated() -> None:
+    """A lean change owes no verification: `archive` and `status` let its drift pass, and so does the gate."""
+    lean = verified(approved_state(), {"REQ-A-001": "met"}, base="c0", diff="sha256:d", at="t")
+    assert lean.status == "verified" and merge_gate(lean, [], True, record="change.json") == []
+    standard = lean.model_copy(update={"tier": "standard"})
+    assert [held.code for held in merge_gate(standard, [], True, record="change.json")] == ["change.work-drifted"]

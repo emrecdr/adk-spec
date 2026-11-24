@@ -24,11 +24,13 @@ def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
     `root` is the folder that holds `.spec/`; `exclude`, the person's patterns, apply to its own repository."""
     own = proof.repository == "."
     folder = root if own else root / proof.repository
+    if not folder.is_dir():
+        return None
+    if _found(folder / proof.path, proof.quote):  # read first: a quote that holds asks git nothing
+        return True
     try:
-        if not folder.is_dir() or not is_repository(folder, trust=own):
+        if not is_repository(folder, trust=own):
             return None
-        if _found(folder / proof.path, proof.quote):
-            return True
         term = max(proof.quote.split(), key=len, default="")  # a fixed string git finds on one line
         hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
     except GitError:
@@ -50,8 +52,6 @@ def evidence_findings(workspace: Workspace) -> list[Finding]:
     exclude = workspace.config().exclude
     for capability in workspace.capabilities():
         path = workspace.home / SPECS / capability / EVIDENCE
-        if not path.is_file():
-            continue
         shown = workspace.shown(path)
         read, unread = _read(path)
         if read is None:
@@ -75,14 +75,15 @@ def evidence_folded(
     """What an archive writes beside each living spec its change merges into, by path from `.spec/`, and the living
     evidence files it leaves as they are because they do not read. The change's evidence counts only where it is of
     the verification the change records: one written by a verification since superseded is left out."""
-    held = state.verification
-    mine, _unread = _read(workspace.home / CHANGES / state.id / EVIDENCE) if held else (None, [])
-    proofs = [one for _line, one in mine or [] if held and one.at == held.at]
+    proofs: list[Proof] = []
+    if held := state.verification:
+        mine, _unread = _read(workspace.home / CHANGES / state.id / EVIDENCE)
+        proofs = [one for _line, one in mine or [] if one.at == held.at]
     files: dict[str, str] = {}
     left: list[str] = []
     for capability, delta in sorted(deltas.items()):
         path = workspace.home / SPECS / capability / EVIDENCE
-        living, unread = _read(path) if path.is_file() else ([], [])
+        living, unread = _read(path)
         if living is None or unread:
             left.append(workspace.shown(path))
             continue

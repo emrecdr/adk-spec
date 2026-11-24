@@ -16,7 +16,7 @@ from .model import PASSED, Approval, ChangeState, Checked, Delta, Finding, Gramm
 from .spec_md import fingerprint
 from .tasks_md import parse_tasks, render_tasks
 from .text import sha256_of
-from .validate import UNREAD
+from .validate import UNREAD, finding
 
 #: Findings that block an approval whatever their severity: an open point, or no plan. A base that is missing does
 #: not: an approval records it, since it is a function of the delta and the living spec as they stand.
@@ -351,8 +351,31 @@ def archive_blockers(state: ChangeState, stale: Sequence[str], *, drifted: bool 
     if verified and state.status != "verified":
         return [f"`{cid}` is a {state.tier} change and is not verified: run `adk-spec verify {cid}` first"]
     if verified and drifted:
-        return [f"the work changed since `{cid}` was verified: run `adk-spec verify {cid}` again"]
+        return [_DRIFTED.format(cid=cid)]
     return []
+
+
+_DRIFTED = "the work changed since `{cid}` was verified: run `adk-spec verify {cid}` again"
+
+
+def merge_gate(state: ChangeState, stale: Sequence[str], drift: bool | None, *, record: str) -> list[Finding]:
+    """What a merge gate reads of a change beyond its own findings, each path in the change's folder: an approval its
+    files no longer match, and, where the tier owes a verification, work changed since it was verified (`drift`), or
+    that could not be compared with it (None). `record` names the change's state file. Never among the change's own
+    findings: there, `approve` would weigh a void approval's warning as blocking on the strict tier, and refuse the
+    approval that is its one remedy."""
+    found = []
+    if stale and state.status in ("approved", "verified"):
+        moved = [path for path in stale if path not in ("approval", "bases")]
+        void = _unready(state, stale)
+        found += [finding("change.approval-void", said, path=moved[0] if moved else record) for said in void]
+    if DEMANDS[state.tier].verified and state.status == "verified" and drift is not False:
+        why = "it could not be compared with what was verified (a shallow clone, or a repository not there)"
+        unknown = finding("change.drift-unknown", f"The work of `{state.id}`: {why}", path=record)
+        found.append(
+            unknown if drift is None else finding("change.work-drifted", _DRIFTED.format(cid=state.id), path=record)
+        )
+    return found
 
 
 Actor = Literal["you", "run", "done"]

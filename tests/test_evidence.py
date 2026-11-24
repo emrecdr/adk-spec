@@ -7,7 +7,7 @@ import json
 
 import pytest
 from conftest import on_the_fake, run, seeded
-from test_verify import AFTER, approved_in_a_repository, implemented
+from test_verify import AFTER, verified_in_a_repository
 
 from adk_spec.domain.evidence_md import (
     QUOTE_MAX,
@@ -93,9 +93,7 @@ def test_quotes_are_capped_in_length_and_number() -> None:
 
 
 def test_verify_keeps_the_changes_evidence(tmp_path, capsys) -> None:
-    approved_in_a_repository(tmp_path)
-    implemented(tmp_path)
-    assert run(tmp_path, "verify", "passkeys") == 0
+    verified_in_a_repository(tmp_path)
     read, unread = parse_evidence((tmp_path / CHANGE_EVIDENCE).read_text(encoding="utf-8"))
     assert unread == [] and {one.req for _line, one in read} == {"REQ-AUTH-004", "REQ-AUTH-002"}
     assert any(one.quote == "return passkey(user)" for _line, one in read)
@@ -111,10 +109,8 @@ LIVING_EVIDENCE = ".spec/specs/auth/evidence.md"
 
 
 def archived(root) -> None:
-    """The seeded change approved in a repository, implemented, verified with every requirement met, and archived."""
-    approved_in_a_repository(root)
-    implemented(root)
-    assert run(root, "verify", "passkeys") == 0
+    """The seeded change verified in a repository with every requirement met, and archived."""
+    verified_in_a_repository(root)
     assert run(root, "archive", "passkeys") == 0
 
 
@@ -141,9 +137,7 @@ def test_a_later_change_replaces_a_requirements_evidence() -> None:
 
 
 def test_evidence_of_a_superseded_verification_is_not_folded(tmp_path) -> None:
-    approved_in_a_repository(tmp_path)
-    implemented(tmp_path)
-    assert run(tmp_path, "verify", "passkeys") == 0
+    verified_in_a_repository(tmp_path)
     mine = tmp_path / CHANGE_EVIDENCE
     write_text(mine, mine.read_text(encoding="utf-8").replace(" | 20", " | 19"))  # another verification's time
     assert run(tmp_path, "archive", "passkeys") == 0
@@ -151,9 +145,7 @@ def test_evidence_of_a_superseded_verification_is_not_folded(tmp_path) -> None:
 
 
 def test_a_living_evidence_file_that_does_not_read_is_left_as_it_is(tmp_path, capsys) -> None:
-    approved_in_a_repository(tmp_path)
-    implemented(tmp_path)
-    assert run(tmp_path, "verify", "passkeys") == 0
+    verified_in_a_repository(tmp_path)
     edited = "# Evidence: auth\n\nsomeone wrote this by hand\n"
     write_text(tmp_path / LIVING_EVIDENCE, edited)
     capsys.readouterr()
