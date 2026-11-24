@@ -42,10 +42,11 @@ How it is applied in every phase below:
 | 13 | The `strict` tier | `2026-11-22-adk-spec-strict-tier.md` | A design always owed; `propose` stops after the brief and specs for a person to read, and `plan` goes on; two different names approve; a warning blocks, with no override. What each tier demands is one table in the domain. | Built, cleaned up, reviewed and merged. Measured live: the stop, a design, two names |
 | 15 | Research during planning | `2026-11-23-adk-spec-research-during-planning.md` | `propose` reads the code, and the project's installed libraries offline, before the brief; the brief asks only what the code cannot answer, in order of what depends on what, and "yes" takes a suggestion; rules from the skills the owner pointed to in the brief, specs, tasks and check. | Built, cleaned up, reviewed and merged; measured live, a fault the first run found fixed |
 | 14 | Inside a coding assistant | `2026-11-22-adk-spec-mcp-server.md` | `adk-spec-mcp` serves six commands as MCP tools to a coding assistant (`propose`, revising too, `plan`, `check`, `verify`, `status`, `validate`), each run as the terminal runs it; approving and archiving stay the person's. | Built, cleaned up, reviewed and merged. Its live proof, in VS Code and in Claude Code, waits for the owner |
+| 16 | Evidence and review | `2026-11-24-adk-spec-evidence-and-review.md` | The approver's view of each requirement a change touches, and who else is changing it; unmet verdicts written as the next work; `verify`'s evidence kept beside each living spec, a requirement whose code is gone noted as suspect; `validate` as a merge gate with GitHub annotations; a pull request's summary and a changelog. No model call, command, flag or `change.json` field. | Built test first; cleanup and review follow |
 
 ## The plan being followed now
 
-None: phases 1 to 14 are done, phase 10's rule since removed. What is left is the owner's, below.
+Phase 16, `2026-11-24-adk-spec-evidence-and-review.md`, from the design `2026-11-24-evidence-and-review-design.md`.
 
 ## How a change flows
 

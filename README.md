@@ -378,6 +378,9 @@ requirement is unmet, and the files a task named that the work never touched. Th
 marked as words that code has not checked. Point your coding assistant at it, then verify again. The file is removed
 once every requirement is met.
 
+Each run also writes `reports/summary.md`, Markdown to paste into the pull request: why the change is made, the
+requirements it adds, modifies and removes, each verdict, the tests, and who approved.
+
 ### 6. Archive
 
 ```shell
@@ -395,6 +398,9 @@ each. Later, `validate` and `status` look for those lines in the code. A require
 in its file or anywhere else in the repository, is noted as suspect: a refactor may have broken it. This is a note
 only, and it never fails CI. To clear it, verify a change that keeps the requirement, or delete its lines in a
 reviewed commit. A line from another repository is checked only where that repository is there.
+
+It also puts an entry first in `.spec/changelog.md`: the change and the day, then each requirement it added,
+modified and removed. Anything you write below the heading is kept as it is.
 
 ## Use cases
 

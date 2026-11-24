@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 from ..domain.brief_md import assumption_count, parse_brief, render_brief
+from ..domain.changelog_md import changelog_entry, with_entry
 from ..domain.check import nameable, owed, removed, tasked
 from ..domain.ci_md import annotation_lines, step_summary
 from ..domain.context_md import (
@@ -72,6 +73,7 @@ from ..domain.report_md import left_out, place, render_check, render_tests, rend
 from ..domain.review_md import render_review, review_said
 from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
+from ..domain.summary_md import render_summary
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import UNREAD, failed, finding, validate_spec
@@ -90,10 +92,11 @@ from ..workspace.context import (
     profile_text,
 )
 from ..workspace.evidence import evidence_findings, evidence_folded
-from ..workspace.files import NotTextError, append_text
+from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
+    CHANGELOG,
     CHANGES,
     CONSTITUTION,
     EVIDENCE,
@@ -920,11 +923,25 @@ def _archive(args: argparse.Namespace) -> int:
         return EXIT_FINDINGS
     # The lines that proved each requirement, beside its living spec: the next change and `validate` read them.
     files, left = evidence_folded(workspace, state, loaded.change.deltas)
+    if (logged := _logged(workspace, args.id, loaded.change.deltas)) is None:
+        left.append(workspace.shown(workspace.home / CHANGELOG))
+    else:
+        files[CHANGELOG] = logged
     workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}), files=files)
     print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
     for shown in left:
-        print(f"kept      {shown}: it does not read, so this change's evidence was not added to it")
+        print(f"kept      {shown}: it does not read, so nothing of this change was added to it")
     return EXIT_OK
+
+
+def _logged(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> str | None:
+    """The changelog with this change's entry first; None where the one there does not read, which is left as it is."""
+    path = workspace.home / CHANGELOG
+    try:
+        text = read_text(path) if path.is_file() else None
+    except NotTextError, OSError:
+        return None
+    return with_entry(text, changelog_entry(change_id, datetime.now(UTC).date().isoformat(), deltas))
 
 
 # The commands that call a model, or log in to one.
@@ -1750,6 +1767,8 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     reason = after.verification.override if after.verification else None
     report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases, tests=runs)
     wrote = [workspace.write_report(args.id, "verify.md", report)]
+    summary = render_summary(change, said, ran, after.approval)  # what a reviewer of the pull request reads
+    wrote.append(workspace.write_report(args.id, "summary.md", summary))
     # What is left is written where the next step points: found by the research, the step ignored the verdicts.
     touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
     left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []

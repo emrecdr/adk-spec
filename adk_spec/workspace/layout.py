@@ -53,6 +53,8 @@ REVIEW = "review.md"
 REMAINING = "remaining.md"
 #: The lines `verify` proved each requirement with: in a change's folder, then beside each living spec.
 EVIDENCE = "evidence.md"
+#: An entry for each archived change, in `.spec/`.
+CHANGELOG = "changelog.md"
 #: What a reading of the repository's code found for a change. Supporting material: no approval covers it.
 CONTEXT = "context.md"
 #: The writer's lock, and the marker a run makes while it takes over a lock left behind: a run's own, ignored by git.
