@@ -245,7 +245,11 @@ class Workspace:
             if archived:
                 continue
             for capability in self._holding(folder / SPECS, SPEC_FILE):
-                text = _text_or_bytes(folder / SPECS / capability / SPEC_FILE)
+                path = folder / SPECS / capability / SPEC_FILE
+                try:  # one that will not open stops the command: found by the code review, its IDs went free
+                    text = read_text(path)
+                except NotTextError:
+                    text = path.read_bytes().decode("utf-8", errors="replace")
                 taken.update(spelled.group(0) for spelled in REQ_ID.finditer(text))
         return taken
 

@@ -337,3 +337,18 @@ def test_a_revision_keeps_each_recorded_base_and_records_only_a_new_one() -> Non
     one, _two = parse_spec(SPEC).requirements
     held = {"REQ-AUTH-002": "sha256:old", "REQ-AUTH-009": "sha256:untouched"}
     assert kept_bases(held, deltas, living) == {"REQ-AUTH-002": "sha256:old", "REQ-AUTH-001": fingerprint(one)}
+
+
+def test_a_models_check_counts_the_blocking_findings_of_the_model_alone() -> None:
+    """Found by the code review: on the strict tier a check counted the code's warnings among the model's, and a
+    warning fixed since still held a check by code alone, as if the model had found it. The code's findings are
+    asked again, live, by every approval."""
+    from adk_spec.domain.lifecycle import checked, model_holds
+
+    strict = DRAFT.model_copy(update={"tier": "strict"})
+    warning = Finding(severity="WARNING", code="tasks.no-verify", message="m")
+    critical = Finding(severity="ERROR", code="check.contradiction", message="m")
+    held = checked(strict, [warning], files={"a": "1"}, at=AT, model="m", judged=[])
+    assert held.check.blocking == 0 and not model_holds(held, {"a": "2"})
+    held = checked(strict, [warning, critical], files={"a": "1"}, at=AT, model="m", judged=[critical])
+    assert held.check.blocking == 1 and model_holds(held, {"a": "2"})

@@ -656,7 +656,8 @@ with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists t
   and one whose quote is not in the file it names is left out. A blocking finding stops the approval: fix it and
   approve again, or approve with `--override "<your reason>"`, which is recorded. An override answers only a finding
   you were already shown, never one of the same run. Where no model is set up, `adk-spec check <id> --no-model`
-  checks by code alone; it never clears what a model's check found blocking, which a model checks again.
+  checks by code alone; it never clears what a model's check found blocking, which a model checks again. Where no
+  model can make that check again, on a standard change, `--override "<your reason>"` sets the finding aside.
 
   Where you edited a file adk-spec drafted, `approve` names it once, so that you can write what you corrected in
   `.spec/lessons.md`.

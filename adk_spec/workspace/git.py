@@ -235,6 +235,8 @@ def diffs(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", tr
         raise GitError(f"`{base}` names no commit in {root}")
     # Paths as `a/` and `b/` say, whatever a person's settings say, and under `prefix` for another repository's diff.
     named = (f"--src-prefix=a/{prefix}", f"--dst-prefix=b/{prefix}")
+    # Two runs of git, one for each text: a write between them, by a watcher say, is accepted, as one between the
+    # verdicts and the fingerprint would be by any single run.
     changed = git(root, "diff", *_PLAIN, "-M", *named, "--relative", commit, *_here(exclude), trust=trust)
     unmoved = git(root, "diff", *_PLAIN, "--no-renames", *named, "--relative", commit, *_here(exclude), trust=trust)
     new = _listed(root, "--others", "--exclude-standard", exclude=exclude, trust=trust)
@@ -254,9 +256,10 @@ def _settled(text: str) -> str:
     """A diff as the work's fingerprint is taken of it: a moved file as a deletion and an addition, no `index` line,
     whose names are as short as the repository allows, and each file's part in order. Found by the fourth audit: a
     new file came after every tracked one until it was added, and a moved file read as a move once it was, so a
-    change verified and then committed read as drifted. The diff a stage is shown keeps a move short."""
+    change verified and then committed read as drifted. The diff a stage is shown keeps a move short. Lines are
+    broken at a newline alone: `splitlines` breaks at a form feed too, and a line's tail could pass for a header."""
     kept = (
-        "".join(line for line in part.splitlines(keepends=True) if not line.startswith("index "))
+        "\n".join(line for line in part.split("\n") if not line.startswith("index "))
         for _n, part in parts_of_diff(text)
     )
     return "".join(sorted(kept))

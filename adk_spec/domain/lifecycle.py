@@ -190,14 +190,21 @@ def model_holds(state: ChangeState, files: Mapping[str, str]) -> bool:
 
 
 def checked(
-    state: ChangeState, findings: Sequence[Finding], *, files: Mapping[str, str], at: str, model: str | None = None
+    state: ChangeState,
+    findings: Sequence[Finding],
+    *,
+    files: Mapping[str, str],
+    at: str,
+    model: str | None = None,
+    judged: Sequence[Finding] | None = None,
 ) -> ChangeState:
-    """The state with a check recorded: the fingerprints of the files it read, how many of its findings block an
-    approval, and the model that judged, none where code alone did. A check by code alone records nothing over a
-    model's that `model_holds` keeps."""
+    """The state with a check recorded: the fingerprints of the files it read, how many findings block an approval,
+    and the model that judged, none where code alone did. A model's check counts the model's own, `judged`: what the
+    code finds every approval asks again, live, and counted here a fixed warning held the check as the model's, found
+    by the code review. A check by code alone records nothing over a model's that `model_holds` keeps."""
     if model is None and model_holds(state, files):
         return state
-    stopped = len(blocking(state, findings))
+    stopped = len(blocking(state, findings if model is None or judged is None else judged))
     return state.model_copy(update={"check": Checked(at=at, files=dict(files), blocking=stopped, model=model)})
 
 

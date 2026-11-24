@@ -301,6 +301,18 @@ def test_a_file_that_cannot_be_opened_is_a_finding_and_hides_no_change(tmp_path,
         assert "ERROR file.unreadable .spec/changes/passkeys/tasks.md" in capsys.readouterr().out
 
 
+def test_rebase_refuses_a_change_whose_delta_does_not_read(tmp_path, capsys) -> None:
+    """Found by the code review: a delta that did not read held no base, and `rebase` dropped every one of them."""
+    seeded(tmp_path)
+    run(tmp_path, "rebase", "passkeys")
+    before = state_of(tmp_path)["bases"]
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, "# Delta: auth\n\nHalf written.\n")
+    capsys.readouterr()
+    assert run(tmp_path, "rebase", "passkeys") == 1
+    assert "is not rebased" in capsys.readouterr().err and state_of(tmp_path)["bases"] == before
+
+
 def test_rebase_says_which_base_it_dropped(tmp_path, capsys) -> None:
     """Deferred by the review: a base for an ID the delta no longer touches went without a line."""
     seeded(tmp_path)

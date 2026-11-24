@@ -12,7 +12,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from .drafts import VerdictsDraft
+from .drafts import VerdictDraft, VerdictsDraft
 from .secrets import scrub
 from .text import lines_of, plain, quoted_at
 
@@ -104,9 +104,11 @@ def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed:
     lines the diff removes. A requirement the model gave no verdict is `unclear`, and so is a `met` none of whose
     quotes is such a line. A verdict for any other requirement is left out."""
     sides = lines_of_diff(diff)
-    given = {}
+    given: dict[str, VerdictDraft] = {}
     for one in draft.verdicts:
-        given.setdefault(one.id.strip(), one)
+        held = given.setdefault(one.id.strip(), one)
+        if held is not one and held.verdict == one.verdict:  # found by the code review: weighed on the first alone
+            given[one.id.strip()] = held.model_copy(update={"evidence": [*held.evidence, *one.evidence]})
     verdicts = []
     for req_id in sorted(added | removed):
         one = given.get(req_id)

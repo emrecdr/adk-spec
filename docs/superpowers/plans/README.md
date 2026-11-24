@@ -438,6 +438,12 @@ and a step moves to code only where its output is a function of its input with n
   warns past 16,000 characters), lessons quoting a model's words (fenced, short, and seen in git), Gemini's other
   finish reasons asked again (no Gemini run measured yet), a softer stop for a cancelled MCP command, one regex for
   the library globs (decided before), `--root` after the command (the README says where it goes).
+  Three cleanup reviews and three code reviews followed on the branch, each finding fixed test first. Of note: the
+  work's fingerprint is taken of a text of its own, so the diff a model is shown keeps a move short; a fingerprint an
+  older adk-spec recorded is still accepted; a file whose text was not read is `file.unreadable`, and no command
+  writes over it or hands out its IDs; only a model clears what a model found, and where no model can make the check
+  again a reason sets it aside on a tier that takes one. An exclude pattern holding a backslash, git's escape too, is
+  now refused: write a glob character in brackets, `[[]`.
   The tools compared (OpenSpec 2.1, Spec Kit 1.4, Kiro, Tessl, BMAD 6.12, GSD, Traycer) suggest features that are
   the owner's to choose, recommended in this order: a diff of what each MODIFIED requirement changes, for the
   approver, in code alone; `verify` judging the work against the constitution as well, measured first; a tier raised

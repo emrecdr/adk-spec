@@ -161,6 +161,16 @@ def test_a_quote_across_a_blank_line_both_sides_hold_is_evidence() -> None:
     assert got.verdict == "met"
 
 
+def test_verdicts_that_agree_are_weighed_on_all_their_evidence() -> None:
+    """Found by the code review: a `met` given twice, its first quote nowhere and its second in the diff, stood on
+    the first alone, and came out `unclear`."""
+    real = CANNED_VERDICTS["verdicts"][0]
+    invented = {**real, "evidence": [{"path": "src/auth.py", "quote": "lock_account(user) never happens"}]}
+    draft = VerdictsDraft.model_validate({"verdicts": [invented, real]})
+    (got,) = grounded(draft, DIFF, added=frozenset({real["id"]}), removed=frozenset())
+    assert got.verdict == "met"
+
+
 def test_an_unmet_verdict_is_kept_as_it_is_given() -> None:
     unmet = {"id": "REQ-AUTH-004", "verdict": "unmet", "evidence": [], "reason": "Nothing calls passkey()."}
     (got,) = grounded(

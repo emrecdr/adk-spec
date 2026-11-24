@@ -522,3 +522,20 @@ def test_a_lean_changes_old_check_does_not_hold_a_check_by_code_alone(tmp_path, 
     brief = tmp_path / ".spec/changes/passkeys/brief.md"
     write_text(brief, read_text(brief) + "\nFixed.\n")
     assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+
+
+def test_a_reason_sets_aside_a_models_finding_a_check_cannot_be_made_again_for(
+    tmp_path, monkeypatch, capsys, fake_provider
+) -> None:
+    """Found by the code review, twice: with a model's blocking check stale and no model to make it again, a standard
+    change could never be approved. The person was shown that finding: a reason they give sets it aside, recorded."""
+    ws = standard(tmp_path)
+    fake_provider.answers_when(CHECK, {"findings": [REAL]})
+    assert run(tmp_path, "check", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nFixed.\n")
+    monkeypatch.delenv("GOOGLE_API_KEY")
+    capsys.readouterr()
+    why = "the model is out of reach, and the contradiction is fixed"
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer", "--override", why) == 0
+    assert state(ws).approval.override == why and "sets aside" in capsys.readouterr().out
