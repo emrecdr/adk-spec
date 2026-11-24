@@ -24,6 +24,7 @@ from typing import Any, NoReturn
 
 from ..domain.brief_md import assumption_count, parse_brief, render_brief
 from ..domain.check import nameable, owed, removed, tasked
+from ..domain.ci_md import annotation_lines, step_summary
 from ..domain.context_md import (
     PARTIAL,
     PROFILE_HEADING,
@@ -89,7 +90,7 @@ from ..workspace.context import (
     profile_text,
 )
 from ..workspace.evidence import evidence_findings, evidence_folded
-from ..workspace.files import NotTextError
+from ..workspace.files import NotTextError, append_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
@@ -489,15 +490,21 @@ def _beside(workspace: Workspace, change: Any, living: dict[str, Spec]) -> dict[
 
 
 def _drifted(workspace: Workspace, state: ChangeState) -> bool:
+    """Whether the work changed since a change was verified, or cannot be compared with what was: either is not
+    what was judged. Asked of git for a verified change alone."""
+    return _drift(workspace, state) is not False
+
+
+def _drift(workspace: Workspace, state: ChangeState) -> bool | None:
     """Whether the work changed since a change was verified: its diff against the same commit is no longer the one
-    that was judged. True too where the two cannot be compared. Asked of git for a verified change alone."""
+    that was judged. None where the two cannot be compared: a repository gone, or a commit a shallow clone lacks."""
     held = state.verification
     if state.status != "verified" or held is None:
         return False
     try:
         work = _sources(workspace, state.repositories).work(held.base, held.bases)
-    except GitError, SourceError:  # a repository gone, or no longer readable beside this one: not what was judged
-        return True
+    except GitError, SourceError:
+        return None
     # Or the fingerprint an older adk-spec recorded, of the diff as a stage is shown it: found by the code review,
     # every change it verified read as drifted after the upgrade.
     return held.diff != work.fingerprint and held.diff != sha256_of(work.text)
@@ -585,7 +592,8 @@ def _validate(args: argparse.Namespace) -> int:
             found.append(finding("change.unreadable", str(exc), path=unread))
             continue
         if state.status != "archived":  # folded in, an archived change's delta has no base now: nothing to check
-            found += _assessed(workspace, change_id, living, drift=False).findings
+            assessed = _assessed(workspace, change_id, living, drift=False)
+            found += assessed.findings + _gated(workspace, assessed)
     found += evidence_findings(workspace)  # notes: a requirement whose proving lines are gone from the code
     stops = failed(found, strict=args.strict)
     if args.json:
@@ -595,7 +603,46 @@ def _validate(args: argparse.Namespace) -> int:
     errors = sum(held.severity == "ERROR" for held in found)
     warnings = sum(held.severity == "WARNING" for held in found)
     print(f"{errors} error{'' if errors == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}")
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        _annotated(found, failed=stops)
     return EXIT_FINDINGS if stops else EXIT_OK
+
+
+def _gated(workspace: Workspace, assessed: Assessed) -> list[Finding]:
+    """What a merge gate reads of a change beyond its own findings: an approval its files no longer match, and work
+    changed since it was verified. Made here alone: among the change's own findings, `approve` would weigh a void
+    approval's warning as blocking on the strict tier, and the approval that is its one remedy would be refused."""
+    state = assessed.state
+    folder = f"{ROOT_NAME}/{CHANGES}/{state.id}"
+    found = []
+    if assessed.stale and state.status in ("approved", "verified"):
+        moved = [path for path in assessed.stale if path not in ("approval", "bases")]
+        found.append(
+            finding(
+                "change.approval-void",
+                f"`{state.id}` changed since it was approved ({', '.join(assessed.stale)}): run `{PROG} approve "
+                f"{state.id}` again",
+                path=f"{folder}/{moved[0] if moved else STATE_FILE}",
+            )
+        )
+    drift = _drift(workspace, state)
+    if drift is None:
+        why = "it could not be compared with what was verified (a shallow clone, or a repository not there)"
+        found.append(finding("change.drift-unknown", f"The work of `{state.id}`: {why}", path=f"{folder}/{STATE_FILE}"))
+    elif drift:
+        said = f"The work changed since `{state.id}` was verified: run `{PROG} verify {state.id}` again"
+        found.append(finding("change.work-drifted", said, path=f"{folder}/{STATE_FILE}"))
+    return found
+
+
+def _annotated(found: Sequence[Finding], *, failed: bool) -> None:
+    """In GitHub Actions: each finding as an annotation on its line, and the summary on the run's page, where the
+    runner names a file for it. A summary that cannot be written is left out: the annotations are said."""
+    for line in annotation_lines(found):
+        print(line)
+    if target := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with contextlib.suppress(OSError):
+            append_text(Path(target), step_summary(found, failed=failed))
 
 
 #: How `status` groups changes: by who makes the next step happen.

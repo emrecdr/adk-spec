@@ -560,6 +560,29 @@ on an error (`--strict`: on a warning too). In a CI job where adk-spec is instal
 adk-spec validate --strict
 ```
 
+It also reads whether each change still stands as approved and verified. A change edited after its approval is a
+warning, `change.approval-void`, and so is a verified change whose work changed since, `change.work-drifted`, so
+`--strict` fails on both. Work that cannot be compared, in a clone without the history, is a note. In GitHub
+Actions, `validate` also writes each finding as an annotation on its line, and a summary on the run's page. A
+workflow that checks out the pull request's own commit, with its history:
+
+```yaml
+on: pull_request
+jobs:
+  specs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}  # the merge with the target would read as drifted work
+          fetch-depth: 0  # the history, to compare the work with what was verified
+      - uses: astral-sh/setup-uv@v6
+      - run: uv tool install <where your team keeps adk-spec>  # it is not on PyPI
+      - run: adk-spec validate --strict
+```
+
+Archive each change before its pull request merges, as above, and the gate reads only what is still open.
+
 ### Where am I?
 
 ```shell

@@ -140,6 +140,9 @@ def test_every_code_has_a_case_and_a_severity() -> None:
         "file.unreadable",  # the loader's, of a file that would not open: its cases are in test_cli and test_revise
         "spec.evidence-gone",  # of the evidence kept beside a living spec: its cases are in test_evidence.py
         "spec.evidence-unreadable",
+        "change.approval-void",  # a merge gate's, made by `validate` alone: its cases are in test_merge_gate.py
+        "change.work-drifted",
+        "change.drift-unknown",
     }
 
 

@@ -73,6 +73,13 @@ def write_text(path: Path, text: str) -> None:
     write_all({path: text})
 
 
+def append_text(path: Path, text: str) -> None:
+    """`text` added at the end of the file at `path`, made where it is not there: a file another program reads as it
+    grows, such as a CI run's summary, and never one of adk-spec's own."""
+    with path.open("a", encoding="utf-8", newline="") as held:
+        held.write(text)
+
+
 def write_all(files: Mapping[Path, str]) -> None:
     """Every text written to its path, none moved into place until all are on disk. Where a move fails part way, as
     on a file another process holds open, each file already replaced is put back and each new one removed, so the
