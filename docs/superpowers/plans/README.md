@@ -43,10 +43,15 @@ How it is applied in every phase below:
 | 15 | Research during planning | `2026-11-23-adk-spec-research-during-planning.md` | `propose` reads the code, and the project's installed libraries offline, before the brief; the brief asks only what the code cannot answer, in order of what depends on what, and "yes" takes a suggestion; rules from the skills the owner pointed to in the brief, specs, tasks and check. | Built, cleaned up, reviewed and merged; measured live, a fault the first run found fixed |
 | 14 | Inside a coding assistant | `2026-11-22-adk-spec-mcp-server.md` | `adk-spec-mcp` serves six commands as MCP tools to a coding assistant (`propose`, revising too, `plan`, `check`, `verify`, `status`, `validate`), each run as the terminal runs it; approving and archiving stay the person's. | Built, cleaned up, reviewed and merged. Its live proof, in VS Code and in Claude Code, waits for the owner |
 | 16 | Evidence and review | `2026-11-24-adk-spec-evidence-and-review.md` | The approver's view of each requirement a change touches, and who else is changing it; unmet verdicts written as the next work; `verify`'s evidence kept beside each living spec, a requirement whose code is gone noted as suspect; `validate` as a merge gate with GitHub annotations; a pull request's summary and a changelog. No model call, command, flag or `change.json` field. | Built test first; five cleanup and code reviews, and a closing one; merged |
+| 17 | Freshness and proof notes | `2026-11-25-adk-spec-freshness-and-proof-notes.md` | From an outside discovery report, each option checked by four verifiers: the profile's quotes checked against the code (`status`, `propose`); `verify` naming the living requirements its work took every proof of; a drafted `[P]` held to its rule. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
 
 ## The plan being followed now
 
-None: phase 16 is done. Its five code reviews fixed what each found, a security hole among them (an evidence line could
+Phase 17, freshness and proof notes (`2026-11-25-freshness-and-proof-notes-design.md`): built test first on the
+branch `freshness`, then cleaned up and code-reviewed. Of the outside report's twelve options, the rest were skipped
+or left to be measured first, each with its reason in the design.
+
+Phase 16 is done. Its five code reviews fixed what each found, a security hole among them (an evidence line could
 read a file anywhere, which in CI let a pull request probe the runner). A closing review of the last fixes found two
 more, fixed test first: `reports/remaining.md` could say a model's reason, opening as code's does, was what code found
 (code now marks the reasons it writes), and a changelog entry heading a person added a note to stopped counting as an

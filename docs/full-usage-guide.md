@@ -244,9 +244,14 @@ adk-spec archive let-users-sign-in-with-a-passkey
 - **Phase 16 `[Built]`:** in the same write, folds the change's evidence into `.spec/specs/auth/evidence.md` (a requirement
   it adds or modifies gets its lines, one it removes loses them) and puts an entry above the others in
   `.spec/changelog.md`; one with a code fence never closed is left, and the archive says the entry was not added,
-  since where it goes is then a guess. Later, `validate` and `status` look for each kept quote in the code, in its file and then across
-  its repository: a requirement none of whose quotes is found is noted as suspect (INFO, never a CI failure). Delete its
-  lines in a reviewed commit, or verify a change that keeps it, to clear it.
+  since where it goes is then a guess. Later, `validate` and `status` look for each kept quote in the code, in its
+  file and then across its repository: a requirement none of whose quotes is found is noted as suspect (INFO, never a
+  CI failure). Delete its lines in a reviewed commit, or verify a change that keeps it, to clear it.
+- **Phase 17 `[Built]`:** `verify` prints one `note` where its work took out every line that proved a living
+  requirement the change does not name, looking only at requirements whose lines are in files the work changed.
+  `status`, and `propose` before it spends anything, say on one line how many of `.spec/profile.md`'s quotes are no
+  longer in the code (a library's quote, or one git cannot look for, is not counted): `init --refresh` reads it
+  again. A drafted task keeps `[P]` only where it names its files and none is a file of the task before or after it.
 - `validate` is also a merge gate `[Built: P16]`: `change.approval-void` (an approved change edited since) and
   `change.work-drifted` (verified work that moved, where the tier owes a verification) are warnings that fail
   `--strict`; under GitHub Actions each finding is also an annotation on its line, and a summary goes on the run's page.

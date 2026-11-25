@@ -44,6 +44,22 @@ code, and says what it finds in one line, where the person is looking.
   measured first on a go-ahead (the constitution in `verify`, check lenses, the tier raised after the reading,
   evidence given to the reading, bugfix guidance).
 
+## The report's other options, and why not now
+
+- **Specs drafted from existing code** (2): deferred by the owner in phase 8; evidence is kept only from lines a
+  verification's diff adds, and a baseline has none.
+- **MCP elicitation, resources, prompts, `.agents/skills/`** (4): against recorded decisions (tools ask no question;
+  Claude Code reads `.claude/skills/` alone, and Copilot that too); the tools already send `structuredContent`.
+- **Execution waves, cross-change file collisions** (5, the rest): waves need task dependencies, set aside; the
+  files are the model's guess, and the requirement overlap already shows.
+- **Lesson capture at `approve`** (6b): an interactive prompt and a diff on screen in a command that asks nothing.
+- **A request read from stdin, a size check before the reading** (7): optional, kept for later.
+- **`status --runs`, `smoke --replay`** (8): the tokens line exists; a recording keeps no files to replay against.
+- **Per-task packets** (9): a new parser for `context.md` for an unmeasured saving.
+- **`--dry-run`, `--max-calls`** (11a): the token ceiling already holds every call, before it is made.
+- **A "no test file changed" line** (10b): optional; which files are tests is a guess from their paths.
+- **`--bugfix`, a repro-test proof** (12): a new flag; a diff cannot show a test failed before the fix.
+
 ## Calls made in the design (each the builder's, to check while reading)
 
 - **One test of a quote, shared.** Whether a quote holds is `workspace/evidence.py`'s rule, in its file or moved to
