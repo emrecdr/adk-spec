@@ -123,3 +123,15 @@ def test_task_paths_are_read_as_paths() -> None:
     groups = parse_tasks(TASKS.replace("src/auth/passkey.py, src/auth/lockout.py", "./src/auth/passkey.py, `src`"))
     (left,) = remaining(SAID, groups, frozenset({"src/auth/passkey.py"}))
     assert left.untouched == ()
+
+
+def test_a_change_verified_by_override_is_not_sent_to_a_remaining_list() -> None:
+    """Found by the code review: verified over its verdicts, then approved again, a change was sent to the remaining
+    list its verification removed."""
+    state = verified(approved("standard"), {"REQ-A-001": "unmet"}, base="c0", diff="sha256:d", at="t", override="ok")
+    assert "remaining.md" not in phrase(state.model_copy(update={"status": "approved"}), [], [])
+
+
+def test_the_remaining_list_names_the_step_the_tier_owes() -> None:
+    text = render_remaining("passkeys", remaining(SAID, GROUPS, frozenset()), last="archive")
+    assert "then run `adk-spec archive passkeys`" in text

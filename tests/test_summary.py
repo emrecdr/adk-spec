@@ -92,3 +92,20 @@ def test_the_summary_says_an_override_and_its_reason() -> None:
     change = Change(state=ChangeState(id="passkeys", tier="lean"), brief=parse_brief(BRIEF), deltas=DELTAS, tasks=None)
     text = render_summary(change, {"REQ-AUTH-002": "unmet"}, {}, None, override="the judge misread the lockout")
     assert "Verified by override: the judge misread the lockout" in text
+
+
+def test_a_changelog_that_is_a_link_is_left_and_the_change_archived(tmp_path, capsys) -> None:
+    """Found by the code review: a linked changelog stopped the archive, refused by the write's path rules."""
+    seeded(tmp_path)
+    approved(tmp_path)
+    write_text(tmp_path / ".spec/real.md", "# Changelog\n")
+    try:
+        (tmp_path / CHANGELOG).symlink_to(tmp_path / ".spec/real.md")
+    except OSError:
+        pytest.skip("no symbolic link can be made here")
+    capsys.readouterr()
+    assert run(tmp_path, "archive", "passkeys") == 0
+    assert (
+        f"kept      {CHANGELOG}: " in capsys.readouterr().out
+        and read_text(tmp_path / ".spec/real.md") == "# Changelog\n"
+    )

@@ -92,7 +92,7 @@ from ..workspace.context import (
     living_text,
     profile_text,
 )
-from ..workspace.evidence import evidence_findings, evidence_folded
+from ..workspace.evidence import evidence_findings, evidence_folded, writable
 from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
@@ -507,7 +507,7 @@ def _drift(workspace: Workspace, state: ChangeState) -> bool | None:
         return False
     try:
         work = _sources(workspace, state.repositories).work(held.base, held.bases)
-    except GitError, SourceError:
+    except GitError, SourceError, ConfigError, NotTextError, OSError:  # a config that does not read, too
         return None
     # Or the fingerprint an older adk-spec recorded, of the diff as a stage is shown it: found by the code review,
     # every change it verified read as drifted after the upgrade.
@@ -535,7 +535,7 @@ def _say_next(
     assessed = _assessed(workspace, change_id, living, drift=drift)
     deltas = assessed.loaded.change.deltas
     if assessed.stale and deltas:  # a draft, or an approved change edited since: an approval is owed
-        with contextlib.suppress(OSError):  # the view is an aid: the command's work is saved, its next step said
+        with contextlib.suppress(*_VIEW_FAULTS):  # the view is an aid: the work is saved, its next step said
             shown, overlaps = _view_written(workspace, change_id, deltas, living)
             print(f"review    {shown}: {review_said(deltas, overlaps)}")
     phrase = assessed.step.phrase
@@ -551,13 +551,18 @@ def _view_written(
     return workspace.shown(path), overlaps
 
 
+#: What may keep the approver's view from being written, none of which fails a command whose work is done: a file
+#: that will not open, and a folder the path rules refuse. Found by the code review.
+_VIEW_FAULTS = (OSError, WorkspaceError, PathError)
+
+
 def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
     """Each requirement this change modifies or removes that another open change modifies or removes too. Nothing
     where another change's delta will not open: the view is the approver's aid, and `archive` still stops."""
     own = {req.id for delta in deltas.values() for req in (*delta.modified, *delta.removed)}
     try:
         touched = workspace.touching(change_id)
-    except OSError:
+    except _VIEW_FAULTS:
         return {}
     return {req_id: others for req_id, others in touched.items() if req_id in own}
 
@@ -610,7 +615,7 @@ def _validate(args: argparse.Namespace) -> int:
     warnings = sum(held.severity == "WARNING" for held in found)
     print(f"{errors} error{'' if errors == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}")
     if os.environ.get("GITHUB_ACTIONS") == "true":
-        _annotated(found, failed=stops)
+        _annotated(workspace, found, failed=stops)
     return EXIT_FINDINGS if stops else EXIT_OK
 
 
@@ -621,10 +626,23 @@ def _gated(workspace: Workspace, assessed: Assessed) -> list[Finding]:
     return _from_root(state.id, found)
 
 
-def _annotated(found: Sequence[Finding], *, failed: bool) -> None:
+def _from_the_top(workspace: Workspace, found: Sequence[Finding]) -> list[Finding]:
+    """Findings with their paths from the checkout's top, as GitHub reads an annotation's: found by the code review,
+    a `.spec/` below the top was annotated on files GitHub could not find."""
+    top = os.environ.get("GITHUB_WORKSPACE")
+    try:
+        below = workspace.root.resolve().relative_to(Path(top).resolve()).as_posix() if top else "."
+    except ValueError:  # not under it: the paths are left as they are
+        below = "."
+    if below == ".":
+        return list(found)
+    return [held.model_copy(update={"path": f"{below}/{held.path}"}) if held.path else held for held in found]
+
+
+def _annotated(workspace: Workspace, found: Sequence[Finding], *, failed: bool) -> None:
     """In GitHub Actions: each finding as an annotation on its line, and the summary on the run's page, where the
     runner names a file for it. A summary that cannot be written is left out: the annotations are said."""
-    for line in annotation_lines(found):
+    for line in annotation_lines(_from_the_top(workspace, found)):
         print(line)
     if target := os.environ.get("GITHUB_STEP_SUMMARY"):
         with contextlib.suppress(OSError):
@@ -896,7 +914,10 @@ def _archive(args: argparse.Namespace) -> int:
         _printed(refused)
         print(f"{PROG}: `{args.id}` is not archived, and no spec was written", file=sys.stderr)
         if any(held.code == "delta.base-stale" for held in refused):
-            shown, _overlapping = _view_written(workspace, args.id, loaded.change.deltas, living)
+            try:
+                shown, _overlapping = _view_written(workspace, args.id, loaded.change.deltas, living)
+            except _VIEW_FAULTS:
+                shown = "the current requirement"
             print(
                 f"{PROG}: the living spec changed after this delta was based on it: read {shown}, update the delta, "
                 f"then run `{PROG} rebase {args.id}` and approve again",
@@ -919,11 +940,14 @@ def _archive(args: argparse.Namespace) -> int:
 def _logged(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> str | None:
     """The changelog with this change's entry first; None where the one there does not read, which is left as it is."""
     path = workspace.home / CHANGELOG
+    if not writable(workspace, CHANGELOG):  # a link the archive's write would refuse, and stop on
+        return None
     try:
         text = read_text(path) if path.is_file() else None
     except NotTextError, OSError:
         return None
-    return with_entry(text, changelog_entry(change_id, datetime.now(UTC).date().isoformat(), deltas))
+    day = datetime.now().astimezone().date().isoformat()  # the person's day, not UTC's
+    return with_entry(text, changelog_entry(change_id, day, deltas))
 
 
 # The commands that call a model, or log in to one.
@@ -1759,7 +1783,13 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
     left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []
     if left:
-        wrote.append(workspace.write_report(args.id, REMAINING, render_remaining(args.id, left)))
+        wrote.append(
+            workspace.write_report(
+                args.id,
+                REMAINING,
+                render_remaining(args.id, left, last="verify" if DEMANDS[state.tier].verified else "archive"),
+            )
+        )
     else:
         workspace.drop(args.id, f"{REPORTS}/{REMAINING}")
     # The lines that proved each requirement, kept for `archive` to fold in beside the living spec.

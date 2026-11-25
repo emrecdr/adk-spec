@@ -7,7 +7,7 @@ import json
 
 import pytest
 from conftest import on_the_fake, repository, run, seeded
-from test_verify import AFTER, verified_in_a_repository
+from test_verify import AFTER, approved_in_a_repository, implemented, verified_in_a_repository
 
 from adk_spec.domain.evidence_md import (
     QUOTE_MAX,
@@ -20,7 +20,7 @@ from adk_spec.domain.evidence_md import (
 )
 from adk_spec.domain.text import quoted_at
 from adk_spec.domain.verify import Verdict
-from adk_spec.workspace.files import write_text
+from adk_spec.workspace.files import read_text, write_text
 
 AT = "2026-11-24T10:00:00+00:00"
 CHANGE_EVIDENCE = ".spec/changes/passkeys/evidence.md"
@@ -225,3 +225,38 @@ def test_a_requirement_no_longer_in_the_living_spec_is_not_suspect(tmp_path, cap
     write_text(tmp_path / LIVING_EVIDENCE, render_evidence("auth", lines))
     gone = [line for line in validated(tmp_path, capsys)[1].splitlines() if "spec.evidence-gone" in line]
     assert len(gone) == 1 and "REQ-AUTH-002" in gone[0]
+
+
+@pytest.mark.parametrize(
+    ("folder", "path"),
+    [(".", "../outside.txt"), (".", "/etc/hosts"), ("/", "etc/hosts"), ("..", "outside.txt")],
+)
+def test_an_evidence_line_reaching_outside_its_repository_is_not_checked(tmp_path, folder, path) -> None:
+    """Found by the code review: a line naming `..` or an absolute path was read wherever it pointed, so a pull
+    request could learn, from a note, whether a string is in a file on the runner."""
+    from adk_spec.workspace.evidence import holds
+
+    root = tmp_path / "repo"
+    seeded(root)
+    repository(root)
+    write_text(tmp_path / "outside.txt", "nothing of the quote\n")
+    assert holds(root, proof(repository=folder, path=path, quote="SECRET=abc is here"), ()) is None
+
+
+def test_evidence_of_a_verification_older_than_the_approval_is_not_folded(tmp_path) -> None:
+    """Found by the code review: a lean change revised after its verification, then approved again, folded the
+    quotes that proved its earlier version."""
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    record = tmp_path / ".spec/changes/passkeys/change.json"
+    held = json.loads(read_text(record))
+    old, held["verification"]["at"] = held["verification"]["at"], "2000-01-01T00:00:00+00:00"
+    write_text(record, json.dumps(held, indent=2))
+    mine = tmp_path / CHANGE_EVIDENCE
+    write_text(mine, read_text(mine).replace(old, "2000-01-01T00:00:00+00:00"))
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    write_text(brief, read_text(brief) + "\nRevised after the verification.\n")
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert run(tmp_path, "archive", "passkeys") == 0
+    assert not (tmp_path / LIVING_EVIDENCE).exists()

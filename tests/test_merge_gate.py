@@ -122,3 +122,19 @@ def test_a_lean_changes_drift_is_not_gated() -> None:
     assert lean.status == "verified" and merge_gate(lean, [], True, record="change.json") == []
     standard = lean.model_copy(update={"tier": "standard"})
     assert [held.code for held in merge_gate(standard, [], True, record="change.json")] == ["change.work-drifted"]
+
+
+def test_a_config_that_does_not_read_leaves_drift_unknown_not_the_gate_stopped(tmp_path, capsys) -> None:
+    """Found by the code review: a verified change's drift read the config, and a fault in it stopped `validate`."""
+    verified_in_a_repository(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", "[review]\nfrom = 'a newer adk-spec'\n")
+    code, out = validated(tmp_path, capsys)
+    assert code in (0, 1) and "change.drift-unknown" in out
+
+
+def test_annotations_name_their_file_from_the_repositorys_top(tmp_path, capsys, monkeypatch) -> None:
+    """Found by the code review: where `.spec/` is not at the repository's top, GitHub found no file to annotate."""
+    voided(tmp_path / "service")
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    assert f"::warning file=service/{BRIEF}," in validated(tmp_path / "service", capsys)[1]

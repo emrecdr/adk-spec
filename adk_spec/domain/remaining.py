@@ -58,12 +58,13 @@ def _touched(path: str, touched: frozenset[str]) -> bool:
     return path in touched or any(one.startswith(f"{path}/") for one in touched)
 
 
-def render_remaining(change_id: str, left: Sequence[Left]) -> str:
-    """The report of what `change_id` has left to do."""
+def render_remaining(change_id: str, left: Sequence[Left], *, last: str = "verify") -> str:
+    """The report of what `change_id` has left to do, and `last`, the command that follows: `verify`, or `archive`
+    for a tier that owes no verification."""
     lines = [
         f"# Remaining: {change_id}",
         "",
-        f"The last verification did not show these met. Work on them, then run `adk-spec verify {change_id}`.",
+        f"The last verification did not show these met. Work on them, then run `adk-spec {last} {change_id}`.",
         "",
     ]
     for one in left:

@@ -477,7 +477,10 @@ def _unmet(state: ChangeState) -> Step | None:
     """The step after a verification that did not show every requirement met: the work its report names. Found by
     the research on the tools compared: the step said "implement tasks.md" whatever the verdicts said."""
     held = state.verification
-    unmet = sorted(req_id for req_id, said in held.verdicts.items() if said != "met") if held else []
+    # Not one a person verified by override: its remaining list was removed. Found by the code review.
+    unmet = (
+        sorted(req_id for req_id, said in held.verdicts.items() if said != "met") if held and not held.override else []
+    )
     if not unmet:
         return None
     more = len(unmet) - UNMET_NAMED

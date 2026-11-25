@@ -378,6 +378,10 @@ def _nothing_from_the_shell(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: p
         "GITHUB_COPILOT_API_BASE",
         "GITHUB_COPILOT_ACCESS_TOKEN_FILE",
         "GITHUB_COPILOT_API_KEY_FILE",
+        # Nor a CI run's: found by the code review, `validate` annotated and wrote the job's summary under GitHub.
+        "GITHUB_ACTIONS",
+        "GITHUB_STEP_SUMMARY",
+        "GITHUB_WORKSPACE",
     ]:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path_factory.getbasetemp() / "no-copilot-login"))

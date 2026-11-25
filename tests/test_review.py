@@ -170,3 +170,14 @@ def test_a_view_that_cannot_be_written_does_not_fail_the_command(tmp_path, monke
 
     monkeypatch.setattr(Workspace, "write_report", held)
     assert run(tmp_path, "rebase", "passkeys") == 0
+
+
+def test_a_change_folder_the_path_rules_refuse_fails_no_finished_command(tmp_path) -> None:
+    """Found by the code review: an open change's folder that is a link stopped `approve` after it was recorded."""
+    ws = seeded(tmp_path)
+    elsewhere = another(ws, OTHER).rename(tmp_path / "elsewhere")
+    try:
+        (tmp_path / ".spec/changes/other").symlink_to(elsewhere, target_is_directory=True)
+    except OSError:
+        pytest.skip("no symbolic link can be made here")
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0

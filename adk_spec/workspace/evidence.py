@@ -14,6 +14,7 @@ from .config import ConfigError
 from .files import NotTextError, read_text
 from .git import GitError, grep
 from .layout import CHANGES, EVIDENCE, SPECS, Workspace
+from .paths import PathError, inside
 
 #: How many of the files a quote's search names are read whole to find it.
 ELSEWHERE_MAX = 20
@@ -25,7 +26,7 @@ def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
     `root` is the folder that holds `.spec/`; `exclude`, the person's patterns, apply to its own repository."""
     own = proof.repository == "."
     folder = root if own else root / proof.repository
-    if not folder.is_dir():
+    if not _within(folder, proof, own=own):
         return None
     if _found(folder / proof.path, proof.quote):  # read first: a quote that holds asks git nothing
         return True
@@ -36,6 +37,17 @@ def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
         return None
     named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]
     return any(_found(folder / path, proof.quote) for path in named)
+
+
+def _within(folder: Path, proof: Proof, *, own: bool) -> bool:
+    """Whether a proof names a file of a repository that is there: its path relative and inside it, and another
+    repository one's top folder. Found by the code review: a line edited to `..` or an absolute path was read wherever
+    it pointed, so in CI a pull request could learn from a note whether a string is in a file on the runner."""
+    if Path(proof.repository).is_absolute() or Path(proof.path).is_absolute() or not folder.is_dir():
+        return False
+    if not own and not (folder / ".git").exists():
+        return False
+    return (folder / proof.path).resolve().is_relative_to(folder.resolve())
 
 
 def _found(path: Path, quote: str) -> bool:
@@ -87,14 +99,17 @@ def evidence_folded(
     evidence files it leaves as they are because they do not read. The change's evidence counts only where it is of
     the verification the change records: one written by a verification since superseded is left out."""
     proofs: list[Proof] = []
-    if held := state.verification:
+    # Of a verification made since the approval: found by the code review, a lean change revised after its verify and
+    # approved again, as lean owes none, folded the quotes that proved its earlier version.
+    held = state.verification
+    if held and not (state.approval and held.at < state.approval.at):
         mine, _unread = _read(workspace.home / CHANGES / state.id / EVIDENCE)
         proofs = [one for _line, one in mine or [] if one.at == held.at]
     files: dict[str, str] = {}
     left: list[str] = []
     for capability, delta in sorted(deltas.items()):
         path = workspace.home / SPECS / capability / EVIDENCE
-        living, unread = _read(path)
+        living, unread = _read(path) if writable(workspace, SPECS, capability, EVIDENCE) else (None, [])
         if living is None or unread:
             left.append(workspace.shown(path))
             continue
@@ -104,6 +119,16 @@ def evidence_folded(
         if after != before:
             files[f"{SPECS}/{capability}/{EVIDENCE}"] = render_evidence(capability, after)
     return files, left
+
+
+def writable(workspace: Workspace, *parts: str) -> bool:
+    """Whether the archive's one write may hold a file of `.spec/` by these parts: its path rules refuse a link, or a
+    name another file's differs from only by case. Found by the code review: one such stopped the whole archive."""
+    try:
+        inside(workspace.home, *parts)
+    except PathError:
+        return False
+    return True
 
 
 def _read(path: Path) -> tuple[list[tuple[int, Proof]] | None, list[int]]:
