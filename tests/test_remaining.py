@@ -120,7 +120,8 @@ def test_a_lean_change_with_an_unmet_requirement_is_pointed_to_its_archive() -> 
 
 def test_task_paths_are_read_as_paths() -> None:
     """Found by the code review: a task's `./` path, a backticked one or a folder read as untouched by the work."""
-    groups = parse_tasks(TASKS.replace("src/auth/passkey.py, src/auth/lockout.py", "./src/auth/passkey.py, `src`"))
+    named = "./src/auth/passkey.py, `src`, src\\auth\\passkey.py"  # a backslash, as on Windows, too
+    groups = parse_tasks(TASKS.replace("src/auth/passkey.py, src/auth/lockout.py", named))
     (left,) = remaining(SAID, groups, frozenset({"src/auth/passkey.py"}))
     assert left.untouched == ()
 
@@ -149,6 +150,7 @@ def test_a_change_approved_again_after_an_edit_is_not_sent_to_the_old_remaining_
     brief = tmp_path / ".spec/changes/passkeys/brief.md"
     brief.write_text(brief.read_text(encoding="utf-8") + "\nRevised after the verification.\n", encoding="utf-8")
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert not (tmp_path / LEFT).exists(), "the list of what was left goes with the verification it came from"
     capsys.readouterr()
     assert run(tmp_path, "status", "--json") == 0
     (row,) = json.loads(capsys.readouterr().out)["changes"]
@@ -183,22 +185,3 @@ def test_code_found_reasons_are_said_as_codes() -> None:
     said = [Verdict("REQ-AUTH-002", "unclear", (), f"{UNGROUNDED}. The model's reason: three now.")]
     text = render_remaining("passkeys", remaining(said, GROUPS, frozenset()))
     assert f"What code found: {UNGROUNDED}. The model's reason: three now." in text
-
-
-def test_a_task_path_with_backslashes_reads_as_the_path() -> None:
-    groups = parse_tasks(TASKS.replace("src/auth/passkey.py, src/auth/lockout.py", "src\\auth\\passkey.py"))
-    (left,) = remaining(SAID, groups, frozenset({"src/auth/passkey.py"}))
-    assert left.untouched == ()
-
-
-def test_approving_other_files_removes_the_remaining_list_of_the_old(tmp_path, fake_provider) -> None:
-    """Found by the code review: once an approval of other files dropped the verification, its remaining list stayed
-    in reports/ for an assistant to work from."""
-    approved_in_a_repository(tmp_path)
-    implemented(tmp_path)
-    fake_provider.answers_when(VERIFY, UNMET)
-    assert run(tmp_path, "verify", "passkeys") == 1
-    brief = tmp_path / ".spec/changes/passkeys/brief.md"
-    brief.write_text(brief.read_text(encoding="utf-8") + "\nRevised after the verification.\n", encoding="utf-8")
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
-    assert not (tmp_path / LEFT).exists()

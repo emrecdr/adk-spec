@@ -368,8 +368,14 @@ class Workspace:
         write_text(path, text)
         return path
 
-    def save_state(self, state: ChangeState) -> None:
-        write_text(inside(self.home, CHANGES, state.id, STATE), state.model_dump_json(indent=2))
+    def save_state(self, state: ChangeState, *, files: Mapping[str, str] | None = None) -> list[Path]:
+        """A change's state written, with `files` of its folder, by their paths there, as one set: all, or none as
+        far as the file system allows. The paths of `files` as written."""
+        texts = self._placed(self._folder(state.id), files) if files else {}
+        written = list(texts)
+        texts[inside(self.home, CHANGES, state.id, STATE)] = state.model_dump_json(indent=2)
+        write_all(texts)
+        return written
 
     def _state(self, folder: Path, change_id: str) -> ChangeState:
         """A change's state file alone. `WorkspaceError` where it does not read, or names another change."""

@@ -363,6 +363,10 @@ def archive_blockers(state: ChangeState, stale: Sequence[str], *, drifted: bool 
 
 
 _DRIFTED = "the work changed since `{cid}` was verified: run `adk-spec verify {cid}` again"
+_UNCOMPARED = (
+    "The work of `{cid}`: it could not be compared with what was verified: a shallow clone, a repository not there, "
+    "or git or the config refused"
+)
 
 
 def merge_gate(state: ChangeState, stale: Sequence[str], drift: bool | None, *, record: str) -> list[Finding]:
@@ -377,12 +381,8 @@ def merge_gate(state: ChangeState, stale: Sequence[str], drift: bool | None, *, 
         void = _unready(state, stale)
         found += [finding("change.approval-void", said, path=moved[0] if moved else record) for said in void]
     if DEMANDS[state.tier].verified and state.status == "verified" and drift is not False:
-        why = "it could not be compared with what was verified: a shallow clone, a repository not there, or git or "
-        why += "the config refused"
-        unknown = finding("change.drift-unknown", f"The work of `{state.id}`: {why}", path=record)
-        found.append(
-            unknown if drift is None else finding("change.work-drifted", _DRIFTED.format(cid=state.id), path=record)
-        )
+        code, said = ("change.drift-unknown", _UNCOMPARED) if drift is None else ("change.work-drifted", _DRIFTED)
+        found.append(finding(code, said.format(cid=state.id), path=record))
     return found
 
 

@@ -13,7 +13,6 @@ import getpass
 import json
 import os
 import re
-import secrets
 import sys
 from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
@@ -614,7 +613,7 @@ def _validate(args: argparse.Namespace) -> int:
     github = os.environ.get("GITHUB_ACTIONS") == "true"
     # GitHub reads no command in the plain lines: found by the code review, a path holding a line break could have it
     # read one, and switch the annotations off.
-    token = secrets.token_hex(16) if github else ""
+    token = os.urandom(16).hex()
     if github:
         print(f"::stop-commands::{token}")
     _printed(found)
@@ -832,8 +831,8 @@ def _approve(args: argparse.Namespace) -> int:
     held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=commit, others=began)
     edited = edited_drafts(assessed.state, files)
     workspace.save_state(held)
-    if assessed.state.verification and held.verification is None:  # what it left to do was of other files
-        _aids_written(workspace, args.id, {REMAINING: None})
+    if held.verification is None:  # what a verification left to do was of other files, or there was none
+        workspace.drop(args.id, f"{REPORTS}/{REMAINING}")
     _said_approved(held, by, len(files))
     if overlaps := _overlaps(workspace, args.id, assessed.loaded.change.deltas):
         named = "; ".join(f"{req_id} ({', '.join(others)})" for req_id, others in sorted(overlaps.items()))
@@ -1782,17 +1781,15 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     )
     reason = after.verification.override if after.verification else None
     report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases, tests=runs)
-    wrote = [workspace.write_report(args.id, "verify.md", report)]
-    # The lines that proved each requirement, for `archive` to fold in beside the living spec: written before the
-    # record, so that a recorded verification has its own. Found by the code review: written after a report that
-    # failed, the record's evidence was an earlier one's, and the archive took the living evidence out.
+    # The report, the lines that proved each requirement and the record, written as one set: found by the code
+    # review, written in turn, a failure between two of them lost a verification paid for, or left the record with
+    # an earlier one's evidence, which the archive then took out of the living spec with nothing put in.
+    files = {f"{REPORTS}/verify.md": report}
     if proofs := kept(verdicts, added=added, change=args.id, at=at, repositories=state.repositories):
-        workspace.write_into(args.id, {EVIDENCE: render_evidence(args.id, proofs)})
-    else:
+        files[EVIDENCE] = render_evidence(args.id, proofs)
+    wrote = workspace.save_state(after, files=files)[:1]
+    if not proofs:  # another verification's, which the archive ignores, whether or not it goes
         workspace.drop(args.id, EVIDENCE)
-    # Recorded once its report and its evidence are there: found by the code review, a report that would not be
-    # written or removed lost a verification paid for.
-    workspace.save_state(after)
     # What is left, where the next step points, and what a reviewer of the pull request reads, an override's reason
     # with it: aids each, written after the record, so neither loses it.
     touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
