@@ -155,3 +155,11 @@ def test_approving_a_verified_change_again_keeps_it_verified_and_names_the_new_a
     state = state_of(tmp_path)
     assert state["status"] == "verified" and state["verification"] is not None
     assert "Approved by bob." in read_text(tmp_path / SUMMARY)
+
+
+def test_a_fence_never_closed_leaves_the_closed_ones_before_it() -> None:
+    """Found by the closing code review: one fence never closed, anywhere, read every fence as text, and the new
+    entry went into a code block of the introduction again."""
+    text = "# Changelog\n\nIntro.\n\n```\n## example, 2026-01-01\n```\n\n## a, 2026-02-01\n\n- x\n\n```\n"
+    after = with_entry(text, changelog_entry("passkeys", "2026-11-24", DELTAS))
+    assert after.index("## example") < after.index("## passkeys, 2026-11-24") < after.index("## a, 2026-02-01")

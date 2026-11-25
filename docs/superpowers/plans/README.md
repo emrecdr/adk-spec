@@ -53,7 +53,10 @@ more, fixed test first: `reports/remaining.md` could say a model's reason, openi
 entry, so the next went below it (a line in a code block of the introduction is no entry either). With them: a verified
 change approved again as it stands stays verified, its summary naming the new approval; a strict change's first
 approval names each overlap once; and an approval of files edited after the approver's view was written is refused
-once, the view written again, so no approval records what its approver was not shown. What it left is below.
+once, the view written again, so no approval records specs its approver was not shown. The view ends on a
+fingerprint of the specs it shows, and `approve` compares that alone: found by the review of these fixes, a view
+compared whole was refused for another change's overlap. That review also found an unclosed fence read every fence
+of the changelog as text; now only the lines from its opening are. What it left is below.
 
 ## How a change flows
 
@@ -492,7 +495,11 @@ and a step moves to code only where its output is a function of its input with n
   one reason for every file it leaves; a moved quote's search misreads a file whose name holds a colon. From the
   closing review: an approval that voids a verification leaves its `verify.md` and the change's `evidence.md`, which
   the next `verify` replaces and an archive never folds; a person's own entries in another form,
-  `## [1.2.0] - 2026-01-01`, are read as introduction, so adk-spec's go below them.
+  `## [1.2.0] - 2026-01-01`, are read as introduction, so adk-spec's go below them. From the review of those fixes:
+  the refusal makes `approve` two runs where a spec was edited unseen, as `--override` already does where the run
+  made the check, which is the owner's to keep or drop; a strict change's first approval whose view cannot be
+  written names its overlaps nowhere until `archive` stops the second; brief, design and tasks edits are not in the
+  view, which shows the specs alone, so they hold no approval back.
 
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:

@@ -6,21 +6,42 @@ approver learns it now, not at the second archive."""
 from __future__ import annotations
 
 import difflib
+import re
 from collections.abc import Mapping, Sequence
 
 from .model import Delta, Requirement, Spec
 from .spec_md import render_requirement
-from .text import longest_backticks
+from .text import longest_backticks, sha256_of
 
 #: How many overlaps the line a command prints names; the view names every one.
 SAID = 3
+#: A view's last line: one fingerprint of the change's specs it shows, hidden where the Markdown is rendered.
+_MARK = re.compile(r"^<!-- specs (sha256:[0-9a-f]{64}) -->$", re.MULTILINE)
+
+
+def specs_mark(files: Mapping[str, str]) -> str:
+    """One fingerprint of a change's spec files, from `files`, each file's fingerprint by its path in the folder.
+    Found by the closing code review: a view compared whole changed with another change's overlap, the living spec
+    or the view's own form, none of which an approver of these specs had missed."""
+    return sha256_of("\n".join(f"{path} {mark}" for path, mark in sorted(files.items()) if path.startswith("specs/")))
+
+
+def mark_of(view: str) -> str | None:
+    """The fingerprint of the specs a view was written from; None for one an older adk-spec wrote."""
+    found = _MARK.search(view)
+    return found.group(1) if found else None
 
 
 def render_review(
-    change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec], overlaps: Mapping[str, Sequence[str]]
+    change_id: str,
+    deltas: Mapping[str, Delta],
+    living: Mapping[str, Spec],
+    overlaps: Mapping[str, Sequence[str]],
+    *,
+    mark: str | None = None,
 ) -> str:
     """The view of `change_id`, from its `deltas`, the `living` specs they change, and `overlaps`: each requirement
-    ID to the other open changes that modify or remove it too."""
+    ID to the other open changes that modify or remove it too. `mark`, the specs' fingerprint, ends it."""
     lines = [f"# Review: {change_id}", ""]
     for capability, delta in sorted(deltas.items()):
         held = {req.id: req for req in living[capability].requirements} if capability in living else {}
@@ -39,6 +60,7 @@ def render_review(
     if overlaps:
         lines += ["## Also changed by open changes", ""]
         lines += [f"- {req_id}: {', '.join(others)}" for req_id, others in sorted(overlaps.items())] + [""]
+    lines += [f"<!-- specs {mark} -->"] if mark else []
     return "\n".join(lines).rstrip("\n") + "\n"
 
 

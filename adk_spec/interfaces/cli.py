@@ -72,12 +72,12 @@ from ..domain.merge import MergeError, apply_delta
 from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.remaining import remaining, render_remaining
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
-from ..domain.review_md import render_review, review_said
+from ..domain.review_md import mark_of, render_review, review_said, specs_mark
 from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
 from ..domain.summary_md import render_summary
 from ..domain.tasks_md import render_tasks
-from ..domain.text import lines_of, normalise, plain, sha256_of
+from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import UNREAD, failed, finding, validate_spec
 from ..domain.verify import TestRun, Verdict, grounded, parts_of_diff
 from ..workspace.config import ConfigError
@@ -543,53 +543,43 @@ def _say_next(
 
 
 def _view_written(
-    workspace: Workspace,
-    change_id: str,
-    deltas: Mapping[str, Delta],
-    living: Mapping[str, Spec],
-    *,
-    unless: str | None = None,
+    workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]
 ) -> tuple[str, dict[str, list[str]]] | None:
-    """The approver's view of a change written again: where it is, as shown, and the overlaps it names. None where it
-    reads as `unless` already, the view on disk, or cannot be written, a file that will not open or a folder the path
+    """The approver's view of a change written again, ending on the fingerprint of the specs it shows: where it is, as
+    shown, and the overlaps it names. None where it cannot be written, a file that will not open or a folder the path
     rules refuse: the view is an aid, and found by the code review, its fault failed commands whose work was done."""
     overlaps = _overlaps(workspace, change_id, deltas)
-    text = render_review(change_id, deltas, living, overlaps)
-    if unless is not None and normalise(unless) == normalise(text):  # as a write leaves it
-        return None
     try:
-        path = workspace.write_report(change_id, REVIEW, text)
+        mark = specs_mark(approval_files(workspace.approval_texts(change_id)))
+        path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps, mark=mark))
     except OSError, WorkspaceError:
         return None
     return workspace.shown(path), overlaps
 
 
-def _view_said(
-    workspace: Workspace,
-    change_id: str,
-    deltas: Mapping[str, Delta],
-    living: Mapping[str, Spec],
-    *,
-    unless: str | None = None,
-) -> bool:
+def _view_said(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> bool:
     """The view written again, as `_view_written` writes it, and named on a `review` line: whether it was."""
-    if not deltas or (view := _view_written(workspace, change_id, deltas, living, unless=unless)) is None:
+    if not deltas or (view := _view_written(workspace, change_id, deltas, living)) is None:
         return False
     shown, overlaps = view
     print(f"review    {shown}: {review_said(deltas, overlaps)}")
     return True
 
 
-def _view_behind(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> bool:
-    """Whether the approver's view on disk shows the change otherwise than its files do now: written again where so,
-    and named. Found by the closing code review: a command wrote the view, the files were edited by hand, and the
-    approval recorded what its approver was never shown. No view, or one that will not read or be written again,
-    holds nothing: the view is an aid."""
+def _view_behind(workspace: Workspace, assessed: Assessed, living: Mapping[str, Spec]) -> bool:
+    """Whether the approver's view on disk was written from other specs than the change holds now: written again
+    where so, and named. Found by the closing code review: a command wrote the view, a spec was edited by hand, and
+    the approval recorded what its approver was never shown. No view, one an older adk-spec wrote, or one that will
+    not read or be written again, holds nothing: the view is an aid. Another change's overlap, or the living spec
+    moving, is not the approver's missed edit: `archive` stops on either."""
+    change_id = assessed.state.id
     try:
         before = workspace.report(change_id, REVIEW)
     except OSError, NotTextError, WorkspaceError:
         return False
-    return before is not None and _view_said(workspace, change_id, deltas, living, unless=before)
+    if before is None or mark_of(before) in (None, specs_mark(assessed.files)):
+        return False
+    return _view_said(workspace, change_id, assessed.loaded.change.deltas, living)
 
 
 def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
@@ -844,9 +834,9 @@ def _approve(args: argparse.Namespace) -> int:
     # What the files themselves block comes first: no model is asked about files that are going to change.
     if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
         return _refused(args.id, blockers)
-    if _view_behind(workspace, args.id, assessed.loaded.change.deltas, living):
+    if _view_behind(workspace, assessed, living):
         raise NotYetError(
-            f"`{args.id}` is not approved: its view showed the files before an edit: read it, then approve"
+            f"`{args.id}` is not approved: its view showed the specs before an edit: read it, then approve"
         )
     first = approval_checks_first(assessed.unchecked)
     made = _checked_first(workspace, args.id, living, assessed, args.override) if first else None

@@ -244,3 +244,14 @@ def test_check_without_a_model_brings_a_hand_edit_into_the_view_and_the_approval
     assert run(tmp_path, "check", "passkeys", "--no-model") == 0
     assert "+The system MUST lock an account after four failed attempts." in read_text(tmp_path / VIEW)
     approved(tmp_path)
+
+
+def test_a_view_another_change_or_the_living_spec_moved_holds_no_approval_back(tmp_path) -> None:
+    """Found by the closing code review: the view was compared whole, so another open change touching the same
+    requirement, a living spec that moved, or a view written by another version refused an approval of specs no one
+    had edited, and said they had been."""
+    ws = seeded(tmp_path)
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0  # writes the view
+    another(ws, OTHER)  # now an overlap the view does not name
+    write_text(tmp_path / VIEW, read_text(tmp_path / VIEW).replace("# Review: passkeys", "# Review: passkeys, as was"))
+    approved(tmp_path)

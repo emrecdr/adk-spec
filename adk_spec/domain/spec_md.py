@@ -27,7 +27,7 @@ _RETIRED = re.compile(r"- (REQ-\S+): (\S.*) \(removed by ([^()]+)\)")
 def fenced_lines(lines: list[str], *, strict: bool = True) -> list[bool]:
     """For each line, whether it stands inside a code fence or is one of its two marker lines. A fence that is
     never closed is refused at its opening line: it would take every later heading for text, in silence. Not
-    `strict`, a file read mid-edit, it is read as text with no fence."""
+    `strict`, a file read mid-edit, the lines from its opening on are read as text."""
     inside, held, opened = False, [], 0
     for at, line in enumerate(lines):
         marker = line.startswith(FENCE)
@@ -37,7 +37,8 @@ def fenced_lines(lines: list[str], *, strict: bool = True) -> list[bool]:
             opened = at
     if inside and strict:
         raise GrammarError(opened + 1, "this code fence is never closed: end it with a line of three backticks")
-    return held if not inside else [False] * len(lines)
+    # Found by the closing code review: the fences closed before it still hold.
+    return held[:opened] + [False] * (len(lines) - opened) if inside else held
 
 
 def is_heading(lines: list[str], fenced: list[bool], at: int) -> bool:
