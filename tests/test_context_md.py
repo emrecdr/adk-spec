@@ -226,10 +226,9 @@ def test_a_readings_cuts_and_lookups_are_written() -> None:
         at="2026-11-22T10:00:00+00:00",
         commit=None,
         statements=[],
-        read=("src/app.py (whole)",),
+        read=("src/app.py (whole)", "search: password (3 lines)"),
         over=1,
         unknown_over=2,
-        looked=("search: password (3 lines)",),
     )
-    assert "Left out: 1 statement past the 40 a reading keeps; 2 unknowns past the 8 kept." in text
+    assert "Left out: 1 statement past what a reading keeps; 2 unknowns past what a review keeps." in text
     assert "- src/app.py (whole)\n- search: password (3 lines)\n" in text

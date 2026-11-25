@@ -528,6 +528,9 @@ and a step moves to code only where its output is a function of its input with n
   quote search (`holds`) also looks for a moved quote by its longest word in 20 files at most, so a moved quote with a
   common word can read as gone, in `status`, `validate` and the profile's line alike.
 
+- Phase 18's small item: a folded tree names the files at the top of the workspace's own repository, not those of
+  another repository a change spans, whose paths stand under its name.
+
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:
   holding drafts would also hold a pull request that carries a spec for review. Found by phase 16's code review.

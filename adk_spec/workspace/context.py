@@ -137,9 +137,9 @@ def tree_text(paths: Sequence[str]) -> str:
     kept = sorted(folders.most_common(TREE_MAX_PATHS))  # the largest, by name
     lines = [f"{len(paths):,} files: too many to list. Each folder, {deep} deep, with the files under it:"]
     if top := sorted(path for path in paths if "/" not in path):
-        more = len(top) - TOP_FILES_NAMED
+        rest = len(top) - TOP_FILES_NAMED
         lines.append(
-            "files at the top: " + ", ".join(top[:TOP_FILES_NAMED]) + (f", and {more} more" if more > 0 else "")
+            "files at the top: " + ", ".join(top[:TOP_FILES_NAMED]) + (f", and {rest} more" if rest > 0 else "")
         )
     lines += [f"{folder}/ ({count:,} file{'' if count == 1 else 's'})" for folder, count in kept]
     if more := len(folders) - len(kept):

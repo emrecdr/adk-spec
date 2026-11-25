@@ -1468,7 +1468,7 @@ def _code_read(
     return _Read(said, _found_text(workspace, _CONTEXT_TITLE, found, partial=partial, others=source.commits()))
 
 
-def _context_said(workspace: Workspace, change_id: str, read: _Read | None, answers: str = "") -> None:
+def _context_said(workspace: Workspace, change_id: str, read: _Read | None, answers: str) -> None:
     """The reading's `context.md` written for a change propose wrote, with the person's `answers`, and said: a refusal
     is said beside the change, which stands. Found by review: said as "no change was written", with the change there
     to be proposed twice."""
@@ -1485,7 +1485,7 @@ def _context_written(workspace: Workspace, change_id: str, read: _Read | None, a
     if read is None or not read.text:
         return None
     titled = read.text.replace(f"# {_CONTEXT_TITLE}\n", f"# {_CONTEXT_TITLE}: {change_id}\n", 1)
-    titled = with_answers(titled, scrub(answers)[0])
+    titled = with_answers(titled, answers)
     (path,) = workspace.write_into(change_id, {CONTEXT_FILE: titled})
     return path
 
@@ -1533,8 +1533,8 @@ def _found_text(
         at=datetime.now(UTC).isoformat(timespec="seconds"),
         commit=_commit(workspace),
         statements=found.statements,
-        read=found.read,
-        left_out=found.left_out,
+        read=(*found.read, *found.looked),
+        left_out=(*found.left_out, *found.unread),
         dropped=found.dropped,
         partial=partial,
         others=others,
@@ -1543,7 +1543,6 @@ def _found_text(
         sections=sections,
         over=found.over,
         unknown_over=found.unknown_over,
-        looked=found.looked,
     )
 
 
@@ -1970,6 +1969,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     from ..orchestration.plugins import UsageLedger
     from ..orchestration.stages import CAPABILITIES, LESSONS_TEXT, REQUEST, TIER
     from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages.brief import ANSWERS
     from ..orchestration.stages.brief import KEY as BRIEF_KEY
     from ..orchestration.stages.deltas import KEY as DELTAS_KEY
     from ..orchestration.stages.triage import read_triage
@@ -2012,8 +2012,6 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
             print(f"tokens    {_spent(ledger)}")
             return EXIT_USAGE
         kept.outcome = "written"
-        from ..orchestration.stages.brief import ANSWERS
-
         _context_said(workspace, kept.change, read, state.get(ANSWERS) or "")
     keep = _tasks_kept(workspace, change, changed) if change else None
     change_id = kept.change or ""

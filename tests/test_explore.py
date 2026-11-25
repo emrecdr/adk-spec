@@ -75,6 +75,7 @@ async def test_the_survey_may_look_again_and_no_more_than_the_budget(tmp_path, f
     fake_provider.answers_each_time(SURVEY, iter(rounds))
     found = explored((await read(tmp_path)).state)
     assert len(sent(fake_provider, SURVEY)) == explore.LOOK_BUDGET == 3, "what the third asked for is not read"
+    assert found.unread == ("src/app.py:1-1: past what the reading reads",), "phase 18: and is named"
     assert [one.path for one in found.statements] == ["src/app.py", "src/auth/session.py", "docs/auth.md"]
     assert found.read == ("src/app.py (whole)", "src/auth/session.py (whole)", "docs/auth.md (whole)")
     second = sent(fake_provider, SURVEY)[1]
@@ -125,6 +126,9 @@ async def test_no_more_statements_are_kept_than_the_budget(tmp_path, monkeypatch
     fake_provider.answers_when(SURVEY, survey(APP, more, {**APP, "kind": "risk"}, files=("src/auth/session.py",)))
     found = explored((await read(tmp_path)).state)
     assert len(found.statements) == 2 and len(sent(fake_provider, SURVEY)) == 1, "a full budget ends the reading"
+    assert found.over == 1, "phase 18: the statement past the budget is counted"
+    assert found.unread == ("src/auth/session.py: past what the reading reads",), "and the request it left named"
+    assert all("past what the reading reads" not in told for told in sent(fake_provider, REVIEW)), "the review not told"
 
 
 @pytest.mark.asyncio
@@ -229,7 +233,7 @@ async def test_unknowns_are_kept_plain_and_at_most_eight(tmp_path, fake_provider
     asked = [(f"Who owns sessions?\x1b[31m {n}", "the API\nrepository") for n in range(10)]
     fake_provider.answers_when(REVIEW, reviewed(unknown=asked))
     found = explored((await read(tmp_path)).state)
-    assert len(found.unknown) == explore.UNKNOWN_BUDGET == 8
+    assert len(found.unknown) == explore.UNKNOWN_BUDGET == 8 and found.unknown_over == 2
     assert found.unknown[0] == ("Who owns sessions? [31m 0", "the API repository")
 
 
@@ -321,31 +325,6 @@ async def test_the_survey_and_the_review_are_shown_the_libraries_they_may_ask_fo
 
 
 @pytest.mark.asyncio
-async def test_statements_past_the_budget_and_requests_past_the_rounds_are_said(
-    tmp_path, monkeypatch, fake_provider
-) -> None:
-    """Phase 18: statements past the budget, and what the last round asked for, were dropped in silence."""
-    monkeypatch.setattr(explore, "STATEMENT_BUDGET", 2)
-    more = {**APP, "quote": "def login():", "note": "The entry point."}
-    fake_provider.answers_when(SURVEY, survey(APP, more, {**APP, "kind": "risk"}, files=("src/auth/session.py",)))
-    found = explored((await read(tmp_path)).state)
-    assert found.over == 1 and any("asked for after the reading's last round" in one for one in found.left_out)
-
-
-@pytest.mark.asyncio
-async def test_a_second_review_adds_its_unknowns_to_the_first_and_those_past_the_budget_are_counted(
-    tmp_path, fake_provider
-) -> None:
-    """Phase 18: a second review replaced the first's unknowns, and those past eight went unsaid."""
-    first = reviewed(unknown=[("Who owns sessions?", "")], files=("docs/auth.md",))
-    second = reviewed(unknown=[(f"Question {n}?", "") for n in range(10)])
-    fake_provider.answers_each_time(REVIEW, iter([first, second]))
-    found = explored((await read(tmp_path)).state)
-    assert found.unknown[0] == ("Who owns sessions?", "") and len(found.unknown) == explore.UNKNOWN_BUDGET
-    assert found.unknown_over == 3
-
-
-@pytest.mark.asyncio
 async def test_the_searches_and_folders_a_reading_made_are_said(tmp_path, fake_provider) -> None:
     """Phase 18: a search and a folder listing were shown to the survey and never said in what was read."""
     asks = {"statements": [APP], "more_files": [], "more_folders": ["src/auth"], "more_searches": ["password"]}
@@ -353,3 +332,14 @@ async def test_the_searches_and_folders_a_reading_made_are_said(tmp_path, fake_p
     found = explored((await read(tmp_path)).state)
     assert any(one.startswith("search: password (") for one in found.looked)
     assert any(one.startswith("src/auth/ (") for one in found.looked)
+
+
+@pytest.mark.asyncio
+async def test_unknowns_past_the_budget_add_up_over_two_reviews(tmp_path, fake_provider) -> None:
+    """Found by phase 18's cleanup: the second review counted only its own unknowns past the budget, and the first's
+    went unsaid again."""
+    first = reviewed(unknown=[(f"Question {n}?", "") for n in range(10)], files=("docs/auth.md",))
+    second = reviewed(unknown=[("Who owns sessions?", "")])
+    fake_provider.answers_each_time(REVIEW, iter([first, second]))
+    found = explored((await read(tmp_path)).state)
+    assert found.unknown[0] == ("Question 0?", "") and found.unknown_over == 3

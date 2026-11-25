@@ -12,6 +12,7 @@ import re
 from collections.abc import Mapping, Sequence
 
 from .model import Statement, StatementKind
+from .secrets import scrub
 from .text import code_span, plain
 
 #: How the line begins that a reading which ended early carries at its top.
@@ -30,9 +31,8 @@ PROFILE_SECTIONS = (
 DRAFTED_HEADING = "## Drafted from the code"
 #: The heading what a review named as still unknown stands under.
 UNKNOWN_HEADING = "## What is still unknown"
-#: How many statements a reading keeps, and how many unknowns: the reading's budgets, said where it went past them.
-STATEMENTS_KEPT = 40
-UNKNOWNS_KEPT = 8
+#: The heading the person's answers to the questions `propose` asked stand under, in a change's `context.md`.
+ANSWERS_HEADING = "## The person's answers"
 #: A statement's line as `render_context` writes it: its file and line in a code span, then its note; and the lines
 #: under it, the block it stands in and its quote.
 _STATEMENT = re.compile(r"- `(?P<path>[^`]+):[0-9]+`(?:\s|$)")
@@ -62,7 +62,6 @@ def render_context(
     sections: Sequence[tuple[str, str]] = SECTIONS,
     over: int = 0,
     unknown_over: int = 0,
-    looked: Sequence[str] = (),
 ) -> str:
     """The file, under `title`: when and of what commit each repository was read, the statements under a heading a
     kind, what is still unknown, what was read, and what was left out. `partial` says why a reading ended early,
@@ -87,7 +86,7 @@ def render_context(
                 lines += [f"- `{one.path}:{one.line}` {one.note}", *([f"{_WITHIN}{one.within}"] if one.within else ())]
                 lines.append(f"{_QUOTE}{one.quote}")
             lines.append("")
-    lines += ["## What was read", "", *(f"- {one}" for one in (*read, *looked) or ("nothing",)), ""]
+    lines += ["## What was read", "", *(f"- {one}" for one in read or ("nothing",)), ""]
     return "\n".join(lines)
 
 
@@ -101,7 +100,7 @@ def _read_from(at: str, commit: str | None, others: Mapping[str, str | None]) ->
     )
 
 
-def _left_out(dropped: int, disputed: int, over: int = 0, unknown_over: int = 0) -> str:
+def _left_out(dropped: int, disputed: int, over: int, unknown_over: int) -> str:
     """What was left out of the statements and the unknowns, and why, or nothing."""
     said = []
     if dropped:
@@ -110,26 +109,22 @@ def _left_out(dropped: int, disputed: int, over: int = 0, unknown_over: int = 0)
         noun = "" if said else f" statement{'' if disputed == 1 else 's'}"
         said.append(f"{disputed}{noun} the review disputed")
     if over:
-        said.append(f"{over} statement{'' if over == 1 else 's'} past the {STATEMENTS_KEPT} a reading keeps")
+        said.append(f"{over} statement{'' if over == 1 else 's'} past what a reading keeps")
     if unknown_over:
-        said.append(f"{unknown_over} unknown{'' if unknown_over == 1 else 's'} past the {UNKNOWNS_KEPT} kept")
+        said.append(f"{unknown_over} unknown{'' if unknown_over == 1 else 's'} past what a review keeps")
     return f"Left out: {'; '.join(said)}." if said else ""
 
 
-#: The heading the person's answers to the questions `propose` asked stand under, in a change's `context.md`.
-ANSWERS_HEADING = "## The person's answers"
-
-
 def with_answers(text: str, answers: str) -> str:
-    """A `context.md`, `text`, with the person's `answers` to the questions `propose` asked, each `question ->
-    answer` on a line, under their heading before the file's first other one; as it was where there are none. Phase
-    18: they lived only in the run, and the stages after the brief read the brief's words alone."""
-    said = [plain(one) for one in answers.split("\n") if one.strip()]
+    """A `context.md`, `text`, with the person's `answers` to the questions `propose` asked, scrubbed, each `question
+    -> answer` on a line, under their heading before the file's first other one, which `render_context` always
+    writes; as it was where there are none. Phase 18: they lived only in the run, and the stages after the brief read
+    the brief's words alone; the file is committed, so a secret typed in an answer is not written."""
+    said = [plain(one) for one in scrub(answers)[0].split("\n") if one.strip()]
     if not said:
         return text
     section = "\n".join([ANSWERS_HEADING, "", *(f"- {one}" for one in said), "", ""])
-    at = text.find("\n## ")
-    return f"{text.rstrip(chr(10))}\n\n{section}" if at < 0 else text[: at + 1] + section + text[at + 1 :]
+    return text.replace("\n## ", f"\n{section}## ", 1)
 
 
 def quoted_statements(text: str) -> list[tuple[str, str]]:

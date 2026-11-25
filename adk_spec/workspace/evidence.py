@@ -40,7 +40,8 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
     try:
-        term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
+        # A fixed string git finds on one line, NUL-free and no stand-in's, which no file holds as it stands.
+        term = max((word for word in plain(quote).split() if "[" not in word and "]" not in word), key=len, default="")
         hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
     except GitError:
         return None
@@ -68,7 +69,10 @@ def _found(path: Path, quote: str) -> bool:
         text = read_text(path)
     except NotTextError, OSError:
         return False
-    return quoted_at(quote, text) is not None or quoted_at(quote, scrub_lines(text)[0]) is not None
+    if quoted_at(quote, text) is not None:
+        return True
+    # A stand-in opens on `[` and ends on `]`: a quote of neither is not of the scrubbed text alone, nor costs a scrub.
+    return ("[" in quote or "]" in quote) and quoted_at(quote, scrub_lines(text)[0]) is not None
 
 
 def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[Finding]:

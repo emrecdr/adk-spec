@@ -73,9 +73,11 @@ def test_only_met_verdicts_of_what_a_change_adds_or_modifies_are_kept() -> None:
     assert [one.req for one in kept(said, added=added, change="passkeys", at=AT, repositories={})] == ["REQ-AUTH-004"]
 
 
-def test_a_quote_over_a_secret_is_not_kept() -> None:
+def test_a_quote_over_a_secret_is_kept_as_the_diff_showed_it() -> None:
+    """Phase 18: a quote over a secret is looked for as it was shown, scrubbed, so it is kept as evidence like any."""
     said = [Verdict("REQ-AUTH-004", "met", (("src/auth.py", "token = [REDACTED:generic_secret]"),), "r")]
-    assert kept(said, added=frozenset({"REQ-AUTH-004"}), change="passkeys", at=AT, repositories={}) == []
+    (one,) = kept(said, added=frozenset({"REQ-AUTH-004"}), change="passkeys", at=AT, repositories={})
+    assert one.quote == "token = [REDACTED:generic_secret]"
 
 
 def test_another_repositorys_path_is_kept_with_its_folder() -> None:

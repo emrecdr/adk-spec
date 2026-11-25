@@ -584,11 +584,12 @@ class Source:
         listed = under[:FOLDER_MAX_PATHS]
         note = _counted(len(under), "file", "files")
         note += f", the first {len(listed)} listed" if len(listed) < len(under) else ""
-        if not got.shows("\n".join([f"=== {'.' if whole else folder}/ ({note})", *listed])):
+        label = f"{'.' if whole else folder}/ ({note})"
+        if not got.shows("\n".join([f"=== {label}", *listed])):
             got.left_out.append(f"{folder or '.'}/: past what a round reads")
             got.deferred.append(asked)
             return
-        got.looked.append(f"{'.' if whole else folder}/ ({note})")
+        got.looked.append(label)
 
     def _search(self, asked: str, got: _Round) -> None:
         term = asked.strip()
@@ -611,10 +612,11 @@ class Source:
         note = _counted(len(rows), "line", "lines")
         note = f"more than {SEARCH_MAX_LINES} lines, the first {SEARCH_MAX_LINES} shown" if more else note
         shown = [f"{path}:{number}:{text}" for path, number, text in rows]
-        if not got.shows("\n".join([f"=== search: {term} ({note})", *shown])):
+        label = f"search: {term} ({note})"
+        if not got.shows("\n".join([f"=== {label}", *shown])):
             got.left_out.append(f"search for {term}: past what a round reads")
             got.deferred.append(asked)
             return
-        got.looked.append(f"search: {term} ({note})")
+        got.looked.append(label)
         for path, number, text in rows:
             got.holds(path, number, text)

@@ -122,12 +122,10 @@ def _from_a_line(text: str, *, cut: bool) -> str:
 CUT_MARK = "(the start of the output is not shown: only its end fits)"
 
 
-def _end(text: str, most: int, *, cut: bool = False) -> str:
+def _end(text: str, most: int, *, cut: bool) -> str:
     """The end of `text`, at most `most` characters, cut at a line where it can be, and opening on `CUT_MARK` where
     its start is not shown: cut here, or already, `cut`, by the window a run's output is held in."""
     if len(text) <= most and not cut:
         return text
     room = most - len(CUT_MARK) - 1
-    end = text[-room:]
-    end = (end.partition("\n")[2] or end) if len(text) > room else end
-    return f"{CUT_MARK}\n{end}"
+    return f"{CUT_MARK}\n{_from_a_line(text[-room:], cut=len(text) > room)}"
