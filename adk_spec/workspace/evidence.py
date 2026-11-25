@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
 from ..domain.context_md import quoted_statements
-from ..domain.evidence_md import Proof, all_gone, folded, parse_evidence, placed, render_evidence, suspects
+from ..domain.evidence_md import HIDDEN, Proof, all_gone, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
 from ..domain.text import quoted_at
 from ..domain.validate import finding
@@ -97,24 +97,18 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
 
 
 def removed_by(
-    workspace: Workspace,
-    living: Mapping[str, Spec],
-    touched: frozenset[str],
-    *,
-    repositories: Mapping[str, str],
-    own: frozenset[str],
+    workspace: Workspace, living: Mapping[str, Spec], removed: Sequence[str], *, own: frozenset[str]
 ) -> list[str]:
     """Each living requirement, as `ID (capability)`, that is not among `own`, the change's, all of whose evidence is
-    gone from the code, and one of whose evidence files is among `touched`, the paths of the work's diff as
-    `placed` reads them by the change's `repositories`. Phase 17: only those are looked for, so a verification reads
-    no evidence it did not touch."""
+    gone from the code, and one of whose quotes is in `removed`, the runs of lines the work's diff takes out. Phase 17:
+    only those are looked for, so a verification reads no evidence its diff did not take out; found by its code
+    review, a proof gone before the work was blamed on it, and one in a file the work moved was missed, by path."""
     found, exclude = [], _excluded(workspace)
-    files = {placed(path, repositories) for path in touched}
     for capability in sorted(set(workspace.capabilities()) & set(living)):
         read, _unread = _read(workspace.home / SPECS / capability / EVIDENCE)
         held = {req.id for req in living[capability].requirements} - own
         kept = [one for _line, one in read or [] if one.req in held]
-        hit = {one.req for one in kept if (one.repository, one.path) in files}
+        hit = {one.req for one in kept if any(quoted_at(one.quote, run) is not None for run in removed)}
         found += [
             f"{req} ({capability})"
             for req in sorted(hit)
@@ -133,10 +127,10 @@ def profile_gone(workspace: Workspace) -> tuple[int, int]:
     except NotTextError, OSError:
         return 0, 0
     exclude = _excluded(workspace)
-    looked = [
+    looked = [  # found by its code review: a quote a secret was scrubbed from is never in the code as it stands
         quote_holds(workspace.root, ".", named, quote, exclude)
         for named, quote in quoted_statements(text)
-        if not named.startswith(LIBRARY_SCHEMES)
+        if not named.startswith(LIBRARY_SCHEMES) and HIDDEN not in quote
     ]
     held = [one for one in looked if one is not None]
     return held.count(False), len(held)

@@ -26,7 +26,7 @@ _ENTRY = "- "
 _TITLE = "# Evidence: "
 _NOTE = "> "
 #: The diff a model is shown is scrubbed: a quote holding this was over a secret, and is never in a file as quoted.
-_HIDDEN = "[REDACTED"
+HIDDEN = "[REDACTED"
 
 
 @dataclass(frozen=True)
@@ -83,10 +83,10 @@ def kept(
             continue
         held: list[Proof] = []
         for named, quote in verdict.evidence:
-            repository, path = placed(named, repositories)
+            repository, path = _placed(named, repositories)
             # Cut where it may be: what a quote begins with is found wherever the whole quote is.
             one = Proof(verdict.id, repository, path, change, at, quote[:QUOTE_MAX].rstrip())
-            if _HIDDEN not in quote and _APART not in repository + path and one not in held:
+            if HIDDEN not in quote and _APART not in repository + path and one not in held:
                 held.append(one)
         proofs += held[:QUOTES_A_REQUIREMENT]
     return _sorted(proofs)
@@ -132,7 +132,7 @@ def suspects(proofs: Sequence[tuple[int, Proof]], holds: Callable[[Proof], bool 
     return found
 
 
-def placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:
+def _placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:
     """The repository and the path within it of a path as `verify` named it."""
     name, _, rest = named.partition("/")
     return (repositories[name], rest) if rest and name in repositories else (".", named)

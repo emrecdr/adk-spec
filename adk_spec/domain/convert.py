@@ -216,7 +216,7 @@ def to_tasks(draft: TasksDraft) -> tuple[TaskGroup, ...]:
 
 def _apart(tasks: list[Task]) -> tuple[Task, ...]:
     """Each task's `[P]` where it names its files and none meets a file of the task before or after it: the rule the
-    tasks stage is told, held by code, so two agents never run on one file. Phase 17."""
+    tasks stage is told, held by code, so no two tasks side by side run on one file. Phase 17."""
     files = [[], *([task_path(one) for one in task.files] for task in tasks), []]
     return tuple(
         task.model_copy(update={"parallel": task.parallel and bool(mine) and not _meet(mine, [*before, *after])})

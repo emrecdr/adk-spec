@@ -103,7 +103,7 @@ def _left_out(dropped: int, disputed: int) -> str:
 
 #: A statement's line as `render_context` writes it: its file and line in a code span, then its note; and the lines
 #: under it, the block it stands in and its quote.
-_STATEMENT = re.compile(r"- `(?P<path>.+):[0-9]+` ")
+_STATEMENT = re.compile(r"- `(?P<path>[^`]+):[0-9]+`(?: |$)")
 _WITHIN, _QUOTE = "  in: ", "  > "
 
 

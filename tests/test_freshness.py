@@ -118,3 +118,18 @@ def test_propose_says_it_before_its_first_call(tmp_path, capsys) -> None:
     capsys.readouterr()
     run(tmp_path, "propose", "Add passkeys", "--no-input", "--no-explore")
     assert capsys.readouterr().out.splitlines()[0].startswith(LINE), "said before anything is spent"
+
+
+def test_a_quote_a_secret_was_scrubbed_from_is_not_counted(tmp_path) -> None:
+    """Found by phase 17's code review: the reading quotes scrubbed text, so a quote holding a stand-in for a secret
+    is never in the code, and was counted gone on every `status`, through any refresh."""
+    profile = PROFILE.replace("return password_check(user)", 'URL = "postgres://app:[REDACTED:password]@db/app"')
+    ws = profiled(tmp_path, profile=profile)
+    assert profile_gone(ws) == (0, 1)
+
+
+def test_a_statement_is_read_to_its_own_code_span_and_with_no_note() -> None:
+    """Found by phase 17's code review: a note mentioning `b.py:10` took the path to the note's span, and a statement
+    whose note was empty, its space stripped, was passed over."""
+    text = "- `src/a.py:3` Calls `b.py:10` here.\n  > def call_b():\n- `src/c.py:4`\n  > def c_alone():\n"
+    assert quoted_statements(text) == [("src/a.py", "def call_b():"), ("src/c.py", "def c_alone():")]

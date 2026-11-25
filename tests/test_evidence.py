@@ -337,3 +337,25 @@ def test_the_proofs_taken_out_are_named_three_then_counted() -> None:
     said = removed_said(["REQ-A-001 (a)", "REQ-A-002 (a)", "REQ-B-001 (b)", "REQ-B-002 (b)"])
     assert said.startswith("this work took out every line that proved REQ-A-001 (a), REQ-A-002 (a), REQ-B-001 (b)")
     assert " and 1 more" in said and removed_said([]) == ""
+
+
+def test_verify_names_only_proofs_its_own_diff_removed_wherever_they_moved(tmp_path, capsys) -> None:
+    """Found by phase 17's code review: a proof already gone before the work, in a file the work then edited, was
+    blamed on it; and one in a file the work moved away was missed, its path no longer the diff's."""
+    from samples import SPEC
+
+    write_text(tmp_path / "src/old_name.py", "def keep_me_around():\n    return 1\n")
+    approved_in_a_repository(tmp_path)
+    write_text(tmp_path / ".spec/specs/billing/spec.md", SPEC.replace("AUTH", "BILLING").replace("# auth", "# billing"))
+    billing = [
+        proof("REQ-BILLING-001", quote="def keep_me_around():", path="src/old_name.py"),
+        proof("REQ-BILLING-002", quote="def stale_before_this_work():"),  # in src/auth.py, gone before the work
+    ]
+    write_text(tmp_path / ".spec/specs/billing/evidence.md", render_evidence("billing", billing))
+    implemented(tmp_path)
+    (tmp_path / "src/old_name.py").unlink()
+    write_text(tmp_path / "src/new_name.py", "def renamed():\n    return 1\n")
+    capsys.readouterr()
+    run(tmp_path, "verify", "passkeys")
+    (note,) = [line for line in capsys.readouterr().out.splitlines() if line.startswith("note ")]
+    assert "REQ-BILLING-001 (billing)" in note and "REQ-BILLING-002" not in note
