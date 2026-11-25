@@ -174,3 +174,12 @@ def test_a_cut_stand_in_a_nul_and_a_twice_quoted_line_count_as_nothing_more(tmp_
     capsys.readouterr()
     assert run(tmp_path, "status") == 0
     assert "profile: 1 of 1 quote no longer in the code" in capsys.readouterr().out
+
+
+def test_a_quote_cut_anywhere_in_a_stand_in_is_unknown() -> None:
+    """Found by phase 17's last review: a search hit is cut at its own length, so a quote can end, or start, inside
+    `[REDACTED:...]` though shorter than a statement's cut; such a quote is never in the code as it stands."""
+    from adk_spec.domain.evidence_md import scrubbed
+
+    assert scrubbed('; API = "[REDAC') and scrubbed('ACTED:github_token]" + x') and scrubbed('K = "[REDACTED:x]"')
+    assert not scrubbed("items = [") and not scrubbed("def start_session(user):")

@@ -8,8 +8,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
 from ..domain.context_md import quoted_statements
-from ..domain.convert import QUOTE_SHOWN_CHARS
-from ..domain.evidence_md import HIDDEN, Proof, folded, parse_evidence, render_evidence, suspects
+from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, scrubbed, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
 from ..domain.text import plain, quoted_at
 from ..domain.validate import finding
@@ -111,17 +110,10 @@ def profile_gone(workspace: Workspace) -> tuple[int, int]:
     looked = [
         quote_holds(workspace.root, ".", named, quote, exclude)
         for named, quote in dict.fromkeys(quoted_statements(text))
-        if not named.startswith(LIBRARY_SCHEMES) and not _scrubbed(quote)
+        if not named.startswith(LIBRARY_SCHEMES) and not scrubbed(quote)
     ]
     held = [one for one in looked if one is not None]
     return held.count(False), len(held)
-
-
-def _scrubbed(quote: str) -> bool:
-    """Whether a secret was scrubbed from `quote`: it holds the stand-in, or, cut at the length a statement keeps, ends
-    on part of it. Found by phase 17's code review: a cut through `[REDACTED:...]` read as gone."""
-    cut = len(quote) >= QUOTE_SHOWN_CHARS and any(quote.endswith(HIDDEN[:size]) for size in range(1, len(HIDDEN)))
-    return HIDDEN in quote or cut
 
 
 def _excluded(workspace: Workspace) -> tuple[str, ...]:

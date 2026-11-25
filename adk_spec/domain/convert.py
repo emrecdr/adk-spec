@@ -215,13 +215,21 @@ def to_tasks(draft: TasksDraft) -> tuple[TaskGroup, ...]:
 
 
 def _apart(tasks: list[Task]) -> tuple[Task, ...]:
-    """Each task's `[P]` where it names its files and none meets a file of the task before or after it: the rule the
-    tasks stage is told, held by code, so no two tasks side by side run on one file. Phase 17."""
-    files = [[], *([task_path(one) for one in task.files] for task in tasks), []]
+    """Each task's `[P]` where it and the tasks before and after it name their files, and none of its own meets
+    theirs: the rule the tasks stage is told, held by code, so no two tasks side by side run on one file. A neighbour
+    naming none cannot be said apart either (found by phase 17's last review). Phase 17."""
+    files: list[list[str] | None] = [None, *([task_path(one) for one in task.files] for task in tasks), None]
     return tuple(
-        task.model_copy(update={"parallel": task.parallel and bool(mine) and not _meet(mine, [*before, *after])})
+        task.model_copy(update={"parallel": task.parallel and _apart_from(mine, before, after)})
         for task, before, mine, after in zip(tasks, files, files[1:], files[2:], strict=False)
     )
+
+
+def _apart_from(mine: list[str] | None, *neighbours: list[str] | None) -> bool:
+    """Whether a task naming `mine` touches no file of its `neighbours`: None where there is none, at a group's edge."""
+    if not mine or any(side == [] for side in neighbours):
+        return False
+    return not _meet(mine, [path for side in neighbours if side for path in side])
 
 
 def _meet(paths: list[str], others: list[str]) -> bool:

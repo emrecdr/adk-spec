@@ -8,6 +8,7 @@ folder that holds `.spec/`, as the change that proved it recorded it."""
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import astuple, dataclass
 
@@ -27,7 +28,17 @@ _TITLE = "# Evidence: "
 _NOTE = "> "
 #: What a model is shown is scrubbed, a diff or a reading: a quote holding this was over a secret, and is never in a
 #: file as quoted.
-HIDDEN = "[REDACTED"
+_HIDDEN = "[REDACTED"
+#: The rest of a stand-in, `[REDACTED:<name>]`, where a quote opens past a cut through it.
+_TAIL = re.compile(r"[A-Z]{0,8}:[A-Za-z0-9_]+\]")
+
+
+def scrubbed(quote: str) -> bool:
+    """Whether a secret was scrubbed from `quote`, whole or where a cut went through its stand-in: it holds
+    `[REDACTED`, ends on two or more of its first characters, or opens on a stand-in's tail. Such a quote is never in
+    the code as it stands. Found by phase 17's reviews: a reading's line, or a statement, can be cut mid stand-in."""
+    cut = any(quote.endswith(_HIDDEN[:size]) for size in range(2, len(_HIDDEN)))
+    return _HIDDEN in quote or cut or _TAIL.match(quote) is not None
 
 
 @dataclass(frozen=True)
@@ -87,7 +98,7 @@ def kept(
             repository, path = _placed(named, repositories)
             # Cut where it may be: what a quote begins with is found wherever the whole quote is.
             one = Proof(verdict.id, repository, path, change, at, quote[:QUOTE_MAX].rstrip())
-            if HIDDEN not in quote and _APART not in repository + path and one not in held:
+            if not scrubbed(quote) and _APART not in repository + path and one not in held:
                 held.append(one)
         proofs += held[:QUOTES_A_REQUIREMENT]
     return _sorted(proofs)

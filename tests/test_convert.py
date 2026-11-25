@@ -417,5 +417,7 @@ def test_a_parallel_mark_stands_only_where_code_finds_it_true() -> None:
     assert _parallel(["src/a.py"], ["src/b.py"], ["src/c.py"]) == [True, True, True]
     assert _parallel(["src/a.py"], ["`./src/a.py`"], ["src/c.py"]) == [False, False, True]
     assert _parallel(["src/auth/"], ["src/auth/token.py"]) == [False, False]
-    assert _parallel([], ["src/b.py"]) == [False, True], "a task naming no file cannot be said apart"
+    assert _parallel([], ["src/b.py"]) == [False, False], (
+        "a task naming no file cannot be said apart, nor its neighbour"
+    )
     assert _parallel(["src/a.py"], ["src/b.py"], ["src/a.py"]) == [True, True, True], "only neighbours count"
