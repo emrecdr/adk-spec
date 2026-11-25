@@ -42,11 +42,12 @@ How it is applied in every phase below:
 | 13 | The `strict` tier | `2026-11-22-adk-spec-strict-tier.md` | A design always owed; `propose` stops after the brief and specs for a person to read, and `plan` goes on; two different names approve; a warning blocks, with no override. What each tier demands is one table in the domain. | Built, cleaned up, reviewed and merged. Measured live: the stop, a design, two names |
 | 15 | Research during planning | `2026-11-23-adk-spec-research-during-planning.md` | `propose` reads the code, and the project's installed libraries offline, before the brief; the brief asks only what the code cannot answer, in order of what depends on what, and "yes" takes a suggestion; rules from the skills the owner pointed to in the brief, specs, tasks and check. | Built, cleaned up, reviewed and merged; measured live, a fault the first run found fixed |
 | 14 | Inside a coding assistant | `2026-11-22-adk-spec-mcp-server.md` | `adk-spec-mcp` serves six commands as MCP tools to a coding assistant (`propose`, revising too, `plan`, `check`, `verify`, `status`, `validate`), each run as the terminal runs it; approving and archiving stay the person's. | Built, cleaned up, reviewed and merged. Its live proof, in VS Code and in Claude Code, waits for the owner |
-| 16 | Evidence and review | `2026-11-24-adk-spec-evidence-and-review.md` | The approver's view of each requirement a change touches, and who else is changing it; unmet verdicts written as the next work; `verify`'s evidence kept beside each living spec, a requirement whose code is gone noted as suspect; `validate` as a merge gate with GitHub annotations; a pull request's summary and a changelog. No model call, command, flag or `change.json` field. | Built test first, cleaned up; in its review loop |
+| 16 | Evidence and review | `2026-11-24-adk-spec-evidence-and-review.md` | The approver's view of each requirement a change touches, and who else is changing it; unmet verdicts written as the next work; `verify`'s evidence kept beside each living spec, a requirement whose code is gone noted as suspect; `validate` as a merge gate with GitHub annotations; a pull request's summary and a changelog. No model call, command, flag or `change.json` field. | Built test first; five cleanup and code reviews; merged |
 
 ## The plan being followed now
 
-Phase 16, `2026-11-24-adk-spec-evidence-and-review.md`, from the design `2026-11-24-evidence-and-review-design.md`.
+None: phase 16 is done. Its five code reviews fixed what each found, a security hole among them (an evidence line could
+read a file anywhere, which in CI let a pull request probe the runner), and left four small items, below.
 
 ## How a change flows
 
@@ -478,6 +479,11 @@ and a step moves to code only where its output is a function of its input with n
   written by a newer adk-spec, and upgrading reads it.
 
 ## The owner's, outside any phase
+
+- Phase 16's small items, left by its last review: a change an older adk-spec verified with a requirement unmet is sent
+  to a `reports/remaining.md` it never wrote, once, until `verify` runs; a note a person writes in a living
+  `evidence.md` is lost when an archive rewrites it, as the file asks for entries alone; the archive's `kept` line gives
+  one reason for every file it leaves; a moved quote's search misreads a file whose name holds a colon.
 
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:
