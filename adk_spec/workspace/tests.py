@@ -110,7 +110,7 @@ def _tail(output: bytes, *, cut: bool) -> str:
     text = _from_a_line(normalise(output.decode("utf-8", "replace")), cut=cut).rstrip("\n")
     if mentions_a_key(text):
         return WITHHELD
-    return _end(scrub(text, cut=True)[0], TAIL_MAX_CHARS)
+    return _end(scrub(text, cut=True)[0], TAIL_MAX_CHARS, cut=cut)
 
 
 def _from_a_line(text: str, *, cut: bool) -> str:
@@ -118,9 +118,16 @@ def _from_a_line(text: str, *, cut: bool) -> str:
     return (text.partition("\n")[2] or text) if cut else text
 
 
-def _end(text: str, most: int) -> str:
-    """The end of `text`, at most `most` characters, cut at a line where it can be."""
-    if len(text) <= most:
+#: The line before an output whose start is not shown: phase 18, `verify` was given the end with no mark of the cut.
+CUT_MARK = "(the start of the output is not shown: only its end fits)"
+
+
+def _end(text: str, most: int, *, cut: bool = False) -> str:
+    """The end of `text`, at most `most` characters, cut at a line where it can be, and opening on `CUT_MARK` where
+    its start is not shown: cut here, or already, `cut`, by the window a run's output is held in."""
+    if len(text) <= most and not cut:
         return text
-    cut = text[-most:]
-    return cut.partition("\n")[2] or cut
+    room = most - len(CUT_MARK) - 1
+    end = text[-room:]
+    end = (end.partition("\n")[2] or end) if len(text) > room else end
+    return f"{CUT_MARK}\n{end}"

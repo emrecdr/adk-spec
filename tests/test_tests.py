@@ -256,3 +256,11 @@ def test_the_cli_says_which_variables_its_env_file_added(tmp_path, monkeypatch) 
         assert cli._loaded(env) == {"FROM_THE_FILE"} and os.environ["FROM_THE_SHELL"] == "kept"
     finally:
         os.environ.pop("FROM_THE_FILE", None)
+
+
+def test_a_cut_output_says_its_start_is_not_shown(tmp_path) -> None:
+    """Phase 18: `verify` was given the end of a long test output with no mark that its start was cut."""
+    run = run_tests(tmp_path, program(tmp_path, "print('x' * 200_000)\nprint('THE END')"), timeout=60)
+    assert run.tail.startswith("(the start of the output is not shown") and len(run.tail) <= TAIL_MAX_CHARS
+    short = run_tests(tmp_path, program(tmp_path, "print('short')"), timeout=60)
+    assert "not shown" not in short.tail
