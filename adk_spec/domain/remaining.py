@@ -24,7 +24,7 @@ class Left:
     #: The files those tasks named that the diff never touched.
     untouched: tuple[str, ...]
     #: Whether code wrote the reason, as `Verdict.coded`.
-    coded: bool = False
+    coded: bool
 
 
 def remaining(verdicts: Sequence[Verdict], groups: Sequence[TaskGroup], touched: frozenset[str]) -> list[Left]:

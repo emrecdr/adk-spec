@@ -61,6 +61,7 @@ from ..domain.lifecycle import (
     missing_bases,
     model_holds,
     next_step,
+    owes_approval,
     owes_design,
     plan_blockers,
     reopened,
@@ -534,29 +535,49 @@ def _say_next(
     wording of the step named a plan its holds refused. Where no approval covers the change's files, a person reads
     it before approving: its view, `reports/review.md`, is written again first."""
     assessed = _assessed(workspace, change_id, living, drift=drift)
-    deltas = assessed.loaded.change.deltas
-    # A draft, a strict one approved once among them, or an approved change edited since, owes an approval: its view
-    # is written for the person who gives it. Found by the code review: a second approver read the view of before.
-    owed = assessed.stale or assessed.state.status == "draft"
-    if owed and deltas and (view := _view_written(workspace, change_id, deltas, living)):
-        shown, overlaps = view
-        print(f"review    {shown}: {review_said(deltas, overlaps)}")
+    # Found by the code review: a second approver read the view of before.
+    if owes_approval(assessed.state, assessed.stale):
+        _view_said(workspace, change_id, assessed.loaded.change.deltas, living)
     phrase = assessed.step.phrase
     print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
 
 
 def _view_written(
-    workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]
+    workspace: Workspace,
+    change_id: str,
+    deltas: Mapping[str, Delta],
+    living: Mapping[str, Spec],
+    *,
+    unless: str | None = None,
 ) -> tuple[str, dict[str, list[str]]] | None:
     """The approver's view of a change written again: where it is, as shown, and the overlaps it names. None where it
-    cannot be written, a file that will not open or a folder the path rules refuse: the view is an aid, and found by
-    the code review, its fault failed commands whose work was done."""
+    reads as `unless` already, the view on disk, or cannot be written, a file that will not open or a folder the path
+    rules refuse: the view is an aid, and found by the code review, its fault failed commands whose work was done."""
     overlaps = _overlaps(workspace, change_id, deltas)
+    text = render_review(change_id, deltas, living, overlaps)
+    if unless is not None and normalise(unless) == normalise(text):  # as a write leaves it
+        return None
     try:
-        path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps))
+        path = workspace.write_report(change_id, REVIEW, text)
     except OSError, WorkspaceError:
         return None
     return workspace.shown(path), overlaps
+
+
+def _view_said(
+    workspace: Workspace,
+    change_id: str,
+    deltas: Mapping[str, Delta],
+    living: Mapping[str, Spec],
+    *,
+    unless: str | None = None,
+) -> bool:
+    """The view written again, as `_view_written` writes it, and named on a `review` line: whether it was."""
+    if not deltas or (view := _view_written(workspace, change_id, deltas, living, unless=unless)) is None:
+        return False
+    shown, overlaps = view
+    print(f"review    {shown}: {review_said(deltas, overlaps)}")
+    return True
 
 
 def _view_behind(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> bool:
@@ -565,19 +586,10 @@ def _view_behind(workspace: Workspace, change_id: str, deltas: Mapping[str, Delt
     approval recorded what its approver was never shown. No view, or one that will not read or be written again,
     holds nothing: the view is an aid."""
     try:
-        before = read_text(workspace.home / CHANGES / change_id / REPORTS / REVIEW)
-    except OSError, NotTextError:
+        before = workspace.report(change_id, REVIEW)
+    except OSError, NotTextError, WorkspaceError:
         return False
-    if not deltas:
-        return False
-    now = render_review(change_id, deltas, living, _overlaps(workspace, change_id, deltas))
-    if normalise(before) == normalise(now):  # as a write leaves it
-        return False
-    if (view := _view_written(workspace, change_id, deltas, living)) is None:
-        return False
-    shown, overlaps = view
-    print(f"review    {shown}: {review_said(deltas, overlaps)}")
-    return True
+    return before is not None and _view_said(workspace, change_id, deltas, living, unless=before)
 
 
 def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
@@ -822,7 +834,9 @@ def _approve(args: argparse.Namespace) -> int:
     workspace = _workspace(args)
     living = _living(workspace, f"`{args.id}` is not approved")  # coverage is unknown while a spec is unread
     _based(workspace, args.id, living)
-    assessed = _assessed(workspace, args.id, living)
+    assessed = _assessed(
+        workspace, args.id, living, drift=False
+    )  # an approval reads no drift: `_say_next` asks git once
     demands = DEMANDS[assessed.state.tier]
     if args.override and not demands.override:
         raise UsageError(f"a {assessed.state.tier} change sets no blocking finding aside: fix it, then approve again")
@@ -831,19 +845,16 @@ def _approve(args: argparse.Namespace) -> int:
     if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
         return _refused(args.id, blockers)
     if _view_behind(workspace, args.id, assessed.loaded.change.deltas, living):
-        print(
-            f"{PROG}: `{args.id}` is not approved: its view showed the files before an edit: read it, then approve "
-            "again",
-            file=sys.stderr,
+        raise NotYetError(
+            f"`{args.id}` is not approved: its view showed the files before an edit: read it, then approve"
         )
-        return EXIT_FINDINGS
     first = approval_checks_first(assessed.unchecked)
     made = _checked_first(workspace, args.id, living, assessed, args.override) if first else None
     if made is not None:
         if made.failure:
             return _unfinished(f"the check did not finish, and nothing was approved: {made.failure}", made.ledger)
         _said_check(made, assessed.state)
-        assessed = _assessed(workspace, args.id, living)
+        assessed = _assessed(workspace, args.id, living, drift=False)
     aside = first and made is None  # a model's check that could not be made again, set aside by a reason
     # A reason sets aside only what a person was shown: a check recorded before this run, never one it made.
     if not aside and (blockers := check_stops(assessed.unchecked, override=bool(args.override) and not first)):
@@ -865,7 +876,7 @@ def _approve(args: argparse.Namespace) -> int:
     _aids_written(workspace, args.id, _after_approval_aids(assessed.loaded.change, held))
     _said_approved(held, by, len(files))
     # A change still owing an approval gets a `review` line next, which names them: found by the closing code review.
-    if held.status != "draft" and (overlaps := _overlaps(workspace, args.id, assessed.loaded.change.deltas)):
+    if not owes_approval(held, ()) and (overlaps := _overlaps(workspace, args.id, assessed.loaded.change.deltas)):
         named = "; ".join(f"{req_id} ({', '.join(others)})" for req_id, others in sorted(overlaps.items()))
         print(f"note      also changed by another open change: {named}. The second to archive is stopped: rework it")
     if edited:
@@ -880,9 +891,9 @@ def _approve(args: argparse.Namespace) -> int:
 def _after_approval_aids(change: Change, held: ChangeState) -> dict[str, str | None]:
     """The reports an approval rewrites: what a verification said and left to do goes where it was of other files,
     or there was none; a summary it keeps names the approval as it now stands."""
-    if (done := held.verification) is None:
+    if held.verification is None:
         return dict.fromkeys((REMAINING, SUMMARY))
-    return {SUMMARY: render_summary(change, done.verdicts, done.tests, held.approval, override=done.override)}
+    return {SUMMARY: render_summary(change, held)}
 
 
 def _approver(args: argparse.Namespace, assessed: Assessed) -> str:
@@ -909,7 +920,7 @@ def _where_work_begins(workspace: Workspace, assessed: Assessed) -> tuple[dict[s
 def _said_approved(held: ChangeState, by: str, count: int) -> None:
     """What an approval says, in one line: the first of two names, or the approval, with the first name where it is
     the second. Who approves next is the next line's to say."""
-    if held.status != "approved":
+    if first_of_two(held, ()):  # found by the cleanup review: a verified change approved again is not a first of two
         said = f"once, by {by}"
     else:
         said = f"by {by}" + (f", after {held.approval.by}" if held.approval and held.approval.second else "")
@@ -1834,7 +1845,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
     left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []
     aids = {
-        SUMMARY: render_summary(change, said, ran, after.approval, override=reason),
+        SUMMARY: render_summary(change, after),
         REMAINING: render_remaining(args.id, left, last=DEMANDS[state.tier].closing) if left else None,
     }
     wrote += _aids_written(workspace, args.id, aids)

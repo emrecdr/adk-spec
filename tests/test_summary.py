@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
-from conftest import approved, on_the_fake, run, seeded
+from conftest import approved, on_the_fake, run, seeded, state_of
 from samples import BRIEF, DELTA, tasks_for
 from test_review import MENTION
 from test_verify import REPORT, approved_in_a_repository, implemented, verified_in_a_repository
@@ -13,7 +11,7 @@ from test_verify import REPORT, approved_in_a_repository, implemented, verified_
 from adk_spec.domain.brief_md import parse_brief
 from adk_spec.domain.changelog_md import changelog_entry, with_entry
 from adk_spec.domain.delta_md import parse_delta
-from adk_spec.domain.model import Change, ChangeState
+from adk_spec.domain.model import Change, ChangeState, Verification
 from adk_spec.domain.summary_md import render_summary
 from adk_spec.workspace.files import read_text, write_text
 
@@ -22,14 +20,23 @@ SUMMARY = ".spec/changes/passkeys/reports/summary.md"
 CHANGELOG = ".spec/changelog.md"
 
 
+CHANGE = Change(state=ChangeState(id="passkeys", tier="lean"), brief=parse_brief(BRIEF), deltas=DELTAS, tasks=None)
+
+
+def verified_as(verdicts: dict[str, str], **held) -> ChangeState:
+    """The change's state with a verification of these verdicts, and no approval."""
+    done = Verification(at="2026-11-24T10:00:00+00:00", base="abc", diff="def", verdicts=verdicts, **held)
+    return CHANGE.state.model_copy(update={"verification": done})
+
+
 @pytest.fixture(autouse=True)
 def _fake_arm(monkeypatch) -> None:
     on_the_fake(monkeypatch)
 
 
 def test_the_summary_holds_the_why_the_requirements_and_the_verdicts() -> None:
-    change = Change(state=ChangeState(id="passkeys", tier="lean"), brief=parse_brief(BRIEF), deltas=DELTAS, tasks=None)
-    text = render_summary(change, {"REQ-AUTH-004": "met", "REQ-AUTH-002": "unmet"}, {".": "passed"}, None)
+    said = {"REQ-AUTH-004": "met", "REQ-AUTH-002": "unmet"}
+    text = render_summary(CHANGE, verified_as(said, tests={".": "passed"}))
     assert text.startswith("# Sign in with a passkey\n")
     assert "Passwords are the top source of account takeovers." in text
     assert "- Added REQ-AUTH-004: Sign in with a passkey (auth)" in text
@@ -91,8 +98,7 @@ def test_a_heading_of_a_persons_own_is_kept_whole() -> None:
 
 
 def test_the_summary_says_an_override_and_its_reason() -> None:
-    change = Change(state=ChangeState(id="passkeys", tier="lean"), brief=parse_brief(BRIEF), deltas=DELTAS, tasks=None)
-    text = render_summary(change, {"REQ-AUTH-002": "unmet"}, {}, None, override="the judge misread the lockout")
+    text = render_summary(CHANGE, verified_as({"REQ-AUTH-002": "unmet"}, override="the judge misread the lockout"))
     assert "Verified by override: the judge misread the lockout" in text
 
 
@@ -138,11 +144,14 @@ def test_an_entry_in_a_code_block_of_the_introduction_is_no_entry() -> None:
     assert with_entry("# Changelog\n\n```\nnever closed\n", "## a, 2026-01-01\n").endswith("## a, 2026-01-01\n")
 
 
-def test_approving_a_verified_change_again_keeps_it_verified_and_names_the_new_approver(tmp_path) -> None:
+def test_approving_a_verified_change_again_keeps_it_verified_and_names_the_new_approver(tmp_path, capsys) -> None:
     """Found by the closing code review: a second approval of a verified change, its files as they were, sent it back
-    to a verification, paid for again, and the summary still named the first approver."""
+    to a verification, paid for again, and the summary still named the first approver. Found by its cleanup, it was
+    then said to be approved once, as the first of two names is."""
     verified_in_a_repository(tmp_path)
+    capsys.readouterr()
     assert run(tmp_path, "approve", "passkeys", "--by", "bob") == 0
-    state = json.loads((tmp_path / ".spec/changes/passkeys/change.json").read_text(encoding="utf-8"))
+    assert "approved `passkeys` by bob: " in capsys.readouterr().out
+    state = state_of(tmp_path)
     assert state["status"] == "verified" and state["verification"] is not None
     assert "Approved by bob." in read_text(tmp_path / SUMMARY)

@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-from .model import Delta, GrammarError
+from .model import Delta
 from .spec_md import fenced_lines
 
 HEADING = "# Changelog"
@@ -35,10 +35,7 @@ def with_entry(text: str | None, entry: str) -> str:
     none."""
     lines = (text or "").lstrip("\n").split("\n")
     body = lines[1:] if lines[0].rstrip() == HEADING else lines  # a heading of theirs is kept, as their text
-    try:
-        fenced = fenced_lines(body)
-    except GrammarError:  # a fence never closed: read as text with no fence
-        fenced = [False] * len(body)
+    fenced = fenced_lines(body, strict=False)
     first = next((at for at, line in enumerate(body) if not fenced[at] and _ENTRY.match(line)), len(body))
     parts = (HEADING, "\n".join(body[:first]), entry, "\n".join(body[first:]))
     return "\n\n".join(filter(None, (part.strip("\n") for part in parts))) + "\n"

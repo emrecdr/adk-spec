@@ -61,21 +61,21 @@ inside them.
  adk-spec archive <id>     folds the change into the living specs in .spec/specs/
 ```
 
-| Command     | The question it answers    | What happens inside                                                                                                                                                           |
-| ----------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `propose` | What do we want to build?  | Sizes the request, reads the code that matters for it, asks you only what the code cannot answer, writes the brief and the specs, the design where one is owed, and the tasks |
-| `approve` | Do I agree with this plan? | Records what the change is written against, checks the files against each other, stops on anything blocking, then records your approval                                       |
-| `verify`  | Is it built?               | Runs your tests and judges what changed in the repository against each requirement. Run it as often as you like                                                               |
-| `archive` | Make it the record?        | Folds the change into the living specs, all of it or none                                                                                                                     |
+| Command | The question it answers | What happens inside |
+|---|---|---|
+| `propose` | What do we want to build? | Sizes the request, reads the code that matters for it, asks you only what the code cannot answer, writes the brief and the specs, the design where one is owed, and the tasks |
+| `approve` | Do I agree with this plan? | Records what the change is written against, checks the files against each other, stops on anything blocking, then records your approval |
+| `verify` | Is it built? | Runs your tests and judges what changed in the repository against each requirement. Run it as often as you like |
+| `archive` | Make it the record? | Folds the change into the living specs, all of it or none |
 
 Not every change needs all four. `propose` sizes each request into a **tier**, or you name one with `--tier`:
 
-| Tier         | For                                                          | Commands                                                          | What it owes                                                                                                    |
-| ------------ | ------------------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| none         | a typo, a comment, a cosmetic edit                           | `propose` only, which says no spec is owed and writes nothing   | nothing                                                                                                         |
-| `lean`     | a small, contained change or bug fix                         | `propose`, `approve`, `archive`                             | no check, no verification                                                                                       |
-| `standard` | an ordinary feature (the default)                            | `propose`, `approve`, `verify`, `archive`                 | a check before approval, a verification before archive                                                          |
-| `strict`   | many capabilities, a high risk of regression, an audit trail | `propose`, `plan`, `approve` twice, `verify`, `archive` | always a design; you read the brief before the plan; two different approvers; a warning blocks as an error does |
+| Tier | For | Commands | What it owes |
+|---|---|---|---|
+| none | a typo, a comment, a cosmetic edit | `propose` only, which says no spec is owed and writes nothing | nothing |
+| `lean` | a small, contained change or bug fix | `propose`, `approve`, `archive` | no check, no verification |
+| `standard` | an ordinary feature (the default) | `propose`, `approve`, `verify`, `archive` | a check before approval, a verification before archive |
+| `strict` | many capabilities, a high risk of regression, an audit trail | `propose`, `plan`, `approve` twice, `verify`, `archive` | always a design; you read the brief before the plan; two different approvers; a warning blocks as an error does |
 
 At any time, `adk-spec status` says what to do next, and every command that moves a change ends on a `next` line
 that says the same.
@@ -133,6 +133,7 @@ Then give yourself an `adk-spec` command that works in any folder. Either one of
   ```
 
   `uv run --project` runs adk-spec from its own folder's environment while you stay in your project's folder.
+
 - **An installed tool**, which also puts `adk-spec-mcp` on your PATH for the editor setup below:
 
   ```shell
@@ -609,18 +610,18 @@ Ready to run
 
 ## When something goes wrong
 
-| What you see                                                                            | What to do                                                                                                              |
-| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `no .spec folder at or above …`                                                      | You are outside the repository, or it has no `.spec/` yet: `cd` into it, or run `adk-spec init` at its root       |
-| `… is held by another adk-spec run`                                                  | Another command is writing in this repository: wait for it. If none is running, remove the file it names                |
-| `the brief and the specs are written, and the plan is not: … Run adk-spec plan <id>` | The plan failed after the change was written: run that command to finish it                                             |
-| `no change was written: …`                                                           | A stage failed before anything was written: read the reason, then run `propose` again                                 |
-| `` `<id>` is not approved: the findings above block it``                                | Read `reports/check.md`, fix the files, approve again; or `--override "<why>"` (not for a strict change's warnings) |
-| `unmet` or `unclear` in `verify`                                                  | Implement what is missing, or point the work at the requirement, and verify again                                       |
-| `the tests failed`                                                                    | Fix them and verify again; `verify --override "<why>"` verifies anyway, recorded                                      |
-| `archive` stops: the living spec changed under the change                             | Read the current requirement, update the delta, then `adk-spec rebase <id>` and approve again                         |
-| `CEILING: … token ceiling … is spent`                                               | Raise `[limits] max_tokens` in `.spec/config.toml`                                                                  |
-| `… changed since the approval: run adk-spec approve <id> again`                      | A file changed after approval: read the change and approve again                                                        |
+| What you see | What to do |
+|---|---|
+| `no .spec folder at or above …` | You are outside the repository, or it has no `.spec/` yet: `cd` into it, or run `adk-spec init` at its root |
+| `… is held by another adk-spec run` | Another command is writing in this repository: wait for it. If none is running, remove the file it names |
+| `the brief and the specs are written, and the plan is not: … Run adk-spec plan <id>` | The plan failed after the change was written: run that command to finish it |
+| `no change was written: …` | A stage failed before anything was written: read the reason, then run `propose` again |
+| `` `<id>` is not approved: the findings above block it`` | Read `reports/check.md`, fix the files, approve again; or `--override "<why>"` (not for a strict change's warnings) |
+| `unmet` or `unclear` in `verify` | Implement what is missing, or point the work at the requirement, and verify again |
+| `the tests failed` | Fix them and verify again; `verify --override "<why>"` verifies anyway, recorded |
+| `archive` stops: the living spec changed under the change | Read the current requirement, update the delta, then `adk-spec rebase <id>` and approve again |
+| `CEILING: … token ceiling … is spent` | Raise `[limits] max_tokens` in `.spec/config.toml` |
+| `… changed since the approval: run adk-spec approve <id> again` | A file changed after approval: read the change and approve again |
 
 Exit codes: `0` done, `1` a step was refused or found what stops it (a check, a validation, a verification),
 `2` a usage or configuration error, before anything is spent, `3` a model or provider failure, `130` interrupted.
@@ -630,22 +631,22 @@ Exit codes: `0` done, `1` a step was refused or found what stops it (a check, a 
 Every command runs in the repository it is started in (or `--root <folder>`, given before the command:
 `adk-spec --root ../api status`).
 
-| Command                 | Options                                                                                                                                                                                                                                    | Calls a model                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `init`                | `--no-explore` read no code · `--refresh` read the code again, rewrite the profile                                                                                                                                                    | yes, unless `--no-explore`                                    |
-| `propose "<request>"` | `--id ID` name the change, or revise the open change `ID` · `--tier lean\|standard\|strict` · `--no-input` ask nothing · `--no-explore` read no code · `--with PATH` or `--with NAME=PATH` another repository (repeatable) | yes                                                             |
-| `approve <id>`        | `--by NAME` who approves (default: this account) · `--strict` refuse on a warning too · `--override REASON` approve despite a blocking finding                                                                                     | for a standard or strict change whose check is missing or stale |
-| `verify <id>`         | `--base REF` the commit the work started from, or `NAME=REF` for another repository · `--override REASON` verify although a requirement is not shown met                                                                            | yes                                                             |
-| `archive <id>`        |                                                                                                                                                                                                                                            | no                                                              |
-| `status`              | `--all` archived changes too · `--json`                                                                                                                                                                                               | no                                                              |
-| `plan <id>`           | `--replace` redraft although a task is ticked, or a design you edited · `--no-explore` · `--with PATH`                                                                                                                             | yes                                                             |
-| `check <id>`          | `--no-model` the checks code makes, alone                                                                                                                                                                                                | unless `--no-model`                                           |
-| `rebase <id>`         |                                                                                                                                                                                                                                            | no                                                              |
-| `validate [id]`       | `--strict` fail on a warning too · `--json`                                                                                                                                                                                           | no                                                              |
-| `new <id>`            | `--tier lean\|standard\|strict` (default: the config's)                                                                                                                                                                                    | no                                                              |
-| `login`               | `--force` log in again                                                                                                                                                                                                                   | no (GitHub's device flow)                                       |
-| `models`              | `--json`                                                                                                                                                                                                                                 | no (reads the provider's list)                                  |
-| `smoke`               | `--check` say whether the arm is ready, send nothing · `--model MODEL` · `--request TEXT` · `--json`                                                                                                                            | yes, unless `--check`                                         |
+| Command | Options | Calls a model |
+|---|---|---|
+| `init` | `--no-explore` read no code · `--refresh` read the code again, rewrite the profile | yes, unless `--no-explore` |
+| `propose "<request>"` | `--id ID` name the change, or revise the open change `ID` · `--tier lean\|standard\|strict` · `--no-input` ask nothing · `--no-explore` read no code · `--with PATH` or `--with NAME=PATH` another repository (repeatable) | yes |
+| `approve <id>` | `--by NAME` who approves (default: this account) · `--strict` refuse on a warning too · `--override REASON` approve despite a blocking finding | for a standard or strict change whose check is missing or stale |
+| `verify <id>` | `--base REF` the commit the work started from, or `NAME=REF` for another repository · `--override REASON` verify although a requirement is not shown met | yes |
+| `archive <id>` | | no |
+| `status` | `--all` archived changes too · `--json` | no |
+| `plan <id>` | `--replace` redraft although a task is ticked, or a design you edited · `--no-explore` · `--with PATH` | yes |
+| `check <id>` | `--no-model` the checks code makes, alone | unless `--no-model` |
+| `rebase <id>` | | no |
+| `validate [id]` | `--strict` fail on a warning too · `--json` | no |
+| `new <id>` | `--tier lean\|standard\|strict` (default: the config's) | no |
+| `login` | `--force` log in again | no (GitHub's device flow) |
+| `models` | `--json` | no (reads the provider's list) |
+| `smoke` | `--check` say whether the arm is ready, send nothing · `--model MODEL` · `--request TEXT` · `--json` | yes, unless `--check` |
 
 `plan`, `check`, `rebase`, `validate` and `new` redo one step by itself; a standard change rarely needs them, and a
 strict one, or one with a point left open, is planned with `plan` once you have read it.
@@ -696,6 +697,7 @@ with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists t
   dropped; a requirement that keeps its name keeps its ID. The tasks are drafted again unless one is ticked, and
   `context.md` is kept. A revised change is a draft again, to be approved again. A verified or archived change is
   not revised: propose a new one.
+
 - **`approve`** records who approved, when, and the fingerprint of each file. A later edit voids it; ticking a
   task does not. The name is a recorded claim, not an authentication. On a standard or strict change it first makes
   the check, where none is current: code checks structure and that every requirement has a task, and a model looks for
@@ -708,11 +710,13 @@ with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists t
 
   Where you edited a file adk-spec drafted, `approve` names it once, so that you can write what you corrected in
   `.spec/lessons.md`.
+
 - **`.spec/lessons.md`** is what every draft in the workspace follows: each stage that writes a brief, a delta, a
   design or tasks reads it, within 6,000 characters. Write a correction there in one line, under "From people", and
   edit or delete any line. adk-spec adds a line under "Sent back by a gate" each time a gate sent a draft back and
   the next try put it right, by the stage and the fault, and counts it when it comes back. No model writes it. It
   is shared through git, as the constitution is.
+
 - **`verify`** reads what changed in the repository since the change was approved, as one diff: tracked files, and
   files git does not track yet and does not ignore. A model gives each requirement a verdict, `met`, `unmet` or
   `unclear`, and quotes the lines that show it. Code keeps a `met` only where a quoted line is really in the diff.
@@ -729,11 +733,14 @@ with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists t
   A run is judged by its own exit, and whatever it started, a server say, is stopped when it ends, as on Ctrl-C.
   Output that names a private key is shown in no part. On Windows a batch file (`npm.cmd`) is refused, since
   cmd.exe reads its words again: name the program it runs. The work is judged as it stands after the tests.
+
 - **`archive`** folds the change's deltas into the living specs. A standard change is archived only once verified.
   If the living spec changed under a requirement the delta touches, the archive stops and writes nothing: read the
   current requirement, update the delta, then run `adk-spec rebase <id>` and approve again.
+
 - **`status`** lists each open change and what to do next with it, in groups: `Waiting on you`, `Ready to run`,
   and with `--all` `Done`. A change whose `change.json` does not read is listed with the reason, and stops no other.
+
 - **`init`** makes `.spec/` with a config, a constitution and the folders for specs and changes. In an existing
   repository it then reads the code, saying first what that costs (up to seven model calls; `--no-explore` skips
   it), and writes `.spec/profile.md`: what is here, how this repository does things, risks and what is unknown,
@@ -742,6 +749,7 @@ with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists t
   the code again and rewrites the profile; it drafts rules only while the constitution is still the template.
   Without a model set up, `init` makes the tree and says how to read the code later. It also writes the Agent Skill
   `.claude/skills/adk-spec/SKILL.md` where the repository has none, and never over one that is there.
+
 - **`plan`** drafts a change's tasks again, and its design where one is owed, after you edited the brief or the
   specs. Where a task is already ticked it replaces nothing unless you add `--replace`, and it keeps a design you
   wrote or edited, planning from it, unless you add `--replace`. It reads the code first where the change has no

@@ -3,22 +3,15 @@ requirements it adds, modifies and removes, each verdict, the tests, and who app
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 from .changelog_md import changed_lines
-from .model import Approval, Change
+from .model import Change, ChangeState
 
 
-def render_summary(
-    change: Change,
-    verdicts: Mapping[str, str],
-    tests: Mapping[str, str],
-    approval: Approval | None,
-    *,
-    override: str | None = None,
-) -> str:
-    """The summary of `change`, with the `verdicts` and `tests` of its last verification, the reason a person gave
-    for verifying it over them, where one did, and its `approval`."""
+def render_summary(change: Change, state: ChangeState) -> str:
+    """The summary of `change` as `state` records it: the verdicts and tests of its last verification, the reason a
+    person gave for verifying it over them, where one did, and its approval."""
+    done, approval = state.verification, state.approval
+    verdicts, tests = (done.verdicts, done.tests) if done else ({}, {})
     brief = change.brief
     lines = [f"# {brief.title if brief else change.state.id}", ""]
     if brief and brief.why.strip():
@@ -27,8 +20,8 @@ def render_summary(
     lines += ["## Verification", ""]
     lines += [f"- {req_id}: {said}" for req_id, said in sorted(verdicts.items())]
     lines += [f"- Tests{'' if name == '.' else f' of {name}'}: {outcome}" for name, outcome in sorted(tests.items())]
-    if override:
-        lines += [f"- Verified by override: {override}"]
+    if done and done.override:
+        lines += [f"- Verified by override: {done.override}"]
     if approval is not None:
         second = f" and {approval.second.by}" if approval.second else ""
         lines += ["", f"Approved by {approval.by}{second}."]

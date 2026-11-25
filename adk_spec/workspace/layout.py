@@ -336,6 +336,15 @@ class Workspace:
         write_all(texts)
         return list(texts)
 
+    def report(self, change_id: str, name: str) -> str | None:
+        """A generated report of a change as it reads now, under its `reports/` folder; None where there is none.
+        `WorkspaceError` for a path the rules refuse, as `write_report` gives."""
+        try:
+            path = inside(self._folder(change_id), REPORTS, name)
+        except PathError as exc:
+            raise WorkspaceError(f"the report cannot be read: {exc}") from exc
+        return read_text(path) if path.is_file() else None
+
     def write_report(self, change_id: str, name: str, text: str) -> Path:
         """A generated report of a change, under its `reports/` folder: written whole, replacing the one before."""
         return self.write_into(change_id, {f"{REPORTS}/{name}": text})[0]

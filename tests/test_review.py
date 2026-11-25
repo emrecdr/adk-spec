@@ -219,15 +219,6 @@ def test_a_strict_change_approved_once_names_its_overlaps_once(tmp_path, capsys,
     assert out.count("also changed by") == 1 and "review " in out
 
 
-def test_check_without_a_model_brings_a_hand_edit_into_the_view(tmp_path) -> None:
-    """What the guide tells an approver whose files were edited by hand since the last command."""
-    seeded(tmp_path)
-    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
-    write_text(delta, read_text(delta).replace("three failed attempts", "four failed attempts"))
-    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
-    assert "+The system MUST lock an account after four failed attempts." in read_text(tmp_path / VIEW)
-
-
 def test_an_approval_of_files_the_view_does_not_show_is_refused_once(tmp_path, capsys) -> None:
     """Found by the closing code review: a command wrote the view, the files were edited by hand, and the approval
     recorded what the approver was never shown. Refused, the view is written again; the next approval stands."""
@@ -244,9 +235,12 @@ def test_an_approval_of_files_the_view_does_not_show_is_refused_once(tmp_path, c
     approved(tmp_path)
 
 
-def test_an_approval_with_no_view_written_or_one_that_shows_the_files_goes_on(tmp_path) -> None:
+def test_check_without_a_model_brings_a_hand_edit_into_the_view_and_the_approval_goes_on(tmp_path) -> None:
+    """What the guide tells an approver whose files were edited by hand since the last command: a view that shows
+    the files as they are holds no approval back."""
     seeded(tmp_path)
-    approved(tmp_path)  # no view was written: nothing shown is held to
-    seeded(tmp_path / "again")
-    assert run(tmp_path / "again", "check", "passkeys", "--no-model") == 0
-    approved(tmp_path / "again")
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, read_text(delta).replace("three failed attempts", "four failed attempts"))
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    assert "+The system MUST lock an account after four failed attempts." in read_text(tmp_path / VIEW)
+    approved(tmp_path)
