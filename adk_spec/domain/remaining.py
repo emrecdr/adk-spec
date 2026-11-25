@@ -77,7 +77,7 @@ def render_remaining(change_id: str, left: Sequence[Left], *, last: str = "verif
             lines.append("- No task names it.")
         if one.untouched:
             lines.append(f"- Named by its tasks, untouched by the work: {', '.join(one.untouched)}")
-        coded = one.reason.startswith((NO_VERDICT, UNGROUNDED))  # what `grounded` itself wrote
+        coded = one.reason == NO_VERDICT or one.reason.startswith(f"{UNGROUNDED}. ")  # as `grounded` writes them
         said = "What code found" if coded else "The model's reason, which code has not checked"
         lines += [f"- {said}: {one.reason}", ""]
     return "\n".join(lines).rstrip("\n") + "\n"

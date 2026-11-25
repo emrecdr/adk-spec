@@ -534,8 +534,10 @@ def _say_next(
     it before approving: its view, `reports/review.md`, is written again first."""
     assessed = _assessed(workspace, change_id, living, drift=drift)
     deltas = assessed.loaded.change.deltas
-    # A draft, or an approved change edited since, owes an approval: its view is written for the person who gives it.
-    if assessed.stale and deltas and (view := _view_written(workspace, change_id, deltas, living)):
+    # A draft, a strict one approved once among them, or an approved change edited since, owes an approval: its view
+    # is written for the person who gives it. Found by the code review: a second approver read the view of before.
+    owed = assessed.stale or assessed.state.status == "draft"
+    if owed and deltas and (view := _view_written(workspace, change_id, deltas, living)):
         shown, overlaps = view
         print(f"review    {shown}: {review_said(deltas, overlaps)}")
     phrase = assessed.step.phrase
@@ -831,8 +833,8 @@ def _approve(args: argparse.Namespace) -> int:
     held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=commit, others=began)
     edited = edited_drafts(assessed.state, files)
     workspace.save_state(held)
-    if held.verification is None:  # what a verification left to do was of other files, or there was none
-        workspace.drop(args.id, f"{REPORTS}/{REMAINING}")
+    if held.verification is None:  # what a verification said and left to do was of other files, or there was none
+        _aids_written(workspace, args.id, dict.fromkeys((REMAINING, "summary.md")))
     _said_approved(held, by, len(files))
     if overlaps := _overlaps(workspace, args.id, assessed.loaded.change.deltas):
         named = "; ".join(f"{req_id} ({', '.join(others)})" for req_id, others in sorted(overlaps.items()))

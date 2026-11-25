@@ -181,3 +181,18 @@ def test_a_change_folder_the_path_rules_refuse_fails_no_finished_command(tmp_pat
     except OSError:
         pytest.skip("no symbolic link can be made here")
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+
+
+def test_a_strict_change_approved_once_gives_its_second_approver_a_current_view(
+    tmp_path, monkeypatch, fake_provider
+) -> None:
+    """Found by the code review: approved once, a strict change was not stale, and its second approver read the view
+    of the files before the first approver's edit."""
+    from test_strict import planned
+
+    on_the_fake(monkeypatch)
+    planned(tmp_path, fake_provider)
+    view = tmp_path / ".spec/changes/ledger/reports/review.md"
+    view.unlink(missing_ok=True)
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
+    assert view.is_file()

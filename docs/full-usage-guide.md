@@ -207,7 +207,12 @@ What happens inside `approve` `[Built]`:
 - Captures missing base SHA-256 fingerprints against `.spec/specs/` and records your starting Git commit (`base_commit`).
 - Runs deterministic structural + 100% requirement-to-task checks AND the LLM consistency `check` (dropping any LLM finding that doesn't quote real file text), writing `reports/check.md`.
 - Blocks cleanly if anything `ERROR`/blocking is found (never silently passing broken plans; you either fix the files or rerun with `--override "<reason>"` after seeing `reports/check.md`).
-- Records `by`, `at`, and SHA-256 hashes of every change file in `change.json`.
+- Records `by`, `at`, and SHA-256 hashes of every change file in `change.json`. An approval of other files than the last
+  one drops that verification: a change edited since is verified again.
+- Before you approve, read `reports/review.md` `[Built: P16]`: each requirement the change adds, whole; each it removes,
+  with its reason; each it modifies, as a diff against the living spec. Every command that leaves a change waiting on an
+  approval writes it again and names it on a `review` line. `approve` adds a `note` line where another open change
+  modifies or removes the same requirement: whichever is archived second is stopped, to be reworked onto the first.
 
 #### Step 4 — Implement with Your Coding Agent (VS Code Copilot / Claude Code / Cursor)
 Point your coding agent at `.spec/changes/let-users-sign-in-with-a-passkey/` (`brief.md`, `context.md`, `specs/`, `design.md`, `tasks.md`) and have it implement each task and tick boxes (`- [x] T001 ...`). **Ticking `- [x]` never voids approval** `[Built]`.
@@ -220,6 +225,11 @@ What happens inside `verify`:
 - **Phase 9 `[Built]`:** Runs your `[verify] test` command (`uv run pytest -q`) first, says what it runs, and shows the model and the report the end of its output, scrubbed. A failing run blocks "verified" whatever the verdicts, unless `--override "<reason>"`.
 - **Phase 3 & 6 `[Built]`:** Computes the real diff (tracked + untracked non-ignored files, minus `.spec/`, `[repository] exclude`, and private-key files), scrubs secret shapes, asks the LLM for per-requirement verdicts (`met`/`unmet`/`unclear`) with exact line quotes, and **downgrades any `met` whose quote isn't literally in the diff to `unclear`**.
 - Writes `reports/verify.md`. Re-run `verify` as many times as you need while finishing code! Once all requirements read `met`, `next` says `run adk-spec archive ...`.
+- **Phase 16 `[Built]`:** also writes, as one set with the record, the change's `evidence.md`: each quote a `met` verdict of
+  a requirement the change adds or modifies was grounded on, one line each, a quote over a secret left out. Then
+  `reports/summary.md`, Markdown to paste into the pull request, and, where a requirement is not shown met,
+  `reports/remaining.md`: per requirement, what code found first (a task ticked yet unmet, files its tasks named that the
+  work never touched), then the model's reason. The `next` line names the unmet requirements and the file.
 
 #### Step 6 — `archive` (Fold Deltas into Canonical Living Truth)
 ```bash
@@ -227,6 +237,14 @@ adk-spec archive let-users-sign-in-with-a-passkey
 ```
 - Confirms approval is still valid, diff hasn't drifted since `verify`, and no concurrent change modified the same requirement base SHA-256.
 - Atomically merges `ADDED` / `MODIFIED` / `REMOVED` blocks into `.spec/specs/auth/spec.md` and marks the change `archived`.
+- **Phase 16 `[Built]`:** in the same write, folds the change's evidence into `.spec/specs/auth/evidence.md` (a requirement
+  it adds or modifies gets its lines, one it removes loses them) and puts an entry above the others in
+  `.spec/changelog.md`. Later, `validate` and `status` look for each kept quote in the code, in its file and then across
+  its repository: a requirement none of whose quotes is found is noted as suspect (INFO, never a CI failure). Delete its
+  lines in a reviewed commit, or verify a change that keeps it, to clear it.
+- `validate` is also a merge gate `[Built: P16]`: `change.approval-void` (an approved change edited since) and
+  `change.work-drifted` (verified work that moved, where the tier owes a verification) are warnings that fail
+  `--strict`; under GitHub Actions each finding is also an annotation on its line, and a summary goes on the run's page.
 
 ---
 
@@ -383,10 +401,12 @@ What `strict` adds on top of `standard` `[Built: P13]`:
 ├── constitution.md                   # Short, versioned rules with reasons (rules drafted by init, P8)
 ├── profile.md                        # What the repository is and where things live, quoted [Built: P8]
 ├── lessons.md                        # People's corrections and what gates sent back, in git [Built: P12]
+├── changelog.md                      # An entry per archived change, newest first [Built: P16]
 ├── runs/                             # Auto-gitignored *.json scrubbed stage recordings (keep_runs=20) [Built]
 ├── specs/
 │   └── <capability>/
-│       └── spec.md                   # Living canonical truth (## Purpose, ## Requirements, ## Retired) [Built]
+│       ├── spec.md                   # Living canonical truth (## Purpose, ## Requirements, ## Retired) [Built]
+│       └── evidence.md               # The lines verify proved each requirement with, one a line [Built: P16]
 └── changes/
     └── <change-id>/
         ├── change.json               # Tier, status, base hashes, approval hashes, commit(s), verify state [Built]
@@ -395,7 +415,8 @@ What `strict` adds on top of `standard` `[Built: P13]`:
         ├── design.md                 # Context, goals, decisions, risks (when owed / always in strict) [Built]
         ├── tasks.md                  # Vertical T### [P] [REQ-...] checklist (`files` + `verify`) [Built]
         ├── specs/<cap>/spec.md       # Delta spec: ADDED / MODIFIED / REMOVED [Built]
-        └── reports/                  # check.md and verify.md [Built]
+        ├── evidence.md               # What its last verify proved, folded in at archive [Built: P16]
+        └── reports/                  # check.md, verify.md; review.md, summary.md, remaining.md [Built: P16]
 ```
 
 ### Quick Command Reference (Grouped Like `adk-spec --help`)

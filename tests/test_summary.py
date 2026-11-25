@@ -83,9 +83,9 @@ def test_a_heading_of_a_persons_own_is_kept_whole() -> None:
     """Found by the code review: `# Changelog of the API` lost its first two words, and a file opening on a blank line
     got a second heading."""
     entry = changelog_entry("passkeys", "2026-11-24", DELTAS)
-    theirs = with_entry("# Changelog of the API\n\n## old\n", entry)
+    theirs = with_entry("# Changelog of the API\n\n## old, 2026-01-01\n", entry)
     assert theirs.startswith("# Changelog\n\n# Changelog of the API\n\n## passkeys")
-    assert with_entry("\n# Changelog\n\n## old\n", entry).count("# Changelog") == 1
+    assert with_entry("\n# Changelog\n\n## old, 2026-01-01\n", entry).count("# Changelog") == 1
 
 
 def test_the_summary_says_an_override_and_its_reason() -> None:
@@ -109,3 +109,11 @@ def test_a_changelog_that_is_a_link_is_left_and_the_change_archived(tmp_path, ca
         f"kept      {CHANGELOG}: " in capsys.readouterr().out
         and read_text(tmp_path / ".spec/real.md") == "# Changelog\n"
     )
+
+
+def test_a_heading_of_a_persons_introduction_is_no_entry() -> None:
+    """Found by the code review: a `## ` heading in a person's introduction was read as the first entry, and the new
+    entry split their introduction."""
+    intro = "# Changelog\n\nIntro.\n\n## How to read this\n\nText.\n"
+    after = with_entry(intro, changelog_entry("passkeys", "2026-11-24", DELTAS))
+    assert after.index("Text.") < after.index("## passkeys, 2026-11-24")

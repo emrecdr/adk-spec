@@ -151,6 +151,7 @@ def test_a_change_approved_again_after_an_edit_is_not_sent_to_the_old_remaining_
     brief.write_text(brief.read_text(encoding="utf-8") + "\nRevised after the verification.\n", encoding="utf-8")
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
     assert not (tmp_path / LEFT).exists(), "the list of what was left goes with the verification it came from"
+    assert not (tmp_path / ".spec/changes/passkeys/reports/summary.md").exists(), "and so does its summary"
     capsys.readouterr()
     assert run(tmp_path, "status", "--json") == 0
     (row,) = json.loads(capsys.readouterr().out)["changes"]
@@ -185,3 +186,10 @@ def test_code_found_reasons_are_said_as_codes() -> None:
     said = [Verdict("REQ-AUTH-002", "unclear", (), f"{UNGROUNDED}. The model's reason: three now.")]
     text = render_remaining("passkeys", remaining(said, GROUPS, frozenset()))
     assert f"What code found: {UNGROUNDED}. The model's reason: three now." in text
+
+
+def test_a_reason_of_the_models_own_is_never_said_as_codes() -> None:
+    """Found by the code review: a model's reason opening as code's did was said as what code found."""
+    said = [Verdict("REQ-AUTH-002", "unmet", (), "no quoted line is in the diff for the retry path")]
+    text = render_remaining("passkeys", remaining(said, GROUPS, frozenset()))
+    assert "The model's reason, which code has not checked: no quoted line is in the diff for the retry path" in text

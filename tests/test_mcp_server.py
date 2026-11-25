@@ -257,5 +257,14 @@ def test_a_command_the_server_runs_is_not_told_it_runs_in_github_actions(monkeyp
 
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", "/tmp/summary.md")
-    held = child_environment()
+    held = child_environment(["validate"])
     assert "GITHUB_ACTIONS" not in held and "GITHUB_STEP_SUMMARY" not in held and held["PYTHONUNBUFFERED"] == "1"
+
+
+def test_only_validate_is_kept_from_github_actions(monkeypatch) -> None:
+    """Found by the code review: `verify`'s run of the project's tests lost the CI variables its suite may read."""
+    from adk_spec.interfaces.mcp_server import child_environment
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    assert child_environment(["verify", "x"])["GITHUB_ACTIONS"] == "true"
+    assert "GITHUB_ACTIONS" not in child_environment(["validate"])
