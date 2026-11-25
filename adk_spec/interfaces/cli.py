@@ -712,7 +712,8 @@ def _profile_said(workspace: Workspace) -> None:
     """One line where quotes of `.spec/profile.md`, which every drafting stage reads, are no longer in the code."""
     gone, looked = profile_gone(workspace)
     if gone:
-        print(f"profile: {gone} of {looked} quotes no longer in the code (`{PROG} init --refresh` reads it again)")
+        said = f"{gone} of {looked} quote{'' if looked == 1 else 's'}"
+        print(f"profile: {said} no longer in the code (`{PROG} init --refresh` reads it again)")
 
 
 def _rebase(args: argparse.Namespace) -> int:

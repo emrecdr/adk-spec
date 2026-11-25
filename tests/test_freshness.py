@@ -138,3 +138,44 @@ def test_a_statement_is_read_to_its_own_code_span_and_with_no_note() -> None:
         ("src/c.py", "def c_alone():"),
         ("src/d.py", "def d_tabbed():"),
     ]
+
+
+def test_a_quote_the_reading_made_plain_still_holds(tmp_path) -> None:
+    """Found by phase 17's fourth review: the reading stores a quote with each unprintable character as a space, a
+    soft hyphen say, and the raw file never matched it."""
+    profile = PROFILE.replace("return password_check(user)", "label = Ta belle_einstellung")
+    files = {**FILES, "src/app.py": "label = Ta­belle_einstellung\n"}
+    ws = profiled(tmp_path, files=files, profile=profile)
+    assert profile_gone(ws) == (0, 2)
+
+
+def test_a_profile_past_the_stages_cap_is_checked_whole(tmp_path) -> None:
+    """Found by phase 17's fourth review: the profile was read cut at the cap a stage is given, and a quote the cut
+    shortened read as gone."""
+    from adk_spec.workspace.context import PROFILE_MAX_CHARS
+
+    head = "# Profile\n\n## Conventions\n\n"
+    statement = "- `src/app.py:2` Sign-in goes through the password check.\n"
+    filler_size = PROFILE_MAX_CHARS - len(head) - len(statement) - len("  > ret")
+    filler = "x" * (filler_size - 2) + "\n\n"  # a paragraph of the person's own
+    profile = head + filler + statement + "  > return password_check(user)\n"
+    ws = profiled(tmp_path, profile=profile)
+    assert profile_gone(ws) == (0, 1)
+
+
+def test_a_cut_stand_in_a_nul_and_a_twice_quoted_line_count_as_nothing_more(tmp_path, capsys) -> None:
+    """Found by phase 17's fourth review: a quote cut inside a secret's stand-in read as gone; a NUL in a quote
+    stopped `status` with a traceback; one line quoted by two statements counted twice; one quote was "quotes"."""
+    from adk_spec.domain.convert import QUOTE_SHOWN_CHARS
+    from adk_spec.workspace.evidence import quote_holds
+
+    cut = ("v = 1; " * 40)[: QUOTE_SHOWN_CHARS - len(" [REDA")] + " [REDA"
+    profile = PROFILE.replace("return password_check(user)", cut).replace("class Client(BaseClient):", "")
+    profile += "- `src/old.py:1` The helper again.\n  > def start_session(user):\n"
+    ws = profiled(tmp_path, profile=profile)
+    assert quote_holds(tmp_path, ".", "src/app.py", "zzzzzzzz\x00yyyy", ()) is None
+    write_text(tmp_path / "src/old.py", "def begin(user):\n")
+    assert profile_gone(ws) == (1, 1)
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0
+    assert "profile: 1 of 1 quote no longer in the code" in capsys.readouterr().out

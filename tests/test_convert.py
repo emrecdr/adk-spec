@@ -412,7 +412,8 @@ def _parallel(*files: list[str]) -> list[bool]:
 
 def test_a_parallel_mark_stands_only_where_code_finds_it_true() -> None:
     """Phase 17: `[P]` says a task touches other files than its neighbours, and code now reads its files. A pair
-    sharing a file, or a folder and a file under it, loses the mark on both, so two agents never run on one file."""
+    sharing a file, or a folder and a file under it, loses the mark on both, so no two tasks side by side run on one
+    file."""
     assert _parallel(["src/a.py"], ["src/b.py"], ["src/c.py"]) == [True, True, True]
     assert _parallel(["src/a.py"], ["`./src/a.py`"], ["src/c.py"]) == [False, False, True]
     assert _parallel(["src/auth/"], ["src/auth/token.py"]) == [False, False]

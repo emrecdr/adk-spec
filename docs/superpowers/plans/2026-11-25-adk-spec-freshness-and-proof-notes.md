@@ -45,7 +45,7 @@ the files its diff touched; `domain/convert.py` drops a `[P]` that breaks its ru
   the line before triage's call (fake provider).
 - [ ] Implement; run the tests; commit.
 
-### Task 2: The proofs the work removed
+### Task 2: The proofs the work removed (built, then taken out: see the design's Goal 2)
 
 **Files:** Modify `adk_spec/interfaces/cli.py` (`_verified`), `adk_spec/workspace/evidence.py`. Test:
 `tests/test_evidence.py` (append).

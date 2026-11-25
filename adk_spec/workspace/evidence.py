@@ -8,15 +8,15 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
 from ..domain.context_md import quoted_statements
+from ..domain.convert import QUOTE_SHOWN_CHARS
 from ..domain.evidence_md import HIDDEN, Proof, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
-from ..domain.text import quoted_at
+from ..domain.text import plain, quoted_at
 from ..domain.validate import finding
 from .config import ConfigError
-from .context import profile_text
 from .files import NotTextError, read_text
 from .git import GitError, grep
-from .layout import CHANGES, EVIDENCE, SPECS, Workspace
+from .layout import CHANGES, EVIDENCE, PROFILE, SPECS, Workspace
 from .source import LIBRARY_SCHEMES
 
 #: How many of the files a quote's search names are read whole to find it.
@@ -35,7 +35,7 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     its own; `exclude`, the person's patterns, apply to its own."""
     own = repository == "."
     folder = root if own else root / repository
-    if not _within(folder, repository, path, own=own):
+    if "\x00" in quote or not _within(folder, repository, path, own=own):  # no file holds a NUL, nor git takes one
         return None
     if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
@@ -61,8 +61,10 @@ def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
 
 
 def _found(path: Path, quote: str) -> bool:
+    """Whether `quote` is in the file at `path`, read as a quote is kept: each unprintable character a space. Found by
+    phase 17's code review: a soft hyphen in the code kept a quote from ever matching its own line."""
     try:
-        return quoted_at(quote, read_text(path)) is not None
+        return quoted_at(quote, "\n".join(plain(line) for line in read_text(path).split("\n"))) is not None
     except NotTextError, OSError:
         return False
 
@@ -98,22 +100,30 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
 
 
 def profile_gone(workspace: Workspace) -> tuple[int, int]:
-    """Of the quotes of `.spec/profile.md`, as a stage reads it, how many are no longer in the code, and how many
-    were looked for: none where there is no profile that reads. Phase 17: every drafting stage reads the profile, and
-    nothing else checks it. A library's quote is not looked for, nor counted one that could not be: unknown is not
-    gone."""
+    """Of the quotes of `.spec/profile.md`, each once, how many are no longer in the code, and how many were looked
+    for: none where there is no profile that reads. Phase 17: every drafting stage reads the profile, and nothing else
+    checks it. A library's quote is not looked for, nor one a secret was scrubbed from, nor counted one that could not
+    be: unknown is not gone. Read whole: found by its code review, the cap a stage reads it at could halve a quote."""
+    path = workspace.home / PROFILE
     try:
-        text = profile_text(workspace)
+        text = read_text(path) if path.is_file() else ""
     except NotTextError, OSError:
         return 0, 0
     exclude = _excluded(workspace)
-    looked = [  # found by its code review: a quote a secret was scrubbed from is never in the code as it stands
+    looked = [
         quote_holds(workspace.root, ".", named, quote, exclude)
-        for named, quote in quoted_statements(text)
-        if not named.startswith(LIBRARY_SCHEMES) and HIDDEN not in quote
+        for named, quote in dict.fromkeys(quoted_statements(text))
+        if not named.startswith(LIBRARY_SCHEMES) and not _scrubbed(quote)
     ]
     held = [one for one in looked if one is not None]
     return held.count(False), len(held)
+
+
+def _scrubbed(quote: str) -> bool:
+    """Whether a secret was scrubbed from `quote`: it holds the stand-in, or, cut at the length a statement keeps, ends
+    on part of it. Found by phase 17's code review: a cut through `[REDACTED:...]` read as gone."""
+    cut = len(quote) >= QUOTE_SHOWN_CHARS and any(quote.endswith(HIDDEN[:size]) for size in range(1, len(HIDDEN)))
+    return HIDDEN in quote or cut
 
 
 def _excluded(workspace: Workspace) -> tuple[str, ...]:
