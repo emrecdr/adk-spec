@@ -52,15 +52,14 @@ more, fixed test first: `reports/remaining.md` could say a model's reason, openi
 (code now marks the reasons it writes), and a changelog entry heading a person added a note to stopped counting as an
 entry, so the next went below it (a line in a code block of the introduction is no entry either). With them: a verified
 change approved again as it stands stays verified, its summary naming the new approval; a strict change's first
-approval names each overlap once; and an approval of files edited after the approver's view was written is refused
-once, the view written again, so no approval records specs its approver was not shown. Two reviews of these fixes
-shaped it: the view ends on a fingerprint of what it shows, each requirement and the living one it diffs against,
-and `approve` compares that alone, so another change's overlap or a formatter's blank lines hold nothing back while a
-living requirement edited since does (an approval would otherwise record a base that reverts it unseen); a new
-capability's view shows its purpose; a removed requirement is shown as the living spec holds it, so an edit to it
-since refuses too; a view outlives a delta that will not read; a generated file is never dropped through a link; and
-a changelog with a code fence never closed is left and said, since which fences pair is then a guess. What they left
-is below.
+approval names each overlap once; a removed requirement is shown in the view as the living spec holds it, and a new
+capability's view shows its purpose; a generated file is never dropped through a link; and a changelog with a code
+fence never closed is left and said, since which fences pair is then a guess.
+
+A refusal of an approval whose view was out of date was built too, then taken out: three reviews in turn found
+holes in what "out of date" meant (another change's overlap, a moved living requirement, blank lines, a delta
+mid-edit, a change whose specs were all removed), each fix opened the next, and it made `approve` two runs against
+the golden rule. The gap it closed is the owner's, below. What the reviews left is below too.
 
 ## How a change flows
 
@@ -499,15 +498,16 @@ and a step moves to code only where its output is a function of its input with n
   one reason for every file it leaves; a moved quote's search misreads a file whose name holds a colon. From the
   closing review: an approval that voids a verification leaves its `verify.md` and the change's `evidence.md`, which
   the next `verify` replaces and an archive never folds; a person's own entries in another form,
-  `## [1.2.0] - 2026-01-01`, are read as introduction, so adk-spec's go below them. From the review of those fixes:
-  the refusal makes `approve` two runs where a spec was edited unseen, as `--override` already does where the run
-  made the check, which is the owner's to keep or drop; a strict change's first approval whose view cannot be
-  written names its overlaps nowhere until `archive` stops the second; brief, design and tasks edits are not in the
-  view, which shows the specs alone, so they hold no approval back; an adk-spec that renders the view otherwise
-  refuses an open change's approval once after the upgrade, and writes it again. From the third review: a delta
-  mid-edit, its fence never closed, counts the IDs inside its earlier closed fences as changed, as it did before this
-  branch, for as long as the edit lasts; a changelog whose valid longer fence (four backticks) holds a line of three
-  is read as one never closed, and left; a change with no spec left keeps the view of those it held.
+  `## [1.2.0] - 2026-01-01`, are read as introduction, so adk-spec's go below them. From the reviews after: a strict
+  change's first approval whose view cannot be written names its overlaps nowhere until `archive` stops the second;
+  a changelog whose valid longer fence (four backticks, or `~~~`) holds a line of three is read as one never closed,
+  and left, or its fence not seen; a change with no spec left keeps the view of those it held; the archive's `kept`
+  line for an evidence file still says "nothing was added" where a removal's lines were left too.
+
+- Whether `approve` should refuse where the approver's view is out of date: a spec edited by hand after the last
+  command wrote `reports/review.md` is approved as it stands, though the view showed it before the edit. A refusal
+  was built and taken out (above): it made `approve` two runs, and "out of date" was hard to say exactly. Until then
+  the README says to run `check <id> --no-model` after a hand edit, which writes the view again.
 
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:

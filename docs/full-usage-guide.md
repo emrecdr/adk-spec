@@ -214,11 +214,9 @@ What happens inside `approve` `[Built]`:
   with its reason and as the living spec holds it; each it modifies, as a diff against the living spec. Each command that writes a change and leaves it
   waiting on an approval writes the view again and names it on a `review` line, with the open changes that modify or
   remove the same requirements; a command refused, and `status`, write nothing. Once a change is approved, `approve`
-  names those on a `note` line: whichever is archived second is stopped, to be reworked onto the first. Where the
-  view is out of date, `approve` refuses once, before any model is called, and writes the view again: read it, then
-  approve. The view ends on a hidden fingerprint of what it shows, each requirement and the living one it changes,
-  and that is what `approve` compares: a spec edited since, or a living requirement it diffs against, refuses; blank
-  lines, or another change's overlap, do not. A new capability's view shows the purpose its living spec opens on.
+  names those on a `note` line: whichever is archived second is stopped, to be reworked onto the first. A spec
+  edited by hand is in the view once a command writes it again: `check --no-model` does, and calls no model. A new
+  capability's view shows the purpose its living spec opens on.
 
 #### Step 4 — Implement with Your Coding Agent (VS Code Copilot / Claude Code / Cursor)
 Point your coding agent at `.spec/changes/let-users-sign-in-with-a-passkey/` (`brief.md`, `context.md`, `specs/`, `design.md`, `tasks.md`) and have it implement each task and tick boxes (`- [x] T001 ...`). **Ticking `- [x]` never voids approval** `[Built]`.

@@ -343,9 +343,8 @@ Before approving, read `reports/review.md`, which every command that leaves a dr
 living spec holds it; and each it
 modifies, as a diff against the living spec. It also names any other open change that modifies or removes the same
 requirement, as `approve` does in a `note` line: whichever of the two is archived second is stopped, to be reworked
-onto the first. Where `archive` stops on a living spec that moved, it writes the view again to show what. Where the
-view is out of date, a spec or the living requirement it changes edited since, `approve` refuses once and writes it
-again: read it, then approve.
+onto the first. Where `archive` stops on a living spec that moved, it writes the view again to show what. A spec you
+edit by hand is in the view once a command writes it again: `adk-spec check <id> --no-model` does, and calls no model.
 
 ### 4. Implement
 

@@ -6,32 +6,14 @@ removes too is named, so the approver learns it now, not at the second archive."
 from __future__ import annotations
 
 import difflib
-import re
 from collections.abc import Mapping, Sequence
 
 from .model import Delta, Requirement, Spec
 from .spec_md import render_requirement
-from .text import longest_backticks, sha256_of
+from .text import longest_backticks
 
 #: How many overlaps the line a command prints names; the view names every one.
 SAID = 3
-#: A view's last line, hidden where the Markdown is rendered: the fingerprint of what it shows of the change.
-_MARK = re.compile(r"<!-- view (sha256:[0-9a-f]{64}) -->")
-
-
-def view_mark(change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> str:
-    """The fingerprint of what a view shows of a change: each requirement as the view renders it, the living ones it
-    diffs against with them. Not the overlaps, which are another change's, nor the file's bytes: found by the review
-    of the closing fixes, blank lines a formatter added refused an approval, and a living requirement edited since
-    the view was written did not."""
-    return sha256_of(render_review(change_id, deltas, living, {}))
-
-
-def mark_of(view: str) -> str | None:
-    """The fingerprint a view ends on; None for one with none, an older adk-spec's. Its last line alone: found by the
-    review of the closing fixes, a requirement's line shaped as one was read first."""
-    found = _MARK.fullmatch(view.rstrip().rsplit("\n", 1)[-1].strip())
-    return found.group(1) if found else None
 
 
 def render_review(
@@ -39,11 +21,9 @@ def render_review(
     deltas: Mapping[str, Delta],
     living: Mapping[str, Spec],
     overlaps: Mapping[str, Sequence[str]],
-    *,
-    mark: str | None = None,
 ) -> str:
     """The view of `change_id`, from its `deltas`, the `living` specs they change, and `overlaps`: each requirement
-    ID to the other open changes that modify or remove it too. `mark`, `view_mark`'s, ends it."""
+    ID to the other open changes that modify or remove it too."""
     lines = [f"# Review: {change_id}", ""]
     for capability, delta in sorted(deltas.items()):
         held = {req.id: req for req in living[capability].requirements} if capability in living else {}
@@ -66,7 +46,6 @@ def render_review(
     if overlaps:
         lines += ["## Also changed by open changes", ""]
         lines += [f"- {req_id}: {', '.join(others)}" for req_id, others in sorted(overlaps.items())] + [""]
-    lines += [f"<!-- view {mark} -->"] if mark else []
     return "\n".join(lines).rstrip("\n") + "\n"
 
 

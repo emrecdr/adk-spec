@@ -4,11 +4,11 @@ same one."""
 from __future__ import annotations
 
 import pytest
-from conftest import approved, on_the_fake, run, seeded, state_of
+from conftest import approved, on_the_fake, run, seeded
 from samples import DELTA, SPEC, tasks_for
 
 from adk_spec.domain.delta_md import changed_ids, parse_delta
-from adk_spec.domain.review_md import mark_of, render_review
+from adk_spec.domain.review_md import render_review
 from adk_spec.domain.spec_md import parse_spec
 from adk_spec.workspace.files import read_text, write_text
 
@@ -197,7 +197,6 @@ def test_a_strict_change_approved_once_gives_its_second_approver_a_current_view(
     at = next(at for at, line in enumerate(lines) if "SHALL" in line)
     lines[at] = f"{lines[at].rstrip()} Edited before the first approval."
     write_text(delta, "\n".join(lines))
-    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 1, "the view showed the files before the edit"
     assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
     assert "Edited before the first approval." in read_text(tmp_path / ".spec/changes/ledger/reports/review.md")
 
@@ -212,27 +211,10 @@ def test_a_strict_change_approved_once_names_its_overlaps_once(tmp_path, capsys,
     folder = tmp_path / ".spec/changes/ledger"
     write_text(folder / "specs/auth/spec.md", OTHER)  # it modifies what the seeded `passkeys` modifies
     write_text(folder / "tasks.md", tasks_for("REQ-AUTH-002"))
-    assert run(tmp_path, "check", "ledger", "--no-model") == 0  # the view as the approver reads it
     capsys.readouterr()
     assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
     out = capsys.readouterr().out
     assert out.count("also changed by") == 1 and "review " in out
-
-
-def test_an_approval_of_files_the_view_does_not_show_is_refused_once(tmp_path, capsys) -> None:
-    """Found by the closing code review: a command wrote the view, the files were edited by hand, and the approval
-    recorded what the approver was never shown. Refused, the view is written again; the next approval stands."""
-    seeded(tmp_path)
-    assert run(tmp_path, "check", "passkeys", "--no-model") == 0  # writes the view
-    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
-    write_text(delta, read_text(delta).replace("three failed attempts", "four failed attempts"))
-    capsys.readouterr()
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
-    said = capsys.readouterr()
-    assert "review    .spec/changes/passkeys/reports/review.md" in said.out and "read it" in said.err
-    assert state_of(tmp_path)["status"] == "draft"
-    assert "+The system MUST lock an account after four failed attempts." in read_text(tmp_path / VIEW)
-    approved(tmp_path)
 
 
 def test_check_without_a_model_brings_a_hand_edit_into_the_view_and_the_approval_goes_on(tmp_path) -> None:
@@ -246,59 +228,6 @@ def test_check_without_a_model_brings_a_hand_edit_into_the_view_and_the_approval
     approved(tmp_path)
 
 
-def test_another_open_change_on_the_same_requirement_holds_no_approval_back(tmp_path) -> None:
-    """Found by the closing code review: the view was compared whole, so another open change touching the same
-    requirement, or an edit of the view itself, refused an approval of specs no one had edited."""
-    ws = seeded(tmp_path)
-    assert run(tmp_path, "check", "passkeys", "--no-model") == 0  # writes the view
-    another(ws, OTHER)  # an overlap the view does not name
-    write_text(tmp_path / VIEW, read_text(tmp_path / VIEW).replace("# Review: passkeys", "# Review: passkeys, read"))
-    approved(tmp_path)
-
-
-def test_a_spec_edit_the_view_does_not_show_holds_no_approval_back(tmp_path) -> None:
-    """Found by the review of the closing fixes: blank lines a formatter added to a delta refused the approval, and
-    the view written again was the same."""
-    seeded(tmp_path)
-    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
-    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
-    write_text(delta, read_text(delta).replace("## MODIFIED Requirements", "\n\n## MODIFIED Requirements"))
-    approved(tmp_path)
-
-
-def test_a_view_of_a_living_requirement_since_changed_is_refused_once(tmp_path) -> None:
-    """Found by the review of the closing fixes: the living requirement a change modifies was edited after its view
-    was written, the approval recorded the base as it now stood, and the archive reverted the edit unseen."""
-    seeded(tmp_path)
-    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
-    living = tmp_path / ".spec/specs/auth/spec.md"
-    write_text(living, read_text(living).replace("five failed attempts.", "five failed attempts, and alerts security."))
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
-    assert "-The system MUST lock an account after five failed attempts, and alerts security." in read_text(
-        tmp_path / VIEW
-    )
-    approved(tmp_path)
-
-
-def test_a_view_with_no_fingerprint_is_written_again_once(tmp_path) -> None:
-    """Found by the review of the closing fixes: a view an older adk-spec wrote, or whose last line was taken off,
-    was not compared at all."""
-    seeded(tmp_path)
-    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
-    write_text(tmp_path / VIEW, read_text(tmp_path / VIEW).rstrip("\n").rsplit("\n", 1)[0] + "\n")
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
-    assert mark_of(read_text(tmp_path / VIEW))
-    approved(tmp_path)
-
-
-def test_the_views_fingerprint_is_its_last_line_alone() -> None:
-    """Found by the review of the closing fixes: a requirement's line shaped as the fingerprint was read first, and
-    `approve` refused for ever."""
-    planted = f"<!-- view sha256:{'0' * 64} -->"
-    assert mark_of(f"# Review: x\n\n```\n{planted}\n```\n") is None
-    assert mark_of(f"# Review: x\n\n{planted}\n") == f"sha256:{'0' * 64}"
-
-
 def test_a_new_capabilitys_purpose_is_in_its_view() -> None:
     """Found by the review of the closing fixes: the purpose a new capability's living spec opens on was approved
     unseen."""
@@ -308,38 +237,10 @@ def test_a_new_capabilitys_purpose_is_in_its_view() -> None:
     assert "### Purpose\n\n```markdown\nFind things.\n```" in render_review("passkeys", {"search": new}, LIVING, {})
 
 
-def test_a_view_outlives_a_delta_that_will_not_read(tmp_path) -> None:
-    """Found by the third review of the closing fixes: a delta mid-edit read as no delta, the view was dropped, and
-    the next approval, of an edit no view had shown, went through."""
-    seeded(tmp_path)
-    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
-    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
-    good = read_text(delta)
-    write_text(delta, good + "\n```\n")
-    run(tmp_path, "check", "passkeys", "--no-model")
-    assert (tmp_path / VIEW).is_file()
-    write_text(delta, good.replace("three failed attempts", "ninety failed attempts"))
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
-    approved(tmp_path)
-
-
-def test_a_removed_requirement_is_shown_as_the_living_spec_holds_it(tmp_path) -> None:
-    """Found by the third review of the closing fixes: a living requirement the change removes was edited after the
-    view was written, and the approval and the archive took the edit out unseen."""
+def test_a_removed_requirement_is_shown_as_the_living_spec_holds_it() -> None:
+    """Found by a review of the closing fixes: the approver read only a removed requirement's name and reason, and the
+    archive took out text they were never shown."""
     assert "The system SHALL let a registered user sign in with email" in render_review("passkeys", DELTAS, LIVING, {})
-    seeded(tmp_path)
-    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
-    living = tmp_path / ".spec/specs/auth/spec.md"
-    write_text(living, read_text(living).replace("sign in with email", "sign in with email, and SSO for admins", 1))
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
-    assert "SSO for admins" in read_text(tmp_path / VIEW)
-    approved(tmp_path)
-
-
-def test_the_views_fingerprint_is_read_past_trailing_spaces() -> None:
-    """Found by the third review of the closing fixes: an editor's trailing spaces read as no fingerprint."""
-    mark = f"sha256:{'0' * 64}"
-    assert mark_of(f"# Review: x\n\n<!-- view {mark} -->  \n\n") == mark
 
 
 def test_a_generated_file_is_never_dropped_through_a_link(tmp_path) -> None:

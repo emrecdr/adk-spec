@@ -72,7 +72,7 @@ from ..domain.merge import MergeError, apply_delta
 from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.remaining import remaining, render_remaining
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
-from ..domain.review_md import mark_of, render_review, review_said, view_mark
+from ..domain.review_md import render_review, review_said
 from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
 from ..domain.summary_md import render_summary
@@ -535,9 +535,13 @@ def _say_next(
     wording of the step named a plan its holds refused. Where no approval covers the change's files, a person reads
     it before approving: its view, `reports/review.md`, is written again first."""
     assessed = _assessed(workspace, change_id, living, drift=drift)
-    # Found by the code review: a second approver read the view of before.
-    if owes_approval(assessed.state, assessed.stale):
-        _view_said(workspace, change_id, assessed.loaded.change.deltas, living)
+    deltas = assessed.loaded.change.deltas
+    # A draft, a strict one approved once among them, or an approved change edited since, owes an approval: its view
+    # is written for the person who gives it. Found by the code review: a second approver read the view of before.
+    owed = owes_approval(assessed.state, assessed.stale)
+    if owed and deltas and (view := _view_written(workspace, change_id, deltas, living)):
+        shown, overlaps = view
+        print(f"review    {shown}: {review_said(deltas, overlaps)}")
     phrase = assessed.step.phrase
     print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
 
@@ -545,42 +549,15 @@ def _say_next(
 def _view_written(
     workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]
 ) -> tuple[str, dict[str, list[str]]] | None:
-    """The approver's view of a change written again, ending on the fingerprint of what it shows: where it is, as
-    shown, and the overlaps it names. None where it cannot be written, a file that will not open or a folder the path
-    rules refuse: the view is an aid, and found by the code review, its fault failed commands whose work was done."""
+    """The approver's view of a change written again: where it is, as shown, and the overlaps it names. None where it
+    cannot be written, a file that will not open or a folder the path rules refuse: the view is an aid, and found by
+    the code review, its fault failed commands whose work was done."""
     overlaps = _overlaps(workspace, change_id, deltas)
-    text = render_review(change_id, deltas, living, overlaps, mark=view_mark(change_id, deltas, living))
     try:
-        path = workspace.write_report(change_id, REVIEW, text)
+        path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps))
     except OSError, WorkspaceError:
         return None
     return workspace.shown(path), overlaps
-
-
-def _view_said(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> bool:
-    """The view written again, as `_view_written` writes it, and named on a `review` line: whether it was. Not where
-    no delta reads: found by a review, a view dropped while a delta was mid-edit let an unseen edit be approved."""
-    if not deltas or (view := _view_written(workspace, change_id, deltas, living)) is None:
-        return False
-    shown, overlaps = view
-    print(f"review    {shown}: {review_said(deltas, overlaps)}")
-    return True
-
-
-def _view_behind(workspace: Workspace, assessed: Assessed, living: Mapping[str, Spec]) -> bool:
-    """Whether the approver's view on disk shows the change otherwise than it now stands: written again where so, and
-    named. Found by the closing code review: a command wrote the view, a spec was edited by hand, and the approval
-    recorded what its approver was never shown. Compared by the fingerprint the view ends on, of what it shows: a
-    spec, or a living requirement it diffs against, edited since, or a view with none. Another change's overlap is
-    not compared, and no view, or one that will not read or be written again, holds nothing: the view is an aid."""
-    change_id, deltas = assessed.state.id, assessed.loaded.change.deltas
-    try:
-        before = workspace.report(change_id, REVIEW)
-    except OSError, NotTextError, WorkspaceError:
-        return False
-    if before is None or mark_of(before) == view_mark(change_id, deltas, living):
-        return False
-    return _view_said(workspace, change_id, deltas, living)
 
 
 def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
@@ -835,10 +812,6 @@ def _approve(args: argparse.Namespace) -> int:
     # What the files themselves block comes first: no model is asked about files that are going to change.
     if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
         return _refused(args.id, blockers)
-    if _view_behind(workspace, assessed, living):
-        raise NotYetError(
-            f"`{args.id}` is not approved: its view was out of date, and is written again: read it, then approve"
-        )
     first = approval_checks_first(assessed.unchecked)
     made = _checked_first(workspace, args.id, living, assessed, args.override) if first else None
     if made is not None:
@@ -986,7 +959,7 @@ def _archive(args: argparse.Namespace) -> int:
     if logged is None:
         print(
             f"kept      {workspace.shown(workspace.home / CHANGELOG)}: it would not read or be written, a link, not "
-            f"UTF-8 or a code fence never closed: the entry of `{args.id}` was not added"
+            f"UTF-8 or a code fence never closed: the entry of `{args.id}` was not added, so add it by hand"
         )
     return EXIT_OK
 
