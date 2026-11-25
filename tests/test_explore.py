@@ -332,6 +332,8 @@ async def test_the_searches_and_folders_a_reading_made_are_said(tmp_path, fake_p
 @pytest.mark.asyncio
 async def test_a_review_naming_one_unknown_twice_keeps_it_once(tmp_path, fake_provider) -> None:
     """Found by phase 18's code review: a question named twice took two of the eight places."""
-    fake_provider.answers_when(REVIEW, reviewed(unknown=[("Who owns sessions?", ""), ("Who owns sessions?", "src")]))
+    asked = [("Who owns sessions?", ""), *((f"Q{n}?", "") for n in range(8)), ("Who owns sessions?", "src")]
+    fake_provider.answers_when(REVIEW, reviewed(unknown=asked))
     found = explored((await read(tmp_path)).state)
-    assert found.unknown == (("Who owns sessions?", ""),)
+    assert found.unknown[0] == ("Who owns sessions?", "src"), "first named stays first, with where it may be answered"
+    assert len(found.unknown) == 8 and found.unknown_over == 1

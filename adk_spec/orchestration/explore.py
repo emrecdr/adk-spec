@@ -274,8 +274,11 @@ def _weighed(ctx: Context) -> Event:
     kept = [one for number, one in enumerate(found.statements, 1) if number not in numbers]
     asked = ((plain(one.question)[:QUESTION_MAX_CHARS], plain(one.where)[:WHERE_MAX_CHARS]) for one in answer.unknown)
     # The last review's unknowns stand, as it read what the first asked for. Phase 18: those past the budget counted.
-    once = dict(reversed([(question, where) for question, where in asked if question]))  # found by its review
-    unknown = [[question, where] for question, where in reversed(once.items())]
+    once: dict[str, str] = {}  # each question once, where first named, with the first place it may be answered
+    for question, where in asked:
+        if question and not once.get(question):
+            once[question] = where
+    unknown = [[question, where] for question, where in once.items()]
     disputed = found.disputed + len(found.statements) - len(kept)
     over = max(0, len(unknown) - UNKNOWN_BUDGET)
     update = {**_holding(kept), DISPUTED: disputed, UNKNOWN: unknown[:UNKNOWN_BUDGET], _UNKNOWN_OVER: over}

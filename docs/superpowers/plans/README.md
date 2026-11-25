@@ -44,7 +44,7 @@ How it is applied in every phase below:
 | 14 | Inside a coding assistant | `2026-11-22-adk-spec-mcp-server.md` | `adk-spec-mcp` serves six commands as MCP tools to a coding assistant (`propose`, revising too, `plan`, `check`, `verify`, `status`, `validate`), each run as the terminal runs it; approving and archiving stay the person's. | Built, cleaned up, reviewed and merged. Its live proof, in VS Code and in Claude Code, waits for the owner |
 | 16 | Evidence and review | `2026-11-24-adk-spec-evidence-and-review.md` | The approver's view of each requirement a change touches, and who else is changing it; unmet verdicts written as the next work; `verify`'s evidence kept beside each living spec, a requirement whose code is gone noted as suspect; `validate` as a merge gate with GitHub annotations; a pull request's summary and a changelog. No model call, command, flag or `change.json` field. | Built test first; five cleanup and code reviews, and a closing one; merged |
 | 17 | Freshness and proof notes | `2026-11-25-adk-spec-freshness-and-proof-notes.md` | From an outside discovery report, each option checked by four verifiers: the profile's quotes checked against the code (`status`, `propose`); a drafted `[P]` held to its rule. A `verify` note on proofs the work removed was built and taken out after three reviews. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
-| 18 | Context kept and said | `2026-11-25-context-kept-and-said-design.md` | From the owner's question whether context is lost between the layers: the person's answers kept in `context.md`; every cut of the reading said; unknowns and what was left out above the statements; a folded tree naming the top files; a cut test output marked. The exact scrubbed-quote check (a quote is looked for as it was shown) replaced phase 17's guess by shape. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
+| 18 | Context kept and said | `2026-11-25-context-kept-and-said-design.md` | From the owner's question whether context is lost between the layers: the person's answers kept in `context.md`; the reading's cuts said (statements and unknowns past their budgets, the searches and listings made); unknowns and what was left out above the statements; a folded tree naming the top files; a cut test output marked. The exact scrubbed-quote check (a quote is looked for as it was shown) replaced phase 17's guess by shape. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
 
 ## The plan being followed now
 
@@ -532,7 +532,9 @@ and a step moves to code only where its output is a function of its input with n
   another repository a change spans; what a reading's last round asked for past its budget is not said (a count was
   built and taken out: exact, it needs each request followed across rounds, a request read later or asked twice);
   a second review is not shown the first's unknowns, so they are replaced, not added (showing them is a change to
-  what a model is told); evidence whose code holds `[REDACTED` itself, as redaction code does, is not kept.
+  what a model is told); a verify quote of code that holds `[REDACTED` itself, as redaction code does, is not kept as
+  evidence; a quote over a secret that moved to another file can read as gone, its search term being the stand-in;
+  answers in a `context.md` a person deletes to read the code again are not kept.
 
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:

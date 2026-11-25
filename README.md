@@ -789,7 +789,7 @@ design and the tasks rest on what is there and not on file names. `plan` reads i
   statement names a file and a line, the line that opens the block it stands in, and quotes the code; a statement
   whose quote is not in that file is left out and counted, as are statements and unknowns past what a reading
   keeps. A run with `--no-explore`, or a reading that keeps nothing, writes no `context.md`, and so keeps no
-  answers. The design and the tasks are drafted from it, and do not plan on an unknown as if it were known.
+  answers; nor does a `context.md` you delete to read the code again. The design and the tasks are drafted from it, and do not plan on an unknown as if it were known.
 - **It is yours.** Edit `context.md` as you would any file of the change. One that is there is kept and read as it
   stands; delete it and the next `adk-spec plan <id>` reads the code again. It is no part of an approval.
 - **What it costs.** Up to seven model calls: one to choose, four to state, two to review. Measured live on a

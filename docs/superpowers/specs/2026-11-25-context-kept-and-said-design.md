@@ -3,7 +3,7 @@
 Designed on 25 November 2026, from the owner's question whether context is lost between the layers and between
 Python and the models. Two read-only researchers mapped every stage's inputs, caps and losses, and the code reading's
 aim and limits (findings cited to file and line in the session). The owner chose, as recommended, a first step that
-calls no model: keep what is lost in silence, and say every cut. A second step, aiming the reading with triage's
+calls no model: keep what is lost in silence, and say the reading's cuts. A second step, aiming the reading with triage's
 capabilities, a reading of the repository's guidance files, and the constitution for the deltas stage, changes what
 models are told and waits for a live measurement on the owner's go-ahead.
 

@@ -30,9 +30,10 @@ def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
 
 def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Sequence[str]) -> bool | None:
     """Whether `quote` is still in the code: in `path`, or else in another file of its repository, so that a moved
-    function reads as moved. None where its repository is not there to look in, as another one is not in CI, or git
-    refuses the search, outside a repository say. `root` is the folder that holds `.spec/`; `repository` is `.` for
-    its own; `exclude`, the person's patterns, apply to its own."""
+    function reads as moved. None where its repository is not there to look in, as another one is not in CI, where
+    git refuses the search, outside a repository say, or where the quote is too short to find anywhere. `root` is
+    the folder that holds `.spec/`; `repository` is `.` for its own; `exclude`, the person's patterns, apply to its
+    own."""
     own = repository == "."
     folder = root if own else root / repository
     if len(plain(quote)) < QUOTE_MIN_CHARS or not _within(folder, repository, path, own=own):  # too short to find
@@ -40,13 +41,8 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
     try:
-        # A fixed string git finds on one line, NUL-free: no piece of a secret's stand-in, which no file holds as it
-        # stands (found by phase 18's code review); nothing to look for elsewhere is unknown, not gone.
-        words = [word for word in plain(quote).split() if "REDA" not in word and "ACTED" not in word]
-        term = max(words, key=len, default="")
-        if not term:
-            return None
-        hits = grep(folder, term, exclude=exclude if own else (), trust=own)
+        term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
+        hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
     except GitError:
         return None
     named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]
