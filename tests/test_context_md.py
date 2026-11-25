@@ -10,6 +10,7 @@ from adk_spec.domain.context_md import (
     drafted_rules,
     render_context,
     unknown_count,
+    with_answers,
 )
 from adk_spec.domain.convert import to_statements
 from adk_spec.domain.drafts import SurveyDraft
@@ -140,7 +141,7 @@ def test_what_is_still_unknown_has_its_section_and_the_disputed_are_counted() ->
     assert "- `api/src/routes.py:2` Here.\n  in: def a():\n  > return x()\n" in text
     assert (
         "## What is still unknown\n\n- Does the mobile app call it too? Look in: a repository not named here.\n"
-        "- Who owns sessions?\n\n## What was read"
+        "- Who owns sessions?\n\nLeft out: 2 statements"
     ) in text
     assert "Left out: 2 statements whose quote was not in the file named; 1 the review disputed." in text
     assert unknown_count(text) == 2 and unknown_count("# Context: x\n") == 0
@@ -198,3 +199,57 @@ def test_a_drafted_rule_is_the_first_sentence_of_its_note() -> None:
         note="Every error is raised as an AppError. It is defined in errors.py, e.g. for the store.",
     )
     assert "- Every error is raised as an AppError. (`src/errors.py:4`" in drafted_rules([held])
+
+
+def test_what_is_unknown_and_left_out_stands_above_the_statements() -> None:
+    """Phase 18: a stage is given `context.md` cut at 20,000 characters, and the unknowns and what was not read came
+    last, so the cut took them first; now the statements' tail goes first."""
+    held = Statement(kind="exists", path="src/app.py", line=2, quote="return password(user)", note="Sign-in.")
+    text = render_context(
+        "Context: passkeys",
+        at="2026-11-22T10:00:00+00:00",
+        commit=None,
+        statements=[held],
+        read=("src/app.py (whole)",),
+        left_out=("config/prod.yaml: git lists no such file",),
+        unknown=[("Who owns sessions?", "")],
+    )
+    first_statement = text.index("## What exists")
+    assert text.index("## What is still unknown") < text.index("Not read: config/prod.yaml") < first_statement
+    assert first_statement < text.index("## What was read")
+
+
+def test_a_readings_cuts_and_lookups_are_written() -> None:
+    """Phase 18: statements and unknowns past their budgets are said with what was left out; the searches and folder
+    listings made, with what was read."""
+    text = render_context(
+        "Context: passkeys",
+        at="2026-11-22T10:00:00+00:00",
+        commit=None,
+        statements=[],
+        read=("src/app.py (whole)", "search: password (3 lines)"),
+        over=1,
+        unknown_over=2,
+    )
+    assert "Left out: 1 statement past what a reading keeps; 2 unknowns past what a review keeps." in text
+    assert "- src/app.py (whole)\n- search: password (3 lines)\n" in text
+
+
+def test_the_answers_stand_right_under_the_files_first_lines() -> None:
+    """Found by phase 18's code review: with no unknown, the answers came below what was not read."""
+    text = render_context(
+        "Context: x", at="2026-11-22T10:00:00+00:00", commit=None, statements=[], read=(), left_out=("a.py: gone",)
+    )
+    kept = with_answers(text, "Which browsers? -> Chrome")
+    assert kept.index("## The person's answers") < kept.index("Not read: a.py: gone.")
+
+
+def test_a_partial_note_is_one_line_and_the_answers_stand_after_it() -> None:
+    """Found by phase 18's code review: a failure holding a blank line split the partial note, and the answers went
+    into its middle."""
+    text = render_context(
+        "Context: x", at="2026-11-22T10:00:00+00:00", commit=None, statements=[], read=(), partial="boom\n\nmore"
+    )
+    kept = with_answers(text, "Which browsers? -> Chrome")
+    assert "This reading is partial: boom more." in kept
+    assert kept.index("partial: boom more.") < kept.index("## The person's answers")

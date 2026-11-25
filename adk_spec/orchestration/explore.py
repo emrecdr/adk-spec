@@ -74,6 +74,10 @@ LOOKS = "looks"
 _READ_LIST = "read_list"
 _REACHED = "reached"
 _ASKED = "asked"
+#: Phase 18: the searches and folder listings made, and how many statements and unknowns went past their budgets.
+_LOOKED_LIST = "looked_list"
+_OVER = "over"
+_UNKNOWN_OVER = "unknown_over"
 #: What the review leaves: what is still unknown, how many statements it disputed, and how often it ran.
 UNKNOWN = "unknown"
 DISPUTED = "disputed"
@@ -95,6 +99,11 @@ class Explored:
     unknown: tuple[tuple[str, str], ...] = ()
     #: How many statements a review left out for a quote that does not bear out their note.
     disputed: int = 0
+    #: Each search made and folder listed, with what it found.
+    looked: tuple[str, ...] = ()
+    #: How many statements went past the budget, and how many unknowns past theirs.
+    over: int = 0
+    unknown_over: int = 0
 
 
 def explored(state: Mapping[str, Any]) -> Explored:
@@ -102,7 +111,17 @@ def explored(state: Mapping[str, Any]) -> Explored:
     statements = [Statement.model_validate(one) for one in state.get(KEPT) or ()]
     unknown = tuple((question, where) for question, where in state.get(UNKNOWN) or ())
     read, left_out = tuple(state.get(_READ_LIST) or ()), tuple(state.get(LEFT_OUT) or ())
-    return Explored(statements, read, left_out, state.get(DROPPED) or 0, unknown, state.get(DISPUTED) or 0)
+    return Explored(
+        statements,
+        read,
+        left_out,
+        state.get(DROPPED) or 0,
+        unknown,
+        state.get(DISPUTED) or 0,
+        looked=tuple(state.get(_LOOKED_LIST) or ()),
+        over=state.get(_OVER) or 0,
+        unknown_over=state.get(_UNKNOWN_OVER) or 0,
+    )
 
 
 def _said(statements: Sequence[Statement]) -> str:
@@ -171,11 +190,14 @@ def _look(
             reached[path] = [upto, total]
     read = list(state.get(_READ_LIST) or ())
     read += [note for note in got.read if note not in read]
+    looked = list(state.get(_LOOKED_LIST) or ())
+    looked += [note for note in got.looked if note not in looked]
     update = {
         SEEN: seen,
         _REACHED: reached,
         _ASKED: [*(state.get(_ASKED) or ()), *answered],
         _READ_LIST: read,
+        _LOOKED_LIST: looked,
         READ: "\n".join(read),
         LEFT_OUT: [*(state.get(LEFT_OUT) or ()), *got.left_out],
     }
@@ -221,8 +243,9 @@ def _grounded(ctx: Context, source: Source) -> Event:
     before = explored(state)
     held = {(one.path, one.line, one.kind) for one in before.statements}
     kept = [*before.statements, *(one for one in fresh if (one.path, one.line, one.kind) not in held)]
+    over = max(0, len(kept) - STATEMENT_BUDGET)
     kept = kept[:STATEMENT_BUDGET]
-    update = {**_holding(kept), DROPPED: before.dropped + dropped}
+    update = {**_holding(kept), DROPPED: before.dropped + dropped, _OVER: before.over + over}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
     on = more and (state.get(LOOKS) or 0) < LOOK_BUDGET and len(kept) < STATEMENT_BUDGET
     return Event(route=SOME if on else NONE, state=update)
@@ -250,8 +273,15 @@ def _weighed(ctx: Context) -> Event:
     numbers = {one.statement for one in answer.disputed}
     kept = [one for number, one in enumerate(found.statements, 1) if number not in numbers]
     asked = ((plain(one.question)[:QUESTION_MAX_CHARS], plain(one.where)[:WHERE_MAX_CHARS]) for one in answer.unknown)
-    unknown = [[question, where] for question, where in asked if question][:UNKNOWN_BUDGET]
-    update = {**_holding(kept), DISPUTED: found.disputed + len(found.statements) - len(kept), UNKNOWN: unknown}
+    # The last review's unknowns stand, as it read what the first asked for. Phase 18: those past the budget counted.
+    once: dict[str, str] = {}  # each question once, where first named, with the first place it may be answered
+    for question, where in asked:
+        if question and not once.get(question):
+            once[question] = where
+    unknown = [[question, where] for question, where in once.items()]
+    disputed = found.disputed + len(found.statements) - len(kept)
+    over = max(0, len(unknown) - UNKNOWN_BUDGET)
+    update = {**_holding(kept), DISPUTED: disputed, UNKNOWN: unknown[:UNKNOWN_BUDGET], _UNKNOWN_OVER: over}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
     on = more and (state.get(REVIEWS) or 0) < REVIEW_BUDGET and len(kept) < STATEMENT_BUDGET
     return Event(route=SOME if on else NONE, state=update)

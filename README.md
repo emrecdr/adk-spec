@@ -308,7 +308,8 @@ The system SHALL let a user sign in with a passkey.
 ```
 
 `context.md` is what the reading found: what exists, where the change plugs in, conventions, risks and what is still
-unknown, each statement quoting a file and line. `tasks.md` is the work, test first, each task naming the
+unknown, each statement quoting a file and line. It also keeps your answers to the questions `propose` asked, and says
+what the reading left out. `tasks.md` is the work, test first, each task naming the
 requirements it serves, its files and how to check it:
 
 ```markdown
@@ -782,10 +783,13 @@ design and the tasks rest on what is there and not on file names. `plan` reads i
 - **A model checks the reading.** A third call reviews what was kept, statement by statement, and reads no file.
   It leaves out a statement its quote does not bear out, names what is still unknown, and may send the reading one
   round further.
-- **What you get.** `context.md` in the change's folder, in four sections: what exists, where the change plugs
-  in, conventions to follow, risks, and then what is still unknown. Every statement names a file and a line, the
-  line that opens the block it stands in, and quotes the code; a statement whose quote is not in that file is left
-  out and counted. The design and the tasks are drafted from it, and do not plan on an unknown as if it were known.
+- **What you get.** `context.md` in the change's folder: your answers to the questions asked, what is still
+  unknown and what the reading left out first, then four sections: what exists, where the change plugs in,
+  conventions to follow, risks; and last what was read, the searches made and folders listed among it. Every
+  statement names a file and a line, the line that opens the block it stands in, and quotes the code; a statement
+  whose quote is not in that file is left out and counted, as are statements and unknowns past what a reading
+  keeps. A run with `--no-explore`, or a reading that keeps nothing, writes no `context.md`, and so keeps no
+  answers; nor does a `context.md` you delete to read the code again. The design and the tasks are drafted from it, and do not plan on an unknown as if it were known.
 - **It is yours.** Edit `context.md` as you would any file of the change. One that is there is kept and read as it
   stands; delete it and the next `adk-spec plan <id>` reads the code again. It is no part of an approval.
 - **What it costs.** Up to seven model calls: one to choose, four to state, two to review. Measured live on a

@@ -125,6 +125,7 @@ async def test_no_more_statements_are_kept_than_the_budget(tmp_path, monkeypatch
     fake_provider.answers_when(SURVEY, survey(APP, more, {**APP, "kind": "risk"}, files=("src/auth/session.py",)))
     found = explored((await read(tmp_path)).state)
     assert len(found.statements) == 2 and len(sent(fake_provider, SURVEY)) == 1, "a full budget ends the reading"
+    assert found.over == 1, "phase 18: the statement past the budget is counted"
 
 
 @pytest.mark.asyncio
@@ -229,7 +230,7 @@ async def test_unknowns_are_kept_plain_and_at_most_eight(tmp_path, fake_provider
     asked = [(f"Who owns sessions?\x1b[31m {n}", "the API\nrepository") for n in range(10)]
     fake_provider.answers_when(REVIEW, reviewed(unknown=asked))
     found = explored((await read(tmp_path)).state)
-    assert len(found.unknown) == explore.UNKNOWN_BUDGET == 8
+    assert len(found.unknown) == explore.UNKNOWN_BUDGET == 8 and found.unknown_over == 2
     assert found.unknown[0] == ("Who owns sessions? [31m 0", "the API repository")
 
 
@@ -316,3 +317,23 @@ async def test_the_survey_and_the_review_are_shown_the_libraries_they_may_ask_fo
     for opening in (SURVEY, REVIEW):
         (told,) = sent(fake_provider, opening)[:1]
         assert "httpx 0.28.1" in told and "python:<path>" in told, opening
+
+
+@pytest.mark.asyncio
+async def test_the_searches_and_folders_a_reading_made_are_said(tmp_path, fake_provider) -> None:
+    """Phase 18: a search and a folder listing were shown to the survey and never said in what was read."""
+    asks = {"statements": [APP], "more_files": [], "more_folders": ["src/auth"], "more_searches": ["password"]}
+    fake_provider.answers_each_time(SURVEY, iter([asks, survey(SESSION)]))
+    found = explored((await read(tmp_path)).state)
+    assert any(one.startswith("search: password (") for one in found.looked)
+    assert any(one.startswith("src/auth/ (") for one in found.looked)
+
+
+@pytest.mark.asyncio
+async def test_a_review_naming_one_unknown_twice_keeps_it_once(tmp_path, fake_provider) -> None:
+    """Found by phase 18's code review: a question named twice took two of the eight places."""
+    asked = [("Who owns sessions?", ""), *((f"Q{n}?", "") for n in range(8)), ("Who owns sessions?", "src")]
+    fake_provider.answers_when(REVIEW, reviewed(unknown=asked))
+    found = explored((await read(tmp_path)).state)
+    assert found.unknown[0] == ("Who owns sessions?", "src"), "first named stays first, with where it may be answered"
+    assert len(found.unknown) == 8 and found.unknown_over == 1

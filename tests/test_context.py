@@ -83,7 +83,7 @@ def test_a_tree_within_the_limit_is_every_path_and_past_it_folders_with_counts()
     lines = lines_of(tree_text(paths))
     assert lines[0].startswith("303 files: too many to list")
     assert "src/pkg0/ (76 files)" in lines and "./ (1 file)" in lines and "docs/guide/ (1 file)" in lines
-    assert len(lines) == 7, "the first line, then one a folder"
+    assert lines[1] == "files at the top: README.md" and len(lines) == 8, "the first lines, then one a folder"
 
 
 def test_a_tree_of_more_folders_than_the_limit_is_folded_again_and_cut_with_a_count() -> None:
@@ -141,3 +141,17 @@ def test_a_readings_text_given_to_the_brief_is_cut_as_context_md_would_be() -> N
 
     held = context_of("# Context\n\n" + "x" * (CONTEXT_FILE_MAX_CHARS * 2))
     assert len(held) < CONTEXT_FILE_MAX_CHARS + 100 and held.endswith("is longer than a stage is given)")
+
+
+def test_a_folded_tree_names_the_files_at_the_top() -> None:
+    """Phase 18: folded, the tree said `./ (8 files)` and hid README.md, pyproject.toml and CLAUDE.md, the files a
+    stage most needs to be pointed to; in a large repository the top was not even among the folders kept."""
+    from adk_spec.workspace.context import TOP_FILES_NAMED, TREE_MAX_PATHS, tree_text
+
+    deep = [f"pkg{n}/src/a.py" for n in range(TREE_MAX_PATHS * 2)]
+    top = ["README.md", "pyproject.toml", "CLAUDE.md"]
+    lines = lines_of(tree_text(deep + top))
+    assert lines[1] == "files at the top: CLAUDE.md, README.md, pyproject.toml"
+    many = [f"f{n:02}.txt" for n in range(TOP_FILES_NAMED + 4)]
+    lines = lines_of(tree_text(deep + many))
+    assert lines[1].endswith(f"f{TOP_FILES_NAMED - 1:02}.txt, and 4 more")

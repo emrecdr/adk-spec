@@ -11,7 +11,7 @@ import time
 import pytest
 
 from adk_spec.workspace import process, tests
-from adk_spec.workspace.tests import TAIL_MAX_CHARS, run_tests
+from adk_spec.workspace.tests import CUT_MARK, TAIL_MAX_CHARS, run_tests
 
 
 def program(tmp_path, body: str) -> list[str]:
@@ -23,7 +23,7 @@ def program(tmp_path, body: str) -> list[str]:
 
 def test_a_passing_run(tmp_path) -> None:
     run = run_tests(tmp_path, program(tmp_path, "print('all green')"), timeout=60)
-    assert run.outcome == "passed" and "all green" in run.tail
+    assert run.outcome == "passed" and "all green" in run.tail and CUT_MARK not in run.tail
 
 
 def test_a_failing_run_says_its_exit_code(tmp_path) -> None:
@@ -53,6 +53,7 @@ def test_a_program_not_found_or_named_by_a_relative_path_is_not_run(tmp_path) ->
 def test_only_the_end_of_a_long_output_is_kept(tmp_path) -> None:
     run = run_tests(tmp_path, program(tmp_path, "print('x' * 200_000)\nprint('THE END')"), timeout=60)
     assert len(run.tail) <= TAIL_MAX_CHARS and run.tail.rstrip().endswith("THE END")
+    assert run.tail.startswith(CUT_MARK), "phase 18: verify was given the end with no mark of the cut"
 
 
 def test_a_secret_the_tests_print_is_scrubbed(tmp_path) -> None:

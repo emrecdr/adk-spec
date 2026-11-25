@@ -107,6 +107,8 @@ class Gathered:
     reached: dict[str, tuple[int, int, int]]
     #: What was asked for and left out for room alone, each as it was asked: it may be asked for again.
     deferred: tuple[str, ...] = ()
+    #: Each search made and folder listed, with what it found: phase 18, they were shown and never said.
+    looked: tuple[str, ...] = ()
 
 
 def merged(one: str, other: str) -> str:
@@ -125,6 +127,7 @@ class _Round:
     left_out: list[str] = field(default_factory=list)
     reached: dict[str, tuple[int, int, int]] = field(default_factory=dict)
     deferred: list[str] = field(default_factory=list)
+    looked: list[str] = field(default_factory=list)
 
     def shows(self, block: str) -> bool:
         """Whether `block` still fits the round, in which case it is taken."""
@@ -474,7 +477,9 @@ class Source:
             named = ", ".join(_named(item, "(nothing)") for item in got.deferred)
             got.parts.append(f"=== not shown, for room. Ask again for what is still needed: {named}")
         shown = "\n".join(got.parts)
-        return Gathered(got.texts, shown, tuple(got.read), tuple(got.left_out), got.reached, tuple(got.deferred))
+        return Gathered(
+            got.texts, shown, tuple(got.read), tuple(got.left_out), got.reached, tuple(got.deferred), tuple(got.looked)
+        )
 
     def without_keys(self, diff: str) -> tuple[str, tuple[str, ...]]:
         """A unified diff less the part of each file that holds a private key, and those files' names. A file is
@@ -579,9 +584,12 @@ class Source:
         listed = under[:FOLDER_MAX_PATHS]
         note = _counted(len(under), "file", "files")
         note += f", the first {len(listed)} listed" if len(listed) < len(under) else ""
-        if not got.shows("\n".join([f"=== {'.' if whole else folder}/ ({note})", *listed])):
+        label = f"{'.' if whole else folder}/ ({note})"
+        if not got.shows("\n".join([f"=== {label}", *listed])):
             got.left_out.append(f"{folder or '.'}/: past what a round reads")
             got.deferred.append(asked)
+            return
+        got.looked.append(label)
 
     def _search(self, asked: str, got: _Round) -> None:
         term = asked.strip()
@@ -604,9 +612,11 @@ class Source:
         note = _counted(len(rows), "line", "lines")
         note = f"more than {SEARCH_MAX_LINES} lines, the first {SEARCH_MAX_LINES} shown" if more else note
         shown = [f"{path}:{number}:{text}" for path, number, text in rows]
-        if not got.shows("\n".join([f"=== search: {term} ({note})", *shown])):
+        label = f"search: {term} ({note})"
+        if not got.shows("\n".join([f"=== {label}", *shown])):
             got.left_out.append(f"search for {term}: past what a round reads")
             got.deferred.append(asked)
             return
+        got.looked.append(label)
         for path, number, text in rows:
             got.holds(path, number, text)

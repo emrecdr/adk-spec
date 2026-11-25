@@ -25,6 +25,8 @@ CONTEXT_MAX_CHARS = 120_000
 CONSTITUTION_MAX_CHARS = 16_000
 #: How many of a repository's files a stage is shown by name. Past it, it is shown folders and counts.
 TREE_MAX_PATHS = 300
+#: How many of the files at a repository's top a folded tree names: phase 18, folded, it hid README.md and the like.
+TOP_FILES_NAMED = 30
 
 
 class ContextTooLargeError(WorkspaceError):
@@ -134,6 +136,11 @@ def tree_text(paths: Sequence[str]) -> str:
         deep, folders = "one level", _folders(paths, 1)
     kept = sorted(folders.most_common(TREE_MAX_PATHS))  # the largest, by name
     lines = [f"{len(paths):,} files: too many to list. Each folder, {deep} deep, with the files under it:"]
+    if top := sorted(path for path in paths if "/" not in path):
+        rest = len(top) - TOP_FILES_NAMED
+        lines.append(
+            "files at the top: " + ", ".join(top[:TOP_FILES_NAMED]) + (f", and {rest} more" if rest > 0 else "")
+        )
     lines += [f"{folder}/ ({count:,} file{'' if count == 1 else 's'})" for folder, count in kept]
     if more := len(folders) - len(kept):
         lines.append(f"and {more:,} more folder{'' if more == 1 else 's'}")

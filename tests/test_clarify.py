@@ -8,7 +8,17 @@ from __future__ import annotations
 import io
 
 import pytest
-from conftest import BRIEF_WITH_A_MARKER, CANNED_BRIEF, CANNED_TRIAGE, OPEN_POINT, between, on_the_fake, run, seeded
+from conftest import (
+    BRIEF_WITH_A_MARKER,
+    CANNED_BRIEF,
+    CANNED_TRIAGE,
+    OPEN_POINT,
+    between,
+    on_the_fake,
+    repository,
+    run,
+    seeded,
+)
 
 from adk_spec.domain.brief_md import markers
 from adk_spec.workspace.files import read_text, write_text
@@ -316,3 +326,17 @@ def test_propose_drafts_no_plan_while_a_point_is_left_open(tmp_path, capsys, fak
     write_text(brief, read_text(brief).replace(f"[NEEDS CLARIFICATION: {ASKED}]", "Evergreen browsers only."))
     assert run(tmp_path, "status") == 0 and "run `adk-spec plan open`" in capsys.readouterr().out
     assert run(tmp_path, "plan", "open") == 0 and (tmp_path / ".spec/changes/open/tasks.md").is_file()
+
+
+def test_the_persons_answers_are_kept_in_context_md_and_scrubbed(tmp_path, monkeypatch, fake_provider) -> None:
+    """Phase 18: the answers lived only in the run, and the stages after the brief read the brief's words alone; the
+    file is committed, so a secret typed in an answer is not written."""
+    seeded(tmp_path)
+    repository(tmp_path)
+    key = "AKIA" + "IOSFODNN7EXAMPLE"
+    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
+    monkeypatch.setattr("sys.stdin", io.StringIO(f"Chrome and Firefox, key {key}\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "kept") == 0
+    context = read_text(tmp_path / ".spec/changes/kept/context.md")
+    assert f"## The person's answers\n\n- {ASKED} -> Chrome and Firefox, key [REDACTED" in context
+    assert key not in context and context.index("## The person's answers") < context.index("## What was read")

@@ -8,9 +8,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
 from ..domain.context_md import quoted_statements
-from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, scrubbed, suspects
+from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
-from ..domain.text import plain, quoted_at
+from ..domain.secrets import scrub_lines
+from ..domain.text import QUOTE_MIN_CHARS, plain, quoted_at
 from ..domain.validate import finding
 from .config import ConfigError
 from .files import NotTextError, read_text
@@ -29,12 +30,13 @@ def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
 
 def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Sequence[str]) -> bool | None:
     """Whether `quote` is still in the code: in `path`, or else in another file of its repository, so that a moved
-    function reads as moved. None where its repository is not there to look in, as another one is not in CI, or git
-    refuses the search, outside a repository say. `root` is the folder that holds `.spec/`; `repository` is `.` for
-    its own; `exclude`, the person's patterns, apply to its own."""
+    function reads as moved. None where its repository is not there to look in, as another one is not in CI, where
+    git refuses the search, outside a repository say, or where the quote is too short to find anywhere. `root` is
+    the folder that holds `.spec/`; `repository` is `.` for its own; `exclude`, the person's patterns, apply to its
+    own."""
     own = repository == "."
     folder = root if own else root / repository
-    if not _within(folder, repository, path, own=own):
+    if len(plain(quote)) < QUOTE_MIN_CHARS or not _within(folder, repository, path, own=own):  # too short to find
         return None
     if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
@@ -60,10 +62,17 @@ def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
 
 
 def _found(path: Path, quote: str) -> bool:
+    """Whether `quote` is in the file at `path`, as it stands or as a reading or a diff is shown it, scrubbed: a quote
+    taken from what a model saw may hold a secret's stand-in, whole or cut through. Found by phase 17's reviews, where
+    guessing such a quote by its shape missed some and took ordinary code for others."""
     try:
-        return quoted_at(quote, read_text(path)) is not None
+        text = read_text(path)
     except NotTextError, OSError:
         return False
+    if quoted_at(quote, text) is not None:
+        return True
+    # A stand-in opens on `[` and ends on `]`: a quote of neither is not of the scrubbed text alone, nor costs a scrub.
+    return ("[" in quote or "]" in quote) and quoted_at(quote, scrub_lines(text)[0]) is not None
 
 
 def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[Finding]:
@@ -99,8 +108,8 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
 def profile_gone(workspace: Workspace) -> tuple[int, int]:
     """Of the quotes of `.spec/profile.md`, each once, how many are no longer in the code, and how many were looked
     for: none where there is no profile that reads. Phase 17: every drafting stage reads the profile, and nothing else
-    checks it. A library's quote is not looked for, nor one a secret was scrubbed from, nor counted one that could not
-    be: unknown is not gone. Read whole: found by its code review, the cap a stage reads it at could halve a quote."""
+    checks it. A library's quote is not looked for, nor counted one that could not be: unknown is not gone. Read
+    whole: found by its code review, the cap a stage reads it at could halve a quote."""
     path = workspace.home / PROFILE
     try:
         text = read_text(path) if path.is_file() else ""
@@ -110,7 +119,7 @@ def profile_gone(workspace: Workspace) -> tuple[int, int]:
     looked = [
         quote_holds(workspace.root, ".", named, quote, exclude)
         for named, quote in dict.fromkeys(quoted_statements(text))
-        if not named.startswith(LIBRARY_SCHEMES) and not scrubbed(quote)
+        if not named.startswith(LIBRARY_SCHEMES)
     ]
     held = [one for one in looked if one is not None]
     return held.count(False), len(held)
