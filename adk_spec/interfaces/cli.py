@@ -76,7 +76,7 @@ from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
 from ..domain.summary_md import render_summary
 from ..domain.tasks_md import render_tasks
-from ..domain.text import lines_of, plain, sha256_of
+from ..domain.text import lines_of, normalise, plain, sha256_of
 from ..domain.validate import UNREAD, failed, finding, validate_spec
 from ..domain.verify import TestRun, Verdict, grounded, parts_of_diff
 from ..workspace.config import ConfigError
@@ -559,6 +559,27 @@ def _view_written(
     return workspace.shown(path), overlaps
 
 
+def _view_behind(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> bool:
+    """Whether the approver's view on disk shows the change otherwise than its files do now: written again where so,
+    and named. Found by the closing code review: a command wrote the view, the files were edited by hand, and the
+    approval recorded what its approver was never shown. No view, or one that will not read or be written again,
+    holds nothing: the view is an aid."""
+    try:
+        before = read_text(workspace.home / CHANGES / change_id / REPORTS / REVIEW)
+    except OSError, NotTextError:
+        return False
+    if not deltas:
+        return False
+    now = render_review(change_id, deltas, living, _overlaps(workspace, change_id, deltas))
+    if normalise(before) == normalise(now):  # as a write leaves it
+        return False
+    if (view := _view_written(workspace, change_id, deltas, living)) is None:
+        return False
+    shown, overlaps = view
+    print(f"review    {shown}: {review_said(deltas, overlaps)}")
+    return True
+
+
 def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
     """Each requirement this change modifies or removes that another open change modifies or removes too. Nothing
     where another change's delta will not open: the view is the approver's aid, and `archive` still stops."""
@@ -809,6 +830,13 @@ def _approve(args: argparse.Namespace) -> int:
     # What the files themselves block comes first: no model is asked about files that are going to change.
     if blockers := approve_blockers(assessed.state, assessed.findings, strict=args.strict):
         return _refused(args.id, blockers)
+    if _view_behind(workspace, args.id, assessed.loaded.change.deltas, living):
+        print(
+            f"{PROG}: `{args.id}` is not approved: its view showed the files before an edit: read it, then approve "
+            "again",
+            file=sys.stderr,
+        )
+        return EXIT_FINDINGS
     first = approval_checks_first(assessed.unchecked)
     made = _checked_first(workspace, args.id, living, assessed, args.override) if first else None
     if made is not None:

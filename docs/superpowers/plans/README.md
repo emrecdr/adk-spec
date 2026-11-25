@@ -52,7 +52,8 @@ more, fixed test first: `reports/remaining.md` could say a model's reason, openi
 (code now marks the reasons it writes), and a changelog entry heading a person added a note to stopped counting as an
 entry, so the next went below it (a line in a code block of the introduction is no entry either). With them: a verified
 change approved again as it stands stays verified, its summary naming the new approval; a strict change's first
-approval names each overlap once. What it left is below.
+approval names each overlap once; and an approval of files edited after the approver's view was written is refused
+once, the view written again, so no approval records what its approver was not shown. What it left is below.
 
 ## How a change flows
 
@@ -489,11 +490,9 @@ and a step moves to code only where its output is a function of its input with n
   to a `reports/remaining.md` it never wrote, once, until `verify` runs; a note a person writes in a living
   `evidence.md` is lost when an archive rewrites it, as the file asks for entries alone; the archive's `kept` line gives
   one reason for every file it leaves; a moved quote's search misreads a file whose name holds a colon. From the
-  closing review: an approver reads `reports/review.md` as the last command wrote it, so files edited by hand since are
-  not in it until a command writes it again (the guide says to run `check --no-model`), and `approve` does not compare
-  them; an approval that voids a verification leaves its `verify.md` and the change's `evidence.md`, which the next
-  `verify` replaces; a person's own entries in another form, `## [1.2.0] - 2026-01-01`, are read as introduction, so
-  adk-spec's go below them.
+  closing review: an approval that voids a verification leaves its `verify.md` and the change's `evidence.md`, which
+  the next `verify` replaces and an archive never folds; a person's own entries in another form,
+  `## [1.2.0] - 2026-01-01`, are read as introduction, so adk-spec's go below them.
 
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:

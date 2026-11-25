@@ -4,7 +4,7 @@ same one."""
 from __future__ import annotations
 
 import pytest
-from conftest import approved, on_the_fake, run, seeded
+from conftest import approved, on_the_fake, run, seeded, state_of
 from samples import DELTA, SPEC, tasks_for
 
 from adk_spec.domain.delta_md import changed_ids, parse_delta
@@ -197,6 +197,7 @@ def test_a_strict_change_approved_once_gives_its_second_approver_a_current_view(
     at = next(at for at, line in enumerate(lines) if "SHALL" in line)
     lines[at] = f"{lines[at].rstrip()} Edited before the first approval."
     write_text(delta, "\n".join(lines))
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 1, "the view showed the files before the edit"
     assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
     assert "Edited before the first approval." in read_text(tmp_path / ".spec/changes/ledger/reports/review.md")
 
@@ -211,6 +212,7 @@ def test_a_strict_change_approved_once_names_its_overlaps_once(tmp_path, capsys,
     folder = tmp_path / ".spec/changes/ledger"
     write_text(folder / "specs/auth/spec.md", OTHER)  # it modifies what the seeded `passkeys` modifies
     write_text(folder / "tasks.md", tasks_for("REQ-AUTH-002"))
+    assert run(tmp_path, "check", "ledger", "--no-model") == 0  # the view as the approver reads it
     capsys.readouterr()
     assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
     out = capsys.readouterr().out
@@ -224,3 +226,27 @@ def test_check_without_a_model_brings_a_hand_edit_into_the_view(tmp_path) -> Non
     write_text(delta, read_text(delta).replace("three failed attempts", "four failed attempts"))
     assert run(tmp_path, "check", "passkeys", "--no-model") == 0
     assert "+The system MUST lock an account after four failed attempts." in read_text(tmp_path / VIEW)
+
+
+def test_an_approval_of_files_the_view_does_not_show_is_refused_once(tmp_path, capsys) -> None:
+    """Found by the closing code review: a command wrote the view, the files were edited by hand, and the approval
+    recorded what the approver was never shown. Refused, the view is written again; the next approval stands."""
+    seeded(tmp_path)
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0  # writes the view
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, read_text(delta).replace("three failed attempts", "four failed attempts"))
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    said = capsys.readouterr()
+    assert "review    .spec/changes/passkeys/reports/review.md" in said.out and "read it" in said.err
+    assert state_of(tmp_path)["status"] == "draft"
+    assert "+The system MUST lock an account after four failed attempts." in read_text(tmp_path / VIEW)
+    approved(tmp_path)
+
+
+def test_an_approval_with_no_view_written_or_one_that_shows_the_files_goes_on(tmp_path) -> None:
+    seeded(tmp_path)
+    approved(tmp_path)  # no view was written: nothing shown is held to
+    seeded(tmp_path / "again")
+    assert run(tmp_path / "again", "check", "passkeys", "--no-model") == 0
+    approved(tmp_path / "again")
