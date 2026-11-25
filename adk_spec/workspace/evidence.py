@@ -7,11 +7,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
 from ..domain.context_md import quoted_statements
-from ..domain.evidence_md import HIDDEN, Proof, all_gone, folded, parse_evidence, placed, render_evidence, suspects
+from ..domain.evidence_md import HIDDEN, Proof, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
 from ..domain.text import quoted_at
 from ..domain.validate import finding
-from ..domain.verify import named_in_diff
 from .config import ConfigError
 from .context import profile_text
 from .files import NotTextError, read_text
@@ -94,34 +93,6 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
         held = {req.id for req in living[capability].requirements} if capability in living else set()
         if kept := [(at, one) for at, one in read if one.req in held]:
             found += suspects(kept, lambda one: holds(workspace.root, one, exclude), path=shown)
-    return found
-
-
-def gone_where_changed(
-    workspace: Workspace,
-    living: Mapping[str, Spec],
-    diff: str,
-    *,
-    repositories: Mapping[str, str],
-    own: frozenset[str],
-) -> list[str]:
-    """Each living requirement, as `ID (capability)`, that is not among `own`, the change's, all of whose evidence is
-    gone from the code, and one of whose evidence files the work's `diff` changes, under its name before or after a
-    move, in its own repository of the change's `repositories`. Phase 17: only those are looked for, so a verification
-    reads no evidence its diff did not touch. Found by its code reviews: matching quotes by text instead missed a
-    quote of two lines the work changed one of, and named a line another repository removed."""
-    files = {placed(name, repositories) for name in named_in_diff(diff)}
-    found, exclude = [], _excluded(workspace)
-    for capability in sorted(set(workspace.capabilities()) & set(living)):
-        read, _unread = _read(workspace.home / SPECS / capability / EVIDENCE)
-        held = {req.id for req in living[capability].requirements} - own
-        kept = [one for _line, one in read or [] if one.req in held]
-        hit = {one.req for one in kept if (one.repository, one.path) in files}
-        found += [
-            f"{req} ({capability})"
-            for req in sorted(hit)
-            if all_gone((one for one in kept if one.req == req), lambda one: holds(workspace.root, one, exclude))
-        ]
     return found
 
 

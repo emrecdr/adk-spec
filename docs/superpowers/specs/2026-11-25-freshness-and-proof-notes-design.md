@@ -19,8 +19,12 @@ code, and says what it finds in one line, where the person is looking.
 
 1. **The profile checked against the code.** `status`, and `propose` before it spends anything, say in one line
    how many of the profile's quotes are no longer in the code, and that `init --refresh` reads it again.
-2. **The proofs the work removed.** `verify` says in one `note` line which living requirements, untouched by the
-   change, lost every line that proved them in files the work changed.
+2. **The proofs the work removed** (built, then taken out on 25 November 2026). `verify` was to say in one `note`
+   line which living requirements, untouched by the change, lost every line that proved them in files the work
+   changed. Three code reviews in turn found it missed or misnamed requirements: by path (code moved before the
+   work, a repository's folder spelled two ways), and by text (a two-line quote changed in one line, a line another
+   repository removed). Exact attribution needs each proof read at the base commit; `status` and `validate` already
+   flag every requirement whose evidence is gone. The owner may take it up again (the roadmap).
 3. **`[P]` as the planner is told it.** A drafted task keeps `[P]` only where it names its files and none of them
    is a file of the task before or after it.
 

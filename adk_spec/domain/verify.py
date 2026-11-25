@@ -79,28 +79,12 @@ def parts_of_diff(diff: str) -> list[tuple[str | None, str]]:
     text. The parts put together are the diff. A part with no name shows no line: a file renamed and not changed,
     or one that is no text."""
     parts: list[tuple[str | None, str]] = []
-    for part in _split(diff):
-        named = _heading(part)
-        parts.append((named.get("+++") or named.get("---"), part))
+    for part in re.split(r"(?m)^(?=diff --git )", diff):
+        if part:
+            heading = part.split("\n@@", 1)[0]  # a line a hunk adds may itself begin with `+++ `
+            named = {line[:3]: _path(line[4:]) for line in heading.split("\n") if line.startswith(("--- ", "+++ "))}
+            parts.append((named.get("+++") or named.get("---"), part))
     return parts
-
-
-def named_in_diff(diff: str) -> frozenset[str]:
-    """Every path a unified diff names in its `---` and `+++` lines: a moved file by its name before as well as after,
-    as `lines_of_diff` knows it by the second alone. Phase 17, found by its code review."""
-    return frozenset(name for part in _split(diff) for name in _heading(part).values() if name)
-
-
-def _split(diff: str) -> list[str]:
-    """A unified diff's parts, one a file, in its order."""
-    return [part for part in re.split(r"(?m)^(?=diff --git )", diff) if part]
-
-
-def _heading(part: str) -> dict[str, str | None]:
-    """The names a file's part of a diff gives it, by `---` and `+++`, read before its first hunk: a line a hunk adds
-    may itself begin with `+++ `."""
-    heading = part.split("\n@@", 1)[0]
-    return {line[:3]: _path(line[4:]) for line in heading.split("\n") if line.startswith(("--- ", "+++ "))}
 
 
 def _path(named: str) -> str | None:

@@ -8,7 +8,7 @@ folder that holds `.spec/`, as the change that proved it recorded it."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import astuple, dataclass
 
 from .ids import REQ_ID
@@ -84,7 +84,7 @@ def kept(
             continue
         held: list[Proof] = []
         for named, quote in verdict.evidence:
-            repository, path = placed(named, repositories)
+            repository, path = _placed(named, repositories)
             # Cut where it may be: what a quote begins with is found wherever the whole quote is.
             one = Proof(verdict.id, repository, path, change, at, quote[:QUOTE_MAX].rstrip())
             if HIDDEN not in quote and _APART not in repository + path and one not in held:
@@ -103,12 +103,6 @@ def folded(
     return _sorted([one for one in living if one.req not in gone] + [one for one in change if one.req in replaced])
 
 
-def all_gone(proofs: Iterable[Proof], holds: Callable[[Proof], bool | None]) -> bool:
-    """Whether none of a requirement's evidence is in the code: each quote looked for and not found. One that could not
-    be looked for keeps it, as unknown is not gone."""
-    return all(holds(one) is False for one in proofs)
-
-
 def suspects(proofs: Sequence[tuple[int, Proof]], holds: Callable[[Proof], bool | None], *, path: str) -> list[Finding]:
     """A note for each requirement none of whose evidence is in the code: `holds` says of a proof whether its quote
     is found (True), is not (False), or could not be looked for (None, which keeps its requirement from being
@@ -118,7 +112,7 @@ def suspects(proofs: Sequence[tuple[int, Proof]], holds: Callable[[Proof], bool 
         held.setdefault(one.req, []).append((line, one))
     found = []
     for req, lines in sorted(held.items()):
-        if all_gone((one for _line, one in lines), holds):
+        if all(holds(one) is False for _line, one in lines):
             first, one = lines[0]
             files = ", ".join(dict.fromkeys(proof.path for _line, proof in lines))
             found.append(
@@ -133,7 +127,7 @@ def suspects(proofs: Sequence[tuple[int, Proof]], holds: Callable[[Proof], bool 
     return found
 
 
-def placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:
+def _placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:
     """The repository and the path within it of a path as `verify` named it."""
     name, _, rest = named.partition("/")
     return (repositories[name], rest) if rest and name in repositories else (".", named)
@@ -141,19 +135,3 @@ def placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:
 
 def _sorted(proofs: Sequence[Proof]) -> list[Proof]:
     return sorted(proofs, key=lambda one: (one.req, one.repository, one.path, one.quote))
-
-
-#: How many requirements the note of proofs gone names; the rest are counted.
-_GONE_NAMED = 3
-
-
-def gone_said(named: Sequence[str]) -> str:
-    """What `verify` says where every line that proved living requirements the change does not name, each
-    `ID (capability)`, is gone from the code, in files its work changed; nothing where there are none. Phase 17. It
-    says no more than code knows: found by its code review, the lines may have gone before the work."""
-    if not named:
-        return ""
-    more = len(named) - _GONE_NAMED
-    listed = ", ".join(named[:_GONE_NAMED]) + (f" and {more} more" if more > 0 else "")
-    gone = f"every line that proved {listed} is gone from the code, and this work changed a file that held one"
-    return f"{gone}: put them back, or change them in this change"

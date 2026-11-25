@@ -385,10 +385,6 @@ once every requirement is met.
 Each run also writes `reports/summary.md`, Markdown to paste into the pull request: why the change is made, the
 requirements it adds, modifies and removes, each verdict, the tests, and who approved.
 
-Where every line that proved a living requirement the change does not name is gone from the code, and the work changed
-a file that held one, `verify` says so on a `note` line: put those lines back, or change that requirement in this change. Only the
-requirements whose lines are in files the work changed are looked at, a moved file by its name before the move too.
-
 ### 6. Archive
 
 ```shell
