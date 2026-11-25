@@ -35,12 +35,12 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     its own; `exclude`, the person's patterns, apply to its own."""
     own = repository == "."
     folder = root if own else root / repository
-    if "\x00" in quote or not _within(folder, repository, path, own=own):  # no file holds a NUL, nor git takes one
+    if not _within(folder, repository, path, own=own):
         return None
     if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
     try:
-        term = max(quote.split(), key=len, default="")  # a fixed string git finds on one line
+        term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
         hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
     except GitError:
         return None
@@ -61,10 +61,8 @@ def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
 
 
 def _found(path: Path, quote: str) -> bool:
-    """Whether `quote` is in the file at `path`, read as a quote is kept: each unprintable character a space. Found by
-    phase 17's code review: a soft hyphen in the code kept a quote from ever matching its own line."""
     try:
-        return quoted_at(quote, "\n".join(plain(line) for line in read_text(path).split("\n"))) is not None
+        return quoted_at(quote, read_text(path)) is not None
     except NotTextError, OSError:
         return False
 

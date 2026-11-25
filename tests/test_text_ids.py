@@ -47,3 +47,12 @@ def test_the_next_id_never_reuses_a_number() -> None:
     taken = ["REQ-AUTH-001", "REQ-AUTH-004", "REQ-BILLING-009"]
     assert next_requirement_id("auth", taken) == "REQ-AUTH-005"
     assert next_requirement_id("search", taken) == "REQ-SEARCH-001"
+
+
+def test_a_quote_made_plain_is_found_in_its_own_line() -> None:
+    """Found by phase 17's reviews: a quote is kept plain, each unprintable character a space, and the line it was
+    taken from, a soft hyphen in it, never matched it, in a file or in a diff."""
+    from adk_spec.domain.text import plain, quoted_at
+
+    line = "label = Ta­belle_einstellung"
+    assert quoted_at(plain(line), line) == 1 and quoted_at(line, line) == 1
