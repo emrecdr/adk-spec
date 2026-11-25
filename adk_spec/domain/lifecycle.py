@@ -16,7 +16,7 @@ from .model import PASSED, Approval, ChangeState, Checked, Delta, Finding, Gramm
 from .spec_md import fingerprint
 from .tasks_md import parse_tasks, render_tasks
 from .text import sha256_of
-from .validate import UNREAD
+from .validate import UNREAD, finding
 
 #: Findings that block an approval whatever their severity: an open point, or no plan. A base that is missing does
 #: not: an approval records it, since it is a function of the delta and the living spec as they stand.
@@ -83,6 +83,11 @@ class Demands:
     #: A warning blocks its approval as an error does, and a blocking finding of its check may not be set aside.
     warnings_block: bool
     override: bool
+
+    @property
+    def closing(self) -> str:
+        """The command a change's work ends on: `verify` where a verification is owed, `archive` where none is."""
+        return "verify" if self.verified else "archive"
 
 
 DEMANDS: Mapping[str, Demands] = {
@@ -156,18 +161,20 @@ def approve(
     approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override)
     # A draft a person corrected is named once: the approved fingerprint then stands for what was drafted.
     drafted = {name: files.get(name, mark) for name, mark in state.drafted.items()}
+    stale = approval_stale(state, files)
+    # A verification stands for the files it was made of: found by the code review, one of an earlier version was
+    # still read for the unmet step, and its evidence folded, after the change was revised and approved again.
+    kept = {"drafted": drafted, "verification": None if stale else state.verification}
     if DEMANDS[state.tier].approvers > 1:  # the first of two names is recorded, and the change is a draft
-        stale = approval_stale(state, files)
         if _approved_by_two(state, stale):  # approved already, and as it stands: nothing to record
             return state
         first = first_of_two(state, stale)
         if first is None or same_name(first.by, by):
-            return state.model_copy(update={"status": "draft", "approval": approval, "drafted": drafted})
+            return state.model_copy(update={"status": "draft", "approval": approval, **kept})
         approval = first.model_copy(update={"second": Seconded(by=by, at=at)})
     began = state.base_commit or commit
     commits = {**(others or {}), **state.base_commits}
-    update = {"status": "approved", "approval": approval, "base_commit": began, "base_commits": commits}
-    update["drafted"] = drafted
+    update = {"status": "approved", "approval": approval, "base_commit": began, "base_commits": commits, **kept}
     return state.model_copy(update=update)
 
 
@@ -351,8 +358,32 @@ def archive_blockers(state: ChangeState, stale: Sequence[str], *, drifted: bool 
     if verified and state.status != "verified":
         return [f"`{cid}` is a {state.tier} change and is not verified: run `adk-spec verify {cid}` first"]
     if verified and drifted:
-        return [f"the work changed since `{cid}` was verified: run `adk-spec verify {cid}` again"]
+        return [_DRIFTED.format(cid=cid)]
     return []
+
+
+_DRIFTED = "the work changed since `{cid}` was verified: run `adk-spec verify {cid}` again"
+_UNCOMPARED = (
+    "The work of `{cid}`: it could not be compared with what was verified: a shallow clone, a repository not there, "
+    "or git or the config refused"
+)
+
+
+def merge_gate(state: ChangeState, stale: Sequence[str], drift: bool | None, *, record: str) -> list[Finding]:
+    """What a merge gate reads of a change beyond its own findings, each path in the change's folder: an approval its
+    files no longer match, and, where the tier owes a verification, work changed since it was verified (`drift`), or
+    that could not be compared with it (None). `record` names the change's state file. Never among the change's own
+    findings: there, `approve` would weigh a void approval's warning as blocking on the strict tier, and refuse the
+    approval that is its one remedy."""
+    found = []
+    if stale and state.status in ("approved", "verified"):
+        moved = [path for path in stale if path not in ("approval", "bases")]
+        void = _unready(state, stale)
+        found += [finding("change.approval-void", said, path=moved[0] if moved else record) for said in void]
+    if DEMANDS[state.tier].verified and state.status == "verified" and drift is not False:
+        code, said = ("change.drift-unknown", _UNCOMPARED) if drift is None else ("change.work-drifted", _DRIFTED)
+        found.append(finding(code, said.format(cid=state.id), path=record))
+    return found
 
 
 Actor = Literal["you", "run", "done"]
@@ -440,8 +471,28 @@ def _after_approval(
     if state.verification and not state.verification.tests_passed:
         why = f'`adk-spec verify {cid} --override "<why>"`'
         return Step("you", f"the tests failed: fix them and run `adk-spec verify {cid}`, or {why}")
-    last = "verify" if DEMANDS[state.tier].verified else "archive"
-    return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
+    if unmet := _unmet(state):
+        return unmet
+    return Step("you", f"implement tasks.md, then run `adk-spec {DEMANDS[state.tier].closing} {cid}`")
+
+
+#: How many unmet requirements the next step names; `reports/remaining.md` holds every one.
+UNMET_NAMED = 3
+
+
+def _unmet(state: ChangeState) -> Step | None:
+    """The step after a verification that did not show every requirement met: the work its report names. Found by
+    the research on the tools compared: the step said "implement tasks.md" whatever the verdicts said."""
+    held = state.verification
+    if held is None or held.override:  # verified by override: its remaining list was removed (the code review)
+        return None
+    unmet = sorted(req_id for req_id, said in held.verdicts.items() if said != "met")
+    if not unmet:
+        return None
+    more = len(unmet) - UNMET_NAMED
+    named = ", ".join(unmet[:UNMET_NAMED]) + (f" and {more} more" if more > 0 else "")
+    last = DEMANDS[state.tier].closing
+    return Step("you", f"{named} unmet: work from reports/remaining.md, then run `adk-spec {last} {state.id}`")
 
 
 def next_step(

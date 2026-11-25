@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import shutil
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,7 +24,7 @@ from pydantic import ValidationError
 
 from ..domain.brief_md import parse_brief
 from ..domain.check import coverage_of
-from ..domain.delta_md import parse_delta
+from ..domain.delta_md import changed_ids, parse_delta
 from ..domain.ids import REQ_ID, slug_problem
 from ..domain.lessons_md import TEMPLATE as LESSONS_TEMPLATE
 from ..domain.lessons_md import learned
@@ -46,6 +46,14 @@ LESSONS = "lessons.md"
 STATE, BRIEF, DESIGN, TASKS, SPEC_FILE = "change.json", "brief.md", "design.md", "tasks.md", "spec.md"
 #: The folder of a change's generated reports, which no approval fingerprints.
 REPORTS = "reports"
+#: The approver's view of a change, under its `reports/`.
+REVIEW = "review.md"
+#: What a verification left to do, under its `reports/`.
+REMAINING = "remaining.md"
+#: The lines `verify` proved each requirement with: in a change's folder, then beside each living spec.
+EVIDENCE = "evidence.md"
+#: An entry for each archived change, in `.spec/`.
+CHANGELOG = "changelog.md"
 #: What a reading of the repository's code found for a change. Supporting material: no approval covers it.
 CONTEXT = "context.md"
 #: The writer's lock, and the marker a run makes while it takes over a lock left behind: a run's own, ignored by git.
@@ -186,15 +194,28 @@ class Workspace:
                 specs[capability] = spec
         return specs, problems
 
-    def write_specs(self, specs: Mapping[str, Spec], *, state: ChangeState | None = None) -> None:
-        """Each spec written in its canonical form and, where given, a change's state beside them: every file, or
-        none, as far as the file system allows."""
-        files = {
+    def write_specs(
+        self, specs: Mapping[str, Spec], *, state: ChangeState | None = None, files: Mapping[str, str] | None = None
+    ) -> None:
+        """Each spec written in its canonical form and, where given, a change's state and other `files` beside them,
+        each by its path from `.spec/`: every file, or none, as far as the file system allows."""
+        written = {
             inside(self.home, SPECS, capability, SPEC_FILE): render_spec(spec) for capability, spec in specs.items()
         }
         if state is not None:
-            files[inside(self.home, CHANGES, state.id, STATE)] = state.model_dump_json(indent=2)
-        write_all(files)
+            written[inside(self.home, CHANGES, state.id, STATE)] = state.model_dump_json(indent=2)
+        for path, text in (files or {}).items():
+            written[inside(self.home, *path.split("/"))] = text
+        write_all(written)
+
+    def writable(self, *parts: str) -> bool:
+        """Whether `write_specs` may hold a file of `.spec/` by these parts: its path rules refuse a link, or a name
+        another file's differs from only by case. Found by the code review: one such stopped the whole archive."""
+        try:
+            inside(self.home, *parts)
+        except PathError:
+            return False
+        return True
 
     def _folder(self, change_id: str) -> Path:
         """The folder of an existing change."""
@@ -235,19 +256,38 @@ class Workspace:
 
         A delta is read as text, not parsed: one that is off its grammar, mid-edit, still holds the IDs it adds."""
         taken = {held.id for spec in specs.values() for held in (*spec.requirements, *spec.retired)}
+        for _change_id, text in self._open_deltas():
+            taken.update(spelled.group(0) for spelled in REQ_ID.finditer(text))
+        return taken
+
+    def touching(self, change_id: str) -> dict[str, list[str]]:
+        """Each requirement another open change modifies or removes, and those changes, sorted. A delta is read as
+        text, as `taken` reads it, but an ID counts only as a requirement's heading under the MODIFIED or REMOVED
+        section: one a statement mentions is not changed by it."""
+        held: dict[str, set[str]] = {}
+        for other, text in self._open_deltas():
+            if other != change_id:
+                for req_id in changed_ids(text):
+                    held.setdefault(req_id, set()).add(other)
+        return {req_id: sorted(others) for req_id, others in held.items()}
+
+    def _open_deltas(self) -> Iterator[tuple[str, str]]:
+        """Each delta of each change not archived, as text, with its change: one that is off its grammar, mid-edit,
+        still holds its IDs. A change whose state does not read is taken to be open, so its IDs are never handed out
+        twice; a delta that will not open stops the command (found by the code review: its IDs went free)."""
         for change_id in self.changes():
             folder = self._folder(change_id)
             try:
                 archived = self._state(folder, change_id).status == "archived"  # history grows, and is not read
-            except WorkspaceError:  # one that does not read is taken to be open: its IDs are never handed out twice
+            except WorkspaceError:
                 archived = False
             if archived:
                 continue
             for capability in self._holding(folder / SPECS, SPEC_FILE):
-                # One that will not open stops the command: found by the code review, its IDs went free.
-                text = (folder / SPECS / capability / SPEC_FILE).read_bytes().decode("utf-8", errors="replace")
-                taken.update(spelled.group(0) for spelled in REQ_ID.finditer(text))
-        return taken
+                yield (
+                    change_id,
+                    (folder / SPECS / capability / SPEC_FILE).read_bytes().decode("utf-8", errors="replace"),
+                )
 
     def _placed(self, folder: Path, files: Mapping[str, str]) -> dict[Path, str]:
         """Each of `files` by the path it takes in `folder`. `WorkspaceError` for a path that leaves it."""
@@ -298,6 +338,13 @@ class Workspace:
         """A generated report of a change, under its `reports/` folder: written whole, replacing the one before."""
         return self.write_into(change_id, {f"{REPORTS}/{name}": text})[0]
 
+    def drop(self, change_id: str, path: str) -> None:
+        """A file adk-spec generated in a change's folder removed, where there is one: what it said no longer holds.
+        One that will not go, held open on Windows, is left: found by the code review, its refusal lost a
+        verification paid for and not yet recorded."""
+        with contextlib.suppress(OSError):
+            (self._folder(change_id) / path).unlink(missing_ok=True)
+
     def learn(self, sent_back: Iterable[tuple[str, str]]) -> None:
         """Each of `sent_back`, a stage and a problem its gate sent back that the next try fixed, noted in the lessons
         file, which is made where there is none. Where nothing is learned, nothing is written."""
@@ -321,8 +368,14 @@ class Workspace:
         write_text(path, text)
         return path
 
-    def save_state(self, state: ChangeState) -> None:
-        write_text(inside(self.home, CHANGES, state.id, STATE), state.model_dump_json(indent=2))
+    def save_state(self, state: ChangeState, *, files: Mapping[str, str] | None = None) -> list[Path]:
+        """A change's state written, with `files` of its folder, by their paths there, as one set: all, or none as
+        far as the file system allows. The paths of `files` as written."""
+        texts = self._placed(self._folder(state.id), files) if files else {}
+        written = list(texts)
+        texts[inside(self.home, CHANGES, state.id, STATE)] = state.model_dump_json(indent=2)
+        write_all(texts)
+        return written
 
     def _state(self, folder: Path, change_id: str) -> ChangeState:
         """A change's state file alone. `WorkspaceError` where it does not read, or names another change."""

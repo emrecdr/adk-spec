@@ -22,6 +22,7 @@ import argparse
 import os
 import signal
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
 
@@ -80,12 +81,20 @@ def command(root: Path, *args: str) -> list[str]:
     return [sys.executable, "-P", "-m", "adk_spec", "--root", str(root), *args]
 
 
+def child_environment(argv: Sequence[str]) -> dict[str, str]:
+    """The environment a command runs in: this server's, unbuffered, and for `validate` without a CI run's variables.
+    Found by the code review: inside Copilot's cloud agent, which runs on GitHub Actions, `validate` annotated its tool
+    result and wrote the job's summary at each call; another command, `verify`'s run of the tests, keeps them."""
+    ci = ("GITHUB_ACTIONS", "GITHUB_STEP_SUMMARY") if argv[:1] == ["validate"] else ()
+    return {**{name: value for name, value in os.environ.items() if name not in ci}, "PYTHONUNBUFFERED": "1"}
+
+
 async def ran(root: Path, argv: list[str]) -> str:
     """What the command printed, standard out and standard error together, in the order written. A command that
     fails, or does not finish, raises `ToolError`, which the assistant reads as a failed call with all it said. A call
     the assistant cancels stops the command's whole tree: it would otherwise run on, and spend, for an hour."""
     try:  # unbuffered: what it printed is kept to a stop at the time limit, and in order with what it warned
-        process = started(command(root, *argv), env={**os.environ, "PYTHONUNBUFFERED": "1"}, cwd=root, merged=True)
+        process = started(command(root, *argv), env=child_environment(argv), cwd=root, merged=True)
     except OSError as exc:  # on Windows, a request past the command line's 32,767 characters, say
         raise ToolError(f"adk-spec could not be started: {exc}") from exc
     RUNNING.add(process)

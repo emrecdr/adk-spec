@@ -25,6 +25,10 @@ SEVERITY: dict[str, Severity] = {
     "syntax": "ERROR",
     "constitution.long": "WARNING",
     "spec.folder-mismatch": "ERROR",
+    # Notes, never a failure: a requirement none of whose kept evidence is in the code, and an evidence line that
+    # does not read. Raised once real use measures how often a refactor sets the first off (the owner, 2026-11-24).
+    "spec.evidence-gone": "INFO",
+    "spec.evidence-unreadable": "INFO",
     "spec.folder-bad-name": "ERROR",
     "spec.id-capability": "ERROR",
     "spec.id-duplicate": "ERROR",
@@ -61,6 +65,11 @@ SEVERITY: dict[str, Severity] = {
     "change.no-deltas": "ERROR",
     "change.missing-tasks": "WARNING",
     "change.missing-design": "WARNING",
+    # A merge gate's, made by `validate` alone and never among a change's own findings, which `approve` weighs: an
+    # approval its files no longer match, work changed since it was verified, and work that could not be compared.
+    "change.approval-void": "WARNING",
+    "change.work-drifted": "WARNING",
+    "change.drift-unknown": "INFO",
     "check.requirement-no-task": "ERROR",
     "check.task-unknown-requirement": "ERROR",
 }

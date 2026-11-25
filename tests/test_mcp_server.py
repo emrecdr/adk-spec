@@ -248,3 +248,23 @@ def test_the_skill_init_writes_keeps_the_rules_the_server_gives() -> None:
     for said in ("take minutes", "status", "strict"):
         assert said in INSTRUCTIONS and said in SKILL_TEXT, said
     assert "background" in SKILL_TEXT and "Then call verify" not in INSTRUCTIONS
+
+
+def test_a_command_the_server_runs_is_not_told_it_runs_in_github_actions(monkeypatch) -> None:
+    """Found by the code review: inside Copilot's cloud agent, which runs on GitHub Actions, `validate` annotated its
+    tool result and wrote the job's summary each time an assistant asked it."""
+    from adk_spec.interfaces.mcp_server import child_environment
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", "/tmp/summary.md")
+    held = child_environment(["validate"])
+    assert "GITHUB_ACTIONS" not in held and "GITHUB_STEP_SUMMARY" not in held and held["PYTHONUNBUFFERED"] == "1"
+
+
+def test_only_validate_is_kept_from_github_actions(monkeypatch) -> None:
+    """Found by the code review: `verify`'s run of the project's tests lost the CI variables its suite may read."""
+    from adk_spec.interfaces.mcp_server import child_environment
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    assert child_environment(["verify", "x"])["GITHUB_ACTIONS"] == "true"
+    assert "GITHUB_ACTIONS" not in child_environment(["validate"])

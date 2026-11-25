@@ -26,6 +26,25 @@ _REMOVED = re.compile(r"### (REQ-\S+): (\S.*)")
 _REASON = "Reason:"
 
 
+def changed_ids(text: str) -> list[str]:
+    """The IDs a delta's text heads under its MODIFIED and REMOVED sections, read line by line so that a delta off
+    its grammar, mid-edit, still holds them; one only a statement mentions is not changed, nor a line in a fence."""
+    lines = lines_of(normalise(text))
+    try:
+        fenced = fenced_lines(lines)
+    except GrammarError:  # a fence never closed, mid-edit: read as text with no fence
+        fenced = [False] * len(lines)
+    changed, section = [], ""
+    for at, line in enumerate(lines):
+        if not is_heading(lines, fenced, at):
+            continue
+        if line.startswith("## "):
+            section = line.strip()
+        elif section in (MODIFIED, REMOVED) and (headed := _REMOVED.match(line)):
+            changed.append(headed.group(1))
+    return changed
+
+
 def parse_delta(text: str) -> Delta:
     """The delta `text` holds. `GrammarError`, with its line, where the text is off the grammar."""
     lines = lines_of(normalise(text))

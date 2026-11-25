@@ -14,15 +14,18 @@ import json
 import os
 import re
 import sys
+from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib import metadata
 from pathlib import Path
 from typing import Any, NoReturn
 
 from ..domain.brief_md import assumption_count, parse_brief, render_brief
+from ..domain.changelog_md import changelog_entry, with_entry
 from ..domain.check import nameable, owed, removed, tasked
+from ..domain.ci_md import annotation_lines, step_summary
 from ..domain.context_md import (
     PARTIAL,
     PROFILE_HEADING,
@@ -34,6 +37,7 @@ from ..domain.context_md import (
 )
 from ..domain.convert import kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
+from ..domain.evidence_md import kept, render_evidence
 from ..domain.lifecycle import (
     DEMANDS,
     Step,
@@ -53,6 +57,7 @@ from ..domain.lifecycle import (
     edited_drafts,
     first_of_two,
     kept_bases,
+    merge_gate,
     missing_bases,
     model_holds,
     next_step,
@@ -64,13 +69,16 @@ from ..domain.lifecycle import (
 )
 from ..domain.merge import MergeError, apply_delta
 from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
+from ..domain.remaining import remaining, render_remaining
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
+from ..domain.review_md import render_review, review_said
 from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
+from ..domain.summary_md import render_summary
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import UNREAD, failed, finding, validate_spec
-from ..domain.verify import TestRun, Verdict, grounded
+from ..domain.verify import TestRun, Verdict, grounded, parts_of_diff
 from ..workspace.config import ConfigError
 from ..workspace.context import (
     CONSTITUTION_MAX_CHARS,
@@ -84,14 +92,20 @@ from ..workspace.context import (
     living_text,
     profile_text,
 )
-from ..workspace.files import NotTextError
+from ..workspace.evidence import evidence_findings, evidence_folded
+from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
+    CHANGELOG,
     CHANGES,
     CONSTITUTION,
+    EVIDENCE,
     LESSONS,
     PROFILE,
+    REMAINING,
+    REPORTS,
+    REVIEW,
     ROOT_NAME,
     SPEC_FILE,
     SPECS,
@@ -480,15 +494,21 @@ def _beside(workspace: Workspace, change: Any, living: dict[str, Spec]) -> dict[
 
 
 def _drifted(workspace: Workspace, state: ChangeState) -> bool:
+    """Whether the work changed since a change was verified, or cannot be compared with what was: either is not
+    what was judged. Asked of git for a verified change alone."""
+    return _drift(workspace, state) is not False
+
+
+def _drift(workspace: Workspace, state: ChangeState) -> bool | None:
     """Whether the work changed since a change was verified: its diff against the same commit is no longer the one
-    that was judged. True too where the two cannot be compared. Asked of git for a verified change alone."""
+    that was judged. None where the two cannot be compared: a repository gone, or a commit a shallow clone lacks."""
     held = state.verification
     if state.status != "verified" or held is None:
         return False
     try:
         work = _sources(workspace, state.repositories).work(held.base, held.bases)
-    except GitError, SourceError:  # a repository gone, or no longer readable beside this one: not what was judged
-        return True
+    except GitError, SourceError:
+        return None
     # Or the fingerprint an older adk-spec recorded, of the diff as a stage is shown it: found by the code review,
     # every change it verified read as drifted after the upgrade.
     return held.diff != work.fingerprint and held.diff != sha256_of(work.text)
@@ -510,9 +530,43 @@ def _say_next(
     """The line every command that changes a change ends on: what comes next, read from the files as they now are.
     Without `drift`, git is not asked whether the work moved: `verify` has just measured it. A `plan` the step names
     is said as `plan` gives it, with the flags this run's plan goes on with: found by the cleanup review, a second
-    wording of the step named a plan its holds refused."""
-    phrase = _assessed(workspace, change_id, living, drift=drift).step.phrase
+    wording of the step named a plan its holds refused. Where no approval covers the change's files, a person reads
+    it before approving: its view, `reports/review.md`, is written again first."""
+    assessed = _assessed(workspace, change_id, living, drift=drift)
+    deltas = assessed.loaded.change.deltas
+    # A draft, a strict one approved once among them, or an approved change edited since, owes an approval: its view
+    # is written for the person who gives it. Found by the code review: a second approver read the view of before.
+    owed = assessed.stale or assessed.state.status == "draft"
+    if owed and deltas and (view := _view_written(workspace, change_id, deltas, living)):
+        shown, overlaps = view
+        print(f"review    {shown}: {review_said(deltas, overlaps)}")
+    phrase = assessed.step.phrase
     print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
+
+
+def _view_written(
+    workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]
+) -> tuple[str, dict[str, list[str]]] | None:
+    """The approver's view of a change written again: where it is, as shown, and the overlaps it names. None where it
+    cannot be written, a file that will not open or a folder the path rules refuse: the view is an aid, and found by
+    the code review, its fault failed commands whose work was done."""
+    overlaps = _overlaps(workspace, change_id, deltas)
+    try:
+        path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps))
+    except OSError, WorkspaceError:
+        return None
+    return workspace.shown(path), overlaps
+
+
+def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
+    """Each requirement this change modifies or removes that another open change modifies or removes too. Nothing
+    where another change's delta will not open: the view is the approver's aid, and `archive` still stops."""
+    own = {req.id for delta in deltas.values() for req in (*delta.modified, *delta.removed)}
+    try:
+        touched = workspace.touching(change_id)
+    except OSError, WorkspaceError:
+        return {}
+    return {req_id: others for req_id, others in touched.items() if req_id in own}
 
 
 def _of_specs(workspace: Workspace) -> tuple[dict[str, Spec], list[Finding]]:
@@ -551,16 +605,60 @@ def _validate(args: argparse.Namespace) -> int:
             found.append(finding("change.unreadable", str(exc), path=unread))
             continue
         if state.status != "archived":  # folded in, an archived change's delta has no base now: nothing to check
-            found += _assessed(workspace, change_id, living, drift=False).findings
+            assessed = _assessed(workspace, change_id, living, drift=False)
+            found += assessed.findings + _gated(workspace, assessed)
+    found += evidence_findings(workspace, living)  # notes: a requirement whose proving lines are gone from the code
     stops = failed(found, strict=args.strict)
     if args.json:
         print(json.dumps({"findings": [held.model_dump() for held in found], "failed": stops}, indent=2))
         return EXIT_FINDINGS if stops else EXIT_OK
+    github = os.environ.get("GITHUB_ACTIONS") == "true"
+    # GitHub reads no command in the plain lines: found by the code review, a path holding a line break could have it
+    # read one, and switch the annotations off.
+    token = os.urandom(16).hex()
+    if github:
+        print(f"::stop-commands::{token}")
     _printed(found)
     errors = sum(held.severity == "ERROR" for held in found)
     warnings = sum(held.severity == "WARNING" for held in found)
     print(f"{errors} error{'' if errors == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}")
+    if github:
+        print(f"::{token}::")
+        _annotated(workspace, found, failed=stops)
     return EXIT_FINDINGS if stops else EXIT_OK
+
+
+def _gated(workspace: Workspace, assessed: Assessed) -> list[Finding]:
+    """What a merge gate reads of a change beyond its own findings, `lifecycle.merge_gate`, pathed from the root."""
+    state = assessed.state
+    try:
+        drift = _drift(workspace, state)
+    except ConfigError, NotTextError, OSError:  # a config that does not read: the gate cannot compare, goes on
+        drift = None
+    found = merge_gate(state, assessed.stale, drift, record=STATE_FILE)
+    return _from_root(state.id, found)
+
+
+def _from_the_top(workspace: Workspace, found: Sequence[Finding]) -> list[Finding]:
+    """Findings with their paths from the checkout's top, as GitHub reads an annotation's: found by the code review,
+    a `.spec/` below the top was annotated on files GitHub could not find."""
+    root = workspace.root.resolve()
+    top = Path(os.environ.get("GITHUB_WORKSPACE") or root).resolve()
+    if root == top or not root.is_relative_to(top):  # at the top, or not under it: the paths are left as they are
+        return list(found)
+    below = root.relative_to(top).as_posix()
+    return [held.model_copy(update={"path": f"{below}/{held.path}"}) if held.path else held for held in found]
+
+
+def _annotated(workspace: Workspace, found: Sequence[Finding], *, failed: bool) -> None:
+    """In GitHub Actions: each finding as an annotation on its line, and the summary on the run's page, where the
+    runner names a file for it. A summary that cannot be written is left out: the annotations are said."""
+    found = _from_the_top(workspace, found)
+    for line in annotation_lines(found):
+        print(line)
+    if target := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with contextlib.suppress(OSError):
+            append_text(Path(target), step_summary(found, failed=failed))
 
 
 #: How `status` groups changes: by who makes the next step happen.
@@ -593,7 +691,18 @@ def _status(args: argparse.Namespace) -> int:
             print(("\n" if at else "") + heading)
             for row in held:
                 print(f"  {row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
+    if not args.json:
+        _suspects_said(workspace, living)
     return EXIT_OK
+
+
+def _suspects_said(workspace: Workspace, living: Mapping[str, Spec]) -> None:
+    """One line for each capability holding a requirement whose evidence is gone from the code: `validate` names
+    them."""
+    gone = Counter(held.path for held in evidence_findings(workspace, living) if held.code == "spec.evidence-gone")
+    for path, count in sorted(gone.items()):
+        capability = Path(path or "").parent.name
+        print(f"{capability}: {count} requirement{'' if count == 1 else 's'} suspect ({PROG} validate lists them)")
 
 
 def _rebase(args: argparse.Namespace) -> int:
@@ -624,8 +733,7 @@ def _rebase(args: argparse.Namespace) -> int:
     else:
         workspace.save_state(reopened(state, bases=held))
         if state.approval is not None:
-            print(f"the approval is void: read what was stale, then run `{PROG} approve {args.id}` again")
-            return EXIT_OK
+            print("the approval is void: the bases were recorded anew")
     _say_next(workspace, args.id, living)  # it ends on what comes next, as every command that moves a change does
     return EXIT_OK
 
@@ -725,7 +833,12 @@ def _approve(args: argparse.Namespace) -> int:
     held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=commit, others=began)
     edited = edited_drafts(assessed.state, files)
     workspace.save_state(held)
+    if held.verification is None:  # what a verification said and left to do was of other files, or there was none
+        _aids_written(workspace, args.id, dict.fromkeys((REMAINING, "summary.md")))
     _said_approved(held, by, len(files))
+    if overlaps := _overlaps(workspace, args.id, assessed.loaded.change.deltas):
+        named = "; ".join(f"{req_id} ({', '.join(others)})" for req_id, others in sorted(overlaps.items()))
+        print(f"note      also changed by another open change: {named}. The second to archive is stopped: rework it")
     if edited:
         print(
             f"lessons   {', '.join(edited)} edited since drafted: say what you corrected in one line in "
@@ -813,17 +926,39 @@ def _archive(args: argparse.Namespace) -> int:
             refused += [held.model_copy(update={"path": path}) for held in exc.findings]
     if refused:
         _printed(refused)
-        print(f"{PROG}: `{args.id}` is not archived, and no file was written", file=sys.stderr)
+        print(f"{PROG}: `{args.id}` is not archived, and no spec was written", file=sys.stderr)
         if any(held.code == "delta.base-stale" for held in refused):
+            view = _view_written(workspace, args.id, loaded.change.deltas, living)
+            shown = view[0] if view else "the current requirement"
             print(
-                f"{PROG}: the living spec changed after this delta was based on it: read the current requirement, "
-                f"update the delta, then run `{PROG} rebase {args.id}` and approve again",
+                f"{PROG}: the living spec changed after this delta was based on it: read {shown}, update the delta, "
+                f"then run `{PROG} rebase {args.id}` and approve again",
                 file=sys.stderr,
             )
         return EXIT_FINDINGS
-    workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}))
+    # The lines that proved each requirement, beside its living spec: the next change and `validate` read them.
+    files, left = evidence_folded(workspace, state, loaded.change.deltas)
+    if (logged := _logged(workspace, args.id, loaded.change.deltas)) is None:
+        left.append(workspace.shown(workspace.home / CHANGELOG))
+    else:
+        files[CHANGELOG] = logged
+    workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}), files=files)
     print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
+    for shown in left:
+        print(f"kept      {shown}: it would not read or be written, a link or not UTF-8: nothing was added")
     return EXIT_OK
+
+
+def _logged(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> str | None:
+    """The changelog with this change's entry first; None where the one there does not read, which is left as it is."""
+    path = workspace.home / CHANGELOG
+    if not workspace.writable(CHANGELOG):  # a link the archive's write would refuse, and stop on
+        return None
+    try:
+        text = read_text(path) if path.is_file() else None
+    except NotTextError, OSError:
+        return None
+    return with_entry(text, changelog_entry(change_id, date.today().isoformat(), deltas))  # the person's day
 
 
 # The commands that call a model, or log in to one.
@@ -1648,15 +1783,44 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     )
     reason = after.verification.override if after.verification else None
     report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases, tests=runs)
-    path = workspace.write_report(args.id, "verify.md", report)
-    workspace.save_state(after)
+    # The report, the lines that proved each requirement and the record, written as one set: found by the code
+    # review, written in turn, a failure between two of them lost a verification paid for, or left the record with
+    # an earlier one's evidence, which the archive then took out of the living spec with nothing put in.
+    files = {f"{REPORTS}/verify.md": report}
+    if proofs := kept(verdicts, added=added, change=args.id, at=at, repositories=state.repositories):
+        files[EVIDENCE] = render_evidence(args.id, proofs)
+    wrote = workspace.save_state(after, files=files)[:1]
+    if not proofs:  # another verification's, which the archive ignores, whether or not it goes
+        workspace.drop(args.id, EVIDENCE)
+    # What is left, where the next step points, and what a reviewer of the pull request reads, an override's reason
+    # with it: aids each, written after the record, so neither loses it.
+    touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
+    left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []
+    aids = {
+        "summary.md": render_summary(change, said, ran, after.approval, override=reason),
+        REMAINING: render_remaining(args.id, left, last=DEMANDS[state.tier].closing) if left else None,
+    }
+    wrote += _aids_written(workspace, args.id, aids)
     for one in verdicts:
         print(f"{one.verdict:<8}  {one.id}  {one.reason}")
-    print(f"wrote     {workspace.shown(path)}")
+    print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
     _say_next(workspace, args.id, specs, drift=False)  # found by the fourth audit: the diff was made a third time
     return EXIT_OK if after.status == "verified" else EXIT_FINDINGS
+
+
+def _aids_written(workspace: Workspace, change_id: str, aids: Mapping[str, str | None]) -> list[Path]:
+    """Each report of `aids` written under the change's `reports/`, or removed where its text is None; one that
+    cannot be written is left out of what is said written, as the command's record is saved already."""
+    wrote = []
+    for name, text in aids.items():
+        with contextlib.suppress(OSError, WorkspaceError):
+            if text is None:
+                workspace.drop(change_id, f"{REPORTS}/{name}")
+            else:
+                wrote.append(workspace.write_report(change_id, name, text))
+    return wrote
 
 
 def _tested_work(

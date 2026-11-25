@@ -338,6 +338,12 @@ a reading, such as two files that contradict each other. A blocking finding stop
 again, or approve with `--override "<your reason>"`, which is recorded. The approval records a fingerprint of each
 file: any later edit voids it, ticking a task box does not.
 
+Before approving, read `reports/review.md`, which every command that leaves a draft for you to read writes again
+(its `review` line names it): each requirement the change adds, whole; each it removes, with the reason; and each it
+modifies, as a diff against the living spec. It also names any other open change that modifies or removes the same
+requirement, as `approve` does in a `note` line: whichever of the two is archived second is stopped, to be reworked
+onto the first. Where `archive` stops on a living spec that moved, it writes the view again to show what.
+
 ### 4. Implement
 
 Work through `tasks.md` yourself or with your coding assistant, ticking each box (`- [x]`) as it is done. For
@@ -366,6 +372,15 @@ in the diff; anything else is `unclear`, so missing or invented evidence never r
 keeps the change from being verified. Run `verify` as often as you like while you work; `--override "<your reason>"`
 verifies a change you judge done although a requirement is not shown met.
 
+Where a requirement is not shown met, `verify` also writes `reports/remaining.md`, and the `next` line names the
+requirements and the file. For each requirement it lists, first, what code found: a task ticked although its
+requirement is unmet, and the files a task named that the work never touched. Then it gives the model's reason,
+marked as words that code has not checked. Point your coding assistant at it, then verify again. The file is removed
+once every requirement is met.
+
+Each run also writes `reports/summary.md`, Markdown to paste into the pull request: why the change is made, the
+requirements it adds, modifies and removes, each verdict, the tests, and who approved.
+
 ### 6. Archive
 
 ```shell
@@ -377,6 +392,15 @@ archived `sign-in-with-a-passkey`: folded into auth
 ```
 
 `.spec/specs/auth/spec.md` now holds `REQ-AUTH-004`. Commit the change with the code it describes.
+
+`archive` also keeps the lines `verify` proved each requirement with, in `.spec/specs/auth/evidence.md`, one line
+each. Later, `validate` and `status` look for those lines in the code. A requirement none of whose lines is found,
+in its file or anywhere else in the repository, is noted as suspect: a refactor may have broken it. This is a note
+only, and it never fails CI. To clear it, verify a change that keeps the requirement, or delete its lines in a
+reviewed commit. A line from another repository is checked only where that repository is there.
+
+It also puts an entry first in `.spec/changelog.md`: the change and the day, then each requirement it added,
+modified and removed. Anything you write below the heading is kept as it is.
 
 ## Use cases
 
@@ -541,6 +565,30 @@ on an error (`--strict`: on a warning too). In a CI job where adk-spec is instal
 ```shell
 adk-spec validate --strict
 ```
+
+It also reads whether an approved change still stands as approved, and a verified one as verified. A change edited
+after its approval is a warning, `change.approval-void`, and so is a verified change whose work changed since,
+`change.work-drifted`, where its tier owes a verification, so `--strict` fails on both. A change that a revision or
+`rebase` sent back to a draft reads as a draft, which the gate does not hold. Work that cannot be compared, in a clone without the history, is a note. In GitHub
+Actions, `validate` also writes each finding as an annotation on its line, and a summary on the run's page. A
+workflow that checks out the pull request's own commit, with its history:
+
+```yaml
+on: pull_request
+jobs:
+  specs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}  # the merge with the target would read as drifted work
+          fetch-depth: 0  # the history, to compare the work with what was verified
+      - uses: astral-sh/setup-uv@v6
+      - run: uv tool install <where your team keeps adk-spec>  # it is not on PyPI
+      - run: adk-spec validate --strict
+```
+
+Archive each change before its pull request merges, as above, and the gate reads only what is still open.
 
 ### Where am I?
 
