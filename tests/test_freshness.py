@@ -6,8 +6,8 @@ import pytest
 from conftest import on_the_fake, repository, run, seeded
 
 from adk_spec.domain.context_md import quoted_statements, render_context
-from adk_spec.domain.convert import QUOTE_SHOWN_CHARS
 from adk_spec.domain.model import Statement
+from adk_spec.domain.secrets import scrub_lines
 from adk_spec.workspace.context import PROFILE_MAX_CHARS
 from adk_spec.workspace.evidence import profile_gone, quote_holds
 from adk_spec.workspace.files import write_text
@@ -122,14 +122,6 @@ def test_propose_says_it_before_its_first_call(tmp_path, capsys) -> None:
     assert capsys.readouterr().out.splitlines()[0].startswith(LINE), "said before anything is spent"
 
 
-def test_a_quote_a_secret_was_scrubbed_from_is_not_counted(tmp_path) -> None:
-    """Found by phase 17's code review: the reading quotes scrubbed text, so a quote holding a stand-in for a secret
-    is never in the code, and was counted gone on every `status`, through any refresh."""
-    profile = PROFILE.replace("return password_check(user)", 'URL = "postgres://app:[REDACTED:password]@db/app"')
-    ws = profiled(tmp_path, profile=profile)
-    assert profile_gone(ws) == (0, 1)
-
-
 def test_a_statement_is_read_to_its_own_code_span_and_with_no_note() -> None:
     """Found by phase 17's code review: a note mentioning `b.py:10` took the path to the note's span, and a statement
     whose note was empty, its space stripped, or followed by a tab, was passed over."""
@@ -161,13 +153,13 @@ def test_a_profile_past_the_stages_cap_is_checked_whole(tmp_path) -> None:
     assert profile_gone(ws) == (0, 1)
 
 
-def test_a_cut_stand_in_a_nul_and_a_twice_quoted_line_count_as_nothing_more(tmp_path, capsys) -> None:
-    """Found by phase 17's fourth review: a quote cut inside a secret's stand-in read as gone; a NUL in a quote
-    stopped `status` with a traceback; one line quoted by two statements counted twice; one quote was "quotes"."""
-    cut = ("v = 1; " * 40)[: QUOTE_SHOWN_CHARS - len(" [REDA")] + " [REDA"
-    profile = PROFILE.replace("return password_check(user)", cut)
-    profile += "- `src/old.py:1` The helper again.\n  > def start_session(user):\n"
-    ws = profiled(tmp_path, profile=profile)
+def test_a_nul_and_a_twice_quoted_line_count_as_nothing_more(tmp_path, capsys) -> None:
+    """Found by phase 17's fourth review: a NUL in a quote stopped `status` with a traceback; one line quoted by two
+    statements counted twice; one quote was "quotes"."""
+    twice = "- `src/old.py:1` The session helper.\n  > def start_session(user):\n"
+    ws = profiled(
+        tmp_path, profile="# Profile\n\n## Conventions\n\n" + twice + twice.replace("session helper", "helper")
+    )
     assert quote_holds(tmp_path, ".", "src/app.py", "zzzzzzzz\x00yyyy", ()) is False, "no NUL reaches git"
     write_text(tmp_path / "src/old.py", "def begin(user):\n")
     assert profile_gone(ws) == (1, 1)
@@ -176,10 +168,14 @@ def test_a_cut_stand_in_a_nul_and_a_twice_quoted_line_count_as_nothing_more(tmp_
     assert "profile: 1 of 1 quote no longer in the code" in capsys.readouterr().out
 
 
-def test_a_quote_cut_anywhere_in_a_stand_in_is_unknown() -> None:
-    """Found by phase 17's last review: a search hit is cut at its own length, so a quote can end, or start, inside
-    `[REDACTED:...]` though shorter than a statement's cut; such a quote is never in the code as it stands."""
-    from adk_spec.domain.evidence_md import scrubbed
-
-    assert scrubbed('; API = "[REDAC') and scrubbed('ACTED:github_token]" + x') and scrubbed('K = "[REDACTED:x]"')
-    assert not scrubbed("items = [") and not scrubbed("def start_session(user):")
+def test_a_quote_a_secret_was_scrubbed_from_holds_while_its_line_stands(tmp_path) -> None:
+    """Found by phase 17's reviews: a reading quotes scrubbed text, whole or cut through a secret's stand-in, and such a
+    quote read as gone, or was guessed unknown by its shape. It is looked for in the file as a reading is shown it."""
+    key = "AKIA" + "IOSFODNN7EXAMPLE"
+    shown = scrub_lines(f'KEY = "{key}"')[0]
+    quotes = (shown, shown[: shown.index("[REDA") + 5], shown[shown.index("ACTED") :])
+    entries = "".join(f"- `src/conf.py:1` Note {n}.\n  > {quote}\n" for n, quote in enumerate(quotes))
+    ws = profiled(tmp_path, files={**FILES, "src/conf.py": f'KEY = "{key}"\n'}, profile="# Profile\n\n" + entries)
+    assert profile_gone(ws) == (0, 3)
+    write_text(tmp_path / "src/conf.py", "KEY = None\n")
+    assert profile_gone(ws) == (3, 3)

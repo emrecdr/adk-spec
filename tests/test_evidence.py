@@ -311,8 +311,12 @@ def test_a_change_modifying_a_requirement_with_no_proof_takes_its_old_lines_out(
     assert [one.req for _line, one in read] == ["REQ-AUTH-001"]
 
 
-def test_a_quote_cut_inside_a_stand_in_is_no_evidence() -> None:
-    """Found by phase 17's last review: a `met` quote ending inside `[REDACTED:...]` was kept, and its requirement read
-    as suspect for ever, the stand-in never being in the code."""
-    cut = Verdict("REQ-AUTH-004", "met", (("src/auth.py", 'KEY = "[REDACTE'),), "Kept the key.")
-    assert kept([cut], added=frozenset({"REQ-AUTH-004"}), change="passkeys", at=AT, repositories={}) == []
+def test_a_quote_cut_inside_a_stand_in_holds_while_its_line_stands(tmp_path) -> None:
+    """Found by phase 17's reviews: evidence quoted from a scrubbed diff, cut through `[REDACTED:...]`, read as suspect
+    for ever, the stand-in never being in the code as it stands; it is looked for as the diff was shown too."""
+    from adk_spec.workspace.evidence import holds
+
+    key = "AKIA" + "IOSFODNN7EXAMPLE"
+    write_text(tmp_path / "src/conf.py", f'KEY = "{key}"\n')
+    cut = proof(quote='KEY = "[REDACTE', path="src/conf.py")
+    assert holds(tmp_path, cut, ()) is True
