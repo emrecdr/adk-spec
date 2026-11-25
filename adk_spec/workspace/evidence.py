@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
+from ..domain.context_md import quoted_statements
 from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
 from ..domain.text import quoted_at
@@ -13,7 +14,7 @@ from ..domain.validate import finding
 from .config import ConfigError
 from .files import NotTextError, read_text
 from .git import GitError, grep
-from .layout import CHANGES, EVIDENCE, SPECS, Workspace
+from .layout import CHANGES, EVIDENCE, PROFILE, SPECS, Workspace
 
 #: How many of the files a quote's search names are read whole to find it.
 ELSEWHERE_MAX = 20
@@ -25,30 +26,35 @@ def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
     `root` is the folder that holds `.spec/`; `exclude`, the person's patterns, apply to its own repository."""
     own = proof.repository == "."
     folder = root if own else root / proof.repository
-    if not _within(folder, proof, own=own):
+    if not _within(folder, proof.repository, proof.path, own=own):
         return None
-    if _found(folder / proof.path, proof.quote):  # read first: a quote that holds asks git nothing
+    return _quoted(folder, proof.path, proof.quote, exclude if own else (), trust=own)
+
+
+def _quoted(folder: Path, path: str, quote: str, exclude: Sequence[str], *, trust: bool) -> bool | None:
+    """Whether `quote` is in `path` of the repository at `folder`, or else in another of its files; None where git
+    refuses the search, outside a repository say: not looked for."""
+    if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
-    try:  # outside a repository, git refuses the search: not looked for
-        term = max(proof.quote.split(), key=len, default="")  # a fixed string git finds on one line
-        hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
+    try:
+        term = max(quote.split(), key=len, default="")  # a fixed string git finds on one line
+        hits = grep(folder, term, exclude=exclude, trust=trust) if term else []
     except GitError:
         return None
     named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]
-    return any(_found(folder / path, proof.quote) for path in named)
+    return any(_found(folder / path, quote) for path in named)
 
 
-def _within(folder: Path, proof: Proof, *, own: bool) -> bool:
-    """Whether a proof names a file of a repository that is there: its path relative and inside it, and another
+def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
+    """Whether a quote names a file of a repository that is there: its path relative and inside it, and another
     repository one's top folder. Found by the code review: a line edited to `..` or an absolute path was read wherever
     it pointed, so in CI a pull request could learn from a note whether a string is in a file on the runner."""
-    named = (proof.repository, proof.path)
     # A root or a drive on either system, `C:x` too, or a NUL that no file system takes.
-    if any(PureWindowsPath(part).anchor or "\x00" in part for part in named):
+    if any(PureWindowsPath(part).anchor or "\x00" in part for part in (repository, path)):
         return False
     if not folder.is_dir() or (not own and not (folder / ".git").exists()):
         return False
-    return (folder / proof.path).resolve().is_relative_to(folder.resolve())
+    return (folder / path).resolve().is_relative_to(folder.resolve())
 
 
 def _found(path: Path, quote: str) -> bool:
@@ -86,6 +92,30 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
         if kept := [(at, one) for at, one in read if one.req in held]:
             found += suspects(kept, lambda one: holds(workspace.root, one, exclude), path=shown)
     return found
+
+
+#: The schemes of an installed library's paths, which a reading may open and the repository does not hold.
+LIBRARIES = ("python:", "node:")
+
+
+def profile_gone(workspace: Workspace) -> tuple[int, int] | None:
+    """Of the quotes `.spec/profile.md` holds, how many are no longer in the code, and how many were looked for; None
+    where there is no profile that reads, or none of its quotes could be looked for. Phase 17: every drafting stage
+    reads the profile, and nothing else checks it. A library's quote is not looked for, nor one git cannot search for
+    outside its file: unknown is not gone."""
+    path = workspace.home / PROFILE
+    try:
+        text = read_text(path) if path.is_file() else ""
+    except NotTextError, OSError:
+        return None
+    exclude, root = _excluded(workspace), workspace.root
+    looked = [
+        _quoted(root, named, quote, exclude, trust=True) if _within(root, ".", named, own=True) else None
+        for named, quote in quoted_statements(text)
+        if not named.startswith(LIBRARIES)
+    ]
+    held = [one for one in looked if one is not None]
+    return (held.count(False), len(held)) if held else None
 
 
 def _excluded(workspace: Workspace) -> tuple[str, ...]:

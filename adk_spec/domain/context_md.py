@@ -101,6 +101,26 @@ def _left_out(dropped: int, disputed: int) -> str:
     return f"Left out: {'; '.join(said)}." if said else ""
 
 
+#: A statement's line as `render_context` writes it: its file and line in a code span, then its note.
+_STATEMENT = re.compile(r"- `(?P<path>.+):[0-9]+` ")
+
+
+def quoted_statements(text: str) -> list[tuple[str, str]]:
+    """Each statement of a file `render_context` wrote, as its path and its quote: the `  > ` line under its own.
+    Read leniently, as a person may edit the file: any other line, and a statement with no quote, is passed over."""
+    found: list[tuple[str, str]] = []
+    path: str | None = None
+    for line in text.split("\n"):
+        if held := _STATEMENT.match(line):
+            path = held.group("path")
+        elif path is not None and line.startswith("  > "):
+            found.append((path, line[4:]))
+            path = None
+        elif not line.startswith("  in: "):
+            path = None
+    return found
+
+
 def unknown_count(text: str) -> int:
     """How many things a `context.md` lists as still unknown: its lines under that heading."""
     count, under = 0, False

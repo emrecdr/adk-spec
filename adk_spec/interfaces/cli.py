@@ -93,7 +93,7 @@ from ..workspace.context import (
     living_text,
     profile_text,
 )
-from ..workspace.evidence import evidence_findings, evidence_folded
+from ..workspace.evidence import evidence_findings, evidence_folded, profile_gone
 from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
@@ -695,6 +695,7 @@ def _status(args: argparse.Namespace) -> int:
                 print(f"  {row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
     if not args.json:
         _suspects_said(workspace, living)
+        _profile_said(workspace)
     return EXIT_OK
 
 
@@ -705,6 +706,13 @@ def _suspects_said(workspace: Workspace, living: Mapping[str, Spec]) -> None:
     for path, count in sorted(gone.items()):
         capability = Path(path or "").parent.name
         print(f"{capability}: {count} requirement{'' if count == 1 else 's'} suspect ({PROG} validate lists them)")
+
+
+def _profile_said(workspace: Workspace) -> None:
+    """One line where quotes of `.spec/profile.md`, which every drafting stage reads, are no longer in the code."""
+    if (counted := profile_gone(workspace)) and counted[0]:
+        gone, looked = counted
+        print(f"profile: {gone} of {looked} quotes no longer in the code (`{PROG} init --refresh` reads it again)")
 
 
 def _rebase(args: argparse.Namespace) -> int:
@@ -1128,6 +1136,7 @@ def _propose(args: argparse.Namespace, workspace: Workspace) -> int:
     drafting = ("brief", "deltas", "design", "tasks", *(() if args.no_explore else READING))
     if why := require_ready(roles=drafting if args.tier else ("triage", *drafting)):
         raise UsageError(why)
+    _profile_said(workspace)  # what every stage of it reads, said before anything is spent
     return _proposed(args, workspace, change)
 
 
