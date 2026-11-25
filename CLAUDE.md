@@ -75,8 +75,11 @@ Rules that span files and are easy to break:
   `stages/__init__.py` (`instruction()`, shared sections, the retry findings just before the ending).
 
 `.spec/` in a repository using adk-spec: `config.toml`, `constitution.md`, `profile.md` (written by `init`),
-`lessons.md`, `specs/<capability>/spec.md` (living specs), `changes/<id>/` (`brief.md`, `specs/<capability>/spec.md`
-deltas, `design.md`, `tasks.md`, `context.md`, `reports/`, `change.json`), `runs/` (recordings, git-ignored).
+`lessons.md`, `changelog.md` (an entry per archive), `specs/<capability>/spec.md` (living specs) and `evidence.md`
+beside it (the lines `verify` proved each requirement with, one entry a line, folded in at archive), `changes/<id>/`
+(`brief.md`, `specs/<capability>/spec.md` deltas, `design.md`, `tasks.md`, `context.md`, `evidence.md`, `reports/`
+with `review.md`, `verify.md`, `remaining.md`, `summary.md`, `change.json`), `runs/` (recordings, git-ignored). None
+of the evidence, changelog or report files enters an approval's fingerprints.
 
 ## Working conventions
 

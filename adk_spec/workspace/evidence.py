@@ -4,7 +4,7 @@ against the code, so that a requirement whose proving lines are gone from it is 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
@@ -42,9 +42,11 @@ def _within(folder: Path, proof: Proof, *, own: bool) -> bool:
     """Whether a proof names a file of a repository that is there: its path relative and inside it, and another
     repository one's top folder. Found by the code review: a line edited to `..` or an absolute path was read wherever
     it pointed, so in CI a pull request could learn from a note whether a string is in a file on the runner."""
-    if Path(proof.repository).is_absolute() or Path(proof.path).is_absolute() or not folder.is_dir():
+    named = (proof.repository, proof.path)
+    # A root or a drive on either system, `C:x` too, or a NUL that no file system takes.
+    if any(PureWindowsPath(part).anchor or PurePosixPath(part).anchor or "\x00" in part for part in named):
         return False
-    if not own and not (folder / ".git").exists():
+    if not folder.is_dir() or (not own and not (folder / ".git").exists()):
         return False
     return (folder / proof.path).resolve().is_relative_to(folder.resolve())
 
@@ -98,23 +100,23 @@ def evidence_folded(
     evidence files it leaves as they are because they do not read. The change's evidence counts only where it is of
     the verification the change records: one written by a verification since superseded is left out."""
     proofs: list[Proof] = []
-    # Of a verification made since the approval: found by the code review, a lean change revised after its verify and
-    # approved again, as lean owes none, folded the quotes that proved its earlier version.
-    held = state.verification
-    if held and not (state.approval and held.at < state.approval.at):
+    if held := state.verification:  # an approval of other files drops it: none of an earlier version is folded
         mine, _unread = _read(workspace.home / CHANGES / state.id / EVIDENCE)
         proofs = [one for _line, one in mine or [] if one.at == held.at]
     files: dict[str, str] = {}
     left: list[str] = []
     for capability, delta in sorted(deltas.items()):
+        replaced = frozenset(req.id for req in (*delta.added, *delta.modified))
+        removed = frozenset(gone.id for gone in delta.removed)
+        if not replaced & {one.req for one in proofs} and not removed:
+            continue  # nothing of this change to add or take out
         path = workspace.home / SPECS / capability / EVIDENCE
         living, unread = _read(path) if workspace.writable(SPECS, capability, EVIDENCE) else (None, [])
         if living is None or unread:
             left.append(workspace.shown(path))
             continue
-        replaced = frozenset(req.id for req in (*delta.added, *delta.modified))
         before = [one for _line, one in living]
-        after = folded(before, proofs, replaced=replaced, removed=frozenset(gone.id for gone in delta.removed))
+        after = folded(before, proofs, replaced=replaced, removed=removed)
         if after != before:
             files[f"{SPECS}/{capability}/{EVIDENCE}"] = render_evidence(capability, after)
     return files, left

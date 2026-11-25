@@ -138,3 +138,24 @@ def test_annotations_name_their_file_from_the_repositorys_top(tmp_path, capsys, 
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     assert f"::warning file=service/{BRIEF}," in validated(tmp_path / "service", capsys)[1]
+
+
+def test_a_config_fault_is_said_as_itself_at_archive(tmp_path, capsys) -> None:
+    """Found by the code review: read as drift, a config that does not read had archive ask for a verify again."""
+    verified_in_a_repository(tmp_path)
+    write_text(tmp_path / ".spec/config.toml", "this is = = not toml\n")
+    capsys.readouterr()
+    assert run(tmp_path, "archive", "passkeys") != 0
+    assert "the work changed" not in capsys.readouterr().err
+
+
+def test_the_summary_names_its_files_from_the_repositorys_top_as_the_annotations_do(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    voided(tmp_path / "service")
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    validated(tmp_path / "service", capsys)
+    assert f"service/{BRIEF}" in read_text(summary)

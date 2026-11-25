@@ -260,3 +260,48 @@ def test_evidence_of_a_verification_older_than_the_approval_is_not_folded(tmp_pa
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
     assert run(tmp_path, "archive", "passkeys") == 0
     assert not (tmp_path / LIVING_EVIDENCE).exists()
+
+
+@pytest.mark.parametrize(("folder", "path"), [(".", "src/a\x00.py"), (".", "C:x.py"), ("C:/elsewhere", "x.py")])
+def test_an_evidence_line_with_a_nul_or_a_drive_is_not_checked(tmp_path, folder, path) -> None:
+    """Found by the code review: a NUL in a path stopped `status` and `validate` with a traceback, and a drive-relative
+    path passed the guard on Windows."""
+    from adk_spec.workspace.evidence import holds
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    assert holds(tmp_path, proof(repository=folder, path=path), ()) is None
+
+
+def test_a_lean_change_approved_again_as_it_stands_keeps_its_evidence(tmp_path) -> None:
+    """Found by the code review: approved again with nothing edited, after its verify, a lean change lost its evidence
+    at archive, the verification read as older than the approval."""
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    record = tmp_path / ".spec/changes/passkeys/change.json"
+    held = json.loads(read_text(record))
+    old, held["verification"]["at"] = held["verification"]["at"], "2000-01-01T00:00:00+00:00"
+    write_text(record, json.dumps(held, indent=2))
+    mine = tmp_path / CHANGE_EVIDENCE
+    write_text(mine, read_text(mine).replace(old, "2000-01-01T00:00:00+00:00"))
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert run(tmp_path, "archive", "passkeys") == 0
+    assert (tmp_path / LIVING_EVIDENCE).is_file()
+
+
+def test_no_kept_line_where_there_was_no_evidence_to_add(tmp_path, capsys) -> None:
+    """Found by the code review: an archive with nothing to add or take out said it had left the evidence file."""
+    from samples import BRIEF, tasks_for
+    from test_review import MENTION
+
+    ws = seeded(tmp_path)
+    folder = ws.new_change("unlock", "lean")  # adds a requirement, verified by no one: nothing to fold
+    write_text(folder / "brief.md", BRIEF)
+    write_text(folder / "tasks.md", tasks_for("REQ-AUTH-005"))
+    write_text(folder / "specs" / "auth" / "spec.md", MENTION)
+    assert run(tmp_path, "approve", "unlock", "--by", "reviewer") == 0
+    write_text(tmp_path / LIVING_EVIDENCE, "someone wrote this by hand\n")
+    capsys.readouterr()
+    assert run(tmp_path, "archive", "unlock") == 0
+    assert LIVING_EVIDENCE not in capsys.readouterr().out

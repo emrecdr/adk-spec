@@ -507,7 +507,7 @@ def _drift(workspace: Workspace, state: ChangeState) -> bool | None:
         return False
     try:
         work = _sources(workspace, state.repositories).work(held.base, held.bases)
-    except (GitError, OSError, *REFUSALS):  # a config that does not read too
+    except GitError, SourceError:
         return None
     # Or the fingerprint an older adk-spec recorded, of the diff as a stage is shown it: found by the code review,
     # every change it verified read as drifted after the upgrade.
@@ -622,7 +622,11 @@ def _validate(args: argparse.Namespace) -> int:
 def _gated(workspace: Workspace, assessed: Assessed) -> list[Finding]:
     """What a merge gate reads of a change beyond its own findings, `lifecycle.merge_gate`, pathed from the root."""
     state = assessed.state
-    found = merge_gate(state, assessed.stale, _drift(workspace, state), record=STATE_FILE)
+    try:
+        drift = _drift(workspace, state)
+    except (OSError, *REFUSALS):  # a config that does not read: the gate says it cannot compare, and goes on
+        drift = None
+    found = merge_gate(state, assessed.stale, drift, record=STATE_FILE)
     return _from_root(state.id, found)
 
 
@@ -640,7 +644,8 @@ def _from_the_top(workspace: Workspace, found: Sequence[Finding]) -> list[Findin
 def _annotated(workspace: Workspace, found: Sequence[Finding], *, failed: bool) -> None:
     """In GitHub Actions: each finding as an annotation on its line, and the summary on the run's page, where the
     runner names a file for it. A summary that cannot be written is left out: the annotations are said."""
-    for line in annotation_lines(_from_the_top(workspace, found)):
+    found = _from_the_top(workspace, found)
+    for line in annotation_lines(found):
         print(line)
     if target := os.environ.get("GITHUB_STEP_SUMMARY"):
         with contextlib.suppress(OSError):
@@ -929,7 +934,7 @@ def _archive(args: argparse.Namespace) -> int:
     workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}), files=files)
     print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
     for shown in left:
-        print(f"kept      {shown}: it does not read, so nothing of this change was added to it")
+        print(f"kept      {shown}: it would not read or be written, a link or not UTF-8: nothing was added")
     return EXIT_OK
 
 

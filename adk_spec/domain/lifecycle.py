@@ -161,18 +161,24 @@ def approve(
     approval = Approval(by=by, at=at, files=dict(files), bases=dict(state.bases), override=override)
     # A draft a person corrected is named once: the approved fingerprint then stands for what was drafted.
     drafted = {name: files.get(name, mark) for name, mark in state.drafted.items()}
+    # A verification stands for the files it was made of: found by the code review, one of an earlier version was
+    # still read for the unmet step, and its evidence folded, after the change was revised and approved again.
+    was = state.approval
+    same = was is not None and was.files == approval.files and was.bases == approval.bases
+    verification = state.verification if same else None
     if DEMANDS[state.tier].approvers > 1:  # the first of two names is recorded, and the change is a draft
         stale = approval_stale(state, files)
         if _approved_by_two(state, stale):  # approved already, and as it stands: nothing to record
             return state
         first = first_of_two(state, stale)
         if first is None or same_name(first.by, by):
-            return state.model_copy(update={"status": "draft", "approval": approval, "drafted": drafted})
+            held = {"status": "draft", "approval": approval, "drafted": drafted, "verification": verification}
+            return state.model_copy(update=held)
         approval = first.model_copy(update={"second": Seconded(by=by, at=at)})
     began = state.base_commit or commit
     commits = {**(others or {}), **state.base_commits}
     update = {"status": "approved", "approval": approval, "base_commit": began, "base_commits": commits}
-    update["drafted"] = drafted
+    update |= {"drafted": drafted, "verification": verification}
     return state.model_copy(update=update)
 
 

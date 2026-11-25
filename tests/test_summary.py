@@ -64,8 +64,8 @@ def test_a_persons_edits_below_the_heading_are_kept() -> None:
     before = "# Changelog\n\nA note a person wrote.\n\n## old, 2026-01-01\n\n- Added REQ-X-001: Old (x)\n"
     entry = changelog_entry("passkeys", "2026-11-24", DELTAS)
     after = with_entry(before, entry)
-    assert after.startswith("# Changelog\n\n## passkeys, 2026-11-24\n")
-    assert after.endswith("A note a person wrote.\n\n## old, 2026-01-01\n\n- Added REQ-X-001: Old (x)\n")
+    assert after.startswith("# Changelog\n\nA note a person wrote.\n\n## passkeys, 2026-11-24\n")
+    assert after.endswith("\n\n## old, 2026-01-01\n\n- Added REQ-X-001: Old (x)\n")
     assert with_entry(None, entry).startswith("# Changelog\n\n## passkeys, 2026-11-24\n")
 
 
@@ -84,7 +84,7 @@ def test_a_heading_of_a_persons_own_is_kept_whole() -> None:
     got a second heading."""
     entry = changelog_entry("passkeys", "2026-11-24", DELTAS)
     theirs = with_entry("# Changelog of the API\n\n## old\n", entry)
-    assert theirs.startswith("# Changelog\n\n## passkeys") and "\n# Changelog of the API\n" in theirs
+    assert theirs.startswith("# Changelog\n\n# Changelog of the API\n\n## passkeys")
     assert with_entry("\n# Changelog\n\n## old\n", entry).count("# Changelog") == 1
 
 
@@ -109,3 +109,10 @@ def test_a_changelog_that_is_a_link_is_left_and_the_change_archived(tmp_path, ca
         f"kept      {CHANGELOG}: " in capsys.readouterr().out
         and read_text(tmp_path / ".spec/real.md") == "# Changelog\n"
     )
+
+
+def test_an_introduction_under_the_heading_stays_above_the_entries() -> None:
+    """Found by the code review: a person's introduction sank below each new entry."""
+    intro = "# Changelog\n\nAll notable changes are written here.\n\n## old, 2026-01-01\n\n- Added REQ-X-001: Old (x)\n"
+    after = with_entry(intro, changelog_entry("passkeys", "2026-11-24", DELTAS))
+    assert after.index("All notable changes") < after.index("## passkeys") < after.index("## old")

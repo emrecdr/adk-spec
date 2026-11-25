@@ -135,3 +135,21 @@ def test_a_change_verified_by_override_is_not_sent_to_a_remaining_list() -> None
 def test_the_remaining_list_names_the_step_the_tier_owes() -> None:
     text = render_remaining("passkeys", remaining(SAID, GROUPS, frozenset()), last="archive")
     assert "then run `adk-spec archive passkeys`" in text
+
+
+def test_a_change_approved_again_after_an_edit_is_not_sent_to_the_old_remaining_list(
+    tmp_path, capsys, fake_provider
+) -> None:
+    """Found by the code review: revised and approved again, a change was still sent to the unmet requirements of the
+    verification its earlier files had."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    fake_provider.answers_when(VERIFY, UNMET)
+    assert run(tmp_path, "verify", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    brief.write_text(brief.read_text(encoding="utf-8") + "\nRevised after the verification.\n", encoding="utf-8")
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    capsys.readouterr()
+    assert run(tmp_path, "status", "--json") == 0
+    (row,) = json.loads(capsys.readouterr().out)["changes"]
+    assert "remaining.md" not in row["next"]
