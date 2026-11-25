@@ -28,6 +28,8 @@ class Verdict:
     verdict: str
     evidence: tuple[tuple[str, str], ...]  # (path, quote), each found in the diff
     reason: str
+    #: Whether code wrote the reason, not the model: found by the code review, a model's reason could open as code's.
+    coded: bool = False
 
 
 #: The lines one side of a diff holds, by run: lines next to each other in the file.
@@ -116,7 +118,7 @@ def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed:
     for req_id in sorted(added | removed):
         one = given.get(req_id)
         if one is None:
-            verdicts.append(Verdict(req_id, "unclear", (), NO_VERDICT))
+            verdicts.append(Verdict(req_id, "unclear", (), NO_VERDICT, coded=True))
             continue
         side = 1 if req_id in removed else 0
         evidence = tuple(
@@ -127,7 +129,7 @@ def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed:
         )
         reason = plain(one.reason)
         if one.verdict == "met" and not evidence:
-            verdicts.append(Verdict(req_id, "unclear", (), f"{UNGROUNDED}. The model's reason: {reason}"))
+            verdicts.append(Verdict(req_id, "unclear", (), f"{UNGROUNDED}. The model's reason: {reason}", coded=True))
         else:
             verdicts.append(Verdict(req_id, one.verdict, evidence, reason))
     return verdicts

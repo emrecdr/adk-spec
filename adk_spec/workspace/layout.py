@@ -50,6 +50,8 @@ REPORTS = "reports"
 REVIEW = "review.md"
 #: What a verification left to do, under its `reports/`.
 REMAINING = "remaining.md"
+#: What a reviewer of the pull request reads, under its `reports/`.
+SUMMARY = "summary.md"
 #: The lines `verify` proved each requirement with: in a change's folder, then beside each living spec.
 EVIDENCE = "evidence.md"
 #: An entry for each archived change, in `.spec/`.

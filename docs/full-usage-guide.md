@@ -208,11 +208,15 @@ What happens inside `approve` `[Built]`:
 - Runs deterministic structural + 100% requirement-to-task checks AND the LLM consistency `check` (dropping any LLM finding that doesn't quote real file text), writing `reports/check.md`.
 - Blocks cleanly if anything `ERROR`/blocking is found (never silently passing broken plans; you either fix the files or rerun with `--override "<reason>"` after seeing `reports/check.md`).
 - Records `by`, `at`, and SHA-256 hashes of every change file in `change.json`. An approval of other files than the last
-  one drops that verification: a change edited since is verified again.
+  one drops that verification: a change edited since is verified again. Approved again as it stands, a verified change
+  stays verified, and its `reports/summary.md` names the new approval.
 - Before you approve, read `reports/review.md` `[Built: P16]`: each requirement the change adds, whole; each it removes,
-  with its reason; each it modifies, as a diff against the living spec. Every command that leaves a change waiting on an
-  approval writes it again and names it on a `review` line. `approve` adds a `note` line where another open change
-  modifies or removes the same requirement: whichever is archived second is stopped, to be reworked onto the first.
+  with its reason; each it modifies, as a diff against the living spec. Each command that writes a change and leaves it
+  waiting on an approval writes the view again and names it on a `review` line, with the open changes that modify or
+  remove the same requirements; a command refused, and `status`, write nothing. Once a change is approved, `approve`
+  names those on a `note` line: whichever is archived second is stopped, to be reworked onto the first. Files edited
+  by hand after the last command are in the view once a command writes it again: `check --no-model` does, and calls
+  no model.
 
 #### Step 4 — Implement with Your Coding Agent (VS Code Copilot / Claude Code / Cursor)
 Point your coding agent at `.spec/changes/let-users-sign-in-with-a-passkey/` (`brief.md`, `context.md`, `specs/`, `design.md`, `tasks.md`) and have it implement each task and tick boxes (`- [x] T001 ...`). **Ticking `- [x]` never voids approval** `[Built]`.

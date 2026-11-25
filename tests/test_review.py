@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 from conftest import approved, on_the_fake, run, seeded
-from samples import DELTA, SPEC
+from samples import DELTA, SPEC, tasks_for
 
 from adk_spec.domain.delta_md import changed_ids, parse_delta
 from adk_spec.domain.review_md import render_review
@@ -192,7 +192,35 @@ def test_a_strict_change_approved_once_gives_its_second_approver_a_current_view(
 
     on_the_fake(monkeypatch)
     planned(tmp_path, fake_provider)
-    view = tmp_path / ".spec/changes/ledger/reports/review.md"
-    view.unlink(missing_ok=True)
+    delta = tmp_path / ".spec/changes/ledger/specs/auth/spec.md"
+    lines = read_text(delta).split("\n")
+    at = next(at for at, line in enumerate(lines) if "SHALL" in line)
+    lines[at] = f"{lines[at].rstrip()} Edited before the first approval."
+    write_text(delta, "\n".join(lines))
     assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
-    assert view.is_file()
+    assert "Edited before the first approval." in read_text(tmp_path / ".spec/changes/ledger/reports/review.md")
+
+
+def test_a_strict_change_approved_once_names_its_overlaps_once(tmp_path, capsys, monkeypatch, fake_provider) -> None:
+    """Found by the closing code review: the first of two approvals named each overlap twice, on the `note` line and
+    again on the `review` line that follows it."""
+    from test_strict import planned
+
+    on_the_fake(monkeypatch)
+    planned(tmp_path, fake_provider)
+    folder = tmp_path / ".spec/changes/ledger"
+    write_text(folder / "specs/auth/spec.md", OTHER)  # it modifies what the seeded `passkeys` modifies
+    write_text(folder / "tasks.md", tasks_for("REQ-AUTH-002"))
+    capsys.readouterr()
+    assert run(tmp_path, "approve", "ledger", "--by", "ana") == 0
+    out = capsys.readouterr().out
+    assert out.count("also changed by") == 1 and "review " in out
+
+
+def test_check_without_a_model_brings_a_hand_edit_into_the_view(tmp_path) -> None:
+    """What the guide tells an approver whose files were edited by hand since the last command."""
+    seeded(tmp_path)
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, read_text(delta).replace("three failed attempts", "four failed attempts"))
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    assert "+The system MUST lock an account after four failed attempts." in read_text(tmp_path / VIEW)
