@@ -38,6 +38,7 @@ from .model import (
     TaskGroup,
 )
 from .spec_md import fenced_lines, paragraphs
+from .tasks_md import task_path
 from .text import flat, lines_of, normalise, plain, quoted_at
 
 _STEP = re.compile(r"(?:-\s*)?(?:\*\*)?(GIVEN|WHEN|THEN|AND)(?:\*\*)?\s+(\S.*)", re.IGNORECASE | re.DOTALL)
@@ -209,8 +210,33 @@ def to_tasks(draft: TasksDraft) -> tuple[TaskGroup, ...]:
                     verify=flat(task.verify) or None,
                 )
             )
-        groups.append(TaskGroup(title=flat(group.title), tasks=tuple(tasks)))
+        groups.append(TaskGroup(title=flat(group.title), tasks=_apart(tasks)))
     return tuple(groups)
+
+
+def _apart(tasks: list[Task]) -> tuple[Task, ...]:
+    """Each task's `[P]` where it and the tasks before and after it name their files, and none of its own meets
+    theirs: the rule the tasks stage is told, held by code, so no two tasks side by side run on one file. A neighbour
+    naming none cannot be said apart either (found by phase 17's last review). Phase 17."""
+    files: list[list[str] | None] = [None, *([task_path(one) for one in task.files] for task in tasks), None]
+    return tuple(
+        task.model_copy(update={"parallel": task.parallel and _apart_from(mine, before, after)})
+        for task, before, mine, after in zip(tasks, files, files[1:], files[2:], strict=False)
+    )
+
+
+def _apart_from(mine: list[str] | None, *neighbours: list[str] | None) -> bool:
+    """Whether a task naming `mine` touches no file of its `neighbours`: None where there is none, at a group's edge."""
+    if not mine or any(side == [] for side in neighbours):
+        return False
+    return not _meet(mine, [path for side in neighbours if side for path in side])
+
+
+def _meet(paths: list[str], others: list[str]) -> bool:
+    """Whether a path of `paths` is one of `others`, or one is a folder the other is under."""
+    return any(
+        one == other or other.startswith(f"{one}/") or one.startswith(f"{other}/") for one in paths for other in others
+    )
 
 
 #: The sections of a design, in the order of its file: each a field of `DesignDraft`.

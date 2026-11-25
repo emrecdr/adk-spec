@@ -348,8 +348,9 @@ edit by hand is in the view once a command writes it again: `adk-spec check <id>
 
 ### 4. Implement
 
-Work through `tasks.md` yourself or with your coding assistant, ticking each box (`- [x]`) as it is done. For
-example, to GitHub Copilot or Claude Code:
+Work through `tasks.md` yourself or with your coding assistant, ticking each box (`- [x]`) as it is done. A task
+marked `[P]` touches other files than the tasks beside it: adk-spec drops the mark from a drafted task where its
+files say otherwise, or it names none. For example, to GitHub Copilot or Claude Code:
 
 > Implement `.spec/changes/sign-in-with-a-passkey/tasks.md` task by task, test first. Read `brief.md`, the specs and
 > `context.md` in that folder first. Tick each task's box when it is done. Do not edit any other file in `.spec/`.
@@ -608,7 +609,9 @@ Ready to run
   trailing-space          lean      draft     run `adk-spec plan trailing-space`
 ```
 
-`--all` lists archived changes too; `--json` prints the list for a script.
+`--all` lists archived changes too; `--json` prints the list for a script. Where quotes of `.spec/profile.md` are no
+longer in the code, `status` says how many on one line, and so does `propose` before it spends anything: run
+`adk-spec init --refresh` to read the code again.
 
 ## When something goes wrong
 

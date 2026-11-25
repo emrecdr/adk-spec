@@ -43,10 +43,17 @@ How it is applied in every phase below:
 | 15 | Research during planning | `2026-11-23-adk-spec-research-during-planning.md` | `propose` reads the code, and the project's installed libraries offline, before the brief; the brief asks only what the code cannot answer, in order of what depends on what, and "yes" takes a suggestion; rules from the skills the owner pointed to in the brief, specs, tasks and check. | Built, cleaned up, reviewed and merged; measured live, a fault the first run found fixed |
 | 14 | Inside a coding assistant | `2026-11-22-adk-spec-mcp-server.md` | `adk-spec-mcp` serves six commands as MCP tools to a coding assistant (`propose`, revising too, `plan`, `check`, `verify`, `status`, `validate`), each run as the terminal runs it; approving and archiving stay the person's. | Built, cleaned up, reviewed and merged. Its live proof, in VS Code and in Claude Code, waits for the owner |
 | 16 | Evidence and review | `2026-11-24-adk-spec-evidence-and-review.md` | The approver's view of each requirement a change touches, and who else is changing it; unmet verdicts written as the next work; `verify`'s evidence kept beside each living spec, a requirement whose code is gone noted as suspect; `validate` as a merge gate with GitHub annotations; a pull request's summary and a changelog. No model call, command, flag or `change.json` field. | Built test first; five cleanup and code reviews, and a closing one; merged |
+| 17 | Freshness and proof notes | `2026-11-25-adk-spec-freshness-and-proof-notes.md` | From an outside discovery report, each option checked by four verifiers: the profile's quotes checked against the code (`status`, `propose`); a drafted `[P]` held to its rule. A `verify` note on proofs the work removed was built and taken out after three reviews. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
 
 ## The plan being followed now
 
-None: phase 16 is done. Its five code reviews fixed what each found, a security hole among them (an evidence line could
+Phase 17, freshness and proof notes (`2026-11-25-freshness-and-proof-notes-design.md`): built test first on the
+branch `freshness`, then cleaned up and code-reviewed. Of the outside report's twelve options, the rest were skipped
+or left to be measured first, each with its reason in the design. Its `verify` note on the proofs a work removed
+was taken out: three reviews in turn found it missed or misnamed requirements, by path and by text alike, and
+`status` and `validate` already flag every requirement whose evidence is gone.
+
+Phase 16 is done. Its five code reviews fixed what each found, a security hole among them (an evidence line could
 read a file anywhere, which in CI let a pull request probe the runner). A closing review of the last fixes found two
 more, fixed test first: `reports/remaining.md` could say a model's reason, opening as code's does, was what code found
 (code now marks the reasons it writes), and a changelog entry heading a person added a note to stopped counting as an
@@ -495,7 +502,10 @@ and a step moves to code only where its output is a function of its input with n
 - Phase 16's small items, left by its last review: a change an older adk-spec verified with a requirement unmet is sent
   to a `reports/remaining.md` it never wrote, once, until `verify` runs; a note a person writes in a living
   `evidence.md` is lost when an archive rewrites it, as the file asks for entries alone; the archive's `kept` line gives
-  one reason for every file it leaves; a moved quote's search misreads a file whose name holds a colon. From the
+  one reason for every file it leaves; a moved quote's search misreads a file whose name holds a colon, or one of
+  the characters git quotes even with `core.quotePath` off (`"`, `\`, a tab), which the profile's check now reaches
+  too: `git grep -z` would fix it. A drafted `[P]` is held to its neighbours alone, as the
+  planner is told: two `[P]` tasks a third stands between may still name one file. From the
   closing review: an approval that voids a verification leaves its `verify.md` and the change's `evidence.md`, which
   the next `verify` replaces and an archive never folds; a person's own entries in another form,
   `## [1.2.0] - 2026-01-01`, are read as introduction, so adk-spec's go below them. From the reviews after: a strict
@@ -508,6 +518,12 @@ and a step moves to code only where its output is a function of its input with n
   command wrote `reports/review.md` is approved as it stands, though the view showed it before the edit. A refusal
   was built and taken out (above): it made `approve` two runs, and "out of date" was hard to say exactly. Until then
   the README says to run `check <id> --no-model` after a hand edit, which writes the view again.
+
+- Whether `verify` should name the living requirements its own work took every proof of. Done exactly, it reads
+  each gone proof at the change's base commit in each repository (`git show`, and a search there for a moved one):
+  new git calls on every `verify` for one line, which `status` and `validate` cover without attribution. The
+  quote search (`holds`) also looks for a moved quote by its longest word in 20 files at most, so a moved quote with a
+  common word can read as gone, in `status`, `validate` and the profile's line alike.
 
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:

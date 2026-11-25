@@ -1,54 +1,62 @@
 """Evidence on disk: a change's, folded in beside each living spec at archive, and the living evidence checked
-against the code, so that a requirement whose proving lines are gone from it is noted as suspect."""
+against the code, so that a requirement whose proving lines are gone from it is noted as suspect; and the quotes of
+`.spec/profile.md` checked against the code the same way."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
-from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
+from ..domain.context_md import quoted_statements
+from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, scrubbed, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
-from ..domain.text import quoted_at
+from ..domain.text import plain, quoted_at
 from ..domain.validate import finding
 from .config import ConfigError
 from .files import NotTextError, read_text
 from .git import GitError, grep
-from .layout import CHANGES, EVIDENCE, SPECS, Workspace
+from .layout import CHANGES, EVIDENCE, PROFILE, SPECS, Workspace
+from .source import LIBRARY_SCHEMES
 
 #: How many of the files a quote's search names are read whole to find it.
 ELSEWHERE_MAX = 20
 
 
 def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
-    """Whether `proof`'s quote is still in the code: in its file, or else in another file of its repository, so that
-    a moved function reads as moved. None where its repository is not there to look in, as another one is not in CI.
-    `root` is the folder that holds `.spec/`; `exclude`, the person's patterns, apply to its own repository."""
-    own = proof.repository == "."
-    folder = root if own else root / proof.repository
-    if not _within(folder, proof, own=own):
+    """Whether `proof`'s quote is still in the code, as `quote_holds` says."""
+    return quote_holds(root, proof.repository, proof.path, proof.quote, exclude)
+
+
+def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Sequence[str]) -> bool | None:
+    """Whether `quote` is still in the code: in `path`, or else in another file of its repository, so that a moved
+    function reads as moved. None where its repository is not there to look in, as another one is not in CI, or git
+    refuses the search, outside a repository say. `root` is the folder that holds `.spec/`; `repository` is `.` for
+    its own; `exclude`, the person's patterns, apply to its own."""
+    own = repository == "."
+    folder = root if own else root / repository
+    if not _within(folder, repository, path, own=own):
         return None
-    if _found(folder / proof.path, proof.quote):  # read first: a quote that holds asks git nothing
+    if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
-    try:  # outside a repository, git refuses the search: not looked for
-        term = max(proof.quote.split(), key=len, default="")  # a fixed string git finds on one line
+    try:
+        term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
         hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
     except GitError:
         return None
     named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]
-    return any(_found(folder / path, proof.quote) for path in named)
+    return any(_found(folder / one, quote) for one in named)
 
 
-def _within(folder: Path, proof: Proof, *, own: bool) -> bool:
-    """Whether a proof names a file of a repository that is there: its path relative and inside it, and another
+def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
+    """Whether a quote names a file of a repository that is there: its path relative and inside it, and another
     repository one's top folder. Found by the code review: a line edited to `..` or an absolute path was read wherever
     it pointed, so in CI a pull request could learn from a note whether a string is in a file on the runner."""
-    named = (proof.repository, proof.path)
     # A root or a drive on either system, `C:x` too, or a NUL that no file system takes.
-    if any(PureWindowsPath(part).anchor or "\x00" in part for part in named):
+    if any(PureWindowsPath(part).anchor or "\x00" in part for part in (repository, path)):
         return False
     if not folder.is_dir() or (not own and not (folder / ".git").exists()):
         return False
-    return (folder / proof.path).resolve().is_relative_to(folder.resolve())
+    return (folder / path).resolve().is_relative_to(folder.resolve())
 
 
 def _found(path: Path, quote: str) -> bool:
@@ -86,6 +94,26 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
         if kept := [(at, one) for at, one in read if one.req in held]:
             found += suspects(kept, lambda one: holds(workspace.root, one, exclude), path=shown)
     return found
+
+
+def profile_gone(workspace: Workspace) -> tuple[int, int]:
+    """Of the quotes of `.spec/profile.md`, each once, how many are no longer in the code, and how many were looked
+    for: none where there is no profile that reads. Phase 17: every drafting stage reads the profile, and nothing else
+    checks it. A library's quote is not looked for, nor one a secret was scrubbed from, nor counted one that could not
+    be: unknown is not gone. Read whole: found by its code review, the cap a stage reads it at could halve a quote."""
+    path = workspace.home / PROFILE
+    try:
+        text = read_text(path) if path.is_file() else ""
+    except NotTextError, OSError:
+        return 0, 0
+    exclude = _excluded(workspace)
+    looked = [
+        quote_holds(workspace.root, ".", named, quote, exclude)
+        for named, quote in dict.fromkeys(quoted_statements(text))
+        if not named.startswith(LIBRARY_SCHEMES) and not scrubbed(quote)
+    ]
+    held = [one for one in looked if one is not None]
+    return held.count(False), len(held)
 
 
 def _excluded(workspace: Workspace) -> tuple[str, ...]:

@@ -89,3 +89,8 @@ def render_tasks(groups: Sequence[TaskGroup], *, unchecked: bool = False) -> str
         if lines:
             chunks.append("\n".join(lines))
     return "\n\n".join(chunks) + "\n"
+
+
+def task_path(named: str) -> str:
+    """A task's file as a path: written by a person or a model, it may be quoted in backticks or open on `./`."""
+    return named.strip().strip("`").replace("\\", "/").removeprefix("./").rstrip("/")

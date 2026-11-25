@@ -51,18 +51,20 @@ def plain(text: str) -> str:
 def quoted_at(quote: str, text: str) -> int | None:
     """The line of `text`, counted from 1, where `quote` starts, or nothing where `text` does not hold it. The two
     are compared with every run of whitespace read as one space, so a line break or an indent a model changed does
-    not lose a quote, and a quote may run over lines. One too short to point at anything is in no text.
+    not lose a quote, and a quote may run over lines; and with every character that is no printable one read as a
+    space, as `plain` keeps a quote, so a soft hyphen in the code loses none (found by phase 17's reviews). One too
+    short to point at anything is in no text.
 
     This is the one test of whether what a model points to is there: a finding's quote in a file, and a verdict's
     in the lines of a diff."""
-    wanted = flat(quote)
+    wanted = plain(quote)
     if len(wanted) < QUOTE_MIN_CHARS:
         return None
     starts: list[tuple[int, int]] = []  # where each line that holds a word starts in the flat text, and its number
     pieces: list[str] = []
     offset = 0
     for number, line in enumerate(lines_of(normalise(text)), 1):
-        if piece := flat(line):
+        if piece := plain(line):
             starts.append((offset, number))
             pieces.append(piece)
             offset += len(piece) + 1

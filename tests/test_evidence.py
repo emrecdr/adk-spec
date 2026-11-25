@@ -309,3 +309,10 @@ def test_a_change_modifying_a_requirement_with_no_proof_takes_its_old_lines_out(
     assert run(tmp_path, "archive", "stricter") == 0
     read, _unread = parse_evidence(read_text(tmp_path / LIVING_EVIDENCE))
     assert [one.req for _line, one in read] == ["REQ-AUTH-001"]
+
+
+def test_a_quote_cut_inside_a_stand_in_is_no_evidence() -> None:
+    """Found by phase 17's last review: a `met` quote ending inside `[REDACTED:...]` was kept, and its requirement read
+    as suspect for ever, the stand-in never being in the code."""
+    cut = Verdict("REQ-AUTH-004", "met", (("src/auth.py", 'KEY = "[REDACTE'),), "Kept the key.")
+    assert kept([cut], added=frozenset({"REQ-AUTH-004"}), change="passkeys", at=AT, repositories={}) == []

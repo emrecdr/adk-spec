@@ -30,6 +30,10 @@ PROFILE_SECTIONS = (
 DRAFTED_HEADING = "## Drafted from the code"
 #: The heading what a review named as still unknown stands under.
 UNKNOWN_HEADING = "## What is still unknown"
+#: A statement's line as `render_context` writes it: its file and line in a code span, then its note; and the lines
+#: under it, the block it stands in and its quote.
+_STATEMENT = re.compile(r"- `(?P<path>[^`]+):[0-9]+`(?:\s|$)")
+_WITHIN, _QUOTE = "  in: ", "  > "
 #: The kinds of statement, each with the heading it stands under, in the order of the file.
 SECTIONS: tuple[tuple[StatementKind, str], ...] = (
     ("exists", "What exists"),
@@ -65,8 +69,8 @@ def render_context(
         if held:
             lines += [f"## {section}", ""]
             for one in held:
-                lines += [f"- `{one.path}:{one.line}` {one.note}", *([f"  in: {one.within}"] if one.within else ())]
-                lines.append(f"  > {one.quote}")
+                lines += [f"- `{one.path}:{one.line}` {one.note}", *([f"{_WITHIN}{one.within}"] if one.within else ())]
+                lines.append(f"{_QUOTE}{one.quote}")
             lines.append("")
     if unknown:
         lines += [UNKNOWN_HEADING, ""]
@@ -99,6 +103,22 @@ def _left_out(dropped: int, disputed: int) -> str:
         noun = "" if said else f" statement{'' if disputed == 1 else 's'}"
         said.append(f"{disputed}{noun} the review disputed")
     return f"Left out: {'; '.join(said)}." if said else ""
+
+
+def quoted_statements(text: str) -> list[tuple[str, str]]:
+    """Each statement of a file `render_context` wrote, as its path and its quote: the `  > ` line under its own.
+    Read leniently, as a person may edit the file: any other line, and a statement with no quote, is passed over."""
+    found: list[tuple[str, str]] = []
+    path: str | None = None
+    for line in text.split("\n"):
+        if held := _STATEMENT.match(line):
+            path = held.group("path")
+        elif path is not None and line.startswith(_QUOTE):
+            found.append((path, line.removeprefix(_QUOTE)))
+            path = None
+        elif not line.startswith(_WITHIN):
+            path = None
+    return found
 
 
 def unknown_count(text: str) -> int:
