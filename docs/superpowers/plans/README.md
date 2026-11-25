@@ -533,8 +533,11 @@ and a step moves to code only where its output is a function of its input with n
   built and taken out: exact, it needs each request followed across rounds, a request read later or asked twice);
   a second review is not shown the first's unknowns, so they are replaced, not added (showing them is a change to
   what a model is told); a verify quote of code that holds `[REDACTED` itself, as redaction code does, is not kept as
-  evidence; a quote over a secret that moved to another file can read as gone, its search term being the stand-in;
-  answers in a `context.md` a person deletes to read the code again are not kept.
+  evidence; a quote over a secret that moved to another file can read as gone, its search term being the stand-in
+  (a search by the longest word and then by one with no bracket was tried and taken out: a stand-in glued to code
+  has no such word, the fallback word is often too common to find the file, a gone line could read as present
+  through another file's same-named secret, and it cost five times as much); answers in a `context.md` a person
+  deletes to read the code again are not kept.
 
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:
