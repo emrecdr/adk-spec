@@ -7,12 +7,12 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
-from ..domain.model import ChangeState, Delta, Finding
+from ..domain.model import ChangeState, Delta, Finding, Spec
 from ..domain.text import quoted_at
 from ..domain.validate import finding
 from .config import ConfigError
 from .files import NotTextError, read_text
-from .git import GitError, grep, is_repository
+from .git import GitError, grep
 from .layout import CHANGES, EVIDENCE, SPECS, Workspace
 
 #: How many of the files a quote's search names are read whole to find it.
@@ -29,9 +29,7 @@ def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
         return None
     if _found(folder / proof.path, proof.quote):  # read first: a quote that holds asks git nothing
         return True
-    try:
-        if not is_repository(folder, trust=own):
-            return None
+    try:  # outside a repository, git refuses the search: not looked for
         term = max(proof.quote.split(), key=len, default="")  # a fixed string git finds on one line
         hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
     except GitError:
@@ -47,12 +45,11 @@ def _found(path: Path, quote: str) -> bool:
         return False
 
 
-def evidence_findings(workspace: Workspace) -> list[Finding]:
-    """A note for each suspect requirement of every living spec, and for each evidence line that does not read. A
+def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[Finding]:
+    """A note for each suspect requirement of the `living` specs, and for each evidence line that does not read. A
     requirement the living spec no longer holds is not checked, nor any of a living spec that does not read."""
     found: list[Finding] = []
-    living, _faults = workspace.specs()
-    exclude: tuple[str, ...] | None = None  # read once, and only where there is evidence to look for
+    exclude = _excluded(workspace)
     for capability in workspace.capabilities():
         path = workspace.home / SPECS / capability / EVIDENCE
         shown = workspace.shown(path)
@@ -70,8 +67,7 @@ def evidence_findings(workspace: Workspace) -> list[Finding]:
         ]
         held = {req.id for req in living[capability].requirements} if capability in living else set()
         if kept := [(at, one) for at, one in read if one.req in held]:
-            exclude = _excluded(workspace) if exclude is None else exclude
-            found += suspects(kept, lambda one, skip=exclude: holds(workspace.root, one, skip), path=shown)
+            found += suspects(kept, lambda one: holds(workspace.root, one, exclude), path=shown)
     return found
 
 
@@ -79,8 +75,8 @@ def _excluded(workspace: Workspace) -> tuple[str, ...]:
     """The person's exclude patterns; none where the config does not read. Found by the code review: read first, a
     fault in it, or no config at all, stopped `validate` and `status` where no evidence was kept."""
     try:
-        return tuple(workspace.config().exclude)
-    except ConfigError, OSError:
+        return workspace.config().exclude
+    except ConfigError, NotTextError, OSError:
         return ()
 
 

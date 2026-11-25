@@ -535,11 +535,9 @@ def _say_next(
     assessed = _assessed(workspace, change_id, living, drift=drift)
     deltas = assessed.loaded.change.deltas
     if assessed.stale and deltas:  # a draft, or an approved change edited since: an approval is owed
-        try:
+        with contextlib.suppress(OSError):  # the view is an aid: the command's work is saved, its next step said
             shown, overlaps = _view_written(workspace, change_id, deltas, living)
             print(f"review    {shown}: {review_said(deltas, overlaps)}")
-        except OSError:  # the view is an aid: the command's work is saved, and its next step is said
-            pass
     phrase = assessed.step.phrase
     print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
 
@@ -602,7 +600,7 @@ def _validate(args: argparse.Namespace) -> int:
         if state.status != "archived":  # folded in, an archived change's delta has no base now: nothing to check
             assessed = _assessed(workspace, change_id, living, drift=False)
             found += assessed.findings + _gated(workspace, assessed)
-    found += evidence_findings(workspace)  # notes: a requirement whose proving lines are gone from the code
+    found += evidence_findings(workspace, living)  # notes: a requirement whose proving lines are gone from the code
     stops = failed(found, strict=args.strict)
     if args.json:
         print(json.dumps({"findings": [held.model_dump() for held in found], "failed": stops}, indent=2))
@@ -664,14 +662,14 @@ def _status(args: argparse.Namespace) -> int:
             for row in held:
                 print(f"  {row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
     if not args.json:
-        _suspects_said(workspace)
+        _suspects_said(workspace, living)
     return EXIT_OK
 
 
-def _suspects_said(workspace: Workspace) -> None:
+def _suspects_said(workspace: Workspace, living: Mapping[str, Spec]) -> None:
     """One line for each capability holding a requirement whose evidence is gone from the code: `validate` names
     them."""
-    gone = Counter(held.path for held in evidence_findings(workspace) if held.code == "spec.evidence-gone")
+    gone = Counter(held.path for held in evidence_findings(workspace, living) if held.code == "spec.evidence-gone")
     for path, count in sorted(gone.items()):
         capability = Path(path or "").parent.name
         print(f"{capability}: {count} requirement{'' if count == 1 else 's'} suspect ({PROG} validate lists them)")
@@ -1751,6 +1749,9 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     reason = after.verification.override if after.verification else None
     report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases, tests=runs)
     wrote = [workspace.write_report(args.id, "verify.md", report)]
+    # Recorded once its report is there, before anything else is written: found by the code review, a report that
+    # would not be written or removed lost a verification paid for.
+    workspace.save_state(after)
     # What a reviewer of the pull request reads, an override's reason with it.
     summary = render_summary(change, said, ran, after.approval, override=reason)
     wrote.append(workspace.write_report(args.id, "summary.md", summary))
@@ -1766,7 +1767,6 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
         workspace.write_into(args.id, {EVIDENCE: render_evidence(args.id, proofs)})
     else:
         workspace.drop(args.id, EVIDENCE)
-    workspace.save_state(after)
     for one in verdicts:
         print(f"{one.verdict:<8}  {one.id}  {one.reason}")
     print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")

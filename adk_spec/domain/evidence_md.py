@@ -13,7 +13,7 @@ from dataclasses import astuple, dataclass
 
 from .ids import REQ_ID
 from .model import Finding
-from .text import QUOTE_MIN_CHARS, lines_of, normalise
+from .text import lines_of, normalise
 from .validate import finding
 from .verify import Verdict
 
@@ -84,9 +84,9 @@ def kept(
         held: list[Proof] = []
         for named, quote in verdict.evidence:
             repository, path = _placed(named, repositories)
-            one = Proof(verdict.id, repository, path, change, at, _cut(quote))
-            findable = len(one.quote) >= QUOTE_MIN_CHARS  # a shorter one is in no text, by `quoted_at`
-            if findable and _HIDDEN not in quote and _APART not in repository + path and one not in held:
+            # Cut where it may be: what a quote begins with is found wherever the whole quote is.
+            one = Proof(verdict.id, repository, path, change, at, quote[:QUOTE_MAX].rstrip())
+            if _HIDDEN not in quote and _APART not in repository + path and one not in held:
                 held.append(one)
         proofs += held[:QUOTES_A_REQUIREMENT]
     return _sorted(proofs)
@@ -130,17 +130,6 @@ def _placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:
     """The repository and the path within it of a path as `verify` named it."""
     name, _, rest = named.partition("/")
     return (repositories[name], rest) if rest and name in repositories else (".", named)
-
-
-def _cut(quote: str) -> str:
-    """A quote at most `QUOTE_MAX` long, cut at a space where that keeps enough of it to be found: what is kept is
-    still in the file wherever the whole is. Found by the code review: cut at an early space, `x = <a long token>`
-    kept `x =`, which no text holds, and its requirement read as suspect at once."""
-    if len(quote) <= QUOTE_MAX:
-        return quote
-    head = quote[:QUOTE_MAX]
-    spaced = head.rsplit(" ", 1)[0]
-    return spaced if len(spaced) >= QUOTE_MAX // 2 else head
 
 
 def _sorted(proofs: Sequence[Proof]) -> list[Proof]:

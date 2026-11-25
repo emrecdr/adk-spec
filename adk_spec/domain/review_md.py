@@ -71,13 +71,8 @@ def _changed(before: Requirement | None, after: Requirement, change_id: str) -> 
     """A modified requirement as a diff of the living one against the delta's; whole where no living spec holds it."""
     if before is None:
         return [f"{after.id} is in no living spec now: shown as the change has it.", "", *_whole(after)]
-    if render_requirement(before) == render_requirement(after):
+    old, new = render_requirement(before).splitlines(), render_requirement(after).splitlines()
+    if old == new:
         return [f"{after.id} is unchanged from the living spec.", ""]
-    diff = difflib.unified_diff(
-        render_requirement(before).splitlines(),
-        render_requirement(after).splitlines(),
-        fromfile="living",
-        tofile=change_id,
-        lineterm="",
-    )
+    diff = difflib.unified_diff(old, new, fromfile="living", tofile=change_id, lineterm="")
     return _fenced("diff", list(diff))
