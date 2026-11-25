@@ -12,7 +12,7 @@ import re
 from collections.abc import Mapping, Sequence
 
 from .model import Statement, StatementKind
-from .text import code_span
+from .text import code_span, plain
 
 #: How the line begins that a reading which ended early carries at its top.
 PARTIAL = "This reading is partial: "
@@ -114,6 +114,22 @@ def _left_out(dropped: int, disputed: int, over: int = 0, unknown_over: int = 0)
     if unknown_over:
         said.append(f"{unknown_over} unknown{'' if unknown_over == 1 else 's'} past the {UNKNOWNS_KEPT} kept")
     return f"Left out: {'; '.join(said)}." if said else ""
+
+
+#: The heading the person's answers to the questions `propose` asked stand under, in a change's `context.md`.
+ANSWERS_HEADING = "## The person's answers"
+
+
+def with_answers(text: str, answers: str) -> str:
+    """A `context.md`, `text`, with the person's `answers` to the questions `propose` asked, each `question ->
+    answer` on a line, under their heading before the file's first other one; as it was where there are none. Phase
+    18: they lived only in the run, and the stages after the brief read the brief's words alone."""
+    said = [plain(one) for one in answers.split("\n") if one.strip()]
+    if not said:
+        return text
+    section = "\n".join([ANSWERS_HEADING, "", *(f"- {one}" for one in said), "", ""])
+    at = text.find("\n## ")
+    return f"{text.rstrip(chr(10))}\n\n{section}" if at < 0 else text[: at + 1] + section + text[at + 1 :]
 
 
 def quoted_statements(text: str) -> list[tuple[str, str]]:

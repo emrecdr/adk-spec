@@ -34,6 +34,7 @@ from ..domain.context_md import (
     drafted_rules,
     render_context,
     unknown_count,
+    with_answers,
 )
 from ..domain.convert import kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
@@ -1467,22 +1468,24 @@ def _code_read(
     return _Read(said, _found_text(workspace, _CONTEXT_TITLE, found, partial=partial, others=source.commits()))
 
 
-def _context_said(workspace: Workspace, change_id: str, read: _Read | None) -> None:
-    """The reading's `context.md` written for a change propose wrote, and said: a refusal is said beside the change,
-    which stands. Found by review: said as "no change was written", with the change there to be proposed twice."""
+def _context_said(workspace: Workspace, change_id: str, read: _Read | None, answers: str = "") -> None:
+    """The reading's `context.md` written for a change propose wrote, with the person's `answers`, and said: a refusal
+    is said beside the change, which stands. Found by review: said as "no change was written", with the change there
+    to be proposed twice."""
     try:
-        if context := _context_written(workspace, change_id, read):
+        if context := _context_written(workspace, change_id, read, answers):
             print(f"          {workspace.shown(context)}")
     except WorkspaceError as exc:
         print(f"{PROG}: the change is written, and its context.md is not: {exc}", file=sys.stderr)
 
 
-def _context_written(workspace: Workspace, change_id: str, read: _Read | None) -> Path | None:
-    """What a reading kept, written as the change's `context.md` under the change's id: nothing where it kept
-    nothing."""
+def _context_written(workspace: Workspace, change_id: str, read: _Read | None, answers: str = "") -> Path | None:
+    """What a reading kept, written as the change's `context.md` under the change's id, with the person's `answers`
+    above it: nothing where it kept nothing."""
     if read is None or not read.text:
         return None
     titled = read.text.replace(f"# {_CONTEXT_TITLE}\n", f"# {_CONTEXT_TITLE}: {change_id}\n", 1)
+    titled = with_answers(titled, scrub(answers)[0])
     (path,) = workspace.write_into(change_id, {CONTEXT_FILE: titled})
     return path
 
@@ -2009,7 +2012,9 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
             print(f"tokens    {_spent(ledger)}")
             return EXIT_USAGE
         kept.outcome = "written"
-        _context_said(workspace, kept.change, read)
+        from ..orchestration.stages.brief import ANSWERS
+
+        _context_said(workspace, kept.change, read, state.get(ANSWERS) or "")
     keep = _tasks_kept(workspace, change, changed) if change else None
     change_id = kept.change or ""
     # A tier that reads first stops here: the plan is drafted once a person read the brief and the specs. Not an

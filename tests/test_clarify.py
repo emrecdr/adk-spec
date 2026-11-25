@@ -316,3 +316,31 @@ def test_propose_drafts_no_plan_while_a_point_is_left_open(tmp_path, capsys, fak
     write_text(brief, read_text(brief).replace(f"[NEEDS CLARIFICATION: {ASKED}]", "Evergreen browsers only."))
     assert run(tmp_path, "status") == 0 and "run `adk-spec plan open`" in capsys.readouterr().out
     assert run(tmp_path, "plan", "open") == 0 and (tmp_path / ".spec/changes/open/tasks.md").is_file()
+
+
+def test_the_persons_answers_are_kept_in_context_md(tmp_path, monkeypatch, fake_provider) -> None:
+    """Phase 18: the answers lived only in the run, and the stages after the brief read the brief's words alone."""
+    from conftest import repository
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
+    monkeypatch.setattr("sys.stdin", io.StringIO("Chrome and Firefox\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "kept") == 0
+    context = read_text(tmp_path / ".spec/changes/kept/context.md")
+    assert f"## The person's answers\n\n- {ASKED} -> Chrome and Firefox\n" in context
+    assert context.index("## The person's answers") < context.index("## What was read")
+
+
+def test_a_secret_in_an_answer_is_not_written_to_context_md(tmp_path, monkeypatch, fake_provider) -> None:
+    """Phase 18: `context.md` is committed with the change, so an answer is scrubbed before it is kept there."""
+    from conftest import repository
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    key = "AKIA" + "IOSFODNN7EXAMPLE"
+    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
+    monkeypatch.setattr("sys.stdin", io.StringIO(f"use {key}\n"))
+    assert proposed(tmp_path, "--tier", "standard", "--id", "scrubbed") == 0
+    context = read_text(tmp_path / ".spec/changes/scrubbed/context.md")
+    assert key not in context and "[REDACTED" in context

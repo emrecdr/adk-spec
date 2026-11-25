@@ -44,14 +44,17 @@ How it is applied in every phase below:
 | 14 | Inside a coding assistant | `2026-11-22-adk-spec-mcp-server.md` | `adk-spec-mcp` serves six commands as MCP tools to a coding assistant (`propose`, revising too, `plan`, `check`, `verify`, `status`, `validate`), each run as the terminal runs it; approving and archiving stay the person's. | Built, cleaned up, reviewed and merged. Its live proof, in VS Code and in Claude Code, waits for the owner |
 | 16 | Evidence and review | `2026-11-24-adk-spec-evidence-and-review.md` | The approver's view of each requirement a change touches, and who else is changing it; unmet verdicts written as the next work; `verify`'s evidence kept beside each living spec, a requirement whose code is gone noted as suspect; `validate` as a merge gate with GitHub annotations; a pull request's summary and a changelog. No model call, command, flag or `change.json` field. | Built test first; five cleanup and code reviews, and a closing one; merged |
 | 17 | Freshness and proof notes | `2026-11-25-adk-spec-freshness-and-proof-notes.md` | From an outside discovery report, each option checked by four verifiers: the profile's quotes checked against the code (`status`, `propose`); a drafted `[P]` held to its rule. A `verify` note on proofs the work removed was built and taken out after three reviews. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
+| 18 | Context kept and said | `2026-11-25-context-kept-and-said-design.md` | From the owner's question whether context is lost between the layers: the person's answers kept in `context.md`; every cut of the reading said; unknowns and what was left out above the statements; a folded tree naming the top files; a cut test output marked. The exact scrubbed-quote check (a quote is looked for as it was shown) replaced phase 17's guess by shape. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
 
 ## The plan being followed now
 
-Phase 17, freshness and proof notes (`2026-11-25-freshness-and-proof-notes-design.md`): built test first on the
-branch `freshness`, then cleaned up and code-reviewed. Of the outside report's twelve options, the rest were skipped
-or left to be measured first, each with its reason in the design. Its `verify` note on the proofs a work removed
-was taken out: three reviews in turn found it missed or misnamed requirements, by path and by text alike, and
-`status` and `validate` already flag every requirement whose evidence is gone.
+Phase 18, context kept and said (`2026-11-25-context-kept-and-said-design.md`): built test first on the branch
+`context`, then cleaned up and code-reviewed. Its second step, which changes what models are told (aiming the reading
+with triage's capabilities, a reading of the repository's guidance files, the constitution for the deltas stage),
+waits for a live measurement on the owner's go-ahead.
+
+Phase 17 is done: the profile checked against the code and `[P]` held to its rule; its `verify` note on the proofs a
+work removed was taken out after three reviews.
 
 Phase 16 is done. Its five code reviews fixed what each found, a security hole among them (an evidence line could
 read a file anywhere, which in CI let a pull request probe the runner). A closing review of the last fixes found two
