@@ -87,6 +87,20 @@ def parts_of_diff(diff: str) -> list[tuple[str | None, str]]:
     return parts
 
 
+def named_in_diff(diff: str) -> frozenset[str]:
+    """Every path a unified diff names in its `---` and `+++` lines: a moved file by its name before as well as after,
+    as `lines_of_diff` knows it by the second alone. Phase 17, found by its code review."""
+    names, in_hunk = set(), False
+    for line in lines_of(diff):
+        if line.startswith("diff --git "):
+            in_hunk = False
+        elif line.startswith("@@"):
+            in_hunk = True
+        elif not in_hunk and line.startswith(("--- ", "+++ ")) and (name := _path(line[4:])):
+            names.add(name)
+    return frozenset(names)
+
+
 def _path(named: str) -> str | None:
     """A file's path from a `---` or `+++` line: without git's `a/` or `b/`, and nothing for `/dev/null`."""
     named = named.split("\t", 1)[0].strip()
@@ -95,7 +109,7 @@ def _path(named: str) -> str | None:
     return named[2:] if named[:2] in ("a/", "b/") else named
 
 
-def shown(quote: str, runs: Runs) -> bool:
+def _shown(quote: str, runs: Runs) -> bool:
     """Whether `quote` is in one run of `runs`, by the one test of a quote the package has."""
     return any(quoted_at(quote, "\n".join(run)) is not None for run in runs)
 
@@ -125,7 +139,7 @@ def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed:
             (path, quote)
             for piece in one.evidence
             for path, quote in [(_named(piece.path, sides), plain(piece.quote))]  # as plain text, then looked for
-            if path is not None and shown(quote, sides[path][side])
+            if path is not None and _shown(quote, sides[path][side])
         )
         reason = plain(one.reason)
         if one.verdict == "met" and not evidence:

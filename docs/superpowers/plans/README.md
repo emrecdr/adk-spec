@@ -500,8 +500,10 @@ and a step moves to code only where its output is a function of its input with n
 - Phase 16's small items, left by its last review: a change an older adk-spec verified with a requirement unmet is sent
   to a `reports/remaining.md` it never wrote, once, until `verify` runs; a note a person writes in a living
   `evidence.md` is lost when an archive rewrites it, as the file asks for entries alone; the archive's `kept` line gives
-  one reason for every file it leaves; a moved quote's search misreads a file whose name holds a colon, or one
-  git quotes for a character outside ASCII (`core.quotePath`), which the profile's check now reaches too. From the
+  one reason for every file it leaves; a moved quote's search misreads a file whose name holds a colon, or one of
+  the characters git quotes even with `core.quotePath` off (`"`, `\`, a tab), which the profile's check and the
+  `verify` note now reach too: `git grep -z` would fix it. A drafted `[P]` is held to its neighbours alone, as the
+  planner is told: two `[P]` tasks a third stands between may still name one file. From the
   closing review: an approval that voids a verification leaves its `verify.md` and the change's `evidence.md`, which
   the next `verify` replaces and an archive never folds; a person's own entries in another form,
   `## [1.2.0] - 2026-01-01`, are read as introduction, so adk-spec's go below them. From the reviews after: a strict

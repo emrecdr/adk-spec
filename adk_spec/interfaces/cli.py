@@ -1827,7 +1827,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     wrote += _aids_written(workspace, args.id, aids)
     for one in verdicts:
         print(f"{one.verdict:<8}  {one.id}  {one.reason}")
-    _taken_out_said(workspace, specs, work.text, added | gone)
+    _taken_out_said(workspace, state, specs, work.text, added | gone)
     print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
@@ -1835,10 +1835,12 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     return EXIT_OK if after.status == "verified" else EXIT_FINDINGS
 
 
-def _taken_out_said(workspace: Workspace, living: Mapping[str, Spec], diff: str, own: frozenset[str]) -> None:
+def _taken_out_said(
+    workspace: Workspace, state: ChangeState, living: Mapping[str, Spec], diff: str, own: frozenset[str]
+) -> None:
     """A note naming the living requirements the change does not name, `own` being those it does, whose every
-    proving line its work's `diff` took out, where there are any. Phase 17."""
-    if said := removed_said(removed_by(workspace, living, diff, own=own)):
+    proving line is gone from the code, in files its work's `diff` changed, where there are any. Phase 17."""
+    if said := removed_said(removed_by(workspace, living, diff, repositories=state.repositories, own=own)):
         print(f"note      {said}")
 
 

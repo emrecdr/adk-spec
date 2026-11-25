@@ -132,4 +132,9 @@ def test_a_statement_is_read_to_its_own_code_span_and_with_no_note() -> None:
     """Found by phase 17's code review: a note mentioning `b.py:10` took the path to the note's span, and a statement
     whose note was empty, its space stripped, was passed over."""
     text = "- `src/a.py:3` Calls `b.py:10` here.\n  > def call_b():\n- `src/c.py:4`\n  > def c_alone():\n"
-    assert quoted_statements(text) == [("src/a.py", "def call_b():"), ("src/c.py", "def c_alone():")]
+    text += "- `src/d.py:5`\ta tab after the span.\n  > def d_tabbed():\n"
+    assert quoted_statements(text) == [
+        ("src/a.py", "def call_b():"),
+        ("src/c.py", "def c_alone():"),
+        ("src/d.py", "def d_tabbed():"),
+    ]

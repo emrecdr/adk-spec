@@ -84,7 +84,7 @@ def kept(
             continue
         held: list[Proof] = []
         for named, quote in verdict.evidence:
-            repository, path = _placed(named, repositories)
+            repository, path = placed(named, repositories)
             # Cut where it may be: what a quote begins with is found wherever the whole quote is.
             one = Proof(verdict.id, repository, path, change, at, quote[:QUOTE_MAX].rstrip())
             if HIDDEN not in quote and _APART not in repository + path and one not in held:
@@ -133,7 +133,7 @@ def suspects(proofs: Sequence[tuple[int, Proof]], holds: Callable[[Proof], bool 
     return found
 
 
-def _placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:
+def placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:
     """The repository and the path within it of a path as `verify` named it."""
     name, _, rest = named.partition("/")
     return (repositories[name], rest) if rest and name in repositories else (".", named)
@@ -148,10 +148,12 @@ REMOVED_NAMED = 3
 
 
 def removed_said(named: Sequence[str]) -> str:
-    """What `verify` says where its work took out every line that proved living requirements the change does not
-    name, each `ID (capability)`; nothing where there are none. Phase 17."""
+    """What `verify` says where every line that proved living requirements the change does not name, each
+    `ID (capability)`, is gone from the code, in files its work changed; nothing where there are none. Phase 17. It
+    says no more than code knows: found by its code review, the lines may have gone before the work."""
     if not named:
         return ""
     more = len(named) - REMOVED_NAMED
     listed = ", ".join(named[:REMOVED_NAMED]) + (f" and {more} more" if more > 0 else "")
-    return f"this work took out every line that proved {listed}: put them back, or change them in this change"
+    gone = f"the lines that proved {listed} are gone from the code, in files this work changed"
+    return f"{gone}: put them back, or change them in this change"

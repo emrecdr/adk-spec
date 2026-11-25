@@ -314,29 +314,41 @@ def test_a_change_modifying_a_requirement_with_no_proof_takes_its_old_lines_out(
 
 def test_the_proofs_taken_out_are_named_three_then_counted() -> None:
     said = removed_said(["REQ-A-001 (a)", "REQ-A-002 (a)", "REQ-B-001 (b)", "REQ-B-002 (b)"])
-    assert said.startswith("this work took out every line that proved REQ-A-001 (a), REQ-A-002 (a), REQ-B-001 (b)")
+    assert said.startswith("the lines that proved REQ-A-001 (a), REQ-A-002 (a), REQ-B-001 (b)")
     assert " and 1 more" in said and removed_said([]) == ""
 
 
-def test_verify_names_the_living_requirements_its_own_diff_took_every_proof_of(tmp_path, capsys) -> None:
-    """Phase 17, and its code review. Named: a requirement the change never names whose only line the work took out,
-    though its file moved away. Not named: one whose line was gone before the work, in a file the work then edited,
-    nor one the change modifies itself."""
+def test_verify_notes_living_requirements_whose_lines_are_gone_in_files_the_work_changed(tmp_path, capsys) -> None:
+    """Phase 17, and its two code reviews. Named: a requirement the change never names whose line was in a file the
+    work moved and edited (known by its old name), and one whose two-line quote the work changed one line of. Not
+    named: one whose lines are in a file the work never changed, nor one the change modifies itself."""
+    from conftest import _git
     from samples import SPEC
 
-    write_text(tmp_path / "src/old_name.py", "def keep_me_around():\n    return 1\n")
+    moved = "def keep_me_around():\n    return 1\n# one\n# two\n# three\n# four\n"
+    write_text(tmp_path / "src/old_name.py", moved)
     approved_in_a_repository(tmp_path)
-    write_text(tmp_path / ".spec/specs/billing/spec.md", SPEC.replace("AUTH", "BILLING").replace("# auth", "# billing"))
+    for capability in ("billing", "audit"):
+        title = capability.upper()
+        write_text(
+            tmp_path / f".spec/specs/{capability}/spec.md",
+            SPEC.replace("AUTH", title).replace("# auth", f"# {capability}"),
+        )
     billing = [
         proof("REQ-BILLING-001", quote="def keep_me_around():", path="src/old_name.py"),
-        proof("REQ-BILLING-002", quote="def stale_before_this_work():"),  # in src/auth.py, which the work edits
+        proof("REQ-BILLING-002", quote="def lock(account): return account.failures >= 5"),  # two lines, one changed
     ]
     write_text(tmp_path / ".spec/specs/billing/evidence.md", render_evidence("billing", billing))
+    audit = [
+        proof("REQ-AUDIT-001", quote="def never_here():", path="src/elsewhere.py")
+    ]  # a file the work never changed
+    write_text(tmp_path / ".spec/specs/audit/evidence.md", render_evidence("audit", audit))
     write_text(tmp_path / LIVING_EVIDENCE, render_evidence("auth", [proof("REQ-AUTH-002", quote="failures >= 5")]))
     implemented(tmp_path)
-    (tmp_path / "src/old_name.py").unlink()
-    write_text(tmp_path / "src/new_name.py", "def renamed():\n    return 1\n")
+    _git(tmp_path, "mv", "src/old_name.py", "src/new_name.py")
+    write_text(tmp_path / "src/new_name.py", moved.replace("def keep_me_around():", "def renamed():"))
     capsys.readouterr()
     assert run(tmp_path, "verify", "passkeys") == 0
     (note,) = [line for line in capsys.readouterr().out.splitlines() if line.startswith("note ")]
-    assert "REQ-BILLING-001 (billing)" in note and "REQ-BILLING-002" not in note and "REQ-AUTH-002" not in note
+    assert "REQ-BILLING-001 (billing)" in note and "REQ-BILLING-002 (billing)" in note
+    assert "REQ-AUDIT-001" not in note and "REQ-AUTH-002" not in note and "in files this work changed" in note
