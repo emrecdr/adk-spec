@@ -11,7 +11,7 @@ from ..domain.context_md import quoted_statements
 from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
 from ..domain.secrets import scrub_lines
-from ..domain.text import plain, quoted_at
+from ..domain.text import QUOTE_MIN_CHARS, plain, quoted_at
 from ..domain.validate import finding
 from .config import ConfigError
 from .files import NotTextError, read_text
@@ -35,13 +35,16 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     its own; `exclude`, the person's patterns, apply to its own."""
     own = repository == "."
     folder = root if own else root / repository
-    if not _within(folder, repository, path, own=own):
+    if len(plain(quote)) < QUOTE_MIN_CHARS or not _within(folder, repository, path, own=own):  # too short to find
         return None
     if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
     try:
-        term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
-        if not term:  # nothing to look for elsewhere: unknown, not gone (found by phase 18's code review)
+        # A fixed string git finds on one line, NUL-free: no piece of a secret's stand-in, which no file holds as it
+        # stands (found by phase 18's code review); nothing to look for elsewhere is unknown, not gone.
+        words = [word for word in plain(quote).split() if "REDA" not in word and "ACTED" not in word]
+        term = max(words, key=len, default="")
+        if not term:
             return None
         hits = grep(folder, term, exclude=exclude if own else (), trust=own)
     except GitError:

@@ -1543,7 +1543,6 @@ def _found_text(
         sections=sections,
         over=found.over,
         unknown_over=found.unknown_over,
-        unread=found.unread,
     )
 
 

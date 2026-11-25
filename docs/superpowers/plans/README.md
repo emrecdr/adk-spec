@@ -528,8 +528,11 @@ and a step moves to code only where its output is a function of its input with n
   quote search (`holds`) also looks for a moved quote by its longest word in 20 files at most, so a moved quote with a
   common word can read as gone, in `status`, `validate` and the profile's line alike.
 
-- Phase 18's small item: a folded tree names the files at the top of the workspace's own repository, not those of
-  another repository a change spans, whose paths stand under its name.
+- Phase 18's small items: a folded tree names the files at the top of the workspace's own repository, not those of
+  another repository a change spans; what a reading's last round asked for past its budget is not said (a count was
+  built and taken out: exact, it needs each request followed across rounds, a request read later or asked twice);
+  a second review is not shown the first's unknowns, so they are replaced, not added (showing them is a change to
+  what a model is told); evidence whose code holds `[REDACTED` itself, as redaction code does, is not kept.
 
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:

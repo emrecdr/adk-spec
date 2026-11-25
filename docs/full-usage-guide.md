@@ -253,8 +253,8 @@ adk-spec archive let-users-sign-in-with-a-passkey
   file of the task before or after it.
 - **Phase 18 `[Built]`:** `context.md` keeps the person's answers to `propose`'s questions (scrubbed), and puts them,
   what is still unknown and what the reading left out above the statements, so the cut a stage is given takes the
-  statements' tail first. A reading says every cut: statements and unknowns past their budgets, what its last round
-  asked for beyond them, and the searches and folder listings it made. A folded file tree names the files at the
+  statements' tail first. A reading says statements and unknowns past their budgets, and the searches and folder
+  listings it made. A folded file tree names the files at the
   repository's top, and `verify` is told where a long test output was cut.
 - `validate` is also a merge gate `[Built: P16]`: `change.approval-void` (an approved change edited since) and
   `change.work-drifted` (verified work that moved, where the tier owes a verification) are warnings that fail

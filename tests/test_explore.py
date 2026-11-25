@@ -75,7 +75,6 @@ async def test_the_survey_may_look_again_and_no_more_than_the_budget(tmp_path, f
     fake_provider.answers_each_time(SURVEY, iter(rounds))
     found = explored((await read(tmp_path)).state)
     assert len(sent(fake_provider, SURVEY)) == explore.LOOK_BUDGET == 3, "what the third asked for is not read"
-    assert found.unread == 1, "phase 18: and is counted"
     assert [one.path for one in found.statements] == ["src/app.py", "src/auth/session.py", "docs/auth.md"]
     assert found.read == ("src/app.py (whole)", "src/auth/session.py (whole)", "docs/auth.md (whole)")
     second = sent(fake_provider, SURVEY)[1]
@@ -127,7 +126,6 @@ async def test_no_more_statements_are_kept_than_the_budget(tmp_path, monkeypatch
     found = explored((await read(tmp_path)).state)
     assert len(found.statements) == 2 and len(sent(fake_provider, SURVEY)) == 1, "a full budget ends the reading"
     assert found.over == 1, "phase 18: the statement past the budget is counted"
-    assert found.unread == 1, "and the request it left counted"
 
 
 @pytest.mark.asyncio
@@ -332,10 +330,8 @@ async def test_the_searches_and_folders_a_reading_made_are_said(tmp_path, fake_p
 
 
 @pytest.mark.asyncio
-async def test_a_request_for_what_was_read_whole_is_not_counted_unread(tmp_path, fake_provider) -> None:
-    """Found by phase 18's code review: a file asked for again, read whole already, was said not read."""
-    rounds = [survey(APP, files=("src/auth/session.py",)), survey(SESSION, files=("docs/auth.md",))]
-    rounds += [survey(DOCS, files=("src/app.py",))]
-    fake_provider.answers_each_time(SURVEY, iter(rounds))
+async def test_a_review_naming_one_unknown_twice_keeps_it_once(tmp_path, fake_provider) -> None:
+    """Found by phase 18's code review: a question named twice took two of the eight places."""
+    fake_provider.answers_when(REVIEW, reviewed(unknown=[("Who owns sessions?", ""), ("Who owns sessions?", "src")]))
     found = explored((await read(tmp_path)).state)
-    assert found.unread == 0 and "src/app.py (whole)" in found.read
+    assert found.unknown == (("Who owns sessions?", ""),)

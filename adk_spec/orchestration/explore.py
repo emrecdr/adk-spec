@@ -74,12 +74,10 @@ LOOKS = "looks"
 _READ_LIST = "read_list"
 _REACHED = "reached"
 _ASKED = "asked"
-#: Phase 18: the searches and folder listings made, how many statements and unknowns went past their budgets, and
-#: what was asked for past what the reading reads; kept apart from what was left out, which the review is told.
+#: Phase 18: the searches and folder listings made, and how many statements and unknowns went past their budgets.
 _LOOKED_LIST = "looked_list"
 _OVER = "over"
 _UNKNOWN_OVER = "unknown_over"
-_UNREAD = "unread"
 #: What the review leaves: what is still unknown, how many statements it disputed, and how often it ran.
 UNKNOWN = "unknown"
 DISPUTED = "disputed"
@@ -106,8 +104,6 @@ class Explored:
     #: How many statements went past the budget, and how many unknowns past theirs.
     over: int = 0
     unknown_over: int = 0
-    #: How many requests went past what the reading reads.
-    unread: int = 0
 
 
 def explored(state: Mapping[str, Any]) -> Explored:
@@ -125,16 +121,7 @@ def explored(state: Mapping[str, Any]) -> Explored:
         looked=tuple(state.get(_LOOKED_LIST) or ()),
         over=state.get(_OVER) or 0,
         unknown_over=state.get(_UNKNOWN_OVER) or 0,
-        unread=state.get(_UNREAD) or 0,
     )
-
-
-def _unread(state: Mapping[str, Any], answer: SurveyDraft | ReviewDraft) -> dict[str, Any]:
-    """How many of the requests of `answer` not answered already go past what the reading reads, added to those before:
-    a count, as the request is the model's words. Found by phase 18's code review: named, a request read whole before
-    was said not read, and a model's text went into the file whole."""
-    fresh = _new(state, answer.more_files, answer.more_folders, answer.more_searches)
-    return {_UNREAD: (state.get(_UNREAD) or 0) + sum(len(part) for part in fresh)}
 
 
 def _said(statements: Sequence[Statement]) -> str:
@@ -261,7 +248,7 @@ def _grounded(ctx: Context, source: Source) -> Event:
     update = {**_holding(kept), DROPPED: before.dropped + dropped, _OVER: before.over + over}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
     on = more and (state.get(LOOKS) or 0) < LOOK_BUDGET and len(kept) < STATEMENT_BUDGET
-    return Event(route=SOME if on else NONE, state={**update, **(_unread(state, answer) if more and not on else {})})
+    return Event(route=SOME if on else NONE, state=update)
 
 
 def _to_review(ctx: Context) -> Event:
@@ -287,13 +274,14 @@ def _weighed(ctx: Context) -> Event:
     kept = [one for number, one in enumerate(found.statements, 1) if number not in numbers]
     asked = ((plain(one.question)[:QUESTION_MAX_CHARS], plain(one.where)[:WHERE_MAX_CHARS]) for one in answer.unknown)
     # The last review's unknowns stand, as it read what the first asked for. Phase 18: those past the budget counted.
-    unknown = [[question, where] for question, where in asked if question]
+    once = dict(reversed([(question, where) for question, where in asked if question]))  # found by its review
+    unknown = [[question, where] for question, where in reversed(once.items())]
     disputed = found.disputed + len(found.statements) - len(kept)
     over = max(0, len(unknown) - UNKNOWN_BUDGET)
     update = {**_holding(kept), DISPUTED: disputed, UNKNOWN: unknown[:UNKNOWN_BUDGET], _UNKNOWN_OVER: over}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
     on = more and (state.get(REVIEWS) or 0) < REVIEW_BUDGET and len(kept) < STATEMENT_BUDGET
-    return Event(route=SOME if on else NONE, state={**update, **(_unread(state, answer) if more and not on else {})})
+    return Event(route=SOME if on else NONE, state=update)
 
 
 def build_explore_app(*, source: Source, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:

@@ -18,8 +18,10 @@ given to `verify` with no mark of the cut. This phase keeps the answers and says
 
 1. **The person's answers kept.** `context.md` holds each question `propose` asked and its answer, near its top, so
    the stages after the brief (deltas, design, tasks) read the person's own words, not only the brief's.
-2. **Every cut of the reading said.** Statements past the 40 kept, unknowns past 8, and requests left when the reading's budget ran out are counted under what was left out; the searches and
-   folder listings made are said under what was read.
+2. **Every cut of the reading said.** Statements past the 40 kept and unknowns past 8 are counted under what was
+   left out; the searches and folder listings made are said under what was read. (Requests left when the budget ran
+   out were counted, then taken out: two reviews found the count wrong, a request read later or asked twice; an exact
+   one needs each request followed across rounds. The roadmap keeps it.)
 3. **What matters first in `context.md`.** The unknowns and what was left out stand above the statements, so the cut
    a stage is given at 20,000 characters takes the statements' tail first.
 4. **The top files named.** A folded tree lists the files at the repository's top by name, so a stage sees
@@ -48,5 +50,5 @@ given to `verify` with no mark of the cut. This phase keeps the answers and says
 ## Tests
 
 One per goal: answers in `context.md` after a propose that asked; each cut said (statements past the budget, unknowns
-past theirs, a budget's leftover requests counted, one read whole before not counted, a search and a folder in what was
+past theirs, a search and a folder in what was
 read); the unknowns above the statements in the file; a folded tree naming the top files; a cut test output marked.

@@ -62,20 +62,19 @@ def render_context(
     sections: Sequence[tuple[str, str]] = SECTIONS,
     over: int = 0,
     unknown_over: int = 0,
-    unread: int = 0,
 ) -> str:
     """The file, under `title`: when and of what commit each repository was read, the statements under a heading a
     kind, what is still unknown, what was read, and what was left out. `partial` says why a reading ended early,
     where it did."""
     lines = [f"# {title}", "", _read_from(at, commit, others or {}), ""]
     if partial:
-        lines += [f"{PARTIAL}{partial}.", ""]
+        lines += [f"{PARTIAL}{plain(partial)}.", ""]  # one line: phase 18 places the answers after it
     # What is unknown and what was left out first: phase 18, a stage is given the file cut at its cap, which took them.
     if unknown:
         lines += [UNKNOWN_HEADING, ""]
         lines += [f"- {question}" + (f" Look in: {where}." if where else "") for question, where in unknown]
         lines.append("")
-    if said := _left_out(dropped, disputed, over, unknown_over, unread):
+    if said := _left_out(dropped, disputed, over, unknown_over):
         lines += [said, ""]
     if left_out:
         lines += [f"Not read: {'; '.join(left_out)}.", ""]
@@ -101,7 +100,7 @@ def _read_from(at: str, commit: str | None, others: Mapping[str, str | None]) ->
     )
 
 
-def _left_out(dropped: int, disputed: int, over: int, unknown_over: int, unread: int) -> str:
+def _left_out(dropped: int, disputed: int, over: int, unknown_over: int) -> str:
     """What was left out of the statements and the unknowns, and why, or nothing."""
     said = []
     if dropped:
@@ -113,8 +112,6 @@ def _left_out(dropped: int, disputed: int, over: int, unknown_over: int, unread:
         said.append(f"{over} statement{'' if over == 1 else 's'} past what a reading keeps")
     if unknown_over:
         said.append(f"{unknown_over} unknown{'' if unknown_over == 1 else 's'} past what a review keeps")
-    if unread:
-        said.append(f"{unread} request{'' if unread == 1 else 's'} past what the reading reads")
     return f"Left out: {'; '.join(said)}." if said else ""
 
 

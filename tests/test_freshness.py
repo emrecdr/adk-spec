@@ -178,4 +178,15 @@ def test_a_quote_a_secret_was_scrubbed_from_holds_while_its_line_stands(tmp_path
     ws = profiled(tmp_path, files={**FILES, "src/conf.py": f'KEY = "{key}"\n'}, profile="# Profile\n\n" + entries)
     assert profile_gone(ws) == (0, 3)
     write_text(tmp_path / "src/conf.py", "KEY = None\n")
-    assert profile_gone(ws) == (3, 3)
+    assert profile_gone(ws) == (2, 2), "a stand-in's tail alone has no word to look for elsewhere: unknown"
+
+
+def test_a_quote_over_a_secret_moved_to_another_file_holds_and_a_short_one_is_unknown(tmp_path) -> None:
+    """Found by phase 18's code review: the search term was the stand-in itself, which no file holds as it stands, so
+    a moved quote over a secret read as gone; and a quote too short to look for read as gone too."""
+    key = "AKIA" + "IOSFODNN7EXAMPLE"
+    shown = scrub_lines(f'ACCESS_KEY_FOR_UPLOADS = "{key}"')[0]
+    profile = f"# Profile\n\n- `src/old.py:1` The key.\n  > {shown}\n"
+    ws = profiled(tmp_path, files={**FILES, "src/conf.py": f'ACCESS_KEY_FOR_UPLOADS = "{key}"\n'}, profile=profile)
+    assert profile_gone(ws) == (0, 1), "moved to src/conf.py, and found there"
+    assert quote_holds(tmp_path, ".", "src/app.py", "x = 1", ()) is None
