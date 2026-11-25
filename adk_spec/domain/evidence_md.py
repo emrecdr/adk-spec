@@ -143,17 +143,17 @@ def _sorted(proofs: Sequence[Proof]) -> list[Proof]:
     return sorted(proofs, key=lambda one: (one.req, one.repository, one.path, one.quote))
 
 
-#: How many requirements the note of proofs a work took out names; the rest are counted.
-REMOVED_NAMED = 3
+#: How many requirements the note of proofs gone names; the rest are counted.
+_GONE_NAMED = 3
 
 
-def removed_said(named: Sequence[str]) -> str:
+def gone_said(named: Sequence[str]) -> str:
     """What `verify` says where every line that proved living requirements the change does not name, each
     `ID (capability)`, is gone from the code, in files its work changed; nothing where there are none. Phase 17. It
     says no more than code knows: found by its code review, the lines may have gone before the work."""
     if not named:
         return ""
-    more = len(named) - REMOVED_NAMED
-    listed = ", ".join(named[:REMOVED_NAMED]) + (f" and {more} more" if more > 0 else "")
-    gone = f"the lines that proved {listed} are gone from the code, in files this work changed"
+    more = len(named) - _GONE_NAMED
+    listed = ", ".join(named[:_GONE_NAMED]) + (f" and {more} more" if more > 0 else "")
+    gone = f"every line that proved {listed} is gone from the code, and this work changed a file that held one"
     return f"{gone}: put them back, or change them in this change"

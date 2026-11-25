@@ -825,3 +825,19 @@ def test_the_work_is_judged_as_it_stands_after_the_tests(tmp_path, fake_provider
     assert run(tmp_path, "verify", "passkeys") == 0
     assert "# touched by the tests" in str(fake_provider.requests[-1].config.system_instruction)
     assert run(tmp_path, "archive", "passkeys") == 0
+
+
+def test_every_name_a_diff_gives_a_file_is_read_a_moved_ones_before_too() -> None:
+    """Phase 17: a moved file is known by its name before the move as well as after; a deleted or a new one by the
+    name it has; a hunk's line that opens as a header is no name."""
+    from adk_spec.domain.verify import named_in_diff
+
+    diff = (
+        "diff --git a/src/old.py b/src/new.py\nsimilarity index 80%\nrename from src/old.py\nrename to src/new.py\n"
+        "--- a/src/old.py\n+++ b/src/new.py\n@@ -1,2 +1,2 @@\n-def keep():\n+def moved():\n+++ not/a/name\n"
+        "diff --git a/src/gone.py b/src/gone.py\ndeleted file mode 100644\n--- a/src/gone.py\n+++ /dev/null\n"
+        "@@ -1 +0,0 @@\n-GONE = 1\n"
+        "diff --git a/src/n.py b/src/n.py\nnew file mode 100644\n--- /dev/null\n+++ b/src/n.py\t\n"
+        "@@ -0,0 +1 @@\n+N = 1\n"
+    )
+    assert named_in_diff(diff) == {"src/old.py", "src/new.py", "src/gone.py", "src/n.py"}

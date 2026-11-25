@@ -97,7 +97,7 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
     return found
 
 
-def removed_by(
+def gone_where_changed(
     workspace: Workspace,
     living: Mapping[str, Spec],
     diff: str,

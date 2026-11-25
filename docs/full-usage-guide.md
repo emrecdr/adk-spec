@@ -248,7 +248,7 @@ adk-spec archive let-users-sign-in-with-a-passkey
   file and then across its repository: a requirement none of whose quotes is found is noted as suspect (INFO, never a
   CI failure). Delete its lines in a reviewed commit, or verify a change that keeps it, to clear it.
 - **Phase 17 `[Built]`:** `verify` prints one `note` where every line that proved a living requirement the change
-  does not name is gone from the code, in files the work changed (a moved file by either name).
+  does not name is gone from the code, and the work changed a file that held one (a moved file by either name).
   `status`, and `propose` before it spends anything, say on one line how many of `.spec/profile.md`'s quotes are no
   longer in the code (a library's quote, or one git cannot look for, is not counted): `init --refresh` reads it
   again. A drafted task keeps `[P]` only where it names its files and none is a file of the task before or after it.

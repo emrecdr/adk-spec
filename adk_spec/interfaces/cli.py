@@ -37,7 +37,7 @@ from ..domain.context_md import (
 )
 from ..domain.convert import kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
-from ..domain.evidence_md import kept, removed_said, render_evidence
+from ..domain.evidence_md import gone_said, kept, render_evidence
 from ..domain.lifecycle import (
     DEMANDS,
     Step,
@@ -93,7 +93,7 @@ from ..workspace.context import (
     living_text,
     profile_text,
 )
-from ..workspace.evidence import evidence_findings, evidence_folded, profile_gone, removed_by
+from ..workspace.evidence import evidence_findings, evidence_folded, gone_where_changed, profile_gone
 from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
@@ -1827,7 +1827,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     wrote += _aids_written(workspace, args.id, aids)
     for one in verdicts:
         print(f"{one.verdict:<8}  {one.id}  {one.reason}")
-    _taken_out_said(workspace, state, specs, work.text, added | gone)
+    _gone_said(workspace, state.repositories, specs, work.text, added | gone)
     print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
@@ -1835,12 +1835,12 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     return EXIT_OK if after.status == "verified" else EXIT_FINDINGS
 
 
-def _taken_out_said(
-    workspace: Workspace, state: ChangeState, living: Mapping[str, Spec], diff: str, own: frozenset[str]
+def _gone_said(
+    workspace: Workspace, repositories: Mapping[str, str], living: Mapping[str, Spec], diff: str, own: frozenset[str]
 ) -> None:
     """A note naming the living requirements the change does not name, `own` being those it does, whose every
     proving line is gone from the code, in files its work's `diff` changed, where there are any. Phase 17."""
-    if said := removed_said(removed_by(workspace, living, diff, repositories=state.repositories, own=own)):
+    if said := gone_said(gone_where_changed(workspace, living, diff, repositories=repositories, own=own)):
         print(f"note      {said}")
 
 
