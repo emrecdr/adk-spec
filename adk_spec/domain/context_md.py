@@ -30,6 +30,9 @@ PROFILE_SECTIONS = (
 DRAFTED_HEADING = "## Drafted from the code"
 #: The heading what a review named as still unknown stands under.
 UNKNOWN_HEADING = "## What is still unknown"
+#: How many statements a reading keeps, and how many unknowns: the reading's budgets, said where it went past them.
+STATEMENTS_KEPT = 40
+UNKNOWNS_KEPT = 8
 #: A statement's line as `render_context` writes it: its file and line in a code span, then its note; and the lines
 #: under it, the block it stands in and its quote.
 _STATEMENT = re.compile(r"- `(?P<path>[^`]+):[0-9]+`(?:\s|$)")
@@ -57,6 +60,9 @@ def render_context(
     unknown: Sequence[tuple[str, str]] = (),
     disputed: int = 0,
     sections: Sequence[tuple[str, str]] = SECTIONS,
+    over: int = 0,
+    unknown_over: int = 0,
+    looked: Sequence[str] = (),
 ) -> str:
     """The file, under `title`: when and of what commit each repository was read, the statements under a heading a
     kind, what is still unknown, what was read, and what was left out. `partial` says why a reading ended early,
@@ -64,6 +70,15 @@ def render_context(
     lines = [f"# {title}", "", _read_from(at, commit, others or {}), ""]
     if partial:
         lines += [f"{PARTIAL}{partial}.", ""]
+    # What is unknown and what was left out first: phase 18, a stage is given the file cut at its cap, which took them.
+    if unknown:
+        lines += [UNKNOWN_HEADING, ""]
+        lines += [f"- {question}" + (f" Look in: {where}." if where else "") for question, where in unknown]
+        lines.append("")
+    if said := _left_out(dropped, disputed, over, unknown_over):
+        lines += [said, ""]
+    if left_out:
+        lines += [f"Not read: {'; '.join(left_out)}.", ""]
     for kind, section in sections:
         held = [one for one in statements if one.kind == kind]
         if held:
@@ -72,15 +87,7 @@ def render_context(
                 lines += [f"- `{one.path}:{one.line}` {one.note}", *([f"{_WITHIN}{one.within}"] if one.within else ())]
                 lines.append(f"{_QUOTE}{one.quote}")
             lines.append("")
-    if unknown:
-        lines += [UNKNOWN_HEADING, ""]
-        lines += [f"- {question}" + (f" Look in: {where}." if where else "") for question, where in unknown]
-        lines.append("")
-    lines += ["## What was read", "", *(f"- {one}" for one in read or ("nothing",)), ""]
-    if said := _left_out(dropped, disputed):
-        lines += [said, ""]
-    if left_out:
-        lines += [f"Not read: {'; '.join(left_out)}.", ""]
+    lines += ["## What was read", "", *(f"- {one}" for one in (*read, *looked) or ("nothing",)), ""]
     return "\n".join(lines)
 
 
@@ -94,14 +101,18 @@ def _read_from(at: str, commit: str | None, others: Mapping[str, str | None]) ->
     )
 
 
-def _left_out(dropped: int, disputed: int) -> str:
-    """What was left out of the statements, and why, or nothing."""
+def _left_out(dropped: int, disputed: int, over: int = 0, unknown_over: int = 0) -> str:
+    """What was left out of the statements and the unknowns, and why, or nothing."""
     said = []
     if dropped:
         said.append(f"{dropped} statement{'' if dropped == 1 else 's'} whose quote was not in the file named")
     if disputed:
         noun = "" if said else f" statement{'' if disputed == 1 else 's'}"
         said.append(f"{disputed}{noun} the review disputed")
+    if over:
+        said.append(f"{over} statement{'' if over == 1 else 's'} past the {STATEMENTS_KEPT} a reading keeps")
+    if unknown_over:
+        said.append(f"{unknown_over} unknown{'' if unknown_over == 1 else 's'} past the {UNKNOWNS_KEPT} kept")
     return f"Left out: {'; '.join(said)}." if said else ""
 
 

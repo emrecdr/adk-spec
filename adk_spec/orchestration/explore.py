@@ -19,6 +19,7 @@ from google.adk.apps.app import App
 from google.adk.events import Event
 from google.adk.plugins.base_plugin import BasePlugin
 
+from ..domain.context_md import STATEMENTS_KEPT, UNKNOWNS_KEPT
 from ..domain.convert import to_statements
 from ..domain.drafts import ReviewDraft, ScoutDraft, SurveyDraft
 from ..domain.model import Statement
@@ -37,7 +38,7 @@ from .stages.survey import MATERIAL, READ, STATED
 ROLES = (scout_stage.KEY, survey_stage.KEY, review_stage.KEY)
 #: How many rounds of reading one change gets, and how many statements are kept of it.
 LOOK_BUDGET = 3
-STATEMENT_BUDGET = 40
+STATEMENT_BUDGET = STATEMENTS_KEPT
 #: How often a reading is reviewed, and how many unknowns, each how long, a review leaves.
 REVIEW_BUDGET = 2
 #: The most model calls one reading makes, a gate's asking again aside: a scout, the rounds and the review's one
@@ -60,7 +61,7 @@ how errors, logging and configuration are handled; and what is risky to change.
 Phrase each convention as a rule new code must follow, in one sentence, such as "Every error is raised as an
 AppError." or "Each module has its test beside it, named after it.": what is merely there is not a convention.
 """
-UNKNOWN_BUDGET = 8
+UNKNOWN_BUDGET = UNKNOWNS_KEPT
 QUESTION_MAX_CHARS = 200
 WHERE_MAX_CHARS = 120
 #: The state keys of a reading: the statements kept, each file's text as it was shown, what was asked for and not
@@ -74,6 +75,12 @@ LOOKS = "looks"
 _READ_LIST = "read_list"
 _REACHED = "reached"
 _ASKED = "asked"
+#: Phase 18: the searches and folder listings made, and how many statements and unknowns went past their budgets.
+_LOOKED_LIST = "looked_list"
+OVER = "over"
+UNKNOWN_OVER = "unknown_over"
+#: What a reading says it left, where its last round, or its review's, asked for more than it may read.
+LEFTOVER = "more asked for after the reading's last round"
 #: What the review leaves: what is still unknown, how many statements it disputed, and how often it ran.
 UNKNOWN = "unknown"
 DISPUTED = "disputed"
@@ -95,6 +102,11 @@ class Explored:
     unknown: tuple[tuple[str, str], ...] = ()
     #: How many statements a review left out for a quote that does not bear out their note.
     disputed: int = 0
+    #: Each search made and folder listed, with what it found.
+    looked: tuple[str, ...] = ()
+    #: How many statements went past the budget, and how many unknowns past theirs.
+    over: int = 0
+    unknown_over: int = 0
 
 
 def explored(state: Mapping[str, Any]) -> Explored:
@@ -102,7 +114,28 @@ def explored(state: Mapping[str, Any]) -> Explored:
     statements = [Statement.model_validate(one) for one in state.get(KEPT) or ()]
     unknown = tuple((question, where) for question, where in state.get(UNKNOWN) or ())
     read, left_out = tuple(state.get(_READ_LIST) or ()), tuple(state.get(LEFT_OUT) or ())
-    return Explored(statements, read, left_out, state.get(DROPPED) or 0, unknown, state.get(DISPUTED) or 0)
+    looked, over, unknown_over = (
+        tuple(state.get(_LOOKED_LIST) or ()),
+        state.get(OVER) or 0,
+        state.get(UNKNOWN_OVER) or 0,
+    )
+    return Explored(
+        statements,
+        read,
+        left_out,
+        state.get(DROPPED) or 0,
+        unknown,
+        state.get(DISPUTED) or 0,
+        looked,
+        over,
+        unknown_over,
+    )
+
+
+def _leftover(state: Mapping[str, Any], left: bool) -> dict[str, Any]:
+    """`LEFTOVER` added once to what was left out where `left`, more asked for than the reading may read."""
+    left_out = list(state.get(LEFT_OUT) or ())
+    return {LEFT_OUT: [*left_out, LEFTOVER]} if left and LEFTOVER not in left_out else {}
 
 
 def _said(statements: Sequence[Statement]) -> str:
@@ -171,11 +204,14 @@ def _look(
             reached[path] = [upto, total]
     read = list(state.get(_READ_LIST) or ())
     read += [note for note in got.read if note not in read]
+    looked = list(state.get(_LOOKED_LIST) or ())
+    looked += [note for note in got.looked if note not in looked]
     update = {
         SEEN: seen,
         _REACHED: reached,
         _ASKED: [*(state.get(_ASKED) or ()), *answered],
         _READ_LIST: read,
+        _LOOKED_LIST: looked,
         READ: "\n".join(read),
         LEFT_OUT: [*(state.get(LEFT_OUT) or ()), *got.left_out],
     }
@@ -221,11 +257,12 @@ def _grounded(ctx: Context, source: Source) -> Event:
     before = explored(state)
     held = {(one.path, one.line, one.kind) for one in before.statements}
     kept = [*before.statements, *(one for one in fresh if (one.path, one.line, one.kind) not in held)]
+    over = max(0, len(kept) - STATEMENT_BUDGET)
     kept = kept[:STATEMENT_BUDGET]
-    update = {**_holding(kept), DROPPED: before.dropped + dropped}
+    update = {**_holding(kept), DROPPED: before.dropped + dropped, OVER: before.over + over}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
     on = more and (state.get(LOOKS) or 0) < LOOK_BUDGET and len(kept) < STATEMENT_BUDGET
-    return Event(route=SOME if on else NONE, state=update)
+    return Event(route=SOME if on else NONE, state={**update, **_leftover(state, more and not on)})
 
 
 def _to_review(ctx: Context) -> Event:
@@ -250,11 +287,15 @@ def _weighed(ctx: Context) -> Event:
     numbers = {one.statement for one in answer.disputed}
     kept = [one for number, one in enumerate(found.statements, 1) if number not in numbers]
     asked = ((plain(one.question)[:QUESTION_MAX_CHARS], plain(one.where)[:WHERE_MAX_CHARS]) for one in answer.unknown)
-    unknown = [[question, where] for question, where in asked if question][:UNKNOWN_BUDGET]
-    update = {**_holding(kept), DISPUTED: found.disputed + len(found.statements) - len(kept), UNKNOWN: unknown}
+    # Phase 18: a second review's unknowns add to the first's, each question once, as it replaced them in silence.
+    every = {question: where for question, where in (*found.unknown, *asked) if question}
+    unknown = [[question, where] for question, where in every.items()]
+    disputed = found.disputed + len(found.statements) - len(kept)
+    over = max(0, len(unknown) - UNKNOWN_BUDGET)
+    update = {**_holding(kept), DISPUTED: disputed, UNKNOWN: unknown[:UNKNOWN_BUDGET], UNKNOWN_OVER: over}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
     on = more and (state.get(REVIEWS) or 0) < REVIEW_BUDGET and len(kept) < STATEMENT_BUDGET
-    return Event(route=SOME if on else NONE, state=update)
+    return Event(route=SOME if on else NONE, state={**update, **_leftover(state, more and not on)})
 
 
 def build_explore_app(*, source: Source, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:

@@ -245,7 +245,9 @@ async def test_the_review_may_send_the_reading_one_round_further_and_runs_twice_
     assert len(sent(fake_provider, REVIEW)) == explore.REVIEW_BUDGET == 2
     assert found.read == ("src/app.py (whole)", "docs/auth.md (whole)"), "what the second review asked is not read"
     assert [one.path for one in found.statements] == ["src/app.py", "docs/auth.md"]
-    assert found.unknown == (("Where is a session ended?", "src/auth"),), "the second review's unknowns stand"
+    assert found.unknown == (("How long does a session last?", "docs"), ("Where is a session ended?", "src/auth")), (
+        "the second review's unknowns add to the first's (phase 18)"
+    )
 
 
 @pytest.mark.asyncio
@@ -316,3 +318,38 @@ async def test_the_survey_and_the_review_are_shown_the_libraries_they_may_ask_fo
     for opening in (SURVEY, REVIEW):
         (told,) = sent(fake_provider, opening)[:1]
         assert "httpx 0.28.1" in told and "python:<path>" in told, opening
+
+
+@pytest.mark.asyncio
+async def test_statements_past_the_budget_and_requests_past_the_rounds_are_said(
+    tmp_path, monkeypatch, fake_provider
+) -> None:
+    """Phase 18: statements past the budget, and what the last round asked for, were dropped in silence."""
+    monkeypatch.setattr(explore, "STATEMENT_BUDGET", 2)
+    more = {**APP, "quote": "def login():", "note": "The entry point."}
+    fake_provider.answers_when(SURVEY, survey(APP, more, {**APP, "kind": "risk"}, files=("src/auth/session.py",)))
+    found = explored((await read(tmp_path)).state)
+    assert found.over == 1 and any("asked for after the reading's last round" in one for one in found.left_out)
+
+
+@pytest.mark.asyncio
+async def test_a_second_review_adds_its_unknowns_to_the_first_and_those_past_the_budget_are_counted(
+    tmp_path, fake_provider
+) -> None:
+    """Phase 18: a second review replaced the first's unknowns, and those past eight went unsaid."""
+    first = reviewed(unknown=[("Who owns sessions?", "")], files=("docs/auth.md",))
+    second = reviewed(unknown=[(f"Question {n}?", "") for n in range(10)])
+    fake_provider.answers_each_time(REVIEW, iter([first, second]))
+    found = explored((await read(tmp_path)).state)
+    assert found.unknown[0] == ("Who owns sessions?", "") and len(found.unknown) == explore.UNKNOWN_BUDGET
+    assert found.unknown_over == 3
+
+
+@pytest.mark.asyncio
+async def test_the_searches_and_folders_a_reading_made_are_said(tmp_path, fake_provider) -> None:
+    """Phase 18: a search and a folder listing were shown to the survey and never said in what was read."""
+    asks = {"statements": [APP], "more_files": [], "more_folders": ["src/auth"], "more_searches": ["password"]}
+    fake_provider.answers_each_time(SURVEY, iter([asks, survey(SESSION)]))
+    found = explored((await read(tmp_path)).state)
+    assert any(one.startswith("search: password (") for one in found.looked)
+    assert any(one.startswith("src/auth/ (") for one in found.looked)
