@@ -558,12 +558,9 @@ def _view_written(
 
 
 def _view_said(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> bool:
-    """The view written again, as `_view_written` writes it, and named on a `review` line: whether it was. A change
-    with no spec has none: found by the review of the closing fixes, the view of specs it no longer held stayed."""
-    if not deltas:
-        workspace.drop(change_id, f"{REPORTS}/{REVIEW}")
-        return False
-    if (view := _view_written(workspace, change_id, deltas, living)) is None:
+    """The view written again, as `_view_written` writes it, and named on a `review` line: whether it was. Not where
+    no delta reads: found by a review, a view dropped while a delta was mid-edit let an unseen edit be approved."""
+    if not deltas or (view := _view_written(workspace, change_id, deltas, living)) is None:
         return False
     shown, overlaps = view
     print(f"review    {shown}: {review_said(deltas, overlaps)}")
@@ -980,14 +977,17 @@ def _archive(args: argparse.Namespace) -> int:
         return EXIT_FINDINGS
     # The lines that proved each requirement, beside its living spec: the next change and `validate` read them.
     files, left = evidence_folded(workspace, state, loaded.change.deltas)
-    if (logged := _logged(workspace, args.id, loaded.change.deltas)) is None:
-        left.append(workspace.shown(workspace.home / CHANGELOG))
-    else:
+    if (logged := _logged(workspace, args.id, loaded.change.deltas)) is not None:
         files[CHANGELOG] = logged
     workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}), files=files)
     print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
     for shown in left:
-        print(f"kept      {shown}: it would not read or be written, a link, not UTF-8 or a fence never closed")
+        print(f"kept      {shown}: it would not read or be written, a link or not UTF-8: nothing was added")
+    if logged is None:
+        print(
+            f"kept      {workspace.shown(workspace.home / CHANGELOG)}: it would not read or be written, a link, not "
+            f"UTF-8 or a code fence never closed: the entry of `{args.id}` was not added"
+        )
     return EXIT_OK
 
 

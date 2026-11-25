@@ -211,7 +211,7 @@ What happens inside `approve` `[Built]`:
   one drops that verification: a change edited since is verified again. Approved again as it stands, a verified change
   stays verified, and its `reports/summary.md` names the new approval.
 - Before you approve, read `reports/review.md` `[Built: P16]`: each requirement the change adds, whole; each it removes,
-  with its reason; each it modifies, as a diff against the living spec. Each command that writes a change and leaves it
+  with its reason and as the living spec holds it; each it modifies, as a diff against the living spec. Each command that writes a change and leaves it
   waiting on an approval writes the view again and names it on a `review` line, with the open changes that modify or
   remove the same requirements; a command refused, and `status`, write nothing. Once a change is approved, `approve`
   names those on a `note` line: whichever is archived second is stopped, to be reworked onto the first. Where the
@@ -245,7 +245,8 @@ adk-spec archive let-users-sign-in-with-a-passkey
 - Atomically merges `ADDED` / `MODIFIED` / `REMOVED` blocks into `.spec/specs/auth/spec.md` and marks the change `archived`.
 - **Phase 16 `[Built]`:** in the same write, folds the change's evidence into `.spec/specs/auth/evidence.md` (a requirement
   it adds or modifies gets its lines, one it removes loses them) and puts an entry above the others in
-  `.spec/changelog.md`. Later, `validate` and `status` look for each kept quote in the code, in its file and then across
+  `.spec/changelog.md`; one with a code fence never closed is left, and the archive says the entry was not added,
+  since where it goes is then a guess. Later, `validate` and `status` look for each kept quote in the code, in its file and then across
   its repository: a requirement none of whose quotes is found is noted as suspect (INFO, never a CI failure). Delete its
   lines in a reviewed commit, or verify a change that keeps it, to clear it.
 - `validate` is also a merge gate `[Built: P16]`: `change.approval-void` (an approved change edited since) and

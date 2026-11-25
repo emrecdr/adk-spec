@@ -1,7 +1,7 @@
 """`reports/review.md`: what a change does to each requirement it touches, as its approver reads it. A requirement it
-adds is shown whole, one it removes with its reason, one it modifies as a diff of the living requirement against the
-delta's; and each the change modifies or removes that another open change modifies or removes too is named, so the
-approver learns it now, not at the second archive."""
+adds is shown whole, one it removes with its reason and as the living spec holds it, one it modifies as a diff of the
+living requirement against the delta's; and each the change modifies or removes that another open change modifies or
+removes too is named, so the approver learns it now, not at the second archive."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def view_mark(change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, 
 def mark_of(view: str) -> str | None:
     """The fingerprint a view ends on; None for one with none, an older adk-spec's. Its last line alone: found by the
     review of the closing fixes, a requirement's line shaped as one was read first."""
-    found = _MARK.fullmatch(view.rstrip("\n").rsplit("\n", 1)[-1])
+    found = _MARK.fullmatch(view.rstrip().rsplit("\n", 1)[-1].strip())
     return found.group(1) if found else None
 
 
@@ -49,7 +49,7 @@ def render_review(
         held = {req.id: req for req in living[capability].requirements} if capability in living else {}
         lines += [f"## {capability}", ""]
         if capability not in living and delta.purpose:  # the new living spec opens on it
-            lines += ["### Purpose", "", delta.purpose, ""]
+            lines += ["### Purpose", "", *_fenced("markdown", delta.purpose.split("\n"))]
         if delta.added:
             lines += ["### Added", ""]
             for req in delta.added:
@@ -60,7 +60,9 @@ def render_review(
                 lines += _changed(held.get(req.id), req, change_id)
         if delta.removed:
             lines += ["### Removed", ""]
-            lines += [f"- {gone.id}: {gone.name}. {gone.reason}" for gone in delta.removed] + [""]
+            for gone in delta.removed:  # as the living spec holds it: found by a review, an edit to it went unseen
+                lines += [f"- {gone.id}: {gone.name}. {gone.reason}", ""]
+                lines += _whole(held[gone.id]) if gone.id in held else []
     if overlaps:
         lines += ["## Also changed by open changes", ""]
         lines += [f"- {req_id}: {', '.join(others)}" for req_id, others in sorted(overlaps.items())] + [""]

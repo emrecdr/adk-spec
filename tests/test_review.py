@@ -304,4 +304,59 @@ def test_a_new_capabilitys_purpose_is_in_its_view() -> None:
     unseen."""
     added = DELTA.split("## ADDED Requirements\n\n")[1].split("\n## MODIFIED")[0].replace("AUTH", "SEARCH")
     new = parse_delta("# Delta: search\n\n## Purpose\n\nFind things.\n\n## ADDED Requirements\n\n" + added)
-    assert "### Purpose\n\nFind things." in render_review("passkeys", {"search": new}, LIVING, {})
+    # In a fence of its own, as a requirement is: found by a review, a purpose opening an HTML comment hid the rest.
+    assert "### Purpose\n\n```markdown\nFind things.\n```" in render_review("passkeys", {"search": new}, LIVING, {})
+
+
+def test_a_view_outlives_a_delta_that_will_not_read(tmp_path) -> None:
+    """Found by the third review of the closing fixes: a delta mid-edit read as no delta, the view was dropped, and
+    the next approval, of an edit no view had shown, went through."""
+    seeded(tmp_path)
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    good = read_text(delta)
+    write_text(delta, good + "\n```\n")
+    run(tmp_path, "check", "passkeys", "--no-model")
+    assert (tmp_path / VIEW).is_file()
+    write_text(delta, good.replace("three failed attempts", "ninety failed attempts"))
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    approved(tmp_path)
+
+
+def test_a_removed_requirement_is_shown_as_the_living_spec_holds_it(tmp_path) -> None:
+    """Found by the third review of the closing fixes: a living requirement the change removes was edited after the
+    view was written, and the approval and the archive took the edit out unseen."""
+    assert "The system SHALL let a registered user sign in with email" in render_review("passkeys", DELTAS, LIVING, {})
+    seeded(tmp_path)
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    living = tmp_path / ".spec/specs/auth/spec.md"
+    write_text(living, read_text(living).replace("sign in with email", "sign in with email, and SSO for admins", 1))
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    assert "SSO for admins" in read_text(tmp_path / VIEW)
+    approved(tmp_path)
+
+
+def test_the_views_fingerprint_is_read_past_trailing_spaces() -> None:
+    """Found by the third review of the closing fixes: an editor's trailing spaces read as no fingerprint."""
+    mark = f"sha256:{'0' * 64}"
+    assert mark_of(f"# Review: x\n\n<!-- view {mark} -->  \n\n") == mark
+
+
+def test_a_generated_file_is_never_dropped_through_a_link(tmp_path) -> None:
+    """Found by the third review of the closing fixes: a change's `reports/` that is a link had a file of its target
+    removed, where writing there is refused."""
+    ws = seeded(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    write_text(outside / "review.md", "theirs\n")
+    reports = tmp_path / ".spec/changes/passkeys/reports"
+    if reports.exists():
+        import shutil
+
+        shutil.rmtree(reports)
+    try:
+        reports.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("no symbolic link can be made here")
+    ws.drop("passkeys", "reports/review.md")
+    assert read_text(outside / "review.md") == "theirs\n"

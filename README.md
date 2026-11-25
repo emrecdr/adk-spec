@@ -339,7 +339,8 @@ again, or approve with `--override "<your reason>"`, which is recorded. The appr
 file: any later edit voids it, ticking a task box does not.
 
 Before approving, read `reports/review.md`, which every command that leaves a draft for you to read writes again
-(its `review` line names it): each requirement the change adds, whole; each it removes, with the reason; and each it
+(its `review` line names it): each requirement the change adds, whole; each it removes, with the reason and as the
+living spec holds it; and each it
 modifies, as a diff against the living spec. It also names any other open change that modifies or removes the same
 requirement, as `approve` does in a `note` line: whichever of the two is archived second is stopped, to be reworked
 onto the first. Where `archive` stops on a living spec that moved, it writes the view again to show what. Where the
@@ -402,7 +403,8 @@ only, and it never fails CI. To clear it, verify a change that keeps the require
 reviewed commit. A line from another repository is checked only where that repository is there.
 
 It also puts an entry first in `.spec/changelog.md`: the change and the day, then each requirement it added,
-modified and removed. Anything you write below the heading is kept as it is.
+modified and removed. Anything you write below the heading is kept as it is. A changelog with a code fence never
+closed is left as it is, and `archive` says the change's entry was not added: close the fence.
 
 ## Use cases
 

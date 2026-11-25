@@ -166,6 +166,8 @@ def test_a_changelog_whose_code_fence_is_never_closed_is_left_and_the_change_arc
     write_text(tmp_path / CHANGELOG, text)
     capsys.readouterr()
     assert run(tmp_path, "archive", "passkeys") == 0
-    assert f"kept      {CHANGELOG}: " in capsys.readouterr().out and read_text(tmp_path / CHANGELOG) == text
+    out = capsys.readouterr().out
+    assert f"kept      {CHANGELOG}: " in out and "entry of `passkeys` was not added" in out
+    assert read_text(tmp_path / CHANGELOG) == text
     with pytest.raises(GrammarError):
         with_entry(text, changelog_entry("passkeys", "2026-11-24", DELTAS))
