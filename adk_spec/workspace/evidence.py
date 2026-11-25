@@ -11,6 +11,7 @@ from ..domain.evidence_md import HIDDEN, Proof, all_gone, folded, parse_evidence
 from ..domain.model import ChangeState, Delta, Finding, Spec
 from ..domain.text import quoted_at
 from ..domain.validate import finding
+from ..domain.verify import lines_of_diff, shown
 from .config import ConfigError
 from .context import profile_text
 from .files import NotTextError, read_text
@@ -96,19 +97,18 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
     return found
 
 
-def removed_by(
-    workspace: Workspace, living: Mapping[str, Spec], removed: Sequence[str], *, own: frozenset[str]
-) -> list[str]:
+def removed_by(workspace: Workspace, living: Mapping[str, Spec], diff: str, *, own: frozenset[str]) -> list[str]:
     """Each living requirement, as `ID (capability)`, that is not among `own`, the change's, all of whose evidence is
-    gone from the code, and one of whose quotes is in `removed`, the runs of lines the work's diff takes out. Phase 17:
-    only those are looked for, so a verification reads no evidence its diff did not take out; found by its code
-    review, a proof gone before the work was blamed on it, and one in a file the work moved was missed, by path."""
+    gone from the code, and one of whose quotes is among the lines the work's `diff` takes out. Phase 17: only those
+    are looked for, so a verification reads no evidence its diff did not take out; found by its code review, a proof
+    gone before the work was blamed on it, and one in a file the work moved was missed, by path."""
+    removed = [run for _added, taken in lines_of_diff(diff).values() for run in taken]
     found, exclude = [], _excluded(workspace)
     for capability in sorted(set(workspace.capabilities()) & set(living)):
         read, _unread = _read(workspace.home / SPECS / capability / EVIDENCE)
         held = {req.id for req in living[capability].requirements} - own
         kept = [one for _line, one in read or [] if one.req in held]
-        hit = {one.req for one in kept if any(quoted_at(one.quote, run) is not None for run in removed)}
+        hit = {one.req for one in kept if shown(one.quote, removed)}
         found += [
             f"{req} ({capability})"
             for req in sorted(hit)

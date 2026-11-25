@@ -25,7 +25,8 @@ _APART = " | "
 _ENTRY = "- "
 _TITLE = "# Evidence: "
 _NOTE = "> "
-#: The diff a model is shown is scrubbed: a quote holding this was over a secret, and is never in a file as quoted.
+#: What a model is shown is scrubbed, a diff or a reading: a quote holding this was over a secret, and is never in a
+#: file as quoted.
 HIDDEN = "[REDACTED"
 
 

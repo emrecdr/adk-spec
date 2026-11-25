@@ -95,7 +95,7 @@ def _path(named: str) -> str | None:
     return named[2:] if named[:2] in ("a/", "b/") else named
 
 
-def _shown(quote: str, runs: Runs) -> bool:
+def shown(quote: str, runs: Runs) -> bool:
     """Whether `quote` is in one run of `runs`, by the one test of a quote the package has."""
     return any(quoted_at(quote, "\n".join(run)) is not None for run in runs)
 
@@ -125,7 +125,7 @@ def grounded(draft: VerdictsDraft, diff: str, *, added: frozenset[str], removed:
             (path, quote)
             for piece in one.evidence
             for path, quote in [(_named(piece.path, sides), plain(piece.quote))]  # as plain text, then looked for
-            if path is not None and _shown(quote, sides[path][side])
+            if path is not None and shown(quote, sides[path][side])
         )
         reason = plain(one.reason)
         if one.verdict == "met" and not evidence:

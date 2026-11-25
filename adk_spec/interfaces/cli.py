@@ -79,7 +79,7 @@ from ..domain.summary_md import render_summary
 from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import UNREAD, failed, finding, validate_spec
-from ..domain.verify import TestRun, Verdict, grounded, lines_of_diff, parts_of_diff
+from ..domain.verify import TestRun, Verdict, grounded, parts_of_diff
 from ..workspace.config import ConfigError
 from ..workspace.context import (
     CONSTITUTION_MAX_CHARS,
@@ -1838,8 +1838,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
 def _taken_out_said(workspace: Workspace, living: Mapping[str, Spec], diff: str, own: frozenset[str]) -> None:
     """A note naming the living requirements the change does not name, `own` being those it does, whose every
     proving line its work's `diff` took out, where there are any. Phase 17."""
-    removed = ["\n".join(run) for _added, taken in lines_of_diff(diff).values() for run in taken]
-    if said := removed_said(removed_by(workspace, living, removed, own=own)):
+    if said := removed_said(removed_by(workspace, living, diff, own=own)):
         print(f"note      {said}")
 
 
