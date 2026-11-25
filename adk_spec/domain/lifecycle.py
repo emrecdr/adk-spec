@@ -127,6 +127,12 @@ def _approved_by_two(state: ChangeState, stale: Sequence[str]) -> Approval | Non
     return held if approved and held is not None and held.second is not None else None
 
 
+def owes_approval(state: ChangeState, stale: Sequence[str]) -> bool:
+    """Whether a change waits on an approval: a draft, a strict one approved once among them, or one edited since its
+    approval. Its view is then written for the person who gives it."""
+    return bool(stale) or state.status == "draft"
+
+
 def owes_design(tier: str, said: bool = False) -> bool:
     """Whether a change owes a design before its tasks: where its brief `said` so, and always where its tier does."""
     return said or DEMANDS[tier].design

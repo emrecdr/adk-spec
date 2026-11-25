@@ -259,6 +259,7 @@ def test_validate_the_server_runs_is_not_told_it_runs_in_github_actions(monkeypa
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", "/tmp/summary.md")
     held = child_environment(["validate"])
     assert "GITHUB_ACTIONS" not in held and "GITHUB_STEP_SUMMARY" not in held and held["PYTHONUNBUFFERED"] == "1"
+    assert "GITHUB_ACTIONS" not in child_environment(("validate", "--strict")), "found by the closing code review"
 
 
 def test_only_validate_is_kept_from_github_actions(monkeypatch) -> None:
@@ -267,5 +268,3 @@ def test_only_validate_is_kept_from_github_actions(monkeypatch) -> None:
 
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     assert child_environment(["verify", "x"])["GITHUB_ACTIONS"] == "true"
-    assert "GITHUB_ACTIONS" not in child_environment(["validate"])
-    assert "GITHUB_ACTIONS" not in child_environment(("validate", "--strict")), "found by the closing code review"

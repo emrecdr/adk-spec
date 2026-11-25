@@ -217,10 +217,47 @@ def test_a_strict_change_approved_once_names_its_overlaps_once(tmp_path, capsys,
     assert out.count("also changed by") == 1 and "review " in out
 
 
-def test_check_without_a_model_brings_a_hand_edit_into_the_view(tmp_path) -> None:
-    """What the guide tells an approver whose files were edited by hand since the last command."""
+def test_check_without_a_model_brings_a_hand_edit_into_the_view_and_the_approval_goes_on(tmp_path) -> None:
+    """A command run after a hand edit writes the view again, and a view that shows the specs as they are holds no
+    approval back."""
     seeded(tmp_path)
     delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
     write_text(delta, read_text(delta).replace("three failed attempts", "four failed attempts"))
     assert run(tmp_path, "check", "passkeys", "--no-model") == 0
     assert "+The system MUST lock an account after four failed attempts." in read_text(tmp_path / VIEW)
+    approved(tmp_path)
+
+
+def test_a_new_capabilitys_purpose_is_in_its_view() -> None:
+    """Found by the review of the closing fixes: the purpose a new capability's living spec opens on was approved
+    unseen."""
+    added = DELTA.split("## ADDED Requirements\n\n")[1].split("\n## MODIFIED")[0].replace("AUTH", "SEARCH")
+    new = parse_delta("# Delta: search\n\n## Purpose\n\nFind things.\n\n## ADDED Requirements\n\n" + added)
+    # In a fence of its own, as a requirement is: found by a review, a purpose opening an HTML comment hid the rest.
+    assert "### Purpose\n\n```markdown\nFind things.\n```" in render_review("passkeys", {"search": new}, LIVING, {})
+
+
+def test_a_removed_requirement_is_shown_as_the_living_spec_holds_it() -> None:
+    """Found by a review of the closing fixes: the approver read only a removed requirement's name and reason, and the
+    archive took out text they were never shown."""
+    assert "The system SHALL let a registered user sign in with email" in render_review("passkeys", DELTAS, LIVING, {})
+
+
+def test_a_generated_file_is_never_dropped_through_a_link(tmp_path) -> None:
+    """Found by the third review of the closing fixes: a change's `reports/` that is a link had a file of its target
+    removed, where writing there is refused."""
+    ws = seeded(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    write_text(outside / "review.md", "theirs\n")
+    reports = tmp_path / ".spec/changes/passkeys/reports"
+    if reports.exists():
+        import shutil
+
+        shutil.rmtree(reports)
+    try:
+        reports.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("no symbolic link can be made here")
+    ws.drop("passkeys", "reports/review.md")
+    assert read_text(outside / "review.md") == "theirs\n"
