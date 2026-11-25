@@ -134,3 +134,17 @@ def _placed(named: str, repositories: Mapping[str, str]) -> tuple[str, str]:
 
 def _sorted(proofs: Sequence[Proof]) -> list[Proof]:
     return sorted(proofs, key=lambda one: (one.req, one.repository, one.path, one.quote))
+
+
+#: How many requirements the note of proofs a work took out names; the rest are counted.
+REMOVED_NAMED = 3
+
+
+def removed_said(named: Sequence[str]) -> str:
+    """What `verify` says where its work took out every line that proved living requirements the change does not
+    name, each `ID (capability)`; nothing where there are none. Phase 17."""
+    if not named:
+        return ""
+    more = len(named) - REMOVED_NAMED
+    listed = ", ".join(named[:REMOVED_NAMED]) + (f" and {more} more" if more > 0 else "")
+    return f"this work took out every line that proved {listed}: put them back, or change them in this change"

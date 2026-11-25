@@ -94,6 +94,35 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
     return found
 
 
+def removed_by(
+    workspace: Workspace,
+    living: Mapping[str, Spec],
+    touched: frozenset[str],
+    *,
+    names: Mapping[str, str],
+    own: frozenset[str],
+) -> list[str]:
+    """Each living requirement, as `ID (capability)`, that is not among `own`, the change's, all of whose evidence is
+    gone from the code, and one of whose evidence files is among `touched`, the paths of the work's diff. `names`
+    gives each other repository's location the name its paths are spelled under there. Phase 17: only those
+    requirements are looked for, so a verification reads no evidence it did not touch."""
+    found, exclude = [], _excluded(workspace)
+    for capability in sorted(set(workspace.capabilities()) & set(living)):
+        read, _unread = _read(workspace.home / SPECS / capability / EVIDENCE)
+        held = {req.id for req in living[capability].requirements} - own
+        proofs: dict[str, list[Proof]] = {}
+        for _line, one in read or []:
+            if one.req in held:
+                proofs.setdefault(one.req, []).append(one)
+        for req, lines in sorted(proofs.items()):
+            spelled = {
+                one.path if one.repository == "." else f"{names.get(one.repository)}/{one.path}" for one in lines
+            }
+            if spelled & touched and all(holds(workspace.root, one, exclude) is False for one in lines):
+                found.append(f"{req} ({capability})")
+    return found
+
+
 #: The schemes of an installed library's paths, which a reading may open and the repository does not hold.
 LIBRARIES = ("python:", "node:")
 

@@ -16,6 +16,7 @@ from adk_spec.domain.evidence_md import (
     folded,
     kept,
     parse_evidence,
+    removed_said,
     render_evidence,
 )
 from adk_spec.domain.text import quoted_at
@@ -309,3 +310,30 @@ def test_a_change_modifying_a_requirement_with_no_proof_takes_its_old_lines_out(
     assert run(tmp_path, "archive", "stricter") == 0
     read, _unread = parse_evidence(read_text(tmp_path / LIVING_EVIDENCE))
     assert [one.req for _line, one in read] == ["REQ-AUTH-001"]
+
+
+def test_verify_names_a_living_requirement_whose_proof_the_work_took_out(tmp_path, capsys) -> None:
+    """Phase 17: the work removed every line that proved a requirement the change never names, and `verify` judged
+    the change without a word of it. Named: one whose only file the work changed. Not named: one whose lines are in a
+    file the work did not touch, nor one the change modifies itself."""
+    from samples import SPEC
+
+    approved_in_a_repository(tmp_path)
+    write_text(tmp_path / ".spec/specs/billing/spec.md", SPEC.replace("AUTH", "BILLING").replace("# auth", "# billing"))
+    billing = [
+        proof("REQ-BILLING-001", quote="return password(user)"),
+        proof("REQ-BILLING-002", quote="def a_helper_long_gone():", path="src/gone_before.py"),  # not this work's
+    ]
+    write_text(tmp_path / ".spec/specs/billing/evidence.md", render_evidence("billing", billing))
+    write_text(tmp_path / LIVING_EVIDENCE, render_evidence("auth", [proof("REQ-AUTH-002", quote="failures >= 5")]))
+    implemented(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys") == 0
+    (note,) = [line for line in capsys.readouterr().out.splitlines() if line.startswith("note ")]
+    assert "REQ-BILLING-001 (billing)" in note and "REQ-BILLING-002" not in note and "REQ-AUTH-002" not in note
+
+
+def test_the_proofs_taken_out_are_named_three_then_counted() -> None:
+    said = removed_said(["REQ-A-001 (a)", "REQ-A-002 (a)", "REQ-B-001 (b)", "REQ-B-002 (b)"])
+    assert said.startswith("this work took out every line that proved REQ-A-001 (a), REQ-A-002 (a), REQ-B-001 (b)")
+    assert " and 1 more" in said and removed_said([]) == ""

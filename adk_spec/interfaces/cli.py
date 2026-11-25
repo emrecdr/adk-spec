@@ -37,7 +37,7 @@ from ..domain.context_md import (
 )
 from ..domain.convert import kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
-from ..domain.evidence_md import kept, render_evidence
+from ..domain.evidence_md import kept, removed_said, render_evidence
 from ..domain.lifecycle import (
     DEMANDS,
     Step,
@@ -93,7 +93,7 @@ from ..workspace.context import (
     living_text,
     profile_text,
 )
-from ..workspace.evidence import evidence_findings, evidence_folded, profile_gone
+from ..workspace.evidence import evidence_findings, evidence_folded, profile_gone, removed_by
 from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
@@ -1827,11 +1827,22 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     wrote += _aids_written(workspace, args.id, aids)
     for one in verdicts:
         print(f"{one.verdict:<8}  {one.id}  {one.reason}")
+    _taken_out_said(workspace, change, specs, touched)
     print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
     _say_next(workspace, args.id, specs, drift=False)  # found by the fourth audit: the diff was made a third time
     return EXIT_OK if after.status == "verified" else EXIT_FINDINGS
+
+
+def _taken_out_said(workspace: Workspace, change: Change, living: Mapping[str, Spec], touched: frozenset[str]) -> None:
+    """A note naming the living requirements the change does not name whose every proving line its work took out,
+    where there are any. Phase 17."""
+    deltas = change.deltas.values()
+    own = frozenset(req.id for delta in deltas for req in (*delta.added, *delta.modified, *delta.removed))
+    names = {where: name for name, where in change.state.repositories.items()}
+    if said := removed_said(removed_by(workspace, living, touched, names=names, own=own)):
+        print(f"note      {said}")
 
 
 def _aids_written(workspace: Workspace, change_id: str, aids: Mapping[str, str | None]) -> list[Path]:
