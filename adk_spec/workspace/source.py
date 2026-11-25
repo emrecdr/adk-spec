@@ -73,6 +73,8 @@ NAME = re.compile(r"[a-z][a-z0-9-]{0,30}")
 LIBRARIES_SHOWN = 120
 #: Where an environment's own folder ends, in a library's path a model names through it.
 _THROUGH = {"python": "site-packages/", "node": "node_modules/"}
+#: How an installed library's path opens, as a reading names it: `python:httpx/_client.py`.
+LIBRARY_SCHEMES = tuple(f"{scheme}:" for scheme in _THROUGH)
 
 
 class SourceError(Exception):

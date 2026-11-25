@@ -7,42 +7,44 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
 from ..domain.context_md import quoted_statements
-from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
+from ..domain.evidence_md import Proof, all_gone, folded, parse_evidence, placed, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
 from ..domain.text import quoted_at
 from ..domain.validate import finding
 from .config import ConfigError
+from .context import profile_text
 from .files import NotTextError, read_text
 from .git import GitError, grep
-from .layout import CHANGES, EVIDENCE, PROFILE, SPECS, Workspace
+from .layout import CHANGES, EVIDENCE, SPECS, Workspace
+from .source import LIBRARY_SCHEMES
 
 #: How many of the files a quote's search names are read whole to find it.
 ELSEWHERE_MAX = 20
 
 
 def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
-    """Whether `proof`'s quote is still in the code: in its file, or else in another file of its repository, so that
-    a moved function reads as moved. None where its repository is not there to look in, as another one is not in CI.
-    `root` is the folder that holds `.spec/`; `exclude`, the person's patterns, apply to its own repository."""
-    own = proof.repository == "."
-    folder = root if own else root / proof.repository
-    if not _within(folder, proof.repository, proof.path, own=own):
+    """Whether `proof`'s quote is still in the code, as `quote_holds` says."""
+    return quote_holds(root, proof.repository, proof.path, proof.quote, exclude)
+
+
+def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Sequence[str]) -> bool | None:
+    """Whether `quote` is still in the code: in `path`, or else in another file of its repository, so that a moved
+    function reads as moved. None where its repository is not there to look in, as another one is not in CI, or git
+    refuses the search, outside a repository say. `root` is the folder that holds `.spec/`; `repository` is `.` for
+    its own; `exclude`, the person's patterns, apply to its own."""
+    own = repository == "."
+    folder = root if own else root / repository
+    if not _within(folder, repository, path, own=own):
         return None
-    return _quoted(folder, proof.path, proof.quote, exclude if own else (), trust=own)
-
-
-def _quoted(folder: Path, path: str, quote: str, exclude: Sequence[str], *, trust: bool) -> bool | None:
-    """Whether `quote` is in `path` of the repository at `folder`, or else in another of its files; None where git
-    refuses the search, outside a repository say: not looked for."""
     if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
     try:
         term = max(quote.split(), key=len, default="")  # a fixed string git finds on one line
-        hits = grep(folder, term, exclude=exclude, trust=trust) if term else []
+        hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
     except GitError:
         return None
     named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]
-    return any(_found(folder / path, quote) for path in named)
+    return any(_found(folder / one, quote) for one in named)
 
 
 def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
@@ -99,52 +101,45 @@ def removed_by(
     living: Mapping[str, Spec],
     touched: frozenset[str],
     *,
-    names: Mapping[str, str],
+    repositories: Mapping[str, str],
     own: frozenset[str],
 ) -> list[str]:
     """Each living requirement, as `ID (capability)`, that is not among `own`, the change's, all of whose evidence is
-    gone from the code, and one of whose evidence files is among `touched`, the paths of the work's diff. `names`
-    gives each other repository's location the name its paths are spelled under there. Phase 17: only those
-    requirements are looked for, so a verification reads no evidence it did not touch."""
+    gone from the code, and one of whose evidence files is among `touched`, the paths of the work's diff as
+    `placed` reads them by the change's `repositories`. Phase 17: only those are looked for, so a verification reads
+    no evidence it did not touch."""
     found, exclude = [], _excluded(workspace)
+    files = {placed(path, repositories) for path in touched}
     for capability in sorted(set(workspace.capabilities()) & set(living)):
         read, _unread = _read(workspace.home / SPECS / capability / EVIDENCE)
         held = {req.id for req in living[capability].requirements} - own
-        proofs: dict[str, list[Proof]] = {}
-        for _line, one in read or []:
-            if one.req in held:
-                proofs.setdefault(one.req, []).append(one)
-        for req, lines in sorted(proofs.items()):
-            spelled = {
-                one.path if one.repository == "." else f"{names.get(one.repository)}/{one.path}" for one in lines
-            }
-            if spelled & touched and all(holds(workspace.root, one, exclude) is False for one in lines):
-                found.append(f"{req} ({capability})")
+        kept = [one for _line, one in read or [] if one.req in held]
+        hit = {one.req for one in kept if (one.repository, one.path) in files}
+        found += [
+            f"{req} ({capability})"
+            for req in sorted(hit)
+            if all_gone((one for one in kept if one.req == req), lambda one: holds(workspace.root, one, exclude))
+        ]
     return found
 
 
-#: The schemes of an installed library's paths, which a reading may open and the repository does not hold.
-LIBRARIES = ("python:", "node:")
-
-
-def profile_gone(workspace: Workspace) -> tuple[int, int] | None:
-    """Of the quotes `.spec/profile.md` holds, how many are no longer in the code, and how many were looked for; None
-    where there is no profile that reads, or none of its quotes could be looked for. Phase 17: every drafting stage
-    reads the profile, and nothing else checks it. A library's quote is not looked for, nor one git cannot search for
-    outside its file: unknown is not gone."""
-    path = workspace.home / PROFILE
+def profile_gone(workspace: Workspace) -> tuple[int, int]:
+    """Of the quotes of `.spec/profile.md`, as a stage reads it, how many are no longer in the code, and how many
+    were looked for: none where there is no profile that reads. Phase 17: every drafting stage reads the profile, and
+    nothing else checks it. A library's quote is not looked for, nor counted one that could not be: unknown is not
+    gone."""
     try:
-        text = read_text(path) if path.is_file() else ""
+        text = profile_text(workspace)
     except NotTextError, OSError:
-        return None
-    exclude, root = _excluded(workspace), workspace.root
+        return 0, 0
+    exclude = _excluded(workspace)
     looked = [
-        _quoted(root, named, quote, exclude, trust=True) if _within(root, ".", named, own=True) else None
+        quote_holds(workspace.root, ".", named, quote, exclude)
         for named, quote in quoted_statements(text)
-        if not named.startswith(LIBRARIES)
+        if not named.startswith(LIBRARY_SCHEMES)
     ]
     held = [one for one in looked if one is not None]
-    return (held.count(False), len(held)) if held else None
+    return held.count(False), len(held)
 
 
 def _excluded(workspace: Workspace) -> tuple[str, ...]:

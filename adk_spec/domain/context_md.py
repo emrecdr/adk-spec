@@ -65,8 +65,8 @@ def render_context(
         if held:
             lines += [f"## {section}", ""]
             for one in held:
-                lines += [f"- `{one.path}:{one.line}` {one.note}", *([f"  in: {one.within}"] if one.within else ())]
-                lines.append(f"  > {one.quote}")
+                lines += [f"- `{one.path}:{one.line}` {one.note}", *([f"{_WITHIN}{one.within}"] if one.within else ())]
+                lines.append(f"{_QUOTE}{one.quote}")
             lines.append("")
     if unknown:
         lines += [UNKNOWN_HEADING, ""]
@@ -101,8 +101,10 @@ def _left_out(dropped: int, disputed: int) -> str:
     return f"Left out: {'; '.join(said)}." if said else ""
 
 
-#: A statement's line as `render_context` writes it: its file and line in a code span, then its note.
+#: A statement's line as `render_context` writes it: its file and line in a code span, then its note; and the lines
+#: under it, the block it stands in and its quote.
 _STATEMENT = re.compile(r"- `(?P<path>.+):[0-9]+` ")
+_WITHIN, _QUOTE = "  in: ", "  > "
 
 
 def quoted_statements(text: str) -> list[tuple[str, str]]:
@@ -113,10 +115,10 @@ def quoted_statements(text: str) -> list[tuple[str, str]]:
     for line in text.split("\n"):
         if held := _STATEMENT.match(line):
             path = held.group("path")
-        elif path is not None and line.startswith("  > "):
-            found.append((path, line[4:]))
+        elif path is not None and line.startswith(_QUOTE):
+            found.append((path, line.removeprefix(_QUOTE)))
             path = None
-        elif not line.startswith("  in: "):
+        elif not line.startswith(_WITHIN):
             path = None
     return found
 

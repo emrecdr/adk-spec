@@ -710,8 +710,8 @@ def _suspects_said(workspace: Workspace, living: Mapping[str, Spec]) -> None:
 
 def _profile_said(workspace: Workspace) -> None:
     """One line where quotes of `.spec/profile.md`, which every drafting stage reads, are no longer in the code."""
-    if (counted := profile_gone(workspace)) and counted[0]:
-        gone, looked = counted
+    gone, looked = profile_gone(workspace)
+    if gone:
         print(f"profile: {gone} of {looked} quotes no longer in the code (`{PROG} init --refresh` reads it again)")
 
 
@@ -1827,7 +1827,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     wrote += _aids_written(workspace, args.id, aids)
     for one in verdicts:
         print(f"{one.verdict:<8}  {one.id}  {one.reason}")
-    _taken_out_said(workspace, change, specs, touched)
+    _taken_out_said(workspace, state, specs, touched, added | gone)
     print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
@@ -1835,13 +1835,12 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     return EXIT_OK if after.status == "verified" else EXIT_FINDINGS
 
 
-def _taken_out_said(workspace: Workspace, change: Change, living: Mapping[str, Spec], touched: frozenset[str]) -> None:
-    """A note naming the living requirements the change does not name whose every proving line its work took out,
-    where there are any. Phase 17."""
-    deltas = change.deltas.values()
-    own = frozenset(req.id for delta in deltas for req in (*delta.added, *delta.modified, *delta.removed))
-    names = {where: name for name, where in change.state.repositories.items()}
-    if said := removed_said(removed_by(workspace, living, touched, names=names, own=own)):
+def _taken_out_said(
+    workspace: Workspace, state: ChangeState, living: Mapping[str, Spec], touched: frozenset[str], own: frozenset[str]
+) -> None:
+    """A note naming the living requirements the change does not name, `own` being those it does, whose every
+    proving line its work took out, where there are any. Phase 17."""
+    if said := removed_said(removed_by(workspace, living, touched, repositories=state.repositories, own=own)):
         print(f"note      {said}")
 
 

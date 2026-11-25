@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 from conftest import on_the_fake, repository, run, seeded
 
-from adk_spec.domain.context_md import quoted_statements
+from adk_spec.domain.context_md import quoted_statements, render_context
+from adk_spec.domain.model import Statement
 from adk_spec.workspace.evidence import profile_gone
 from adk_spec.workspace.files import write_text
 
@@ -33,6 +34,14 @@ FILES = {
     "src/old.py": "def start_session(user):\n    return {}\n",
 }
 LINE = "profile: "
+STATEMENT = Statement(
+    kind="convention",
+    path="src/old.py",
+    line=1,
+    quote="def start_session(user):",
+    note="The session helper.",
+    within="def start_session(user):",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -43,12 +52,14 @@ def _fake_arm(monkeypatch) -> None:
 def profiled(root, files=FILES, profile=PROFILE):
     """A workspace in a repository of `files`, with `profile` as its `.spec/profile.md`."""
     ws = seeded(root)
-    repository(root, dict(files))
+    repository(root, files)
     write_text(root / ".spec/profile.md", profile)
     return ws
 
 
 def test_the_profile_is_read_as_its_statements_and_their_quotes() -> None:
+    written = render_context("Profile", at="2026-11-20", commit="abc", statements=[STATEMENT], read=[])
+    assert quoted_statements(written) == [("src/old.py", "def start_session(user):")], "as the writer writes it"
     assert quoted_statements(PROFILE) == [
         ("src/app.py", "return password_check(user)"),
         ("src/old.py", "def start_session(user):"),
@@ -56,15 +67,11 @@ def test_the_profile_is_read_as_its_statements_and_their_quotes() -> None:
     ]
 
 
-def test_a_profile_whose_quotes_all_hold_says_nothing(tmp_path, capsys) -> None:
-    profiled(tmp_path)
-    capsys.readouterr()
-    assert run(tmp_path, "status") == 0
-    assert LINE not in capsys.readouterr().out
-
-
 def test_a_quote_gone_from_the_code_is_counted_and_the_refresh_named(tmp_path, capsys) -> None:
     ws = profiled(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0
+    assert LINE not in capsys.readouterr().out, "a profile whose quotes all hold says nothing"
     write_text(tmp_path / "src/old.py", "def begin(user):\n    return {}\n")
     assert profile_gone(ws) == (1, 2), "the library's statement is not looked for"
     capsys.readouterr()
@@ -80,11 +87,11 @@ def test_a_quote_moved_to_another_file_holds(tmp_path) -> None:
 
 def test_no_profile_one_that_does_not_read_or_nothing_to_look_for_says_nothing(tmp_path) -> None:
     ws = seeded(tmp_path)
-    assert profile_gone(ws) is None
+    assert profile_gone(ws) == (0, 0)
     (tmp_path / ".spec/profile.md").write_bytes(b"\xff\xfe not text")
-    assert profile_gone(ws) is None
+    assert profile_gone(ws) == (0, 0)
     write_text(tmp_path / ".spec/profile.md", "# Profile\n\nNothing found yet.\n")
-    assert profile_gone(ws) is None
+    assert profile_gone(ws) == (0, 0)
 
 
 def test_outside_a_repository_a_quote_not_in_its_file_is_not_counted(tmp_path) -> None:
@@ -101,7 +108,7 @@ def test_a_profile_statement_is_never_looked_for_outside_the_repository(tmp_path
     write_text(outside, "secret = 1\n")
     profile = "# Profile\n\n## Conventions\n\n- `../outside.py:1` Out.\n  > secret = 1\n"
     ws = profiled(tmp_path / "repo", profile=profile)
-    assert profile_gone(ws) is None
+    assert profile_gone(ws) == (0, 0)
 
 
 @pytest.mark.usefixtures("fake_provider")

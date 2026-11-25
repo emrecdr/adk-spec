@@ -94,8 +94,3 @@ def render_tasks(groups: Sequence[TaskGroup], *, unchecked: bool = False) -> str
 def task_path(named: str) -> str:
     """A task's file as a path: written by a person or a model, it may be quoted in backticks or open on `./`."""
     return named.strip().strip("`").replace("\\", "/").removeprefix("./").rstrip("/")
-
-
-def paths_meet(one: str, other: str) -> bool:
-    """Whether two of a task's paths are one file, or one is a folder the other is under."""
-    return one == other or one.startswith(f"{other}/") or other.startswith(f"{one}/")
