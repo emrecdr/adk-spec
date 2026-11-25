@@ -398,3 +398,23 @@ def test_the_last_round_asks_every_point_still_open() -> None:
     """Found by review: a point that waited was never put to the person once the rounds ran out."""
     draft = brief_draft(open_points=[SCOPE, FALLBACK])
     assert len(questions_of(draft, every=True)) == 2
+
+
+def _parallel(*files: list[str]) -> list[bool]:
+    """Whether each of a group of tasks drafted `[P]`, naming these files, keeps the mark."""
+    tasks = [
+        TaskDraft(description="Do it", requirements=["REQ-AUTH-004"], files=named, verify="run it", parallel=True)
+        for named in files
+    ]
+    (group,) = to_tasks(TasksDraft(groups=[TaskGroupDraft(title="1. A", tasks=tasks)]))
+    return [task.parallel for task in group.tasks]
+
+
+def test_a_parallel_mark_stands_only_where_code_finds_it_true() -> None:
+    """Phase 17: `[P]` says a task touches other files than its neighbours, and code now reads its files. A pair
+    sharing a file, or a folder and a file under it, loses the mark on both, so two agents never run on one file."""
+    assert _parallel(["src/a.py"], ["src/b.py"], ["src/c.py"]) == [True, True, True]
+    assert _parallel(["src/a.py"], ["`./src/a.py`"], ["src/c.py"]) == [False, False, True]
+    assert _parallel(["src/auth/"], ["src/auth/token.py"]) == [False, False]
+    assert _parallel([], ["src/b.py"]) == [False, True], "a task naming no file cannot be said apart"
+    assert _parallel(["src/a.py"], ["src/b.py"], ["src/a.py"]) == [True, True, True], "only neighbours count"

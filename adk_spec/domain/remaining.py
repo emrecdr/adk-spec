@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .model import TaskGroup
+from .tasks_md import task_path
 from .verify import Verdict
 
 
@@ -36,7 +37,7 @@ def remaining(verdicts: Sequence[Verdict], groups: Sequence[TaskGroup], touched:
         if verdict.verdict == "met":
             continue
         serving = [task for task in tasks if verdict.id in task.requirements]
-        named = dict.fromkeys(_path(path) for task in serving for path in task.files)
+        named = dict.fromkeys(task_path(path) for task in serving for path in task.files)
         left.append(
             Left(
                 id=verdict.id,
@@ -49,11 +50,6 @@ def remaining(verdicts: Sequence[Verdict], groups: Sequence[TaskGroup], touched:
             )
         )
     return left
-
-
-def _path(named: str) -> str:
-    """A task's file as a path: written by a person or a model, it may be quoted in backticks or open on `./`."""
-    return named.strip().strip("`").replace("\\", "/").removeprefix("./").rstrip("/")
 
 
 def _touched(path: str, touched: frozenset[str]) -> bool:

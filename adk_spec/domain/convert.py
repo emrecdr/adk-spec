@@ -38,6 +38,7 @@ from .model import (
     TaskGroup,
 )
 from .spec_md import fenced_lines, paragraphs
+from .tasks_md import paths_meet, task_path
 from .text import flat, lines_of, normalise, plain, quoted_at
 
 _STEP = re.compile(r"(?:-\s*)?(?:\*\*)?(GIVEN|WHEN|THEN|AND)(?:\*\*)?\s+(\S.*)", re.IGNORECASE | re.DOTALL)
@@ -209,8 +210,20 @@ def to_tasks(draft: TasksDraft) -> tuple[TaskGroup, ...]:
                     verify=flat(task.verify) or None,
                 )
             )
-        groups.append(TaskGroup(title=flat(group.title), tasks=tuple(tasks)))
+        groups.append(TaskGroup(title=flat(group.title), tasks=_apart(tasks)))
     return tuple(groups)
+
+
+def _apart(tasks: list[Task]) -> tuple[Task, ...]:
+    """Each task's `[P]` where it names its files and none meets a file of the task before or after it: the rule the
+    tasks stage is told, held by code, so two agents never run on one file. Phase 17."""
+    files = [[task_path(one) for one in task.files] for task in tasks]
+
+    def apart(at: int) -> bool:
+        near = [path for side in (at - 1, at + 1) if 0 <= side < len(tasks) for path in files[side]]
+        return bool(files[at]) and not any(paths_meet(one, other) for one in files[at] for other in near)
+
+    return tuple(task.model_copy(update={"parallel": task.parallel and apart(at)}) for at, task in enumerate(tasks))
 
 
 #: The sections of a design, in the order of its file: each a field of `DesignDraft`.
