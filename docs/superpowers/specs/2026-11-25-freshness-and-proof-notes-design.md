@@ -9,11 +9,11 @@ the roadmap.
 
 ## Intent
 
-adk-spec keeps three statements about the code that code can check and does not: `profile.md`, which every drafting
-stage reads, quotes lines that a later edit may have removed; a living requirement's evidence can be removed by a
-change that never names it, and `verify` judges that change without saying so; and the tasks stage marks a task
-`[P]`, "it touches other files than its neighbours", without code reading its files. This phase checks each with
-code, and says what it finds in one line, where the person is looking.
+adk-spec keeps statements about the code that code can check and does not: `profile.md`, which every drafting stage
+reads, quotes lines that a later edit may have removed; and the tasks stage marks a task `[P]`, "it touches other
+files than its neighbours", without code reading its files. This phase checks both with code, and says what it
+finds in one line, where the person is looking. (A third, the proofs a verification's work removed, was taken out:
+Goal 2.)
 
 ## Goals
 
@@ -40,7 +40,7 @@ code, and says what it finds in one line, where the person is looking.
 
 - A line that cries wolf: a quote that moved to another file holds, as evidence's does; a quote of an installed
   library (`python:`, `node:`) is not looked for; a profile that does not read says nothing.
-- A note that blocks: neither line changes an exit code or a step.
+- A note that blocks: the profile's line changes no exit code or step.
 
 ## Decisions (the owner's)
 
@@ -74,12 +74,6 @@ code, and says what it finds in one line, where the person is looking.
   scheme is not looked for; the line number is not used, as a moved quote holds.
 - **Where the profile line shows.** `status` (text only, as the suspect lines are) and the start of `propose`, the
   one command that sends the profile to a model. Not `plan`: it reads `context.md`, which `propose` wrote.
-- **What the `verify` note names.** A living requirement the change neither adds, modifies nor removes, all of whose
-  evidence is gone, with an evidence file the work's diff changed. Another repository's file is matched by the name
-  the change gives it. At most three IDs, then a count, as the unmet step does.
-- **Only what the diff touched is looked at.** The living evidence files are read, and a requirement is checked
-  only where one of its evidence files is among the diff's paths; then every line of it is, as gone means all of
-  them. No whole-repository scan on each `verify` (a refinement from the report's author, 25 November 2026).
 - **A quote that cannot be looked for is not gone.** Not in its file, and git refusing the search for it elsewhere,
   outside a repository say, it is unknown: counted neither gone nor checked, as evidence's `None` is.
 - **`[P]`'s neighbours.** The tasks before and after it in its group, whatever their own mark; two files overlap
@@ -95,7 +89,5 @@ code, and says what it finds in one line, where the person is looking.
   not counted; a profile that will not read, or is not there, says nothing; lines a person wrote off the format are
   passed over; outside a git repository a quote not in its file is not counted; `propose` says it before its first
   call.
-- `verify` names a requirement whose only evidence file the work deleted a line of; not one the change modifies;
-  not one whose evidence holds; not one whose evidence file the work did not touch; three IDs then a count.
 - A drafted `[P]` task sharing a file with its neighbour loses the mark; one sharing a folder does; one naming no
   file does; one apart from both neighbours keeps it.

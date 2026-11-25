@@ -30,6 +30,10 @@ PROFILE_SECTIONS = (
 DRAFTED_HEADING = "## Drafted from the code"
 #: The heading what a review named as still unknown stands under.
 UNKNOWN_HEADING = "## What is still unknown"
+#: A statement's line as `render_context` writes it: its file and line in a code span, then its note; and the lines
+#: under it, the block it stands in and its quote.
+_STATEMENT = re.compile(r"- `(?P<path>[^`]+):[0-9]+`(?:\s|$)")
+_WITHIN, _QUOTE = "  in: ", "  > "
 #: The kinds of statement, each with the heading it stands under, in the order of the file.
 SECTIONS: tuple[tuple[StatementKind, str], ...] = (
     ("exists", "What exists"),
@@ -99,12 +103,6 @@ def _left_out(dropped: int, disputed: int) -> str:
         noun = "" if said else f" statement{'' if disputed == 1 else 's'}"
         said.append(f"{disputed}{noun} the review disputed")
     return f"Left out: {'; '.join(said)}." if said else ""
-
-
-#: A statement's line as `render_context` writes it: its file and line in a code span, then its note; and the lines
-#: under it, the block it stands in and its quote.
-_STATEMENT = re.compile(r"- `(?P<path>[^`]+):[0-9]+`(?:\s|$)")
-_WITHIN, _QUOTE = "  in: ", "  > "
 
 
 def quoted_statements(text: str) -> list[tuple[str, str]]:

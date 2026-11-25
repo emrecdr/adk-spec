@@ -1,5 +1,6 @@
 """Evidence on disk: a change's, folded in beside each living spec at archive, and the living evidence checked
-against the code, so that a requirement whose proving lines are gone from it is noted as suspect."""
+against the code, so that a requirement whose proving lines are gone from it is noted as suspect; and the quotes of
+`.spec/profile.md` checked against the code the same way."""
 
 from __future__ import annotations
 

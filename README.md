@@ -350,8 +350,7 @@ edit by hand is in the view once a command writes it again: `adk-spec check <id>
 
 Work through `tasks.md` yourself or with your coding assistant, ticking each box (`- [x]`) as it is done. A task
 marked `[P]` touches other files than the tasks beside it: adk-spec drops the mark from a drafted task where its
-files say otherwise, or it names none. For
-example, to GitHub Copilot or Claude Code:
+files say otherwise, or it names none. For example, to GitHub Copilot or Claude Code:
 
 > Implement `.spec/changes/sign-in-with-a-passkey/tasks.md` task by task, test first. Read `brief.md`, the specs and
 > `context.md` in that folder first. Tick each task's box when it is done. Do not edit any other file in `.spec/`.
