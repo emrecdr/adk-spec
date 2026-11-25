@@ -11,7 +11,7 @@ from test_verify import REPORT, approved_in_a_repository, implemented, verified_
 from adk_spec.domain.brief_md import parse_brief
 from adk_spec.domain.changelog_md import changelog_entry, with_entry
 from adk_spec.domain.delta_md import parse_delta
-from adk_spec.domain.model import Change, ChangeState, Verification
+from adk_spec.domain.model import Change, ChangeState, GrammarError, Verification
 from adk_spec.domain.summary_md import render_summary
 from adk_spec.workspace.files import read_text, write_text
 
@@ -141,7 +141,6 @@ def test_an_entry_in_a_code_block_of_the_introduction_is_no_entry() -> None:
     intro = "# Changelog\n\nIntro.\n\n```\n## example, 2026-01-01\n```\n\nMore.\n"
     after = with_entry(intro, changelog_entry("passkeys", "2026-11-24", DELTAS))
     assert after.index("More.") < after.index("## passkeys, 2026-11-24")
-    assert with_entry("# Changelog\n\n```\nnever closed\n", "## a, 2026-01-01\n").endswith("## a, 2026-01-01\n")
 
 
 def test_approving_a_verified_change_again_keeps_it_verified_and_names_the_new_approver(tmp_path, capsys) -> None:
@@ -157,9 +156,16 @@ def test_approving_a_verified_change_again_keeps_it_verified_and_names_the_new_a
     assert "Approved by bob." in read_text(tmp_path / SUMMARY)
 
 
-def test_a_fence_never_closed_leaves_the_closed_ones_before_it() -> None:
-    """Found by the closing code review: one fence never closed, anywhere, read every fence as text, and the new
-    entry went into a code block of the introduction again."""
-    text = "# Changelog\n\nIntro.\n\n```\n## example, 2026-01-01\n```\n\n## a, 2026-02-01\n\n- x\n\n```\n"
-    after = with_entry(text, changelog_entry("passkeys", "2026-11-24", DELTAS))
-    assert after.index("## example") < after.index("## passkeys, 2026-11-24") < after.index("## a, 2026-02-01")
+def test_a_changelog_whose_code_fence_is_never_closed_is_left_and_the_change_archived(tmp_path, capsys) -> None:
+    """Found by the review of the closing fixes: where a fence is never closed, which fences pair is a guess, and
+    either guess put the entry inside a code block or below the newest one. The file is left, as one that will not
+    read is."""
+    seeded(tmp_path)
+    approved(tmp_path)
+    text = "# Changelog\n\nIntro.\n\n```\n## a, 2026-02-01\n\n- x\n\n```\ncode\n```\n\n## b, 2026-01-01\n"
+    write_text(tmp_path / CHANGELOG, text)
+    capsys.readouterr()
+    assert run(tmp_path, "archive", "passkeys") == 0
+    assert f"kept      {CHANGELOG}: " in capsys.readouterr().out and read_text(tmp_path / CHANGELOG) == text
+    with pytest.raises(GrammarError):
+        with_entry(text, changelog_entry("passkeys", "2026-11-24", DELTAS))

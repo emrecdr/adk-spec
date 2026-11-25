@@ -342,8 +342,9 @@ Before approving, read `reports/review.md`, which every command that leaves a dr
 (its `review` line names it): each requirement the change adds, whole; each it removes, with the reason; and each it
 modifies, as a diff against the living spec. It also names any other open change that modifies or removes the same
 requirement, as `approve` does in a `note` line: whichever of the two is archived second is stopped, to be reworked
-onto the first. Where `archive` stops on a living spec that moved, it writes the view again to show what. Where a
-spec was edited after the view was written, `approve` refuses once and writes it again: read it, then approve.
+onto the first. Where `archive` stops on a living spec that moved, it writes the view again to show what. Where the
+view is out of date, a spec or the living requirement it changes edited since, `approve` refuses once and writes it
+again: read it, then approve.
 
 ### 4. Implement
 

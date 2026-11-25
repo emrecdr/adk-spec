@@ -72,7 +72,7 @@ from ..domain.merge import MergeError, apply_delta
 from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.remaining import remaining, render_remaining
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
-from ..domain.review_md import mark_of, render_review, review_said, specs_mark
+from ..domain.review_md import mark_of, render_review, review_said, view_mark
 from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
 from ..domain.summary_md import render_summary
@@ -545,21 +545,25 @@ def _say_next(
 def _view_written(
     workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]
 ) -> tuple[str, dict[str, list[str]]] | None:
-    """The approver's view of a change written again, ending on the fingerprint of the specs it shows: where it is, as
+    """The approver's view of a change written again, ending on the fingerprint of what it shows: where it is, as
     shown, and the overlaps it names. None where it cannot be written, a file that will not open or a folder the path
     rules refuse: the view is an aid, and found by the code review, its fault failed commands whose work was done."""
     overlaps = _overlaps(workspace, change_id, deltas)
+    text = render_review(change_id, deltas, living, overlaps, mark=view_mark(change_id, deltas, living))
     try:
-        mark = specs_mark(approval_files(workspace.approval_texts(change_id)))
-        path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps, mark=mark))
+        path = workspace.write_report(change_id, REVIEW, text)
     except OSError, WorkspaceError:
         return None
     return workspace.shown(path), overlaps
 
 
 def _view_said(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]) -> bool:
-    """The view written again, as `_view_written` writes it, and named on a `review` line: whether it was."""
-    if not deltas or (view := _view_written(workspace, change_id, deltas, living)) is None:
+    """The view written again, as `_view_written` writes it, and named on a `review` line: whether it was. A change
+    with no spec has none: found by the review of the closing fixes, the view of specs it no longer held stayed."""
+    if not deltas:
+        workspace.drop(change_id, f"{REPORTS}/{REVIEW}")
+        return False
+    if (view := _view_written(workspace, change_id, deltas, living)) is None:
         return False
     shown, overlaps = view
     print(f"review    {shown}: {review_said(deltas, overlaps)}")
@@ -567,19 +571,19 @@ def _view_said(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]
 
 
 def _view_behind(workspace: Workspace, assessed: Assessed, living: Mapping[str, Spec]) -> bool:
-    """Whether the approver's view on disk was written from other specs than the change holds now: written again
-    where so, and named. Found by the closing code review: a command wrote the view, a spec was edited by hand, and
-    the approval recorded what its approver was never shown. No view, one an older adk-spec wrote, or one that will
-    not read or be written again, holds nothing: the view is an aid. Another change's overlap, or the living spec
-    moving, is not the approver's missed edit: `archive` stops on either."""
-    change_id = assessed.state.id
+    """Whether the approver's view on disk shows the change otherwise than it now stands: written again where so, and
+    named. Found by the closing code review: a command wrote the view, a spec was edited by hand, and the approval
+    recorded what its approver was never shown. Compared by the fingerprint the view ends on, of what it shows: a
+    spec, or a living requirement it diffs against, edited since, or a view with none. Another change's overlap is
+    not compared, and no view, or one that will not read or be written again, holds nothing: the view is an aid."""
+    change_id, deltas = assessed.state.id, assessed.loaded.change.deltas
     try:
         before = workspace.report(change_id, REVIEW)
     except OSError, NotTextError, WorkspaceError:
         return False
-    if before is None or mark_of(before) in (None, specs_mark(assessed.files)):
+    if before is None or mark_of(before) == view_mark(change_id, deltas, living):
         return False
-    return _view_said(workspace, change_id, assessed.loaded.change.deltas, living)
+    return _view_said(workspace, change_id, deltas, living)
 
 
 def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
@@ -836,7 +840,7 @@ def _approve(args: argparse.Namespace) -> int:
         return _refused(args.id, blockers)
     if _view_behind(workspace, assessed, living):
         raise NotYetError(
-            f"`{args.id}` is not approved: its view showed the specs before an edit: read it, then approve"
+            f"`{args.id}` is not approved: its view was out of date, and is written again: read it, then approve"
         )
     first = approval_checks_first(assessed.unchecked)
     made = _checked_first(workspace, args.id, living, assessed, args.override) if first else None
@@ -983,7 +987,7 @@ def _archive(args: argparse.Namespace) -> int:
     workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}), files=files)
     print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
     for shown in left:
-        print(f"kept      {shown}: it would not read or be written, a link or not UTF-8: nothing was added")
+        print(f"kept      {shown}: it would not read or be written, a link, not UTF-8 or a fence never closed")
     return EXIT_OK
 
 
@@ -994,9 +998,9 @@ def _logged(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -
         return None
     try:
         text = read_text(path) if path.is_file() else None
-    except NotTextError, OSError:
+        return with_entry(text, changelog_entry(change_id, date.today().isoformat(), deltas))  # the person's day
+    except NotTextError, OSError, GrammarError:  # a code fence never closed in it too: where it goes is a guess
         return None
-    return with_entry(text, changelog_entry(change_id, date.today().isoformat(), deltas))  # the person's day
 
 
 # The commands that call a model, or log in to one.

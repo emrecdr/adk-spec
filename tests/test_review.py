@@ -8,7 +8,7 @@ from conftest import approved, on_the_fake, run, seeded, state_of
 from samples import DELTA, SPEC, tasks_for
 
 from adk_spec.domain.delta_md import changed_ids, parse_delta
-from adk_spec.domain.review_md import render_review
+from adk_spec.domain.review_md import mark_of, render_review
 from adk_spec.domain.spec_md import parse_spec
 from adk_spec.workspace.files import read_text, write_text
 
@@ -236,8 +236,8 @@ def test_an_approval_of_files_the_view_does_not_show_is_refused_once(tmp_path, c
 
 
 def test_check_without_a_model_brings_a_hand_edit_into_the_view_and_the_approval_goes_on(tmp_path) -> None:
-    """What the guide tells an approver whose files were edited by hand since the last command: a view that shows
-    the files as they are holds no approval back."""
+    """A command run after a hand edit writes the view again, and a view that shows the specs as they are holds no
+    approval back."""
     seeded(tmp_path)
     delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
     write_text(delta, read_text(delta).replace("three failed attempts", "four failed attempts"))
@@ -246,12 +246,62 @@ def test_check_without_a_model_brings_a_hand_edit_into_the_view_and_the_approval
     approved(tmp_path)
 
 
-def test_a_view_another_change_or_the_living_spec_moved_holds_no_approval_back(tmp_path) -> None:
+def test_another_open_change_on_the_same_requirement_holds_no_approval_back(tmp_path) -> None:
     """Found by the closing code review: the view was compared whole, so another open change touching the same
-    requirement, a living spec that moved, or a view written by another version refused an approval of specs no one
-    had edited, and said they had been."""
+    requirement, or an edit of the view itself, refused an approval of specs no one had edited."""
     ws = seeded(tmp_path)
     assert run(tmp_path, "check", "passkeys", "--no-model") == 0  # writes the view
-    another(ws, OTHER)  # now an overlap the view does not name
-    write_text(tmp_path / VIEW, read_text(tmp_path / VIEW).replace("# Review: passkeys", "# Review: passkeys, as was"))
+    another(ws, OTHER)  # an overlap the view does not name
+    write_text(tmp_path / VIEW, read_text(tmp_path / VIEW).replace("# Review: passkeys", "# Review: passkeys, read"))
     approved(tmp_path)
+
+
+def test_a_spec_edit_the_view_does_not_show_holds_no_approval_back(tmp_path) -> None:
+    """Found by the review of the closing fixes: blank lines a formatter added to a delta refused the approval, and
+    the view written again was the same."""
+    seeded(tmp_path)
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    delta = tmp_path / ".spec/changes/passkeys/specs/auth/spec.md"
+    write_text(delta, read_text(delta).replace("## MODIFIED Requirements", "\n\n## MODIFIED Requirements"))
+    approved(tmp_path)
+
+
+def test_a_view_of_a_living_requirement_since_changed_is_refused_once(tmp_path) -> None:
+    """Found by the review of the closing fixes: the living requirement a change modifies was edited after its view
+    was written, the approval recorded the base as it now stood, and the archive reverted the edit unseen."""
+    seeded(tmp_path)
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    living = tmp_path / ".spec/specs/auth/spec.md"
+    write_text(living, read_text(living).replace("five failed attempts.", "five failed attempts, and alerts security."))
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    assert "-The system MUST lock an account after five failed attempts, and alerts security." in read_text(
+        tmp_path / VIEW
+    )
+    approved(tmp_path)
+
+
+def test_a_view_with_no_fingerprint_is_written_again_once(tmp_path) -> None:
+    """Found by the review of the closing fixes: a view an older adk-spec wrote, or whose last line was taken off,
+    was not compared at all."""
+    seeded(tmp_path)
+    assert run(tmp_path, "check", "passkeys", "--no-model") == 0
+    write_text(tmp_path / VIEW, read_text(tmp_path / VIEW).rstrip("\n").rsplit("\n", 1)[0] + "\n")
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 1
+    assert mark_of(read_text(tmp_path / VIEW))
+    approved(tmp_path)
+
+
+def test_the_views_fingerprint_is_its_last_line_alone() -> None:
+    """Found by the review of the closing fixes: a requirement's line shaped as the fingerprint was read first, and
+    `approve` refused for ever."""
+    planted = f"<!-- view sha256:{'0' * 64} -->"
+    assert mark_of(f"# Review: x\n\n```\n{planted}\n```\n") is None
+    assert mark_of(f"# Review: x\n\n{planted}\n") == f"sha256:{'0' * 64}"
+
+
+def test_a_new_capabilitys_purpose_is_in_its_view() -> None:
+    """Found by the review of the closing fixes: the purpose a new capability's living spec opens on was approved
+    unseen."""
+    added = DELTA.split("## ADDED Requirements\n\n")[1].split("\n## MODIFIED")[0].replace("AUTH", "SEARCH")
+    new = parse_delta("# Delta: search\n\n## Purpose\n\nFind things.\n\n## ADDED Requirements\n\n" + added)
+    assert "### Purpose\n\nFind things." in render_review("passkeys", {"search": new}, LIVING, {})

@@ -53,10 +53,12 @@ more, fixed test first: `reports/remaining.md` could say a model's reason, openi
 entry, so the next went below it (a line in a code block of the introduction is no entry either). With them: a verified
 change approved again as it stands stays verified, its summary naming the new approval; a strict change's first
 approval names each overlap once; and an approval of files edited after the approver's view was written is refused
-once, the view written again, so no approval records specs its approver was not shown. The view ends on a
-fingerprint of the specs it shows, and `approve` compares that alone: found by the review of these fixes, a view
-compared whole was refused for another change's overlap. That review also found an unclosed fence read every fence
-of the changelog as text; now only the lines from its opening are. What it left is below.
+once, the view written again, so no approval records specs its approver was not shown. Two reviews of these fixes
+shaped it: the view ends on a fingerprint of what it shows, each requirement and the living one it diffs against,
+and `approve` compares that alone, so another change's overlap or a formatter's blank lines hold nothing back while a
+living requirement edited since does (an approval would otherwise record a base that reverts it unseen); a new
+capability's view shows its purpose; and a changelog with a code fence never closed is left and said, since which
+fences pair is then a guess. What they left is below.
 
 ## How a change flows
 
@@ -499,7 +501,8 @@ and a step moves to code only where its output is a function of its input with n
   the refusal makes `approve` two runs where a spec was edited unseen, as `--override` already does where the run
   made the check, which is the owner's to keep or drop; a strict change's first approval whose view cannot be
   written names its overlaps nowhere until `archive` stops the second; brief, design and tasks edits are not in the
-  view, which shows the specs alone, so they hold no approval back.
+  view, which shows the specs alone, so they hold no approval back; an adk-spec that renders the view otherwise
+  refuses an open change's approval once after the upgrade, and writes it again.
 
 - Whether the merge gate holds a draft change in a pull request. Today `validate` warns of an approved change edited
   since and of verified work that moved, but a change a revision or `rebase` sent back to a draft reads as any draft:
