@@ -40,9 +40,10 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
         return True
     try:
-        # A fixed string git finds on one line, NUL-free and no stand-in's, which no file holds as it stands.
-        term = max((word for word in plain(quote).split() if "[" not in word and "]" not in word), key=len, default="")
-        hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
+        term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
+        if not term:  # nothing to look for elsewhere: unknown, not gone (found by phase 18's code review)
+            return None
+        hits = grep(folder, term, exclude=exclude if own else (), trust=own)
     except GitError:
         return None
     named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]

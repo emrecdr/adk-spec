@@ -106,8 +106,8 @@ class Explored:
     #: How many statements went past the budget, and how many unknowns past theirs.
     over: int = 0
     unknown_over: int = 0
-    #: What was asked for past what the reading reads, each as asked.
-    unread: tuple[str, ...] = ()
+    #: How many requests went past what the reading reads.
+    unread: int = 0
 
 
 def explored(state: Mapping[str, Any]) -> Explored:
@@ -125,25 +125,16 @@ def explored(state: Mapping[str, Any]) -> Explored:
         looked=tuple(state.get(_LOOKED_LIST) or ()),
         over=state.get(_OVER) or 0,
         unknown_over=state.get(_UNKNOWN_OVER) or 0,
-        unread=tuple(state.get(_UNREAD) or ()),
+        unread=state.get(_UNREAD) or 0,
     )
 
 
 def _unread(state: Mapping[str, Any], answer: SurveyDraft | ReviewDraft) -> dict[str, Any]:
-    """What `answer` asked for, added to what was asked for past what the reading reads, each once."""
-    asked = [*answer.more_files, *(f"{one.rstrip('/')}/" for one in answer.more_folders)]
-    asked += [f"search for {one}" for one in answer.more_searches]
-    unread = list(state.get(_UNREAD) or ())
-    return {
-        _UNREAD: [
-            *unread,
-            *(
-                f"{one}: past what the reading reads"
-                for one in asked
-                if f"{one}: past what the reading reads" not in unread
-            ),
-        ]
-    }
+    """How many of the requests of `answer` not answered already go past what the reading reads, added to those before:
+    a count, as the request is the model's words. Found by phase 18's code review: named, a request read whole before
+    was said not read, and a model's text went into the file whole."""
+    fresh = _new(state, answer.more_files, answer.more_folders, answer.more_searches)
+    return {_UNREAD: (state.get(_UNREAD) or 0) + sum(len(part) for part in fresh)}
 
 
 def _said(statements: Sequence[Statement]) -> str:
@@ -295,11 +286,10 @@ def _weighed(ctx: Context) -> Event:
     numbers = {one.statement for one in answer.disputed}
     kept = [one for number, one in enumerate(found.statements, 1) if number not in numbers]
     asked = ((plain(one.question)[:QUESTION_MAX_CHARS], plain(one.where)[:WHERE_MAX_CHARS]) for one in answer.unknown)
-    # Phase 18: a second review's unknowns add to the first's, each question once, as it replaced them in silence.
-    every = {question: where for question, where in (*found.unknown, *asked) if question}
-    unknown = [[question, where] for question, where in every.items()]
+    # The last review's unknowns stand, as it read what the first asked for. Phase 18: those past the budget counted.
+    unknown = [[question, where] for question, where in asked if question]
     disputed = found.disputed + len(found.statements) - len(kept)
-    over = found.unknown_over + max(0, len(unknown) - UNKNOWN_BUDGET)  # found by its cleanup: each review's adds up
+    over = max(0, len(unknown) - UNKNOWN_BUDGET)
     update = {**_holding(kept), DISPUTED: disputed, UNKNOWN: unknown[:UNKNOWN_BUDGET], _UNKNOWN_OVER: over}
     more = any((answer.more_files, answer.more_folders, answer.more_searches))
     on = more and (state.get(REVIEWS) or 0) < REVIEW_BUDGET and len(kept) < STATEMENT_BUDGET

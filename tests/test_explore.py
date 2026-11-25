@@ -75,7 +75,7 @@ async def test_the_survey_may_look_again_and_no_more_than_the_budget(tmp_path, f
     fake_provider.answers_each_time(SURVEY, iter(rounds))
     found = explored((await read(tmp_path)).state)
     assert len(sent(fake_provider, SURVEY)) == explore.LOOK_BUDGET == 3, "what the third asked for is not read"
-    assert found.unread == ("src/app.py:1-1: past what the reading reads",), "phase 18: and is named"
+    assert found.unread == 1, "phase 18: and is counted"
     assert [one.path for one in found.statements] == ["src/app.py", "src/auth/session.py", "docs/auth.md"]
     assert found.read == ("src/app.py (whole)", "src/auth/session.py (whole)", "docs/auth.md (whole)")
     second = sent(fake_provider, SURVEY)[1]
@@ -127,8 +127,7 @@ async def test_no_more_statements_are_kept_than_the_budget(tmp_path, monkeypatch
     found = explored((await read(tmp_path)).state)
     assert len(found.statements) == 2 and len(sent(fake_provider, SURVEY)) == 1, "a full budget ends the reading"
     assert found.over == 1, "phase 18: the statement past the budget is counted"
-    assert found.unread == ("src/auth/session.py: past what the reading reads",), "and the request it left named"
-    assert all("past what the reading reads" not in told for told in sent(fake_provider, REVIEW)), "the review not told"
+    assert found.unread == 1, "and the request it left counted"
 
 
 @pytest.mark.asyncio
@@ -249,9 +248,7 @@ async def test_the_review_may_send_the_reading_one_round_further_and_runs_twice_
     assert len(sent(fake_provider, REVIEW)) == explore.REVIEW_BUDGET == 2
     assert found.read == ("src/app.py (whole)", "docs/auth.md (whole)"), "what the second review asked is not read"
     assert [one.path for one in found.statements] == ["src/app.py", "docs/auth.md"]
-    assert found.unknown == (("How long does a session last?", "docs"), ("Where is a session ended?", "src/auth")), (
-        "the second review's unknowns add to the first's (phase 18)"
-    )
+    assert found.unknown == (("Where is a session ended?", "src/auth"),), "the second review's unknowns stand"
 
 
 @pytest.mark.asyncio
@@ -335,11 +332,10 @@ async def test_the_searches_and_folders_a_reading_made_are_said(tmp_path, fake_p
 
 
 @pytest.mark.asyncio
-async def test_unknowns_past_the_budget_add_up_over_two_reviews(tmp_path, fake_provider) -> None:
-    """Found by phase 18's cleanup: the second review counted only its own unknowns past the budget, and the first's
-    went unsaid again."""
-    first = reviewed(unknown=[(f"Question {n}?", "") for n in range(10)], files=("docs/auth.md",))
-    second = reviewed(unknown=[("Who owns sessions?", "")])
-    fake_provider.answers_each_time(REVIEW, iter([first, second]))
+async def test_a_request_for_what_was_read_whole_is_not_counted_unread(tmp_path, fake_provider) -> None:
+    """Found by phase 18's code review: a file asked for again, read whole already, was said not read."""
+    rounds = [survey(APP, files=("src/auth/session.py",)), survey(SESSION, files=("docs/auth.md",))]
+    rounds += [survey(DOCS, files=("src/app.py",))]
+    fake_provider.answers_each_time(SURVEY, iter(rounds))
     found = explored((await read(tmp_path)).state)
-    assert found.unknown[0] == ("Question 0?", "") and found.unknown_over == 3
+    assert found.unread == 0 and "src/app.py (whole)" in found.read

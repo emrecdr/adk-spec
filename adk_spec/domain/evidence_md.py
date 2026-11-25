@@ -25,6 +25,9 @@ _APART = " | "
 _ENTRY = "- "
 _TITLE = "# Evidence: "
 _NOTE = "> "
+#: The diff a model is shown is scrubbed: a quote holding this was over a secret, and is weak evidence of the code, cut
+#: diffs scrubbing it otherwise than the file whole (found by phase 18's code review).
+_HIDDEN = "[REDACTED"
 
 
 @dataclass(frozen=True)
@@ -72,9 +75,9 @@ def kept(
     verdicts: Sequence[Verdict], *, added: frozenset[str], change: str, at: str, repositories: Mapping[str, str]
 ) -> list[Proof]:
     """The evidence of `verdicts` worth keeping: each quote of a `met` verdict of a requirement in `added`, the ones
-    the change adds or modifies. A removed requirement's quotes are of lines taken out. A quote over a secret is kept
-    as the diff showed it, scrubbed: it is looked for so, as phase 18 made the check. A path under another
-    repository's name is kept as that repository's folder, from `repositories`, and the path within it."""
+    the change adds or modifies. A removed requirement's quotes are of lines taken out, and one over a secret is
+    weak evidence of the code. A path under another repository's name is kept as that repository's folder, from
+    `repositories`, and the path within it."""
     proofs: list[Proof] = []
     for verdict in verdicts:
         if verdict.verdict != "met" or verdict.id not in added:
@@ -84,7 +87,7 @@ def kept(
             repository, path = _placed(named, repositories)
             # Cut where it may be: what a quote begins with is found wherever the whole quote is.
             one = Proof(verdict.id, repository, path, change, at, quote[:QUOTE_MAX].rstrip())
-            if _APART not in repository + path and one not in held:
+            if _HIDDEN not in quote and _APART not in repository + path and one not in held:
                 held.append(one)
         proofs += held[:QUOTES_A_REQUIREMENT]
     return _sorted(proofs)

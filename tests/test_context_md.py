@@ -10,6 +10,7 @@ from adk_spec.domain.context_md import (
     drafted_rules,
     render_context,
     unknown_count,
+    with_answers,
 )
 from adk_spec.domain.convert import to_statements
 from adk_spec.domain.drafts import SurveyDraft
@@ -229,6 +230,19 @@ def test_a_readings_cuts_and_lookups_are_written() -> None:
         read=("src/app.py (whole)", "search: password (3 lines)"),
         over=1,
         unknown_over=2,
+        unread=3,
     )
-    assert "Left out: 1 statement past what a reading keeps; 2 unknowns past what a review keeps." in text
+    assert (
+        "Left out: 1 statement past what a reading keeps; 2 unknowns past what a review keeps; "
+        "3 requests past what the reading reads."
+    ) in text
     assert "- src/app.py (whole)\n- search: password (3 lines)\n" in text
+
+
+def test_the_answers_stand_right_under_the_files_first_lines() -> None:
+    """Found by phase 18's code review: with no unknown, the answers came below what was not read."""
+    text = render_context(
+        "Context: x", at="2026-11-22T10:00:00+00:00", commit=None, statements=[], read=(), left_out=("a.py: gone",)
+    )
+    kept = with_answers(text, "Which browsers? -> Chrome")
+    assert kept.index("## The person's answers") < kept.index("Not read: a.py: gone.")

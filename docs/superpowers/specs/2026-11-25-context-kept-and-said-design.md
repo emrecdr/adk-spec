@@ -18,9 +18,8 @@ given to `verify` with no mark of the cut. This phase keeps the answers and says
 
 1. **The person's answers kept.** `context.md` holds each question `propose` asked and its answer, near its top, so
    the stages after the brief (deltas, design, tasks) read the person's own words, not only the brief's.
-2. **Every cut of the reading said.** Statements past the 40 kept, unknowns past 8 or replaced by a second review,
-   and requests left when the reading's budget ran out are said under what was left out; the searches and folder
-   listings made are said under what was read.
+2. **Every cut of the reading said.** Statements past the 40 kept, unknowns past 8, and requests left when the reading's budget ran out are counted under what was left out; the searches and
+   folder listings made are said under what was read.
 3. **What matters first in `context.md`.** The unknowns and what was left out stand above the statements, so the cut
    a stage is given at 20,000 characters takes the statements' tail first.
 4. **The top files named.** A folded tree lists the files at the repository's top by name, so a stage sees
@@ -39,13 +38,15 @@ given to `verify` with no mark of the cut. This phase keeps the answers and says
 
 - **Where the answers go.** A `## The person's answers` section after the file's first lines, one `- <question> ->
   <answer>` line each, as the brief stage is given them; written when the change's `context.md` is.
-- **Unknowns of two reviews.** The second review's unknowns are added to the first's, each question once, and those
-  past 8 are counted under what was left out.
+- **Unknowns of two reviews.** The last review's stand, as it read what the first asked for; those past 8 are
+  counted. Adding the first's was built and taken out: the second review is not shown them, so it could not withdraw
+  one it had answered (code review). Showing it them is a change to what a model is told: step 2.
 - **The top files.** Up to 30 by name on one line after the header, then a count of the rest.
-- **The test output's mark.** One line before the kept end: how many characters were cut from its start.
+- **The test output's mark.** One line before the kept end, saying its start is not shown (no count: the byte
+  window a run's output is held in drops a start of unknown length too).
 
 ## Tests
 
-One per goal: answers in `context.md` after a propose that asked; each cut said (statements past the budget, a
-second review's unknowns kept with the first's, a budget's leftover requests, a search and a folder in what was
+One per goal: answers in `context.md` after a propose that asked; each cut said (statements past the budget, unknowns
+past theirs, a budget's leftover requests counted, one read whole before not counted, a search and a folder in what was
 read); the unknowns above the statements in the file; a folded tree naming the top files; a cut test output marked.

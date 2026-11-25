@@ -1534,7 +1534,7 @@ def _found_text(
         commit=_commit(workspace),
         statements=found.statements,
         read=(*found.read, *found.looked),
-        left_out=(*found.left_out, *found.unread),
+        left_out=found.left_out,
         dropped=found.dropped,
         partial=partial,
         others=others,
@@ -1543,6 +1543,7 @@ def _found_text(
         sections=sections,
         over=found.over,
         unknown_over=found.unknown_over,
+        unread=found.unread,
     )
 
 
