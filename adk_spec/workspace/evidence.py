@@ -4,7 +4,7 @@ against the code, so that a requirement whose proving lines are gone from it is 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PureWindowsPath
 
 from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
@@ -44,7 +44,7 @@ def _within(folder: Path, proof: Proof, *, own: bool) -> bool:
     it pointed, so in CI a pull request could learn from a note whether a string is in a file on the runner."""
     named = (proof.repository, proof.path)
     # A root or a drive on either system, `C:x` too, or a NUL that no file system takes.
-    if any(PureWindowsPath(part).anchor or PurePosixPath(part).anchor or "\x00" in part for part in named):
+    if any(PureWindowsPath(part).anchor or "\x00" in part for part in named):
         return False
     if not folder.is_dir() or (not own and not (folder / ".git").exists()):
         return False
@@ -105,15 +105,15 @@ def evidence_folded(
         proofs = [one for _line, one in mine or [] if one.at == held.at]
     files: dict[str, str] = {}
     left: list[str] = []
+    proved = {one.req for one in proofs}
     for capability, delta in sorted(deltas.items()):
         replaced = frozenset(req.id for req in (*delta.added, *delta.modified))
         removed = frozenset(gone.id for gone in delta.removed)
-        if not replaced & {one.req for one in proofs} and not removed:
-            continue  # nothing of this change to add or take out
         path = workspace.home / SPECS / capability / EVIDENCE
         living, unread = _read(path) if workspace.writable(SPECS, capability, EVIDENCE) else (None, [])
         if living is None or unread:
-            left.append(workspace.shown(path))
+            if replaced & proved or delta.modified or removed:  # said only where something would go in or out
+                left.append(workspace.shown(path))
             continue
         before = [one for _line, one in living]
         after = folded(before, proofs, replaced=replaced, removed=removed)

@@ -1,6 +1,6 @@
 """`.spec/changelog.md`: an entry for each archived change, newest first, naming each requirement it added,
-modified and removed. adk-spec adds an entry under the heading and leaves everything below it as it stands, so a
-person may write in it."""
+modified and removed. adk-spec adds each entry above the first one already there, and leaves every other line as it
+stands, an introduction under the heading too, so a person may write in it."""
 
 from __future__ import annotations
 
@@ -26,10 +26,10 @@ def changelog_entry(change_id: str, day: str, deltas: Mapping[str, Delta]) -> st
 
 
 def with_entry(text: str | None, entry: str) -> str:
-    """The changelog `text` with `entry` first under its heading; a changelog where there is none."""
+    """The changelog `text` with `entry` above its first entry, below any introduction; a changelog where there is
+    none."""
     lines = (text or "").lstrip("\n").split("\n")
     body = lines[1:] if lines[0].rstrip() == HEADING else lines  # a heading of theirs is kept, as their text
-    first = next((at for at, line in enumerate(body) if line.startswith("## ")), len(body))  # before the first entry
-    intro, rest = "\n".join(body[:first]).strip("\n"), "\n".join(body[first:]).strip("\n")
-    parts = [HEADING, *([intro] if intro else []), entry.rstrip("\n"), *([rest] if rest else [])]
-    return "\n\n".join(parts) + "\n"
+    first = next((at for at, line in enumerate(body) if line.startswith("## ")), len(body))
+    parts = (HEADING, "\n".join(body[:first]), entry, "\n".join(body[first:]))
+    return "\n\n".join(filter(None, (part.strip("\n") for part in parts))) + "\n"

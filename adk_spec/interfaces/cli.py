@@ -624,7 +624,7 @@ def _gated(workspace: Workspace, assessed: Assessed) -> list[Finding]:
     state = assessed.state
     try:
         drift = _drift(workspace, state)
-    except (OSError, *REFUSALS):  # a config that does not read: the gate says it cannot compare, and goes on
+    except ConfigError, NotTextError, OSError:  # a config that does not read: the gate cannot compare, goes on
         drift = None
     found = merge_gate(state, assessed.stale, drift, record=STATE_FILE)
     return _from_root(state.id, found)

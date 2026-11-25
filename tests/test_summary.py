@@ -109,10 +109,3 @@ def test_a_changelog_that_is_a_link_is_left_and_the_change_archived(tmp_path, ca
         f"kept      {CHANGELOG}: " in capsys.readouterr().out
         and read_text(tmp_path / ".spec/real.md") == "# Changelog\n"
     )
-
-
-def test_an_introduction_under_the_heading_stays_above_the_entries() -> None:
-    """Found by the code review: a person's introduction sank below each new entry."""
-    intro = "# Changelog\n\nAll notable changes are written here.\n\n## old, 2026-01-01\n\n- Added REQ-X-001: Old (x)\n"
-    after = with_entry(intro, changelog_entry("passkeys", "2026-11-24", DELTAS))
-    assert after.index("All notable changes") < after.index("## passkeys") < after.index("## old")

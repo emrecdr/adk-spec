@@ -229,7 +229,15 @@ def test_a_requirement_no_longer_in_the_living_spec_is_not_suspect(tmp_path, cap
 
 @pytest.mark.parametrize(
     ("folder", "path"),
-    [(".", "../outside.txt"), (".", "/etc/hosts"), ("/", "etc/hosts"), ("..", "outside.txt")],
+    [
+        (".", "../outside.txt"),
+        (".", "/etc/hosts"),
+        ("/", "etc/hosts"),
+        ("..", "outside.txt"),
+        (".", "src/a\x00.py"),  # a NUL stopped `status` with a traceback
+        (".", "C:x.py"),  # a drive-relative path passed the guard on Windows
+        ("C:/elsewhere", "x.py"),
+    ],
 )
 def test_an_evidence_line_reaching_outside_its_repository_is_not_checked(tmp_path, folder, path) -> None:
     """Found by the code review: a line naming `..` or an absolute path was read wherever it pointed, so a pull
@@ -243,34 +251,17 @@ def test_an_evidence_line_reaching_outside_its_repository_is_not_checked(tmp_pat
     assert holds(root, proof(repository=folder, path=path, quote="SECRET=abc is here"), ()) is None
 
 
-def test_evidence_of_a_verification_older_than_the_approval_is_not_folded(tmp_path) -> None:
+def test_evidence_of_a_verification_of_an_earlier_version_is_not_folded(tmp_path) -> None:
     """Found by the code review: a lean change revised after its verification, then approved again, folded the
     quotes that proved its earlier version."""
     approved_in_a_repository(tmp_path, tier="lean")
     implemented(tmp_path)
     assert run(tmp_path, "verify", "passkeys") == 0
-    record = tmp_path / ".spec/changes/passkeys/change.json"
-    held = json.loads(read_text(record))
-    old, held["verification"]["at"] = held["verification"]["at"], "2000-01-01T00:00:00+00:00"
-    write_text(record, json.dumps(held, indent=2))
-    mine = tmp_path / CHANGE_EVIDENCE
-    write_text(mine, read_text(mine).replace(old, "2000-01-01T00:00:00+00:00"))
     brief = tmp_path / ".spec/changes/passkeys/brief.md"
     write_text(brief, read_text(brief) + "\nRevised after the verification.\n")
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
     assert run(tmp_path, "archive", "passkeys") == 0
     assert not (tmp_path / LIVING_EVIDENCE).exists()
-
-
-@pytest.mark.parametrize(("folder", "path"), [(".", "src/a\x00.py"), (".", "C:x.py"), ("C:/elsewhere", "x.py")])
-def test_an_evidence_line_with_a_nul_or_a_drive_is_not_checked(tmp_path, folder, path) -> None:
-    """Found by the code review: a NUL in a path stopped `status` and `validate` with a traceback, and a drive-relative
-    path passed the guard on Windows."""
-    from adk_spec.workspace.evidence import holds
-
-    seeded(tmp_path)
-    repository(tmp_path)
-    assert holds(tmp_path, proof(repository=folder, path=path), ()) is None
 
 
 def test_a_lean_change_approved_again_as_it_stands_keeps_its_evidence(tmp_path) -> None:
@@ -279,12 +270,6 @@ def test_a_lean_change_approved_again_as_it_stands_keeps_its_evidence(tmp_path) 
     approved_in_a_repository(tmp_path, tier="lean")
     implemented(tmp_path)
     assert run(tmp_path, "verify", "passkeys") == 0
-    record = tmp_path / ".spec/changes/passkeys/change.json"
-    held = json.loads(read_text(record))
-    old, held["verification"]["at"] = held["verification"]["at"], "2000-01-01T00:00:00+00:00"
-    write_text(record, json.dumps(held, indent=2))
-    mine = tmp_path / CHANGE_EVIDENCE
-    write_text(mine, read_text(mine).replace(old, "2000-01-01T00:00:00+00:00"))
     assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
     assert run(tmp_path, "archive", "passkeys") == 0
     assert (tmp_path / LIVING_EVIDENCE).is_file()
@@ -305,3 +290,22 @@ def test_no_kept_line_where_there_was_no_evidence_to_add(tmp_path, capsys) -> No
     capsys.readouterr()
     assert run(tmp_path, "archive", "unlock") == 0
     assert LIVING_EVIDENCE not in capsys.readouterr().out
+
+
+def test_a_change_modifying_a_requirement_with_no_proof_takes_its_old_lines_out(tmp_path) -> None:
+    """Found by the cleanup review: a change with no proof of its own for a requirement it modifies left that
+    requirement's old lines in the living evidence, where they stood for a statement no longer there."""
+    from samples import BRIEF, tasks_for
+    from test_review import OTHER
+
+    ws = seeded(tmp_path)
+    folder = ws.new_change("stricter", "lean")  # modifies REQ-AUTH-002, verified by no one
+    write_text(folder / "brief.md", BRIEF)
+    write_text(folder / "tasks.md", tasks_for("REQ-AUTH-002"))
+    write_text(folder / "specs" / "auth" / "spec.md", OTHER)
+    before = [proof("REQ-AUTH-002", quote="failures >= 5"), proof("REQ-AUTH-001", quote="return password(user)")]
+    write_text(tmp_path / LIVING_EVIDENCE, render_evidence("auth", before))
+    assert run(tmp_path, "approve", "stricter", "--by", "reviewer") == 0
+    assert run(tmp_path, "archive", "stricter") == 0
+    read, _unread = parse_evidence(read_text(tmp_path / LIVING_EVIDENCE))
+    assert [one.req for _line, one in read] == ["REQ-AUTH-001"]

@@ -135,9 +135,12 @@ def test_a_config_that_does_not_read_leaves_drift_unknown_not_the_gate_stopped(t
 def test_annotations_name_their_file_from_the_repositorys_top(tmp_path, capsys, monkeypatch) -> None:
     """Found by the code review: where `.spec/` is not at the repository's top, GitHub found no file to annotate."""
     voided(tmp_path / "service")
+    summary = tmp_path / "summary.md"
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     assert f"::warning file=service/{BRIEF}," in validated(tmp_path / "service", capsys)[1]
+    assert f"service/{BRIEF}" in read_text(summary), "the summary names them as the annotations do"
 
 
 def test_a_config_fault_is_said_as_itself_at_archive(tmp_path, capsys) -> None:
@@ -147,15 +150,3 @@ def test_a_config_fault_is_said_as_itself_at_archive(tmp_path, capsys) -> None:
     capsys.readouterr()
     assert run(tmp_path, "archive", "passkeys") != 0
     assert "the work changed" not in capsys.readouterr().err
-
-
-def test_the_summary_names_its_files_from_the_repositorys_top_as_the_annotations_do(
-    tmp_path, capsys, monkeypatch
-) -> None:
-    voided(tmp_path / "service")
-    summary = tmp_path / "summary.md"
-    monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
-    validated(tmp_path / "service", capsys)
-    assert f"service/{BRIEF}" in read_text(summary)
