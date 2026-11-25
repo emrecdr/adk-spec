@@ -14,7 +14,6 @@ from .config import ConfigError
 from .files import NotTextError, read_text
 from .git import GitError, grep
 from .layout import CHANGES, EVIDENCE, SPECS, Workspace
-from .paths import PathError, inside
 
 #: How many of the files a quote's search names are read whole to find it.
 ELSEWHERE_MAX = 20
@@ -109,7 +108,7 @@ def evidence_folded(
     left: list[str] = []
     for capability, delta in sorted(deltas.items()):
         path = workspace.home / SPECS / capability / EVIDENCE
-        living, unread = _read(path) if writable(workspace, SPECS, capability, EVIDENCE) else (None, [])
+        living, unread = _read(path) if workspace.writable(SPECS, capability, EVIDENCE) else (None, [])
         if living is None or unread:
             left.append(workspace.shown(path))
             continue
@@ -119,16 +118,6 @@ def evidence_folded(
         if after != before:
             files[f"{SPECS}/{capability}/{EVIDENCE}"] = render_evidence(capability, after)
     return files, left
-
-
-def writable(workspace: Workspace, *parts: str) -> bool:
-    """Whether the archive's one write may hold a file of `.spec/` by these parts: its path rules refuse a link, or a
-    name another file's differs from only by case. Found by the code review: one such stopped the whole archive."""
-    try:
-        inside(workspace.home, *parts)
-    except PathError:
-        return False
-    return True
 
 
 def _read(path: Path) -> tuple[list[tuple[int, Proof]] | None, list[int]]:

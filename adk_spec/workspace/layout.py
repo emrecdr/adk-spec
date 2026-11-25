@@ -208,6 +208,15 @@ class Workspace:
             written[inside(self.home, *path.split("/"))] = text
         write_all(written)
 
+    def writable(self, *parts: str) -> bool:
+        """Whether `write_specs` may hold a file of `.spec/` by these parts: its path rules refuse a link, or a name
+        another file's differs from only by case. Found by the code review: one such stopped the whole archive."""
+        try:
+            inside(self.home, *parts)
+        except PathError:
+            return False
+        return True
+
     def _folder(self, change_id: str) -> Path:
         """The folder of an existing change."""
         try:

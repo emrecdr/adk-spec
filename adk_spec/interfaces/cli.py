@@ -17,7 +17,7 @@ import sys
 from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib import metadata
 from pathlib import Path
 from typing import Any, NoReturn
@@ -92,7 +92,7 @@ from ..workspace.context import (
     living_text,
     profile_text,
 )
-from ..workspace.evidence import evidence_findings, evidence_folded, writable
+from ..workspace.evidence import evidence_findings, evidence_folded
 from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
@@ -507,7 +507,7 @@ def _drift(workspace: Workspace, state: ChangeState) -> bool | None:
         return False
     try:
         work = _sources(workspace, state.repositories).work(held.base, held.bases)
-    except GitError, SourceError, ConfigError, NotTextError, OSError:  # a config that does not read, too
+    except (GitError, OSError, *REFUSALS):  # a config that does not read too
         return None
     # Or the fingerprint an older adk-spec recorded, of the diff as a stage is shown it: found by the code review,
     # every change it verified read as drifted after the upgrade.
@@ -534,26 +534,26 @@ def _say_next(
     it before approving: its view, `reports/review.md`, is written again first."""
     assessed = _assessed(workspace, change_id, living, drift=drift)
     deltas = assessed.loaded.change.deltas
-    if assessed.stale and deltas:  # a draft, or an approved change edited since: an approval is owed
-        with contextlib.suppress(*_VIEW_FAULTS):  # the view is an aid: the work is saved, its next step said
-            shown, overlaps = _view_written(workspace, change_id, deltas, living)
-            print(f"review    {shown}: {review_said(deltas, overlaps)}")
+    # A draft, or an approved change edited since, owes an approval: its view is written for the person who gives it.
+    if assessed.stale and deltas and (view := _view_written(workspace, change_id, deltas, living)):
+        shown, overlaps = view
+        print(f"review    {shown}: {review_said(deltas, overlaps)}")
     phrase = assessed.step.phrase
     print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
 
 
 def _view_written(
     workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]
-) -> tuple[str, dict[str, list[str]]]:
-    """The approver's view of a change written again: where it is, as shown, and the overlaps it names."""
+) -> tuple[str, dict[str, list[str]]] | None:
+    """The approver's view of a change written again: where it is, as shown, and the overlaps it names. None where it
+    cannot be written, a file that will not open or a folder the path rules refuse: the view is an aid, and found by
+    the code review, its fault failed commands whose work was done."""
     overlaps = _overlaps(workspace, change_id, deltas)
-    path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps))
+    try:
+        path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps))
+    except OSError, WorkspaceError:
+        return None
     return workspace.shown(path), overlaps
-
-
-#: What may keep the approver's view from being written, none of which fails a command whose work is done: a file
-#: that will not open, and a folder the path rules refuse. Found by the code review.
-_VIEW_FAULTS = (OSError, WorkspaceError, PathError)
 
 
 def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
@@ -562,7 +562,7 @@ def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta])
     own = {req.id for delta in deltas.values() for req in (*delta.modified, *delta.removed)}
     try:
         touched = workspace.touching(change_id)
-    except _VIEW_FAULTS:
+    except OSError, WorkspaceError:
         return {}
     return {req_id: others for req_id, others in touched.items() if req_id in own}
 
@@ -629,13 +629,11 @@ def _gated(workspace: Workspace, assessed: Assessed) -> list[Finding]:
 def _from_the_top(workspace: Workspace, found: Sequence[Finding]) -> list[Finding]:
     """Findings with their paths from the checkout's top, as GitHub reads an annotation's: found by the code review,
     a `.spec/` below the top was annotated on files GitHub could not find."""
-    top = os.environ.get("GITHUB_WORKSPACE")
-    try:
-        below = workspace.root.resolve().relative_to(Path(top).resolve()).as_posix() if top else "."
-    except ValueError:  # not under it: the paths are left as they are
-        below = "."
-    if below == ".":
+    root = workspace.root.resolve()
+    top = Path(os.environ.get("GITHUB_WORKSPACE") or root).resolve()
+    if root == top or not root.is_relative_to(top):  # at the top, or not under it: the paths are left as they are
         return list(found)
+    below = root.relative_to(top).as_posix()
     return [held.model_copy(update={"path": f"{below}/{held.path}"}) if held.path else held for held in found]
 
 
@@ -914,10 +912,8 @@ def _archive(args: argparse.Namespace) -> int:
         _printed(refused)
         print(f"{PROG}: `{args.id}` is not archived, and no spec was written", file=sys.stderr)
         if any(held.code == "delta.base-stale" for held in refused):
-            try:
-                shown, _overlapping = _view_written(workspace, args.id, loaded.change.deltas, living)
-            except _VIEW_FAULTS:
-                shown = "the current requirement"
+            view = _view_written(workspace, args.id, loaded.change.deltas, living)
+            shown = view[0] if view else "the current requirement"
             print(
                 f"{PROG}: the living spec changed after this delta was based on it: read {shown}, update the delta, "
                 f"then run `{PROG} rebase {args.id}` and approve again",
@@ -940,14 +936,13 @@ def _archive(args: argparse.Namespace) -> int:
 def _logged(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> str | None:
     """The changelog with this change's entry first; None where the one there does not read, which is left as it is."""
     path = workspace.home / CHANGELOG
-    if not writable(workspace, CHANGELOG):  # a link the archive's write would refuse, and stop on
+    if not workspace.writable(CHANGELOG):  # a link the archive's write would refuse, and stop on
         return None
     try:
         text = read_text(path) if path.is_file() else None
     except NotTextError, OSError:
         return None
-    day = datetime.now().astimezone().date().isoformat()  # the person's day, not UTC's
-    return with_entry(text, changelog_entry(change_id, day, deltas))
+    return with_entry(text, changelog_entry(change_id, date.today().isoformat(), deltas))  # the person's day
 
 
 # The commands that call a model, or log in to one.
@@ -1787,7 +1782,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
             workspace.write_report(
                 args.id,
                 REMAINING,
-                render_remaining(args.id, left, last="verify" if DEMANDS[state.tier].verified else "archive"),
+                render_remaining(args.id, left, last=DEMANDS[state.tier].closing),
             )
         )
     else:

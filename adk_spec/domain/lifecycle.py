@@ -84,6 +84,11 @@ class Demands:
     warnings_block: bool
     override: bool
 
+    @property
+    def closing(self) -> str:
+        """The command a change's work ends on: `verify` where a verification is owed, `archive` where none is."""
+        return "verify" if self.verified else "archive"
+
 
 DEMANDS: Mapping[str, Demands] = {
     "lean": Demands(False, False, False, False, False, 1, False, True),
@@ -465,8 +470,7 @@ def _after_approval(
         return Step("you", f"the tests failed: fix them and run `adk-spec verify {cid}`, or {why}")
     if unmet := _unmet(state):
         return unmet
-    last = "verify" if DEMANDS[state.tier].verified else "archive"
-    return Step("you", f"implement tasks.md, then run `adk-spec {last} {cid}`")
+    return Step("you", f"implement tasks.md, then run `adk-spec {DEMANDS[state.tier].closing} {cid}`")
 
 
 #: How many unmet requirements the next step names; `reports/remaining.md` holds every one.
@@ -477,15 +481,14 @@ def _unmet(state: ChangeState) -> Step | None:
     """The step after a verification that did not show every requirement met: the work its report names. Found by
     the research on the tools compared: the step said "implement tasks.md" whatever the verdicts said."""
     held = state.verification
-    # Not one a person verified by override: its remaining list was removed. Found by the code review.
-    unmet = (
-        sorted(req_id for req_id, said in held.verdicts.items() if said != "met") if held and not held.override else []
-    )
+    if held is None or held.override:  # verified by override: its remaining list was removed (the code review)
+        return None
+    unmet = sorted(req_id for req_id, said in held.verdicts.items() if said != "met")
     if not unmet:
         return None
     more = len(unmet) - UNMET_NAMED
     named = ", ".join(unmet[:UNMET_NAMED]) + (f" and {more} more" if more > 0 else "")
-    last = "verify" if DEMANDS[state.tier].verified else "archive"  # a lean change owes no verification
+    last = DEMANDS[state.tier].closing
     return Step("you", f"{named} unmet: work from reports/remaining.md, then run `adk-spec {last} {state.id}`")
 
 
