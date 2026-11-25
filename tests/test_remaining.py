@@ -153,3 +153,52 @@ def test_a_change_approved_again_after_an_edit_is_not_sent_to_the_old_remaining_
     assert run(tmp_path, "status", "--json") == 0
     (row,) = json.loads(capsys.readouterr().out)["changes"]
     assert "remaining.md" not in row["next"]
+
+
+def test_a_summary_that_cannot_be_written_leaves_the_evidence_of_the_verification(tmp_path, monkeypatch) -> None:
+    """Found by the code review: a summary refused after the verification was recorded left the change's evidence of
+    an earlier one, and the archive then took the living evidence out with nothing put in."""
+    from adk_spec.workspace.layout import Workspace
+
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    writing = Workspace.write_report
+
+    def held(self, change_id, name, text):
+        if name == "summary.md":
+            raise OSError(13, "Permission denied")
+        return writing(self, change_id, name, text)
+
+    monkeypatch.setattr(Workspace, "write_report", held)
+    assert run(tmp_path, "verify", "passkeys") == 0
+    at = json.loads((tmp_path / ".spec/changes/passkeys/change.json").read_text())["verification"]["at"]
+    assert f" | {at} | " in (tmp_path / ".spec/changes/passkeys/evidence.md").read_text(encoding="utf-8")
+
+
+def test_code_found_reasons_are_said_as_codes() -> None:
+    """Found by the code review: a reason code wrote itself, that no quoted line is in the diff, was labelled as the
+    model's words, which code had not checked."""
+    from adk_spec.domain.verify import UNGROUNDED
+
+    said = [Verdict("REQ-AUTH-002", "unclear", (), f"{UNGROUNDED}. The model's reason: three now.")]
+    text = render_remaining("passkeys", remaining(said, GROUPS, frozenset()))
+    assert f"What code found: {UNGROUNDED}. The model's reason: three now." in text
+
+
+def test_a_task_path_with_backslashes_reads_as_the_path() -> None:
+    groups = parse_tasks(TASKS.replace("src/auth/passkey.py, src/auth/lockout.py", "src\\auth\\passkey.py"))
+    (left,) = remaining(SAID, groups, frozenset({"src/auth/passkey.py"}))
+    assert left.untouched == ()
+
+
+def test_approving_other_files_removes_the_remaining_list_of_the_old(tmp_path, fake_provider) -> None:
+    """Found by the code review: once an approval of other files dropped the verification, its remaining list stayed
+    in reports/ for an assistant to work from."""
+    approved_in_a_repository(tmp_path)
+    implemented(tmp_path)
+    fake_provider.answers_when(VERIFY, UNMET)
+    assert run(tmp_path, "verify", "passkeys") == 1
+    brief = tmp_path / ".spec/changes/passkeys/brief.md"
+    brief.write_text(brief.read_text(encoding="utf-8") + "\nRevised after the verification.\n", encoding="utf-8")
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    assert not (tmp_path / LEFT).exists()

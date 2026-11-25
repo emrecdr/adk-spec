@@ -69,7 +69,11 @@ def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[
         read, unread = _read(path)
         if read is None:
             found.append(
-                finding("spec.evidence-unreadable", "It is not UTF-8 text: nothing in it is checked.", path=shown)
+                finding(
+                    "spec.evidence-unreadable",
+                    "It will not open, or is not UTF-8 text: nothing in it is checked.",
+                    path=shown,
+                )
             )
             continue
         found += [

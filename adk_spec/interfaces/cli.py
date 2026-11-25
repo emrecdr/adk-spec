@@ -13,6 +13,7 @@ import getpass
 import json
 import os
 import re
+import secrets
 import sys
 from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
@@ -610,11 +611,18 @@ def _validate(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps({"findings": [held.model_dump() for held in found], "failed": stops}, indent=2))
         return EXIT_FINDINGS if stops else EXIT_OK
+    github = os.environ.get("GITHUB_ACTIONS") == "true"
+    # GitHub reads no command in the plain lines: found by the code review, a path holding a line break could have it
+    # read one, and switch the annotations off.
+    token = secrets.token_hex(16) if github else ""
+    if github:
+        print(f"::stop-commands::{token}")
     _printed(found)
     errors = sum(held.severity == "ERROR" for held in found)
     warnings = sum(held.severity == "WARNING" for held in found)
     print(f"{errors} error{'' if errors == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}")
-    if os.environ.get("GITHUB_ACTIONS") == "true":
+    if github:
+        print(f"::{token}::")
         _annotated(workspace, found, failed=stops)
     return EXIT_FINDINGS if stops else EXIT_OK
 
@@ -824,10 +832,12 @@ def _approve(args: argparse.Namespace) -> int:
     held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=commit, others=began)
     edited = edited_drafts(assessed.state, files)
     workspace.save_state(held)
+    if assessed.state.verification and held.verification is None:  # what it left to do was of other files
+        _aids_written(workspace, args.id, {REMAINING: None})
     _said_approved(held, by, len(files))
     if overlaps := _overlaps(workspace, args.id, assessed.loaded.change.deltas):
         named = "; ".join(f"{req_id} ({', '.join(others)})" for req_id, others in sorted(overlaps.items()))
-        print(f"note      also changed by another open change: {named}. The second to archive stops until rebased")
+        print(f"note      also changed by another open change: {named}. The second to archive is stopped: rework it")
     if edited:
         print(
             f"lessons   {', '.join(edited)} edited since drafted: say what you corrected in one line in "
@@ -1773,30 +1783,25 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     reason = after.verification.override if after.verification else None
     report = render_verify(args.id, at, base, verdicts, model=model, override=reason, bases=bases, tests=runs)
     wrote = [workspace.write_report(args.id, "verify.md", report)]
-    # Recorded once its report is there, before anything else is written: found by the code review, a report that
-    # would not be written or removed lost a verification paid for.
-    workspace.save_state(after)
-    # What a reviewer of the pull request reads, an override's reason with it.
-    summary = render_summary(change, said, ran, after.approval, override=reason)
-    wrote.append(workspace.write_report(args.id, "summary.md", summary))
-    # What is left is written where the next step points: found by the research, the step ignored the verdicts.
-    touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
-    left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []
-    if left:
-        wrote.append(
-            workspace.write_report(
-                args.id,
-                REMAINING,
-                render_remaining(args.id, left, last=DEMANDS[state.tier].closing),
-            )
-        )
-    else:
-        workspace.drop(args.id, f"{REPORTS}/{REMAINING}")
-    # The lines that proved each requirement, kept for `archive` to fold in beside the living spec.
+    # The lines that proved each requirement, for `archive` to fold in beside the living spec: written before the
+    # record, so that a recorded verification has its own. Found by the code review: written after a report that
+    # failed, the record's evidence was an earlier one's, and the archive took the living evidence out.
     if proofs := kept(verdicts, added=added, change=args.id, at=at, repositories=state.repositories):
         workspace.write_into(args.id, {EVIDENCE: render_evidence(args.id, proofs)})
     else:
         workspace.drop(args.id, EVIDENCE)
+    # Recorded once its report and its evidence are there: found by the code review, a report that would not be
+    # written or removed lost a verification paid for.
+    workspace.save_state(after)
+    # What is left, where the next step points, and what a reviewer of the pull request reads, an override's reason
+    # with it: aids each, written after the record, so neither loses it.
+    touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
+    left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []
+    aids = {
+        "summary.md": render_summary(change, said, ran, after.approval, override=reason),
+        REMAINING: render_remaining(args.id, left, last=DEMANDS[state.tier].closing) if left else None,
+    }
+    wrote += _aids_written(workspace, args.id, aids)
     for one in verdicts:
         print(f"{one.verdict:<8}  {one.id}  {one.reason}")
     print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")
@@ -1804,6 +1809,19 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
         print(f"tokens    {_spent(ledger)}")
     _say_next(workspace, args.id, specs, drift=False)  # found by the fourth audit: the diff was made a third time
     return EXIT_OK if after.status == "verified" else EXIT_FINDINGS
+
+
+def _aids_written(workspace: Workspace, change_id: str, aids: Mapping[str, str | None]) -> list[Path]:
+    """Each report of `aids` written under the change's `reports/`, or removed where its text is None; one that
+    cannot be written is left out of what is said written, as the command's record is saved already."""
+    wrote = []
+    for name, text in aids.items():
+        with contextlib.suppress(OSError, WorkspaceError):
+            if text is None:
+                workspace.drop(change_id, f"{REPORTS}/{name}")
+            else:
+                wrote.append(workspace.write_report(change_id, name, text))
+    return wrote
 
 
 def _tested_work(

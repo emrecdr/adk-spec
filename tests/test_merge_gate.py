@@ -150,3 +150,16 @@ def test_a_config_fault_is_said_as_itself_at_archive(tmp_path, capsys) -> None:
     capsys.readouterr()
     assert run(tmp_path, "archive", "passkeys") != 0
     assert "the work changed" not in capsys.readouterr().err
+
+
+def test_the_plain_output_is_read_by_github_as_no_command(tmp_path, capsys, monkeypatch) -> None:
+    """Found by the code review: a path holding a line break could have GitHub read a command in `validate`'s plain
+    lines, and switch the annotations off."""
+    voided(tmp_path)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    lines = validated(tmp_path, capsys)[1].splitlines()
+    assert lines[0].startswith("::stop-commands::")
+    token = lines[0].removeprefix("::stop-commands::")
+    resumed = lines.index(f"::{token}::")
+    assert all(not line.startswith("::warning") for line in lines[:resumed])
+    assert any(line.startswith("::warning") for line in lines[resumed:])

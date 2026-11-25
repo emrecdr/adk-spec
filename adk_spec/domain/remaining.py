@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .model import TaskGroup
-from .verify import Verdict
+from .verify import NO_VERDICT, UNGROUNDED, Verdict
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ def remaining(verdicts: Sequence[Verdict], groups: Sequence[TaskGroup], touched:
 
 def _path(named: str) -> str:
     """A task's file as a path: written by a person or a model, it may be quoted in backticks or open on `./`."""
-    return named.strip().strip("`").removeprefix("./").rstrip("/")
+    return named.strip().strip("`").replace("\\", "/").removeprefix("./").rstrip("/")
 
 
 def _touched(path: str, touched: frozenset[str]) -> bool:
@@ -77,5 +77,7 @@ def render_remaining(change_id: str, left: Sequence[Left], *, last: str = "verif
             lines.append("- No task names it.")
         if one.untouched:
             lines.append(f"- Named by its tasks, untouched by the work: {', '.join(one.untouched)}")
-        lines += [f"- The model's reason, which code has not checked: {one.reason}", ""]
+        coded = one.reason.startswith((NO_VERDICT, UNGROUNDED))  # what `grounded` itself wrote
+        said = "What code found" if coded else "The model's reason, which code has not checked"
+        lines += [f"- {said}: {one.reason}", ""]
     return "\n".join(lines).rstrip("\n") + "\n"
