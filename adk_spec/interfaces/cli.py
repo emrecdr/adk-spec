@@ -109,6 +109,7 @@ from ..workspace.layout import (
     ROOT_NAME,
     SPEC_FILE,
     SPECS,
+    SUMMARY,
     LoadedChange,
     Workspace,
     WorkspaceError,
@@ -833,10 +834,10 @@ def _approve(args: argparse.Namespace) -> int:
     held = approve(assessed.state, files=files, by=by, at=at, override=reason, commit=commit, others=began)
     edited = edited_drafts(assessed.state, files)
     workspace.save_state(held)
-    if held.verification is None:  # what a verification said and left to do was of other files, or there was none
-        _aids_written(workspace, args.id, dict.fromkeys((REMAINING, "summary.md")))
+    _aids_written(workspace, args.id, _after_approval_aids(assessed.loaded.change, held))
     _said_approved(held, by, len(files))
-    if overlaps := _overlaps(workspace, args.id, assessed.loaded.change.deltas):
+    # A change still owing an approval gets a `review` line next, which names them: found by the closing code review.
+    if held.status != "draft" and (overlaps := _overlaps(workspace, args.id, assessed.loaded.change.deltas)):
         named = "; ".join(f"{req_id} ({', '.join(others)})" for req_id, others in sorted(overlaps.items()))
         print(f"note      also changed by another open change: {named}. The second to archive is stopped: rework it")
     if edited:
@@ -846,6 +847,14 @@ def _approve(args: argparse.Namespace) -> int:
         )
     _say_next(workspace, args.id, living)
     return EXIT_OK
+
+
+def _after_approval_aids(change: Change, held: ChangeState) -> dict[str, str | None]:
+    """The reports an approval rewrites: what a verification said and left to do goes where it was of other files,
+    or there was none; a summary it keeps names the approval as it now stands."""
+    if (done := held.verification) is None:
+        return dict.fromkeys((REMAINING, SUMMARY))
+    return {SUMMARY: render_summary(change, done.verdicts, done.tests, held.approval, override=done.override)}
 
 
 def _approver(args: argparse.Namespace, assessed: Assessed) -> str:
@@ -1797,7 +1806,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
     touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
     left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []
     aids = {
-        "summary.md": render_summary(change, said, ran, after.approval, override=reason),
+        SUMMARY: render_summary(change, said, ran, after.approval, override=reason),
         REMAINING: render_remaining(args.id, left, last=DEMANDS[state.tier].closing) if left else None,
     }
     wrote += _aids_written(workspace, args.id, aids)

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from conftest import approved, on_the_fake, run, seeded
 from samples import BRIEF, DELTA, tasks_for
 from test_review import MENTION
-from test_verify import REPORT, approved_in_a_repository, implemented
+from test_verify import REPORT, approved_in_a_repository, implemented, verified_in_a_repository
 
 from adk_spec.domain.brief_md import parse_brief
 from adk_spec.domain.changelog_md import changelog_entry, with_entry
@@ -117,3 +119,30 @@ def test_a_heading_of_a_persons_introduction_is_no_entry() -> None:
     intro = "# Changelog\n\nIntro.\n\n## How to read this\n\nText.\n"
     after = with_entry(intro, changelog_entry("passkeys", "2026-11-24", DELTAS))
     assert after.index("Text.") < after.index("## passkeys, 2026-11-24")
+
+
+def test_an_entry_heading_a_person_wrote_a_note_on_is_still_an_entry() -> None:
+    """Found by the closing code review: `## passkeys, 2026-11-24 (reverted in #12)` was read as introduction, and
+    the next entry went below it, the changelog no longer newest first."""
+    before = "# Changelog\n\n## passkeys, 2026-11-24 (reverted in #12)\n\n- x\n\n## other, 2026-11-20\n\n- y\n"
+    after = with_entry(before, changelog_entry("unlock", "2026-11-25", DELTAS))
+    assert after.index("## unlock, 2026-11-25") < after.index("## passkeys, 2026-11-24") < after.index("## other")
+
+
+def test_an_entry_in_a_code_block_of_the_introduction_is_no_entry() -> None:
+    """Found by the closing code review: an example entry in a code block of a person's introduction was read as the
+    first entry, and the new one written inside the block."""
+    intro = "# Changelog\n\nIntro.\n\n```\n## example, 2026-01-01\n```\n\nMore.\n"
+    after = with_entry(intro, changelog_entry("passkeys", "2026-11-24", DELTAS))
+    assert after.index("More.") < after.index("## passkeys, 2026-11-24")
+    assert with_entry("# Changelog\n\n```\nnever closed\n", "## a, 2026-01-01\n").endswith("## a, 2026-01-01\n")
+
+
+def test_approving_a_verified_change_again_keeps_it_verified_and_names_the_new_approver(tmp_path) -> None:
+    """Found by the closing code review: a second approval of a verified change, its files as they were, sent it back
+    to a verification, paid for again, and the summary still named the first approver."""
+    verified_in_a_repository(tmp_path)
+    assert run(tmp_path, "approve", "passkeys", "--by", "bob") == 0
+    state = json.loads((tmp_path / ".spec/changes/passkeys/change.json").read_text(encoding="utf-8"))
+    assert state["status"] == "verified" and state["verification"] is not None
+    assert "Approved by bob." in read_text(tmp_path / SUMMARY)

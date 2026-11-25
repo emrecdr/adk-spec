@@ -7,10 +7,12 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-from .model import Delta
+from .model import Delta, GrammarError
+from .spec_md import fenced_lines
 
 HEADING = "# Changelog"
-#: An entry's heading, as `changelog_entry` writes it: a `## ` heading of a person's introduction is none.
+#: An entry's heading, as `changelog_entry` writes it, and a note a person adds after it: a `## ` heading of their
+#: introduction is none, nor a line in one of its code blocks.
 _ENTRY = re.compile(r"## \S+, \d{4}-\d{2}-\d{2}")
 
 
@@ -33,6 +35,10 @@ def with_entry(text: str | None, entry: str) -> str:
     none."""
     lines = (text or "").lstrip("\n").split("\n")
     body = lines[1:] if lines[0].rstrip() == HEADING else lines  # a heading of theirs is kept, as their text
-    first = next((at for at, line in enumerate(body) if _ENTRY.fullmatch(line.rstrip())), len(body))
+    try:
+        fenced = fenced_lines(body)
+    except GrammarError:  # a fence never closed: read as text with no fence
+        fenced = [False] * len(body)
+    first = next((at for at, line in enumerate(body) if not fenced[at] and _ENTRY.match(line)), len(body))
     parts = (HEADING, "\n".join(body[:first]), entry, "\n".join(body[first:]))
     return "\n\n".join(filter(None, (part.strip("\n") for part in parts))) + "\n"

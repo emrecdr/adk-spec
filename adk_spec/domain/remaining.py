@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .model import TaskGroup
-from .verify import NO_VERDICT, UNGROUNDED, Verdict
+from .verify import Verdict
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,8 @@ class Left:
     open: tuple[str, ...]
     #: The files those tasks named that the diff never touched.
     untouched: tuple[str, ...]
+    #: Whether code wrote the reason, as `Verdict.coded`.
+    coded: bool = False
 
 
 def remaining(verdicts: Sequence[Verdict], groups: Sequence[TaskGroup], touched: frozenset[str]) -> list[Left]:
@@ -43,6 +45,7 @@ def remaining(verdicts: Sequence[Verdict], groups: Sequence[TaskGroup], touched:
                 ticked=tuple(task.id for task in serving if task.done),
                 open=tuple(task.id for task in serving if not task.done),
                 untouched=tuple(path for path in named if not _touched(path, touched)),
+                coded=verdict.coded,
             )
         )
     return left
@@ -77,7 +80,6 @@ def render_remaining(change_id: str, left: Sequence[Left], *, last: str = "verif
             lines.append("- No task names it.")
         if one.untouched:
             lines.append(f"- Named by its tasks, untouched by the work: {', '.join(one.untouched)}")
-        coded = one.reason == NO_VERDICT or one.reason.startswith(f"{UNGROUNDED}. ")  # as `grounded` writes them
-        said = "What code found" if coded else "The model's reason, which code has not checked"
+        said = "What code found" if one.coded else "The model's reason, which code has not checked"
         lines += [f"- {said}: {one.reason}", ""]
     return "\n".join(lines).rstrip("\n") + "\n"

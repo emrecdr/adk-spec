@@ -85,7 +85,7 @@ def child_environment(argv: Sequence[str]) -> dict[str, str]:
     """The environment a command runs in: this server's, unbuffered, and for `validate` without a CI run's variables.
     Found by the code review: inside Copilot's cloud agent, which runs on GitHub Actions, `validate` annotated its tool
     result and wrote the job's summary at each call; another command, `verify`'s run of the tests, keeps them."""
-    ci = ("GITHUB_ACTIONS", "GITHUB_STEP_SUMMARY") if argv[:1] == ["validate"] else ()
+    ci = ("GITHUB_ACTIONS", "GITHUB_STEP_SUMMARY") if argv and argv[0] == "validate" else ()
     return {**{name: value for name, value in os.environ.items() if name not in ci}, "PYTHONUNBUFFERED": "1"}
 
 

@@ -11,10 +11,11 @@ from samples import TASKS
 from test_lifecycle import approved, phrase
 from test_verify import REPORT, VERIFY, approved_in_a_repository, implemented, verdicts
 
+from adk_spec.domain.drafts import VerdictsDraft
 from adk_spec.domain.lifecycle import verified
 from adk_spec.domain.remaining import remaining, render_remaining
 from adk_spec.domain.tasks_md import parse_tasks
-from adk_spec.domain.verify import Verdict
+from adk_spec.domain.verify import NO_VERDICT, UNGROUNDED, Verdict, grounded
 
 LEFT = ".spec/changes/passkeys/reports/remaining.md"
 GROUPS = parse_tasks(TASKS)  # T002, ticked, serves 004, 002 and 001 and names two files under src/auth/
@@ -180,12 +181,14 @@ def test_a_summary_that_cannot_be_written_leaves_the_evidence_of_the_verificatio
 
 def test_code_found_reasons_are_said_as_codes() -> None:
     """Found by the code review: a reason code wrote itself, that no quoted line is in the diff, was labelled as the
-    model's words, which code had not checked."""
-    from adk_spec.domain.verify import UNGROUNDED
-
-    said = [Verdict("REQ-AUTH-002", "unclear", (), f"{UNGROUNDED}. The model's reason: three now.")]
+    model's words, which code had not checked. Both are as `grounded` writes them."""
+    draft = VerdictsDraft.model_validate(
+        {"verdicts": [{"id": "REQ-AUTH-002", "verdict": "met", "evidence": [], "reason": "three now."}]}
+    )
+    said = grounded(draft, "", added=frozenset({"REQ-AUTH-002", "REQ-AUTH-004"}), removed=frozenset())
     text = render_remaining("passkeys", remaining(said, GROUPS, frozenset()))
     assert f"What code found: {UNGROUNDED}. The model's reason: three now." in text
+    assert f"What code found: {NO_VERDICT}" in text
 
 
 def test_a_reason_of_the_models_own_is_never_said_as_codes() -> None:
@@ -193,3 +196,9 @@ def test_a_reason_of_the_models_own_is_never_said_as_codes() -> None:
     said = [Verdict("REQ-AUTH-002", "unmet", (), "no quoted line is in the diff for the retry path")]
     text = render_remaining("passkeys", remaining(said, GROUPS, frozenset()))
     assert "The model's reason, which code has not checked: no quoted line is in the diff for the retry path" in text
+    # Found by the closing code review: nor one whose words are code's own, word for word.
+    said = [
+        Verdict("REQ-AUTH-002", "unmet", (), f"{UNGROUNDED}. The retry path is missing"),
+        Verdict("REQ-AUTH-004", "unclear", (), NO_VERDICT),
+    ]
+    assert "What code found" not in render_remaining("passkeys", remaining(said, GROUPS, frozenset()))

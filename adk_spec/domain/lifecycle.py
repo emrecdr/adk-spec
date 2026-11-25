@@ -174,7 +174,9 @@ def approve(
         approval = first.model_copy(update={"second": Seconded(by=by, at=at)})
     began = state.base_commit or commit
     commits = {**(others or {}), **state.base_commits}
-    update = {"status": "approved", "approval": approval, "base_commit": began, "base_commits": commits, **kept}
+    # Found by the closing code review: approved again as it stands, a verified change was sent to a verification.
+    status = "verified" if state.status == "verified" and not stale else "approved"
+    update = {"status": status, "approval": approval, "base_commit": began, "base_commits": commits, **kept}
     return state.model_copy(update=update)
 
 
