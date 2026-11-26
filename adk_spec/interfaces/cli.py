@@ -183,6 +183,28 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+#: Whether each command calls a model, said in its own help: the audit of 25 November (U5), a command's help listed
+#: its options alone, and a person could not tell what would be spent.
+CALLS_A_MODEL = {
+    "init": "yes, unless --no-explore",
+    "new": "no",
+    "validate": "no",
+    "status": "no",
+    "rebase": "no",
+    "approve": "where its check is missing or out of date",
+    "archive": "no",
+    "propose": "yes",
+    "plan": "yes, but for a change whose code was read",
+    "check": "yes, unless --no-model",
+    "verify": "yes, where the change holds requirements",
+    "smoke": "yes, one small request",
+    "models": "no; it asks the provider for its list",
+    "login": "no; it signs in to GitHub",
+}
+#: The one change's flow, closing the command's own help.
+FLOW = f"One change: propose, approve, implement, verify, archive. `{PROG} status` says what comes next."
+
+
 class _Top(_Parser):
     """The parser of the command itself, whose help lists the commands in their groups: what most people need
     first, and the rest apart."""
@@ -201,6 +223,7 @@ class _Top(_Parser):
         formatter.start_section("Options")
         formatter.add_arguments([action for action in self._actions if action.option_strings])
         formatter.end_section()
+        formatter.add_text(FLOW)
         return formatter.format_help()
 
 
@@ -254,7 +277,9 @@ def _parser() -> _Top:
 
     propose = commands.add_parser("propose", help="draft a whole change from a request: brief, specs and tasks")
     propose.add_argument("request", help="what is wanted, in a sentence or a paragraph")
-    propose.add_argument("--id", help="the change's name (default: made from the brief's title)")
+    propose.add_argument(
+        "--id", help="the change's name (default: made from the brief's title); an open change's name revises it"
+    )
     propose.add_argument("--tier", choices=TIERS, help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
     propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code")
@@ -289,20 +314,24 @@ def _parser() -> _Top:
     )
     verify.set_defaults(handler=_drafting(_verified))
 
-    smoke = commands.add_parser("smoke", help="run the triage stage alone, to prove an arm answers in a schema")
+    smoke = commands.add_parser("smoke", help="send one small request, to prove the provider answers")
     smoke.add_argument("--model", help="the model for this run alone, in place of the arm's")
     smoke.add_argument("--request", default=SMOKE_REQUEST, help="the change request to size")
     smoke.add_argument("--check", action="store_true", help="say whether the arm is ready, and call no model")
     smoke.add_argument("--json", action="store_true", help="print the result as JSON")
     smoke.set_defaults(handler=_smoke)
 
-    models = commands.add_parser("models", help="list the models the chosen arm serves: one request, no model call")
+    models = commands.add_parser("models", help="list the models the chosen provider serves")
     models.add_argument("--json", action="store_true", help="print the list as JSON")
     models.set_defaults(handler=_models)
 
     login = commands.add_parser("login", help="log in to GitHub Copilot once, with GitHub's device flow")
     login.add_argument("--force", action="store_true", help="log in again although a token is cached")
     login.set_defaults(handler=_login)
+    for row in commands._get_subactions():  # argparse's own help rows: each command's line, said again in its help
+        line = row.help or ""
+        calls = CALLS_A_MODEL[row.dest]
+        commands.choices[row.dest].description = f"{line[:1].upper()}{line[1:]}. Calls a model: {calls}."
     return parser
 
 

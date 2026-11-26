@@ -528,3 +528,24 @@ def test_a_change_json_saved_as_utf16_stops_no_other_change_either(tmp_path, cap
     assert run(tmp_path, "validate") == 1
     assert "ERROR change.unreadable .spec/changes/other/change.json" in capsys.readouterr().out
     workspace.taken(workspace.specs()[0])
+
+
+@pytest.mark.parametrize(
+    ("command", "calls"),
+    [("approve", "where its check is missing or out of date"), ("status", "no"), ("propose", "yes")],
+)
+def test_each_commands_help_says_what_it_does_and_whether_it_calls_a_model(capsys, command: str, calls: str) -> None:
+    """The audit of 25 November (U5): a command's help listed its options alone."""
+    with pytest.raises(SystemExit):
+        main([command, "--help"])
+    out = " ".join(capsys.readouterr().out.split())  # as argparse wraps it
+    assert f"Calls a model: {calls}." in out
+
+
+def test_the_help_names_the_flow_of_one_change_and_how_to_revise_one(capsys) -> None:
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    assert "One change: propose, approve, implement, verify, archive." in " ".join(capsys.readouterr().out.split())
+    with pytest.raises(SystemExit):
+        main(["propose", "--help"])
+    assert "an open change's name revises it" in " ".join(capsys.readouterr().out.split())
