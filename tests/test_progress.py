@@ -36,7 +36,7 @@ def test_a_terminal_is_told_each_stage_as_it_starts_and_a_second_try_is_marked(
     said = capsys.readouterr()
     lines = [line for line in said.err.splitlines() if line.startswith("working")]
     # The audit of 25 November (U1): what a call does, in plain words, and the time since the command began.
-    assert all(re.search(r"  \d+:\d\d$", line) for line in lines), lines
+    assert all(re.search(r"  0:0\d$", line) for line in lines), "since the command began, not since the machine did"
     assert [re.sub(r"  \d+:\d\d$", "", line) for line in lines] == [
         "working   writing the brief",
         "working   writing the requirements",

@@ -202,13 +202,13 @@ CALLS_A_MODEL = {
     "validate": "no",
     "status": "no",
     "rebase": "no",
-    "approve": "where its check is missing or out of date",
+    "approve": "on a standard or strict change whose check is missing or out of date",
     "archive": "no",
     "propose": "yes",
-    "plan": "yes, but for a change whose code was read",
+    "plan": "yes; it reads the code too, unless the change has a context.md or --no-explore is given",
     "check": "yes, unless --no-model",
     "verify": "yes, where the change holds requirements",
-    "smoke": "yes, one small request",
+    "smoke": "yes, one small request, unless --check",
     "models": "no; it asks the provider for its list",
     "login": "no; it signs in to GitHub",
 }
@@ -411,8 +411,9 @@ def _init(args: argparse.Namespace) -> int:
             kept, code = _described(workspace)
             _drafted(workspace, kept)
     later = f"; `{PROG} init --refresh` reads the code" if args.no_explore else ""
-    if not workspace.config().test:  # the audit of 25 November (U8): `verify` said so only once the work was done
-        print(f"tests     none named: {NO_TEST_COMMAND}")
+    with contextlib.suppress(ConfigError):  # a config that does not read is said by the commands that read it
+        if not workspace.config().test:  # the audit of 25 November (U8): `verify` said so only after the work
+            print(f"tests     none named: {NO_TEST_COMMAND}")
     print(f'next      keep what is true in constitution.md, then run `{PROG} propose "<what you want>"`{later}')
     return code if args.refresh else EXIT_OK
 
@@ -1084,7 +1085,9 @@ def _loaded(path: Path) -> set[str]:
 def _line() -> str:
     """One line a person typed, or nothing where the input is over, closed, or holds bytes that are no text."""
     try:
-        if sys.stdin.isatty():  # where a person types: a pipe, a script and a test read what they read before (U6)
+        # Where a person types and reads (U6): an output that goes to a pipe or a file would hold the prompt glued to
+        # its next line (the code review of phase 22).
+        if sys.stdin.isatty() and sys.stdout.isatty():
             print("answer> ", end="", flush=True)
         return sys.stdin.readline()
     except OSError, ValueError:  # a closed stream; a `UnicodeDecodeError` is a `ValueError`
@@ -2046,10 +2049,11 @@ def _said_verdicts(
     met = sum(one.verdict == "met" for one in verdicts)
     if recorded is None or not recorded.tests:
         tests = "no tests run"
-    else:  # as `verified` and the next step read the runs: one rule
-        tests = "tests passed" if recorded.tests_passed else "tests failed"
+    else:  # as `verified` and the next step read the runs: one rule; a run that timed out did not fail, nor pass
+        tests = "tests passed" if recorded.tests_passed else "tests did not pass"
     judged = f"{met} of {len(verdicts)} met, " if verdicts else ""
-    print(f"verified  {'yes' if verified else 'no'}: {judged}{tests}")
+    by = ", by override" if recorded is not None and recorded.override else ""  # the code review of phase 22
+    print(f"verified  {'yes' if verified else 'no'}{by}: {judged}{tests}")
 
 
 def _wrote(workspace: Workspace, paths: Sequence[Path]) -> None:

@@ -532,7 +532,12 @@ def test_a_change_json_saved_as_utf16_stops_no_other_change_either(tmp_path, cap
 
 @pytest.mark.parametrize(
     ("command", "calls"),
-    [("approve", "where its check is missing or out of date"), ("status", "no"), ("propose", "yes")],
+    [
+        ("approve", "on a standard or strict change whose check is missing or out of date"),
+        ("status", "no"),
+        ("propose", "yes"),
+        ("plan", "yes; it reads the code too, unless the change has a context.md or --no-explore is given"),
+    ],
 )
 def test_each_commands_help_says_what_it_does_and_whether_it_calls_a_model(capsys, command: str, calls: str) -> None:
     """The audit of 25 November (U5): a command's help listed its options alone."""

@@ -261,3 +261,23 @@ def test_init_says_no_test_command_is_set_until_one_is(tmp_path, capsys) -> None
     diff alone."""
     assert run(tmp_path, "init", "--no-explore") == 0
     assert "tests     none named: set [verify] test in .spec/config.toml\n" in capsys.readouterr().out
+
+
+def test_init_says_nothing_of_the_test_command_once_one_is_set(tmp_path, capsys) -> None:
+    """Found by the code review of phase 22: only the unset case was held."""
+    assert run(tmp_path, "init", "--no-explore") == 0
+    config = tmp_path / ".spec/config.toml"
+    config.write_text(config.read_text(encoding="utf-8") + '\n[verify]\ntest = ["pytest"]\n', encoding="utf-8")
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert "tests     none named" not in capsys.readouterr().out
+
+
+def test_init_with_a_config_that_does_not_read_still_ends_with_its_next_step(tmp_path, capsys) -> None:
+    """Found by the code review of phase 22: asking the config for its test command stopped a refresh at its end."""
+    assert run(tmp_path, "init", "--no-explore") == 0
+    config = tmp_path / ".spec/config.toml"
+    config.write_text(config.read_text(encoding="utf-8").replace("[project]", "[project]\nbogus = 1"), encoding="utf-8")
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert "next      " in capsys.readouterr().out

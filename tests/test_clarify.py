@@ -6,6 +6,7 @@ No model is asked to word a question: the brief's own stage names each open poin
 from __future__ import annotations
 
 import io
+import sys
 
 import pytest
 from conftest import (
@@ -355,5 +356,22 @@ def test_a_person_typing_at_a_terminal_is_shown_where_to_answer(tmp_path, monkey
     fake_provider.answers_when(TRIAGE, STANDARD)
     fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
     monkeypatch.setattr("sys.stdin", Typed("Chrome and Firefox\n"))
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
     assert proposed(tmp_path, "--id", "typed") == 0
     assert "answer> " in capsys.readouterr().out
+
+
+def test_no_prompt_is_written_where_the_output_goes_to_a_pipe(tmp_path, monkeypatch, capsys, fake_provider) -> None:
+    """Found by the code review of phase 22: typed at a terminal, piped to `tee`, the prompt glued itself to the next
+    line a script reads."""
+
+    class Typed(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    seeded(tmp_path)
+    fake_provider.answers_when(TRIAGE, STANDARD)
+    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
+    monkeypatch.setattr("sys.stdin", Typed("Chrome and Firefox\n"))
+    assert proposed(tmp_path, "--id", "piped") == 0
+    assert "answer> " not in capsys.readouterr().out

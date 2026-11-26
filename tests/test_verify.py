@@ -909,3 +909,13 @@ def test_verify_says_its_outcome_and_names_each_requirement(tmp_path, capsys, fa
     assert re.search(r"^unmet     REQ-AUTH-004  \S.*: no handler reads it$", out, re.MULTILINE), out
     assert re.search(r"^met       REQ-AUTH-002  \S", out, re.MULTILINE)
     assert "verified  no: 2 of 3 met, tests passed\n" in out
+
+
+def test_an_override_says_why_the_change_is_verified(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review of phase 22: `verified  yes: 2 of 3 met` read as a contradiction with no reason."""
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    fake_provider.answers_when(VERIFY, verdicts(**{"004": {"verdict": "unmet", "reason": "no handler reads it"}}))
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys", "--override", "known gap") == 0
+    assert "verified  yes, by override: 2 of 3 met, no tests run\n" in capsys.readouterr().out

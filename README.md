@@ -454,11 +454,14 @@ adk-spec propose "Store passwords with Argon2 instead of SHA-256" --tier strict 
 ```
 
 ```text
+explored  8 files: 11 statements kept
 wrote     .spec/changes/argon2, a strict draft
           .spec/changes/argon2/brief.md
           .spec/changes/argon2/specs/auth/spec.md
           .spec/changes/argon2/context.md
+tokens    18,240 in 7 calls
 plan      waits: the change is read before it is planned
+review    .spec/changes/argon2/reports/review.md: 2 added
 next      read brief.md and the specs, then run `adk-spec plan argon2 --no-explore`
 ```
 
