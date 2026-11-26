@@ -518,7 +518,9 @@ own test command and judges the work in all of them. `--with PATH` names a repos
 VS Code, the CLI and the cloud agent) and Claude Code read `.claude/skills/adk-spec/SKILL.md` and run `adk-spec` in
 the terminal. Ask in the chat, as below; the assistant runs `status`, `propose --no-input`, `plan`, `check`, `verify`
 and `validate`, implements the tasks and ticks them, and leaves `approve`, `archive`, every `--override` and every
-`--with` to you.
+`--with` to you. Google Antigravity reads skills from `.agents/skills/` alone: where you use it, copy the skill there,
+`mkdir -p .agents/skills && cp -R .claude/skills/adk-spec .agents/skills/`. Only there: Copilot reads both folders and
+lists a skill found in each twice.
 The assistant's terminal must find `adk-spec`: a shell alias is not seen by every assistant's terminal, so install it
 as a tool (`uv tool install --editable ~/tools/adk_spec`), or say in the chat how to run it.
 
@@ -766,7 +768,8 @@ with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists t
   evidence, for you to keep, edit or delete. Every change's reading starts from the profile. `init --refresh` reads
   the code again and rewrites the profile; it drafts rules only while the constitution is still the template.
   Without a model set up, `init` makes the tree and says how to read the code later. It also writes the Agent Skill
-  `.claude/skills/adk-spec/SKILL.md` where the repository has none, and never over one that is there.
+  `.claude/skills/adk-spec/SKILL.md` where the repository has none. `init --refresh` gives it adk-spec's text now
+  where it holds a text adk-spec wrote, and keeps one you edited, saying so.
 
 - **`plan`** drafts a change's tasks again, and its design where one is owed, after you edited the brief or the
   specs. Where a task is already ticked it replaces nothing unless you add `--replace`, and it keeps a design you
