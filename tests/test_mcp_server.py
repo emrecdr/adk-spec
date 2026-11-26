@@ -249,16 +249,9 @@ def test_the_skill_init_writes_keeps_the_rules_the_server_gives() -> None:
     for said in ("take minutes", "status", "strict"):
         assert said in INSTRUCTIONS and said in SKILL_TEXT, said
     assert "background" in SKILL_TEXT and "Then call verify" not in INSTRUCTIONS
-    # The audit of 25 November (U12): the reports verify leaves for the assistant and for the pull request.
-    for said in ("reports/remaining.md", "reports/summary.md"):
-        assert said in INSTRUCTIONS and said in SKILL_TEXT, said
-
-
-def test_the_skill_says_what_to_run_for_what_the_person_asks() -> None:
-    """The audit of 25 November (C1): the skill listed the commands, not which to run for a plain request."""
-    assert "## What the person asks, and what to run" in SKILL_TEXT
-    for said in ("what is next", "adk-spec status", "adk-spec propose", "adk-spec verify", "stop"):
-        assert said in SKILL_TEXT.split("## What the person asks, and what to run")[1].split("\n## ")[0], said
+    # The audit of 25 November (U12): the report verify leaves for the pull request; remaining.md is named by the
+    # step `status` and `verify` print.
+    assert "reports/summary.md" in INSTRUCTIONS and "reports/summary.md" in SKILL_TEXT
 
 
 def test_validate_the_server_runs_is_not_told_it_runs_in_github_actions(monkeypatch) -> None:

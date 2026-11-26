@@ -396,7 +396,7 @@ def _init(args: argparse.Namespace) -> int:
     repository written, and the rules already true of the code drafted into the constitution while it is still the
     template. The tree is made first: no model, and no failure of one, ever leaves the person without it, and a
     first `init` ends well whatever the reading came to. A refresh owes the profile, and says where it wrote none;
-    with `--no-explore` it writes only what needs no model and is missing, as the skill of a workspace made before it.
+    with `--no-explore` it writes only what needs no model: the skill, missing or holding a text adk-spec wrote.
     """
     if args.refresh:
         workspace = _workspace(args)
@@ -419,19 +419,19 @@ def _init(args: argparse.Namespace) -> int:
 
 
 def _skill(workspace: Workspace) -> None:
-    """How an assistant uses adk-spec, written where the repository has none: a refresh gives it to a workspace made
-    before it. One that cannot be written is a line, never a failed `init`: found by the code review, a `.claude` that
-    was a file or a link failed the command after the tree was made, and every refresh after it."""
+    """How an assistant uses adk-spec, written where the repository has none, and its text now where it holds one
+    adk-spec wrote: a refresh gives it to a workspace made before it. One that cannot be written is a line, never a
+    failed `init`: found by the code review, a `.claude` that was a file or a link failed the command after the tree
+    was made, and every refresh after it."""
+    shown = workspace.shown(workspace.root.joinpath(*SKILL_PARTS))
     try:
-        skill = write_skill(workspace.root)
+        done = write_skill(workspace.root)
     except (PathError, OSError, NotTextError) as exc:
         why = exc.strerror if isinstance(exc, OSError) and exc.strerror else exc
-        print(f"skipped   {workspace.shown(workspace.root.joinpath(*SKILL_PARTS))}: {why}")
+        print(f"skipped   {shown}: {why}")
         return
-    if skill is not None:
-        done, path = skill
-        why = ": edited, so the new text was not written" if done == "kept" else ""
-        print(f"{done:<10}{workspace.shown(path)}{why}")
+    if done is not None:
+        print(f"{done:<10}{shown}{': edited, so the new text was not written' if done == 'kept' else ''}")
 
 
 def _unheld(root: Path) -> Path:

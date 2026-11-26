@@ -225,12 +225,11 @@ def test_a_refresh_keeps_a_skill_a_person_edited_and_says_so(tmp_path, capsys) -
 def test_a_refresh_replaces_a_skill_adk_spec_wrote_with_its_text_now(tmp_path, capsys, monkeypatch) -> None:
     """The audit of 25 November (C3): written once, an install never had a better skill. A text adk-spec shipped is
     known by its hash, and replaced; nothing is written into the file to know it by."""
-    import hashlib
-
+    from adk_spec.domain.text import sha256_of
     from adk_spec.workspace import skill
 
     older = "---\nname: adk-spec\ndescription: an older text\n---\n"
-    monkeypatch.setattr(skill, "SHIPPED", skill.SHIPPED | {hashlib.sha256(older.encode()).hexdigest()})
+    monkeypatch.setattr(skill, "SHIPPED", skill.SHIPPED | {sha256_of(older)})
     assert run(tmp_path, "init", "--no-explore") == 0
     write_text(tmp_path / SKILL, older)
     capsys.readouterr()
@@ -240,13 +239,46 @@ def test_a_refresh_replaces_a_skill_adk_spec_wrote_with_its_text_now(tmp_path, c
     assert SKILL not in capsys.readouterr().out, "the text it has now is said no more"
 
 
-def test_every_skill_text_adk_spec_wrote_is_known_by_its_hash() -> None:
-    """Change the skill's text, and add its new hash: every one shipped stays, so a refresh knows each as its own."""
-    import hashlib
-
+def test_every_skill_text_adk_spec_wrote_is_known_by_its_fingerprint() -> None:
+    """Change the skill's text and add its fingerprint: every one shipped stays, so a refresh knows each as its own."""
+    from adk_spec.domain.text import sha256_of
     from adk_spec.workspace.skill import SHIPPED, SKILL_TEXT
 
-    assert hashlib.sha256(SKILL_TEXT.encode()).hexdigest() in SHIPPED and len(SHIPPED) >= 4
+    now = sha256_of(SKILL_TEXT)
+    assert now in SHIPPED, f"add {now} to SHIPPED, and keep every other"
+    shipped = ("47e9424dde775d16", "ed51f2d572f68659", "b581cfcb44924462")  # 18f9839, 83bd317, a22a99c
+    assert all(any(held.startswith(f"sha256:{one}") for held in SHIPPED) for one in shipped)
+
+
+def test_the_skill_says_what_to_run_for_what_the_person_asks() -> None:
+    """The audit of 25 November (C1): the skill listed the commands, not which to run for a plain request."""
+    from adk_spec.workspace.skill import SKILL_TEXT
+
+    for asked in ('"what is next?"', "a feature, a fix", '"is it done?"', '"implement <id>"'):
+        assert asked in SKILL_TEXT, asked
+
+
+@pytest.mark.parametrize("held", [".claude", ".Claude/"], ids=["a-file", "a-case-twin"])
+def test_a_skill_that_cannot_be_written_is_a_line_and_init_ends_well(tmp_path, capsys, held) -> None:
+    """Found by the code review: where `.claude` was a file, a link or a folder named but for case, writing the skill
+    failed `init` after the tree was made, and every refresh after it failed at the same line, before the profile."""
+    repository(tmp_path, FILES)
+    if held.endswith("/"):
+        (tmp_path / held).mkdir()
+    else:
+        (tmp_path / held).write_text("mine\n", encoding="utf-8")
+    assert run(tmp_path, "init", "--no-explore") == 0
+    said = capsys.readouterr().out
+    assert f"skipped   {SKILL}: " in said and "next" in said and (tmp_path / ".spec").is_dir()
+
+
+def test_a_skill_that_is_no_text_is_a_line_and_a_refresh_ends_well(tmp_path, capsys) -> None:
+    """Read to be known, a skill saved as UTF-16 is a line, never a failed refresh."""
+    assert run(tmp_path, "init", "--no-explore") == 0
+    (tmp_path / SKILL).write_bytes("Mine".encode("utf-16"))
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert f"skipped   {SKILL}: " in capsys.readouterr().out
 
 
 def test_the_skill_is_no_part_of_the_code_a_reading_or_verify_sees(tmp_path) -> None:

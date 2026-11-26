@@ -12,10 +12,12 @@ it is written once, so an install never gets a better text.
 
 ## Goals
 
-1. **C1: what the person asks, and what to run.** A short section maps a plain request to a command, and stops at each
-   point the person decides: an open point, a strict change's reading, an approval, an archive.
-2. **U12: the reports named.** Work on what `verify` leaves unmet from `reports/remaining.md`; put
-   `reports/summary.md` in the pull request. The MCP server's instructions say the same.
+1. **C1: what the person asks, and what to run.** Each command's line names the plain requests it answers ("what is
+   next?", a feature or a fix, "is it done?"), and the implementing section names "implement <id>". A section of its
+   own was built and folded in by the cleanup reviews: it repeated the command list and "what stays the person's",
+   loaded each time the skill is.
+2. **U12: the report named.** Put `reports/summary.md` in the pull request, in the skill and the MCP server's
+   instructions. `reports/remaining.md` is named by the step `status` and `verify` print, which both texts say to do.
 3. **C3: a refresh upgrades an unedited skill.** `init --refresh` replaces a skill whose text is one adk-spec
    shipped, and says `replaced`; one a person edited is kept, said in one line. No mark is written into the file: the
    texts adk-spec shipped are known by their hashes, a test holding the list to the text.
@@ -32,5 +34,6 @@ it is written once, so an install never gets a better text.
 
 ## Calls made in the design (the builder's)
 
-- **"Unedited"** is the text, line ends as LF, hashing to one adk-spec shipped: three so far (`18f9839`, `83bd317`,
-  `a22a99c`), and this phase's.
+- **"Unedited"** is the text's fingerprint, `sha256_of` (normalised: line ends, trailing blanks, one final newline),
+  being one adk-spec shipped: three so far (`18f9839`, `83bd317`, `a22a99c`), and this phase's. An editor that only
+  trims trailing blanks leaves it unedited.
