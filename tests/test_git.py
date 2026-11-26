@@ -282,3 +282,13 @@ def test_a_pattern_opening_with_a_slash_is_anchored_at_the_root_as_gitignore_rea
     nothing else could anchor a single name."""
     repository(tmp_path, dict.fromkeys(["build/a.txt", "src/build/b.txt", "src/app.py"], "x\n"))
     assert files(tmp_path, exclude=("/build",)) == ["src/app.py", "src/build/b.txt"]
+
+
+def test_a_committed_file_is_read_from_the_folder_asked_of_with_no_byte_order_mark(tmp_path) -> None:
+    """Found by the second code review of phase 20: `HEAD:path` is read from the repository's top, and a workspace in a
+    subfolder found no config; and a config saved with a byte-order mark did not read as TOML."""
+    from adk_spec.workspace.git import committed_text
+
+    repository(tmp_path, {"svc/.spec/config.toml": "\ufeff[project]\n", ".spec/config.toml": "the top's\n"})
+    assert committed_text(tmp_path / "svc", ".spec/config.toml") == "[project]"
+    assert committed_text(tmp_path / "svc", ".spec/absent.toml") is None

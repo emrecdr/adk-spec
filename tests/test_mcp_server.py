@@ -326,9 +326,11 @@ def test_a_signal_ignored_before_the_command_started_stays_ignored() -> None:
     SIGHUP turned into an interrupt."""
     held = {number: signal.getsignal(number) for number in (signal.SIGHUP, signal.SIGTERM)}
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
     try:
         cli.interrupt_on_signals()
         assert signal.getsignal(signal.SIGHUP) is signal.SIG_IGN
+        # Found by the second code review: kept ignored, a SIGTERM went unheard and the tests outlived the SIGKILL.
         assert signal.getsignal(signal.SIGTERM) is signal.default_int_handler
     finally:
         for number, handler in held.items():

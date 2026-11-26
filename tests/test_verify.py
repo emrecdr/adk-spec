@@ -878,3 +878,17 @@ def test_a_tool_calls_verify_reads_the_committed_command_from_the_commit(
     monkeypatch.setenv("SPEC_TOOL_CALL", "1")
     assert run(tmp_path, "verify", "passkeys") == 2
     assert "not the committed one" in capsys.readouterr().err and not ran.exists() and not fake_provider.requests
+
+
+def test_a_tool_calls_verify_refuses_a_timeout_not_committed(tmp_path, capsys, monkeypatch, fake_provider) -> None:
+    """Found by the second code review of phase 20: held to the committed command alone, an uncommitted timeout of a
+    day held the tool's call, the lock and the server for a day."""
+    approved_in_a_repository(tmp_path, tier="lean")
+    with_tests(tmp_path, "print('1 passed')")
+    repository_commit(tmp_path, "the test command")
+    config = tmp_path / ".spec/config.toml"
+    write_text(config, read_text(config) + "timeout = 86400\n")
+    implemented(tmp_path)
+    monkeypatch.setenv("SPEC_TOOL_CALL", "1")
+    assert run(tmp_path, "verify", "passkeys") == 2
+    assert "not the committed one" in capsys.readouterr().err and not fake_provider.requests

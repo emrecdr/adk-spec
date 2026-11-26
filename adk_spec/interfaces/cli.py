@@ -1900,19 +1900,20 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
 
 def _committed_tests(every: list[tuple[str, Path, tuple[str, ...], int]]) -> None:
     """`UsageError` where a test command a tool's call would run is not the one its repository's checked-out commit
-    holds, before any test runs: the command as read is held to the commit's `.spec/config.toml`, read the same way,
-    so no index flag or status setting hides an edit, and an edit that leaves the command alone is no refusal. Found by
-    the audit of 25 November: an assistant that edited the test command, which an editor may let it do with no prompt,
-    and then called the `verify` tool ran a command no person approved. A committed command still runs the project's
-    own files, which an assistant may have written: running the work's tests is what `verify` is for."""
+    holds, with its timeout, before any test runs: the command as read is held to the commit's `.spec/config.toml`,
+    read the same way, so no index flag or status setting hides an edit, and an edit that leaves the command alone is
+    no refusal. Found by the audit of 25 November: an assistant that edited the test command, which an editor may let
+    it do with no prompt, and then called the `verify` tool ran a command no person approved. A committed command still
+    runs the project's own files, which an assistant may have written: running the work's tests is what `verify` is
+    for."""
     config = f"{ROOT_NAME}/{CONFIG}"
-    for name, root, argv, _timeout in every:
+    for name, root, argv, timeout in every:
         try:
             text = committed_text(root, config, trust=not name)
-            held = None if text is None else load_config(root / config, text).test
+            committed = None if text is None else load_config(root / config, text)
         except GitError, ConfigError:
-            held = None
-        if held != argv:
+            committed = None
+        if committed is None or (committed.test, committed.test_timeout) != (argv, timeout):
             raise UsageError(
                 f"{f'{name}: ' if name else ''}{config}: the test command is not the committed one, and a tool's call "
                 f"runs only a committed test command. Ask the person to review it and commit it, or to run "
@@ -2445,8 +2446,9 @@ def interrupt_on_signals() -> None:
     kept. Windows has no SIGHUP, and ends a process with no signal it could hear."""
     for name in ("SIGTERM", "SIGHUP"):
         number = getattr(signal, name, None)
-        if number is not None and signal.getsignal(number) is not signal.SIG_IGN:  # `nohup`'s choice is kept
-            signal.signal(number, signal.default_int_handler)
+        if number is None or (name == "SIGHUP" and signal.getsignal(number) is signal.SIG_IGN):
+            continue  # Windows has no SIGHUP; one `nohup` ignores stays ignored, and a SIGTERM is always heard
+        signal.signal(number, signal.default_int_handler)
 
 
 def run() -> int:
