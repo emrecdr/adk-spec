@@ -114,7 +114,7 @@ def test_a_strict_revision_stops_before_the_plan_as_a_new_one_does(tmp_path, fak
 
 def planned(root, fake_provider) -> None:
     """A strict change, `ledger`, proposed and planned: ready to be approved, its check finding nothing."""
-    fake_provider.answers_when(CHECK, {"findings": []})
+    fake_provider.answers_if_asked(CHECK, {"findings": []})  # an approval that stops first asks no check
     seeded(root)
     assert strict_proposed(root) == 0
     assert run(root, "plan", "ledger", "--no-explore") == 0

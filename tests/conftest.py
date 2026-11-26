@@ -246,10 +246,24 @@ class FakeProvider:
     def __init__(self) -> None:
         self.rules: list[tuple[str, object]] = []
         self.requests: list[LlmRequest] = []
+        self._matched: set[int] = set()
+        self._optional: set[int] = set()
 
     def clear(self) -> None:
         self.rules.clear()
         self.requests.clear()
+        self._matched.clear()
+        self._optional.clear()
+
+    def unmatched(self) -> list[str]:
+        """The text of each rule no request matched, but for a default `answers_if_asked` set. Found by the audit of
+        25 November: a rule whose copied opening no longer matched was passed over in silence."""
+        return [text for at, (text, _rule) in enumerate(self.rules) if at not in self._matched | self._optional]
+
+    def answers_if_asked(self, text: str, payload: dict | str) -> None:
+        """As `answers_when`, for a stage a test may not reach: a default, which no request need match."""
+        self._optional.add(len(self.rules))
+        self.answers_when(text, payload)
 
     def raises_when(self, text: str, exc: BaseException) -> None:
         self.rules.append((text, exc))
@@ -275,8 +289,9 @@ class FakeProvider:
 
     def answer(self, llm_request: LlmRequest) -> dict | str | None:
         instruction = str(llm_request.config.system_instruction or "")
-        for text, rule in self.rules:
+        for at, (text, rule) in enumerate(self.rules):
             if text in instruction:
+                self._matched.add(at)
                 if isinstance(rule, BaseException):
                     raise rule
                 if isinstance(rule, dict | str | LlmResponse):
@@ -337,7 +352,9 @@ def fake_provider() -> Iterator[FakeProvider]:
     """The fake's behaviour for one test; whatever a test sets is gone before the next."""
     PROVIDER.clear()
     yield PROVIDER
+    missed = PROVIDER.unmatched()
     PROVIDER.clear()
+    assert not missed, f"no request matched {missed}: a stage's opening changed, or the rule is not needed"
 
 
 def pytest_configure() -> None:
