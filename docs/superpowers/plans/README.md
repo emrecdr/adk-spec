@@ -45,13 +45,15 @@ How it is applied in every phase below:
 | 16 | Evidence and review | `2026-11-24-adk-spec-evidence-and-review.md` | The approver's view of each requirement a change touches, and who else is changing it; unmet verdicts written as the next work; `verify`'s evidence kept beside each living spec, a requirement whose code is gone noted as suspect; `validate` as a merge gate with GitHub annotations; a pull request's summary and a changelog. No model call, command, flag or `change.json` field. | Built test first; five cleanup and code reviews, and a closing one; merged |
 | 17 | Freshness and proof notes | `2026-11-25-adk-spec-freshness-and-proof-notes.md` | From an outside discovery report, each option checked by four verifiers: the profile's quotes checked against the code (`status`, `propose`); a drafted `[P]` held to its rule. A `verify` note on proofs the work removed was built and taken out after three reviews. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
 | 18 | Context kept and said | `2026-11-25-context-kept-and-said-design.md` | From the owner's question whether context is lost between the layers: the person's answers kept in `context.md`; the reading's cuts said (statements and unknowns past their budgets, the searches and listings made); unknowns and what was left out above the statements; a folded tree naming the top files; a cut test output marked. The exact scrubbed-quote check (a quote is looked for as it was shown) replaced phase 17's guess by shape. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
+| 19 | Secrets and links | `2026-11-26-adk-spec-secrets-and-links.md` | From the audit of 25 November, its P0, each checked again in the code: credential lines with a comment, a compose list mark, `set` or a command's option scrubbed; a key held in a string withheld; a link under `.spec/` refused when the workspace is opened. Left out: `.netrc` lines, Docker's `auth`, a connection string's password with no digit, an encrypted key in a string. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
 
 ## The plan being followed now
 
-Phase 18, context kept and said (`2026-11-25-context-kept-and-said-design.md`): built test first on the branch
-`context`, then cleaned up and code-reviewed. Its second step, which changes what models are told (aiming the reading
-with triage's capabilities, a reading of the repository's guidance files, the constitution for the deltas stage),
-waits for a live measurement on the owner's go-ahead.
+Phase 19, secrets and links (`2026-11-26-secrets-and-links-design.md`): the audit of 25 November's P0
+(`docs/reports/2026-11-25-codebase-audit.md`), built test first on the branch `secrets-links`, then cleaned up and
+code-reviewed. Next, as the owner chose: phase 20, the audit's H1 (a command's tests left running when it is stopped)
+and S4 (the MCP `verify` tool). Phase 18's second step, which changes what models are told, waits for a live
+measurement on the owner's go-ahead.
 
 Phase 17 is done: the profile checked against the code and `[P]` held to its rule; its `verify` note on the proofs a
 work removed was taken out after three reviews.
