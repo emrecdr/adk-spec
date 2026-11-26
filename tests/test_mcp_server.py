@@ -268,3 +268,47 @@ def test_only_validate_is_kept_from_github_actions(monkeypatch) -> None:
 
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     assert child_environment(["verify", "x"])["GITHUB_ACTIONS"] == "true"
+
+
+def _testing(marker: Path) -> str:
+    """A command that hears a stop as `adk-spec` does, then runs a test run that waits a minute, its pid in `marker`:
+    a `verify` stopped while the project's tests run."""
+    return textwrap.dedent(f"""
+        import os, sys
+        from adk_spec.interfaces.cli import interrupt_on_signals
+        from adk_spec.workspace.process import run_kept
+        interrupt_on_signals()
+        run_kept([sys.executable, "-c", {_sleeper(marker)!r}], env=dict(os.environ), timeout=120, keep=1000)
+    """)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows ends a process with no signal it could hear")
+@pytest.mark.asyncio
+async def test_a_cancelled_call_stops_the_tests_its_command_started(tmp_path, monkeypatch) -> None:
+    """Found by the audit of 25 November: the tests run in a session of their own, and a cancel that stopped the
+    command outright left them running, with no timeout kept."""
+    marker = tmp_path / "pid"
+    _run_python(monkeypatch, _testing(marker))
+    call = asyncio.create_task(mcp_server.ran(tmp_path, ["verify", "--", "pk"]))
+    pid = await _its_pid(marker)
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+    assert await _ended(pid), "the tests still run after the call that started them was cancelled"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows ends a process with no signal it could hear")
+@pytest.mark.parametrize("heard", ["SIGHUP", "SIGTERM"])
+@pytest.mark.asyncio
+async def test_a_command_hung_up_on_stops_its_tests(tmp_path, heard: str) -> None:
+    """Found by the audit of 25 November: a terminal closed (SIGHUP), or a `kill` (SIGTERM), ended the command and
+    left its tests running."""
+    marker = tmp_path / "pid"
+    running = subprocess.Popen([sys.executable, "-c", _testing(marker)], cwd=ROOT)  # noqa: ASYNC220 - at once
+    try:
+        pid = await _its_pid(marker)
+        running.send_signal(getattr(signal, heard))
+        assert running.wait(timeout=10) != 0
+        assert await _ended(pid), "the tests still run after their command was stopped"
+    finally:
+        running.kill()

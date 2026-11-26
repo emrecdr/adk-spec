@@ -2411,6 +2411,18 @@ def _smoked(args: argparse.Namespace) -> int:
     return EXIT_ENGINE if failure else EXIT_OK
 
 
+def interrupt_on_signals() -> None:
+    """A stop asked of the command from outside, a terminal closed (SIGHUP), a `kill` or a server's cancel (SIGTERM),
+    heard as Ctrl-C is: the interrupt path stops the tests it started in a session of their own, lets the lock go and
+    records the run. Found by the audit of 25 November: only Ctrl-C was heard, and the tests ran on with no timeout
+    kept. Windows has no SIGHUP, and ends a process with no signal it could hear."""
+    import signal
+
+    for name in ("SIGTERM", "SIGHUP"):
+        if (number := getattr(signal, name, None)) is not None:
+            signal.signal(number, signal.default_int_handler)
+
+
 def run() -> int:
     """The process boundary of the installed `adk-spec`."""
     # A Windows console is not UTF-8 by default, and an answer piped in there is read in the ANSI code page. What
@@ -2419,6 +2431,7 @@ def run() -> int:
     for stream, errors in ((sys.stdout, "replace"), (sys.stderr, "replace"), (sys.stdin, "strict")):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors=errors)
+    interrupt_on_signals()
     try:
         return main(sys.argv[1:])
     except KeyboardInterrupt:

@@ -15,6 +15,7 @@ import shutil
 import signal
 import subprocess
 import threading
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,14 +83,14 @@ def waited(process: subprocess.Popen[bytes], timeout: float) -> subprocess.Compl
     try:
         out, err = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        _stopped(process, WINDOWS)
+        _asked_to_stop(process)
         try:  # the output to its end, which Windows reads on threads, for as long as a stopped tree takes
             out, err = process.communicate(timeout=DRAIN_S)
         except subprocess.TimeoutExpired as late:  # a process that left the session holds it: what came is kept
             out, err = late.output or b"", late.stderr or b""
         raise subprocess.TimeoutExpired(argv, timeout, output=out, stderr=err) from None
     except BaseException:  # an interrupt: a session of its own hears none, so it is stopped here
-        _stopped(process, WINDOWS)
+        _asked_to_stop(process)
         raise
     return subprocess.CompletedProcess(argv, process.returncode, out, err)
 
@@ -98,7 +99,21 @@ def stop(process: subprocess.Popen[bytes]) -> None:
     """A started program and every process it started, stopped. One that ended and was waited for is not: its number
     may already be another process's."""
     if process.poll() is None:
-        _stopped(process, WINDOWS)
+        _asked_to_stop(process)
+
+
+def _asked_to_stop(process: subprocess.Popen[bytes]) -> None:
+    """A command asked to stop, as a terminal asks, and given `DRAIN_S` to stop what it started; then stopped whole,
+    with what is left of its session. Found by the audit of 25 November: stopped outright, a command left its tests
+    running, in a session of their own. A project's tests are still stopped outright (`run_kept`): a test tree that
+    hears a signal may not end. Windows ends a process with no signal it could hear."""
+    if not WINDOWS:
+        with contextlib.suppress(ProcessLookupError):  # it ended on its own meanwhile
+            os.killpg(process.pid, signal.SIGTERM)  # pyrefly: ignore[missing-attribute] - not on Windows, nor run there
+        ends = time.monotonic() + DRAIN_S
+        while process.poll() is None and time.monotonic() < ends:
+            time.sleep(0.05)
+    _stopped(process, WINDOWS)
 
 
 @dataclass(frozen=True)
