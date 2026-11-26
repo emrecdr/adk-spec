@@ -61,8 +61,7 @@ def render_remaining(
     change_id: str, left: Sequence[Left], *, last: str = "verify", names: Mapping[str, str] | None = None
 ) -> str:
     """The report of what `change_id` has left to do, and `last`, the command that follows: `verify`, or `archive`
-    for a tier that owes no verification. Each requirement is named beside its ID, from `names`: the audit of 25
-    November (U3), an assistant sent here had to look each ID up."""
+    for a tier that owes no verification. Each requirement is named beside its ID, from `names`."""
     lines = [
         f"# Remaining: {change_id}",
         "",

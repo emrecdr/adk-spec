@@ -38,7 +38,7 @@ from ..domain.context_md import (
     unknown_count,
     with_answers,
 )
-from ..domain.convert import kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
+from ..domain.convert import by_id, kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.evidence_md import kept, render_evidence
 from ..domain.lifecycle import (
@@ -72,7 +72,18 @@ from ..domain.lifecycle import (
     verify_blockers,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import PASSED, TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
+from ..domain.model import (
+    TIERS,
+    Brief,
+    Change,
+    ChangeState,
+    Delta,
+    Finding,
+    GrammarError,
+    Spec,
+    Tier,
+    Verification,
+)
 from ..domain.remaining import remaining, render_remaining
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
 from ..domain.review_md import render_review, review_said
@@ -335,7 +346,14 @@ def _parser() -> _Top:
     return parser
 
 
+#: When the command running now began: each progress line says the time since, across every recording it opens (the
+#: cleanup review of phase 22: kept per recording, the time ran back to 0:00 mid-command).
+_command_began = 0.0
+
+
 def main(argv: list[str]) -> int:
+    global _command_began
+    _command_began = time.monotonic()
     parser = _parser()
     args = parser.parse_args(argv)
     handler = getattr(args, "handler", None)
@@ -394,7 +412,7 @@ def _init(args: argparse.Namespace) -> int:
             _drafted(workspace, kept)
     later = f"; `{PROG} init --refresh` reads the code" if args.no_explore else ""
     if not workspace.config().test:  # the audit of 25 November (U8): `verify` said so only once the work was done
-        print(f"tests     none named: set [verify] test in {ROOT_NAME}/{CONFIG}")
+        print(f"tests     none named: {NO_TEST_COMMAND}")
     print(f'next      keep what is true in constitution.md, then run `{PROG} propose "<what you want>"`{later}')
     return code if args.refresh else EXIT_OK
 
@@ -1127,6 +1145,8 @@ def _on_a_terminal() -> bool:
     return stream is not None and stream.isatty()
 
 
+#: What sets the test command `verify` runs, said where none is set.
+NO_TEST_COMMAND = f"set [verify] test in {ROOT_NAME}/{CONFIG}"
 #: What each stage's call does, in the words a person is shown: the audit of 25 November (U1), the stages' keys
 #: meant nothing to a person, and "review" said two things.
 DOING = {
@@ -1173,7 +1193,7 @@ def _recording(workspace: Workspace, command: str, change: str | None) -> Genera
     from ..orchestration.recorder import Recorder
 
     keep = workspace.config().keep_runs
-    kept = _Kept(Recorder(heard=_working_since(time.monotonic()) if _on_a_terminal() else None), change)
+    kept = _Kept(Recorder(heard=_working_since(_command_began) if _on_a_terminal() else None), change)
     try:
         yield kept
     except KeyboardInterrupt:
@@ -1192,11 +1212,11 @@ def _recording(workspace: Workspace, command: str, change: str | None) -> Genera
 def _spent(ledger: UsageLedger) -> str:
     """What a command spent, from its ledger: its tokens and calls, and the ceiling they are held to where one is set.
     The split by stage is in the run's recording: the audit of 25 November (U2), the line ran to 190 characters."""
-    calls = sum(row.calls for row in ledger.spent.values())
-    if not calls:
+    spent = ledger.total
+    if not spent.calls:
         return "nothing"
     ceiling = f", of {ledger.ceiling:,}" if ledger.ceiling else ""
-    return f"{ledger.total.total:,} in {calls} call{'' if calls == 1 else 's'}{ceiling}"
+    return f"{spent.total:,} in {spent.calls} call{'' if spent.calls == 1 else 's'}{ceiling}"
 
 
 def _propose(args: argparse.Namespace, workspace: Workspace) -> int:
@@ -1923,7 +1943,7 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
         REMAINING: render_remaining(args.id, left, last=DEMANDS[state.tier].closing, names=names) if left else None,
     }
     wrote += _aids_written(workspace, args.id, aids)
-    _said_verdicts(verdicts, names, runs, verified=after.status == "verified")
+    _said_verdicts(verdicts, names, after.verification, verified=after.status == "verified")
     _wrote(workspace, wrote)
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
@@ -1973,7 +1993,7 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     asked = [("", workspace.root, config.test, config.test_timeout)] if config.test else []
     every = [*asked, *source.tests()]
     if not asked:  # found by the fourth audit: a `met` read as tested, with no test run here
-        print(f"tests     none named{' here' if every else ''}: set [verify] test in .spec/config.toml")
+        print(f"tests     none named{' here' if every else ''}: {NO_TEST_COMMAND}")
     if os.environ.get(TOOL_CALL) == "1":
         _committed_tests(every)
     runs = []
@@ -2011,11 +2031,12 @@ def _committed_tests(every: list[tuple[str, Path, tuple[str, ...], int]]) -> Non
 
 def _requirement_names(change: Change) -> dict[str, str]:
     """Each requirement the change adds, modifies or removes, by its ID: its name."""
-    held = change.deltas.values()
-    return {one.id: one.name for delta in held for one in (*delta.added, *delta.modified, *delta.removed)}
+    return {req: one.name for req, one in by_id(change.deltas).items()}
 
 
-def _said_verdicts(verdicts: list[Verdict], names: Mapping[str, str], runs: list[TestRun], *, verified: bool) -> None:
+def _said_verdicts(
+    verdicts: list[Verdict], names: Mapping[str, str], recorded: Verification | None, *, verified: bool
+) -> None:
     """Each verdict, its requirement named, and the model's reason where it is not met, the one a person acts on;
     then how the verification ended. The audit of 25 November (U3): requirements were named by ID alone, and the
     outcome was the next line's to imply."""
@@ -2023,10 +2044,10 @@ def _said_verdicts(verdicts: list[Verdict], names: Mapping[str, str], runs: list
         why = "" if one.verdict == "met" else f": {one.reason}"
         print(f"{one.verdict:<8}  {one.id}  {names.get(one.id, '')}{why}".rstrip())
     met = sum(one.verdict == "met" for one in verdicts)
-    if not runs:
+    if recorded is None or not recorded.tests:
         tests = "no tests run"
-    else:
-        tests = "tests passed" if all(run.outcome == PASSED for run in runs) else "tests failed"
+    else:  # as `verified` and the next step read the runs: one rule
+        tests = "tests passed" if recorded.tests_passed else "tests failed"
     judged = f"{met} of {len(verdicts)} met, " if verdicts else ""
     print(f"verified  {'yes' if verified else 'no'}: {judged}{tests}")
 
@@ -2166,6 +2187,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
         _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first and drafted else None
     )
     # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
+    # A reading says the other repositories before their code is sent, and is made only where there is code (U4).
     planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None, "sources_said": bool(read)}
     # With no question asked, each open point is printed with its suggestion, for an assistant to put to the person.
     # Found by the third audit: the editor's tools promised them in the output, which held their count alone.
@@ -2255,7 +2277,7 @@ def _then_planned(
             ledger=ledger,
             explore=False,
             lessons=lessons,
-            sources_said=sources_said,  # by the reading, before the brief (the audit of 25 November, U4)
+            sources_said=sources_said,
         )
     except NotYetError as exc:  # the calls so far are paid for: what stopped the plan is said as any other failure
         made = _Planned(ledger=ledger, failure=str(exc))

@@ -3,6 +3,8 @@ line the diff really holds makes one `met`."""
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from conftest import (
     CANNED_VERDICTS,
@@ -897,8 +899,6 @@ def test_a_tool_calls_verify_refuses_a_timeout_not_committed(tmp_path, capsys, m
 def test_verify_says_its_outcome_and_names_each_requirement(tmp_path, capsys, fake_provider) -> None:
     """The audit of 25 November (U3): `verify` named requirements by ID alone and never said how it ended; a verdict
     not met keeps the reason a person acts on."""
-    import re
-
     approved_in_a_repository(tmp_path, tier="lean")
     implemented(tmp_path)
     with_tests(tmp_path, "print('12 passed')")

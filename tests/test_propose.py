@@ -33,6 +33,9 @@ TRIAGE, BRIEF, DELTAS = (
 )
 
 
+DESIGN = "You write the design"
+
+
 def proposed(root, *argv: str, request: str = REQUEST) -> int:
     return run(root, "propose", request, *argv)
 
@@ -260,7 +263,7 @@ def test_two_open_changes_that_each_create_one_capability_get_different_ids(tmp_
     assert ids == ["REQ-SEARCH-001", "REQ-SEARCH-002"]
 
 
-def test_the_tokens_line_counts_each_stages_calls(tmp_path, capsys, fake_provider) -> None:
+def test_an_answer_sent_back_counts_as_a_call(tmp_path, capsys, fake_provider) -> None:
     seeded(tmp_path)
     fake_provider.answers_each_time(DELTAS, iter(["not json", None]))
     assert proposed(tmp_path, "--id", "counted") == 0
@@ -438,9 +441,7 @@ def test_propose_writes_the_design_where_the_brief_owes_one_and_none_where_it_ow
     assert ws.load_change("designed").change.design is not None
     out = capsys.readouterr().out
     assert (
-        ".spec/changes/designed/design.md" in out
-        and asked(fake_provider, "You write the design") == 1
-        and "design    owed" not in out
+        ".spec/changes/designed/design.md" in out and asked(fake_provider, DESIGN) == 1 and "design    owed" not in out
     )
     assert proposed(tmp_path, "--tier", "lean", "--id", "plain", request="Fix a typo in the sign-in page.") == 0
     assert not (tmp_path / ".spec/changes/plain/design.md").exists()
