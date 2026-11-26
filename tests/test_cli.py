@@ -528,3 +528,11 @@ def test_a_change_json_saved_as_utf16_stops_no_other_change_either(tmp_path, cap
     assert run(tmp_path, "validate") == 1
     assert "ERROR change.unreadable .spec/changes/other/change.json" in capsys.readouterr().out
     workspace.taken(workspace.specs()[0])
+
+
+def test_what_was_spent_with_no_model_asked_is_said_not_raised() -> None:
+    """Found by typing the seam (the audit of 25 November, A1): a ledger is none where no model was asked, and the
+    tokens line read its rows."""
+    from adk_spec.interfaces.cli import _spent
+
+    assert _spent(None) == "none: no model was asked"
