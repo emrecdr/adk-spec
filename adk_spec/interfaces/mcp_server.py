@@ -63,7 +63,9 @@ tell them to run `adk-spec approve <id>` in a terminal, and once it is verified 
 approve, archive or set a finding aside for them. Once it is approved, implement it: read brief.md, the specs,
 context.md and design.md in its folder, then work through tasks.md in order, test first, and tick each task's box,
 `- [x]`, when it is done. Ticking a box keeps the approval; any other edit of the change's files voids the approval.
-Then call status and do the step it names: verify, where the change owes a verification."""
+Then call status and do the step it names: verify, where the change owes a verification. Where verify leaves
+requirements unmet, work from reports/remaining.md in the change's folder, then call verify again; put
+reports/summary.md in the pull request."""
 
 
 #: What each way a command ends says to an assistant. Found by the fourth audit: exit 1, findings or a refusal, is

@@ -424,12 +424,14 @@ def _skill(workspace: Workspace) -> None:
     was a file or a link failed the command after the tree was made, and every refresh after it."""
     try:
         skill = write_skill(workspace.root)
-    except (PathError, OSError) as exc:
+    except (PathError, OSError, NotTextError) as exc:
         why = exc.strerror if isinstance(exc, OSError) and exc.strerror else exc
         print(f"skipped   {workspace.shown(workspace.root.joinpath(*SKILL_PARTS))}: {why}")
         return
     if skill is not None:
-        print(f"wrote     {workspace.shown(skill)}")
+        done, path = skill
+        why = ": edited, so the new text was not written" if done == "kept" else ""
+        print(f"{done:<10}{workspace.shown(path)}{why}")
 
 
 def _unheld(root: Path) -> Path:

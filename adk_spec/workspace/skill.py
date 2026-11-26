@@ -2,15 +2,17 @@
 
 The owner's choice, 23 November 2026, after the third audit: a skill, in the open Agent Skills form (agentskills.io),
 is read by GitHub Copilot and by Claude Code from `.claude/skills/`, so an assistant knows how to use adk-spec with
-nothing set up, where the MCP server needs an editor's configuration. It is written once and is the person's after
-that: never written over, and committed with the repository as `.spec/` is.
+nothing set up, where the MCP server needs an editor's configuration. It is committed with the repository as `.spec/`
+is. A refresh gives it the text adk-spec has now where it holds one adk-spec wrote, known by its hash; one a person
+edited is theirs, and kept (the audit of 25 November, C3: written once, an install never had a better text).
 """
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
-from .files import write_text
+from .files import read_text, write_text
 from .paths import inside
 
 #: Where the skill stands, from the repository's root: the folder's name is the skill's, as the standard asks.
@@ -43,6 +45,17 @@ Run them in the repository. Where the shell does not find `adk-spec`, ask the pe
 - `adk-spec verify <id>`: runs the project's tests and judges the work against each requirement.
 - `adk-spec validate`: checks the structure of the specs.
 
+## What the person asks, and what to run
+
+- "what is next?" or "where are we?": run `adk-spec status` and say the step it names.
+- A feature, a fix or a change of behaviour: `adk-spec propose --no-input "<request>"`, then put the points it left
+  open to the person.
+- "implement <id>": follow "Implementing an approved change" below; a change not yet approved waits for the person to
+  run `adk-spec approve <id>`.
+- "is it done?" or "check the work": `adk-spec verify <id>`.
+
+At each of them, stop where the person decides: an open point, a strict change's reading, an approval, an archive.
+
 `propose`, `plan`, `check` and `verify` call a model, cost tokens and take minutes, `propose` the most: run each with
 your longest timeout or in the background, wait for it to end, and run it once for a request, never to poll.
 
@@ -60,16 +73,35 @@ to run. A strict change's plan waits for the person to read its brief and specs:
 2. Work through `tasks.md` in order, test first.
 3. Tick each task's box, `- [ ]` to `- [x]`, once it is done. Ticking keeps the approval; any other edit of the
    change's files voids it, so change no other file in `.spec/`.
-4. Run `adk-spec status` and do the step it names: `adk-spec verify <id>` where the change owes a verification, and
-   work on what it finds `unmet` or `unclear`.
+4. Run `adk-spec status` and do the step it names: `adk-spec verify <id>` where the change owes a verification.
+   Where it leaves requirements unmet, work from `reports/remaining.md` in the change's folder, then verify again.
+   Put `reports/summary.md` in the pull request.
 """
 
 
-def write_skill(root: Path) -> Path | None:
-    """The skill written into the repository at `root`, where it has none: the path written, or nothing where one is
-    there already, which is the person's."""
+#: The hash of each skill text adk-spec has written, line ends as LF: a skill holding one is adk-spec's, and a
+#: refresh gives it the text adk-spec has now. A test holds the list to the text: change it, and add its hash here.
+SHIPPED = frozenset(
+    {
+        "47e9424dde775d1682a9dbb08b956f3f933c792782f0caada80e61998adde8c9",  # 18f9839
+        "ed51f2d572f68659c5618cc99be09ad981ef2c0863dca489a948e22ec9d278f0",  # 83bd317
+        "b581cfcb44924462d53add2a3e76ada3efaa4db63aae9dcbf8bba4a6d7ffc33d",  # a22a99c
+        "abf6a8828005ac90fc5f93e16e5ac91e5d1163a6708b8de1dee2ade883c33014",  # phase 23
+    }
+)
+
+
+def write_skill(root: Path) -> tuple[str, Path] | None:
+    """The skill written into the repository at `root`: `wrote` where it had none, `replaced` where it held a text
+    adk-spec wrote before, `kept` where a person edited it, which is theirs; nothing where it holds the text now."""
     path = inside(root, *SKILL_PARTS)
-    if path.exists():
+    if not path.exists():
+        write_text(path, SKILL_TEXT)
+        return "wrote", path
+    held = read_text(path)
+    if held == SKILL_TEXT:
         return None
+    if hashlib.sha256(held.encode()).hexdigest() not in SHIPPED:
+        return "kept", path
     write_text(path, SKILL_TEXT)
-    return path
+    return "replaced", path

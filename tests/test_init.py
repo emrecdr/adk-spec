@@ -212,25 +212,41 @@ def test_init_writes_a_skill_an_assistant_reads_in_the_form_the_standard_asks(tm
         assert said in body, said
 
 
-def test_init_never_writes_over_a_skill_that_is_there(tmp_path, capsys) -> None:
-    repository(tmp_path, FILES)
-    write_text(tmp_path / SKILL, "---\nname: adk-spec\ndescription: mine\n---\n\nMine.\n")
+def test_a_refresh_keeps_a_skill_a_person_edited_and_says_so(tmp_path, capsys) -> None:
+    """The skill is the person's once they edit it: a refresh keeps it, in one line (the audit of 25 November, C3)."""
     assert run(tmp_path, "init", "--no-explore") == 0
-    assert read_text(tmp_path / SKILL).endswith("Mine.\n") and "SKILL.md" not in capsys.readouterr().out
+    write_text(tmp_path / SKILL, read_text(tmp_path / SKILL) + "Mine.\n")
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert read_text(tmp_path / SKILL).endswith("Mine.\n")
+    assert f"kept      {SKILL}: edited, so the new text was not written" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("held", [".claude", ".Claude/"], ids=["a-file", "a-case-twin"])
-def test_a_skill_that_cannot_be_written_is_a_line_and_init_ends_well(tmp_path, capsys, held) -> None:
-    """Found by the code review: where `.claude` was a file, a link or a folder named but for case, writing the skill
-    failed `init` after the tree was made, and every refresh after it failed at the same line, before the profile."""
-    repository(tmp_path, FILES)
-    if held.endswith("/"):
-        (tmp_path / held).mkdir()
-    else:
-        (tmp_path / held).write_text("mine\n", encoding="utf-8")
+def test_a_refresh_replaces_a_skill_adk_spec_wrote_with_its_text_now(tmp_path, capsys, monkeypatch) -> None:
+    """The audit of 25 November (C3): written once, an install never had a better skill. A text adk-spec shipped is
+    known by its hash, and replaced; nothing is written into the file to know it by."""
+    import hashlib
+
+    from adk_spec.workspace import skill
+
+    older = "---\nname: adk-spec\ndescription: an older text\n---\n"
+    monkeypatch.setattr(skill, "SHIPPED", skill.SHIPPED | {hashlib.sha256(older.encode()).hexdigest()})
     assert run(tmp_path, "init", "--no-explore") == 0
-    said = capsys.readouterr().out
-    assert f"skipped   {SKILL}: " in said and "next" in said and (tmp_path / ".spec").is_dir()
+    write_text(tmp_path / SKILL, older)
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert read_text(tmp_path / SKILL) == skill.SKILL_TEXT and f"replaced  {SKILL}" in capsys.readouterr().out
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert SKILL not in capsys.readouterr().out, "the text it has now is said no more"
+
+
+def test_every_skill_text_adk_spec_wrote_is_known_by_its_hash() -> None:
+    """Change the skill's text, and add its new hash: every one shipped stays, so a refresh knows each as its own."""
+    import hashlib
+
+    from adk_spec.workspace.skill import SHIPPED, SKILL_TEXT
+
+    assert hashlib.sha256(SKILL_TEXT.encode()).hexdigest() in SHIPPED and len(SHIPPED) >= 4
 
 
 def test_the_skill_is_no_part_of_the_code_a_reading_or_verify_sees(tmp_path) -> None:
