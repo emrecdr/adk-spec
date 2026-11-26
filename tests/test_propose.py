@@ -33,6 +33,9 @@ TRIAGE, BRIEF, DELTAS = (
 )
 
 
+DESIGN = "You write the design"
+
+
 def proposed(root, *argv: str, request: str = REQUEST) -> int:
     return run(root, "propose", request, *argv)
 
@@ -52,7 +55,11 @@ def test_propose_writes_a_lean_change_a_person_can_approve(tmp_path, capsys, fak
     assert findings_of(loaded, ws.specs()[0]) == [], "nothing is missing: the tasks are written too"
     assert [asked(fake_provider, opening) for opening in (TRIAGE, BRIEF, DELTAS)] == [1, 1, 1]
     out = capsys.readouterr().out
-    assert "passkey-sign-in" in out and "480 total" in out and ".spec/changes/passkey-sign-in/brief.md" in out
+    assert (
+        "passkey-sign-in" in out
+        and "tokens    480 in 4 calls\n" in out
+        and ".spec/changes/passkey-sign-in/brief.md" in out
+    )
     assert not (tmp_path / ".spec/.lock").exists()
 
 
@@ -256,12 +263,12 @@ def test_two_open_changes_that_each_create_one_capability_get_different_ids(tmp_
     assert ids == ["REQ-SEARCH-001", "REQ-SEARCH-002"]
 
 
-def test_the_tokens_line_counts_each_stages_calls(tmp_path, capsys, fake_provider) -> None:
+def test_an_answer_sent_back_counts_as_a_call(tmp_path, capsys, fake_provider) -> None:
     seeded(tmp_path)
     fake_provider.answers_each_time(DELTAS, iter(["not json", None]))
     assert proposed(tmp_path, "--id", "counted") == 0
     out = capsys.readouterr().out
-    assert "triage 120 in 1 call" in out and "deltas 240 in 2 calls" in out and "600 total" in out
+    assert "tokens    600 in 5 calls\n" in out
 
 
 def test_an_answer_that_repeats_a_marker_is_sent_back(tmp_path, capsys, fake_provider) -> None:
@@ -348,7 +355,7 @@ def test_an_answer_the_provider_cut_short_is_not_asked_again(tmp_path, capsys, f
     assert proposed(tmp_path, "--tier", "lean", "--id", "cut") == 3
     said = capsys.readouterr()
     assert "MAX_TOKENS" in said.err and "schema" not in said.err
-    assert asked(fake_provider, DELTAS) == 1 and "deltas 120 in 1 call" in said.out
+    assert asked(fake_provider, DELTAS) == 1 and "tokens    240 in 2 calls\n" in said.out
 
 
 def test_a_name_made_from_the_title_steps_past_one_that_differs_only_by_case(tmp_path, fake_provider) -> None:
@@ -372,7 +379,7 @@ def test_a_change_that_cannot_be_written_still_says_what_was_spent(
     monkeypatch.setattr(Workspace, "write_change", refuse)
     assert proposed(tmp_path, "--tier", "lean", "--id", "unwritten") == 2
     said = capsys.readouterr()
-    assert "no change was written: the folder cannot be made" in said.err and "240 total" in said.out
+    assert "no change was written: the folder cannot be made" in said.err and "tokens    240 in 2 calls\n" in said.out
     assert len(fake_provider.requests) == 2
 
 
@@ -415,7 +422,7 @@ def test_propose_writes_the_whole_change_tasks_included(tmp_path, capsys, fake_p
     assert [asked(fake_provider, opening) for opening in (BRIEF, DELTAS, TASKS)] == [1, 1, 1]
     out = capsys.readouterr().out
     assert ".spec/changes/whole/brief.md" in out and ".spec/changes/whole/tasks.md" in out
-    assert "tokens    brief 120 in 1 call, deltas 120 in 1 call, tasks 120 in 1 call: 360 total" in out
+    assert "tokens    360 in 3 calls\n" in out  # the audit of 25 November (U2): one figure, the split in the recording
     assert "next      run `adk-spec approve whole`" in out
     assert (out.count("tokens    "), out.count("next      ")) == (1, 1), "one command says each once"
     assert run(tmp_path, "approve", "whole", "--by", "reviewer") == 0, "a lean change: three commands with archive"
@@ -433,7 +440,9 @@ def test_propose_writes_the_design_where_the_brief_owes_one_and_none_where_it_ow
     assert proposed(tmp_path, "--tier", "lean", "--id", "designed") == 0
     assert ws.load_change("designed").change.design is not None
     out = capsys.readouterr().out
-    assert ".spec/changes/designed/design.md" in out and "design 120 in 1 call" in out and "design    owed" not in out
+    assert (
+        ".spec/changes/designed/design.md" in out and asked(fake_provider, DESIGN) == 1 and "design    owed" not in out
+    )
     assert proposed(tmp_path, "--tier", "lean", "--id", "plain", request="Fix a typo in the sign-in page.") == 0
     assert not (tmp_path / ".spec/changes/plain/design.md").exists()
 
@@ -449,7 +458,7 @@ def test_one_ceiling_holds_the_drafting_and_the_plan_and_a_failed_plan_leaves_th
     said = capsys.readouterr()
     assert "the brief and the specs are written, and the plan is not" in said.err and "CEILING" in said.err
     assert "Run `adk-spec plan capped` to finish it" in said.err
-    assert "tokens    brief 120 in 1 call, deltas 120 in 1 call: 240 total" in said.out
+    assert "tokens    240 in 2 calls, of 240\n" in said.out
     loaded = ws.load_change("capped")
     assert loaded.change.brief is not None and loaded.change.tasks is None, "what was written stands"
     assert asked(fake_provider, TASKS) == 0 and not (tmp_path / ".spec/.lock").exists()
@@ -691,3 +700,25 @@ def test_a_profile_that_will_not_open_is_left_out_with_a_line(tmp_path, capsys, 
     with shut(ws.home / "profile.md"):
         assert run(tmp_path, "propose", "Let users sign in with a passkey.", "--no-input", "--id", "shut") == 0
     assert "left out  .spec/profile.md" in capsys.readouterr().out
+
+
+def test_the_tokens_line_names_the_ceiling_where_one_is_set(tmp_path, capsys, fake_provider) -> None:
+    """The audit of 25 November (U2): one figure, and the ceiling it is held to."""
+    ws = seeded(tmp_path)
+    config = ws.home / "config.toml"
+    write_text(config, read_text(config).replace("[limits]\n", "") + "\n[limits]\nmax_tokens = 80000\n")
+    assert proposed(tmp_path, "--id", "held", "--no-explore") == 0
+    assert "tokens    480 in 4 calls, of 80,000\n" in capsys.readouterr().out
+    assert fake_provider.requests
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_the_other_repositories_are_said_before_the_reading_and_once(tmp_path, capsys) -> None:
+    """The audit of 25 November (U4): `with` and `left out` stood inside the list of files written, read as if a file
+    were left out, and named only after the repositories' code was sent."""
+    root = beside(tmp_path)
+    capsys.readouterr()
+    assert proposed(root, "--id", "spans", "--tier", "lean", "--with", "../api") == 0
+    out = capsys.readouterr().out
+    assert out.count("with      api from ../api\n") == 1, out
+    assert out.index("with      api") < out.index("explored  "), out

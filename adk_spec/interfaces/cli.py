@@ -15,6 +15,7 @@ import os
 import re
 import signal
 import sys
+import time
 from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -37,7 +38,7 @@ from ..domain.context_md import (
     unknown_count,
     with_answers,
 )
-from ..domain.convert import kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
+from ..domain.convert import by_id, kept_ids, questions_of, render_design, revision, slug_of, to_findings, to_tasks
 from ..domain.delta_md import render_delta
 from ..domain.evidence_md import kept, render_evidence
 from ..domain.lifecycle import (
@@ -71,7 +72,18 @@ from ..domain.lifecycle import (
     verify_blockers,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
+from ..domain.model import (
+    TIERS,
+    Brief,
+    Change,
+    ChangeState,
+    Delta,
+    Finding,
+    GrammarError,
+    Spec,
+    Tier,
+    Verification,
+)
 from ..domain.remaining import remaining, render_remaining
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
 from ..domain.review_md import render_review, review_said
@@ -182,6 +194,28 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+#: Whether each command calls a model, said in its own help: the audit of 25 November (U5), a command's help listed
+#: its options alone, and a person could not tell what would be spent.
+CALLS_A_MODEL = {
+    "init": "yes, unless --no-explore",
+    "new": "no",
+    "validate": "no",
+    "status": "no",
+    "rebase": "no",
+    "approve": "on a standard or strict change whose check is missing or out of date",
+    "archive": "no",
+    "propose": "yes",
+    "plan": "yes; it reads the code too, unless the change has a context.md or --no-explore is given",
+    "check": "yes, unless --no-model",
+    "verify": "yes, where the change holds requirements",
+    "smoke": "yes, one small request, unless --check",
+    "models": "no; it asks the provider for its list",
+    "login": "no; it signs in to GitHub",
+}
+#: The one change's flow, closing the command's own help.
+FLOW = f"One change: propose, approve, implement, verify, archive. `{PROG} status` says what comes next."
+
+
 class _Top(_Parser):
     """The parser of the command itself, whose help lists the commands in their groups: what most people need
     first, and the rest apart."""
@@ -200,6 +234,7 @@ class _Top(_Parser):
         formatter.start_section("Options")
         formatter.add_arguments([action for action in self._actions if action.option_strings])
         formatter.end_section()
+        formatter.add_text(FLOW)
         return formatter.format_help()
 
 
@@ -253,7 +288,9 @@ def _parser() -> _Top:
 
     propose = commands.add_parser("propose", help="draft a whole change from a request: brief, specs and tasks")
     propose.add_argument("request", help="what is wanted, in a sentence or a paragraph")
-    propose.add_argument("--id", help="the change's name (default: made from the brief's title)")
+    propose.add_argument(
+        "--id", help="the change's name (default: made from the brief's title); an open change's name revises it"
+    )
     propose.add_argument("--tier", choices=TIERS, help="how much ceremony (default: the model's call)")
     propose.add_argument("--no-input", action="store_true", help="ask no question: open points stay in the brief")
     propose.add_argument("--no-explore", action="store_true", help="read none of the repository's code")
@@ -288,24 +325,35 @@ def _parser() -> _Top:
     )
     verify.set_defaults(handler=_drafting(_verified))
 
-    smoke = commands.add_parser("smoke", help="run the triage stage alone, to prove an arm answers in a schema")
+    smoke = commands.add_parser("smoke", help="send one small request, to prove the provider answers")
     smoke.add_argument("--model", help="the model for this run alone, in place of the arm's")
     smoke.add_argument("--request", default=SMOKE_REQUEST, help="the change request to size")
     smoke.add_argument("--check", action="store_true", help="say whether the arm is ready, and call no model")
     smoke.add_argument("--json", action="store_true", help="print the result as JSON")
     smoke.set_defaults(handler=_smoke)
 
-    models = commands.add_parser("models", help="list the models the chosen arm serves: one request, no model call")
+    models = commands.add_parser("models", help="list the models the chosen provider serves")
     models.add_argument("--json", action="store_true", help="print the list as JSON")
     models.set_defaults(handler=_models)
 
     login = commands.add_parser("login", help="log in to GitHub Copilot once, with GitHub's device flow")
     login.add_argument("--force", action="store_true", help="log in again although a token is cached")
     login.set_defaults(handler=_login)
+    for row in commands._get_subactions():  # argparse's own help rows: each command's line, said again in its help
+        line = row.help or ""
+        calls = CALLS_A_MODEL[row.dest]
+        commands.choices[row.dest].description = f"{line[:1].upper()}{line[1:]}. Calls a model: {calls}."
     return parser
 
 
+#: When the command running now began: each progress line says the time since, across every recording it opens (the
+#: cleanup review of phase 22: kept per recording, the time ran back to 0:00 mid-command).
+_command_began = 0.0
+
+
 def main(argv: list[str]) -> int:
+    global _command_began
+    _command_began = time.monotonic()
     parser = _parser()
     args = parser.parse_args(argv)
     handler = getattr(args, "handler", None)
@@ -363,6 +411,9 @@ def _init(args: argparse.Namespace) -> int:
             kept, code = _described(workspace)
             _drafted(workspace, kept)
     later = f"; `{PROG} init --refresh` reads the code" if args.no_explore else ""
+    with contextlib.suppress(ConfigError):  # a config that does not read is said by the commands that read it
+        if not workspace.config().test:  # the audit of 25 November (U8): `verify` said so only after the work
+            print(f"tests     none named: {NO_TEST_COMMAND}")
     print(f'next      keep what is true in constitution.md, then run `{PROG} propose "<what you want>"`{later}')
     return code if args.refresh else EXIT_OK
 
@@ -1034,6 +1085,10 @@ def _loaded(path: Path) -> set[str]:
 def _line() -> str:
     """One line a person typed, or nothing where the input is over, closed, or holds bytes that are no text."""
     try:
+        # Where a person types and reads (U6): an output that goes to a pipe or a file would hold the prompt glued to
+        # its next line (the code review of phase 22).
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            print("answer> ", end="", flush=True)
         return sys.stdin.readline()
     except OSError, ValueError:  # a closed stream; a `UnicodeDecodeError` is a `ValueError`
         return ""
@@ -1043,9 +1098,12 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     """A round of questions put to the person on the terminal, one at a time: the answer to each, in their order.
     A line is the answer; `=` takes the suggestion; an empty line leaves the point open; the end of the input, or
     no input at all, answers every question still to come with nothing."""
-    points = "1 point" if len(questions) == 1 else f"{len(questions)} points"
-    print(f"The brief leaves {points} open. A line answers. `=` takes the suggestion, and `yes` one that says yes.")
-    print("An empty line leaves the point open.")
+    points = "1 point is" if len(questions) == 1 else f"{len(questions)} points are"
+    # The audit of 25 November (U6): "A line answers" said little of what to do.
+    print(
+        f"{points} open. Type an answer and press Enter; = takes the suggestion, and yes one that says yes; an empty "
+        "line leaves it open in brief.md."
+    )
     answers: list[str] = []
     ended = sys.stdin is None  # a process started with no terminal and no pipe
     for number, question in enumerate(questions, 1):
@@ -1090,9 +1148,34 @@ def _on_a_terminal() -> bool:
     return stream is not None and stream.isatty()
 
 
-def _working(stage: str, again: bool) -> None:
-    """One line a model call, as it starts: a command that works for a minute is not silent for a minute."""
-    print(f"working   {stage}{', again' if again else ''}", file=sys.stderr, flush=True)
+#: What sets the test command `verify` runs, said where none is set.
+NO_TEST_COMMAND = f"set [verify] test in {ROOT_NAME}/{CONFIG}"
+#: What each stage's call does, in the words a person is shown: the audit of 25 November (U1), the stages' keys
+#: meant nothing to a person, and "review" said two things.
+DOING = {
+    "triage": "sizing the request",
+    "scout": "choosing what to read",
+    "survey": "reading the code",
+    "review": "checking the reading",
+    "brief": "writing the brief",
+    "deltas": "writing the requirements",
+    "design": "writing the design",
+    "tasks": "writing the tasks",
+    "check": "checking the files",
+    "verify": "judging the work",
+}
+
+
+def _working_since(began: float) -> Callable[[str, bool], None]:
+    """What says one line a model call, as it starts, with the time since `began`: a command that works for a minute
+    is not silent for a minute, and shows how long it has worked."""
+
+    def working(stage: str, again: bool) -> None:
+        minutes, seconds = divmod(int(time.monotonic() - began), 60)
+        doing = f"{DOING.get(stage, stage)}{', again' if again else ''}"
+        print(f"working   {doing}  {minutes}:{seconds:02}", file=sys.stderr, flush=True)
+
+    return working
 
 
 @dataclass
@@ -1113,7 +1196,7 @@ def _recording(workspace: Workspace, command: str, change: str | None) -> Genera
     from ..orchestration.recorder import Recorder
 
     keep = workspace.config().keep_runs
-    kept = _Kept(Recorder(heard=_working if _on_a_terminal() else None), change)
+    kept = _Kept(Recorder(heard=_working_since(_command_began) if _on_a_terminal() else None), change)
     try:
         yield kept
     except KeyboardInterrupt:
@@ -1130,11 +1213,13 @@ def _recording(workspace: Workspace, command: str, change: str | None) -> Genera
 
 
 def _spent(ledger: UsageLedger) -> str:
-    """What a command's stages spent, from its ledger: each stage with its calls, then the total."""
-    stages = ", ".join(
-        f"{name} {row.total:,} in {row.calls} call{'' if row.calls == 1 else 's'}" for name, row in ledger.spent.items()
-    )
-    return f"{stages}: {ledger.total.total:,} total" if stages else "nothing"
+    """What a command spent, from its ledger: its tokens and calls, and the ceiling they are held to where one is set.
+    The split by stage is in the run's recording: the audit of 25 November (U2), the line ran to 190 characters."""
+    spent = ledger.total
+    if not spent.calls:
+        return "nothing"
+    ceiling = f", of {ledger.ceiling:,}" if ledger.ceiling else ""
+    return f"{spent.total:,} in {spent.calls} call{'' if spent.calls == 1 else 's'}{ceiling}"
 
 
 def _propose(args: argparse.Namespace, workspace: Workspace) -> int:
@@ -1346,6 +1431,7 @@ def _plan_made(
     ledger: UsageLedger | None = None,
     explore: bool = True,
     repositories: Mapping[str, str] | None = None,
+    sources_said: bool = False,
     lessons: str | None = None,
 ) -> _Planned:
     """A draft change's tasks drafted, and first its design where the brief owes one, from what a reading of the
@@ -1372,7 +1458,8 @@ def _plan_made(
 
     held = state.repositories if repositories is None else repositories
     source = _source(workspace, held)
-    _said_sources(source, held)
+    if not sources_said:
+        _said_sources(source, held)
     seed = {
         RULES: constitution_text(workspace),
         BRIEF_TEXT: render_brief(brief),
@@ -1462,6 +1549,8 @@ def _code_read(
     seed: dict[str, Any],
     ledger: UsageLedger,
     repositories: Mapping[str, str],
+    *,
+    say_sources: bool = False,
 ) -> _Read | None:
     """One reading of the repository's code, of its installed libraries and of the repositories a change names,
     seeded with `seed` and the files a stage may name: what it came to. Nothing where there is no repository or no
@@ -1474,6 +1563,8 @@ def _code_read(
     if source is None or not source.paths:  # found by the fourth audit: said by `init` alone
         print("explored  nothing: no git repository here, or no file in it")
         return None
+    if say_sources:  # before their code is sent (the audit of 25 November, U4)
+        _said_sources(source, repositories)
     # Asked after only once there is code to read: a plan outside a repository needs no reading model.
     if why := require_ready(roles=ROLES):
         raise UsageError(why)
@@ -1847,16 +1938,16 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
         workspace.drop(args.id, EVIDENCE)
     # What is left, where the next step points, and what a reviewer of the pull request reads, an override's reason
     # with it: aids each, written after the record, so neither loses it.
+    names = _requirement_names(change)
     touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
     left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []
     aids = {
         SUMMARY: render_summary(change, after),
-        REMAINING: render_remaining(args.id, left, last=DEMANDS[state.tier].closing) if left else None,
+        REMAINING: render_remaining(args.id, left, last=DEMANDS[state.tier].closing, names=names) if left else None,
     }
     wrote += _aids_written(workspace, args.id, aids)
-    for one in verdicts:
-        print(f"{one.verdict:<8}  {one.id}  {one.reason}")
-    print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")
+    _said_verdicts(verdicts, names, after.verification, verified=after.status == "verified")
+    _wrote(workspace, wrote)
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
     _say_next(workspace, args.id, specs, drift=False)  # found by the fourth audit: the diff was made a third time
@@ -1905,7 +1996,7 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     asked = [("", workspace.root, config.test, config.test_timeout)] if config.test else []
     every = [*asked, *source.tests()]
     if not asked:  # found by the fourth audit: a `met` read as tested, with no test run here
-        print(f"tests     none named{' here' if every else ''}: set [verify] test in .spec/config.toml")
+        print(f"tests     none named{' here' if every else ''}: {NO_TEST_COMMAND}")
     if os.environ.get(TOOL_CALL) == "1":
         _committed_tests(every)
     runs = []
@@ -1939,6 +2030,36 @@ def _committed_tests(every: list[tuple[str, Path, tuple[str, ...], int]]) -> Non
                 f"runs only a committed test command. Ask the person to review it and commit it, or to run "
                 f"`{PROG} verify` in a terminal"
             )
+
+
+def _requirement_names(change: Change) -> dict[str, str]:
+    """Each requirement the change adds, modifies or removes, by its ID: its name."""
+    return {req: one.name for req, one in by_id(change.deltas).items()}
+
+
+def _said_verdicts(
+    verdicts: list[Verdict], names: Mapping[str, str], recorded: Verification | None, *, verified: bool
+) -> None:
+    """Each verdict, its requirement named, and the model's reason where it is not met, the one a person acts on;
+    then how the verification ended. The audit of 25 November (U3): requirements were named by ID alone, and the
+    outcome was the next line's to imply."""
+    for one in verdicts:
+        why = "" if one.verdict == "met" else f": {one.reason}"
+        print(f"{one.verdict:<8}  {one.id}  {names.get(one.id, '')}{why}".rstrip())
+    met = sum(one.verdict == "met" for one in verdicts)
+    if recorded is None or not recorded.tests:
+        tests = "no tests run"
+    else:  # as `verified` and the next step read the runs: one rule; a run that timed out did not fail, nor pass
+        tests = "tests passed" if recorded.tests_passed else "tests did not pass"
+    judged = f"{met} of {len(verdicts)} met, " if verdicts else ""
+    by = ", by override" if recorded is not None and recorded.override else ""  # the code review of phase 22
+    print(f"verified  {'yes' if verified else 'no'}{by}: {judged}{tests}")
+
+
+def _wrote(workspace: Workspace, paths: Sequence[Path]) -> None:
+    """The files a command wrote, one a line."""
+    for at, path in enumerate(paths):
+        print(f"{'wrote' if at == 0 else '':<10}{workspace.shown(path)}")
 
 
 def _verdicts(
@@ -2070,7 +2191,8 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
         _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first and drafted else None
     )
     # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
-    planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None}
+    # A reading says the other repositories before their code is sent, and is made only where there is code (U4).
+    planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None, "sources_said": bool(read)}
     # With no question asked, each open point is printed with its suggestion, for an assistant to put to the person.
     # Found by the third audit: the editor's tools promised them in the output, which held their count alone.
     unasked = questions_of(BriefDraft.model_validate(state[BRIEF_KEY]), every=True) if args.no_input else []
@@ -2122,6 +2244,7 @@ def _then_planned(
     review: str | None = None,
     lessons: str | None = None,
     unasked: Sequence[Mapping[str, str]] = (),
+    sources_said: bool = False,
 ) -> int:
     """What `propose` does once its change is written: the plan, in the same command and under the same ceiling.
     An open point comes before it, since its answer shapes the tasks: none is drafted on a guess. A revised change
@@ -2150,7 +2273,15 @@ def _then_planned(
     # The change is written by now: a plan that does not end well leaves it a draft, and `plan` finishes it.
     try:
         made = _plan_made(  # the code was read before the brief, or is not to be: the plan reads none
-            workspace, change_id, specs, of_specs, replace=False, ledger=ledger, explore=False, lessons=lessons
+            workspace,
+            change_id,
+            specs,
+            of_specs,
+            replace=False,
+            ledger=ledger,
+            explore=False,
+            lessons=lessons,
+            sources_said=sources_said,
         )
     except NotYetError as exc:  # the calls so far are paid for: what stopped the plan is said as any other failure
         made = _Planned(ledger=ledger, failure=str(exc))
@@ -2278,7 +2409,7 @@ def _drafts(
     if explore:  # aimed by the request, the brief to come
         asked = f"# A change is requested\n\n## The request\n\n{seed[REQUEST].strip()}\n"
         aim = {RULES: seed[RULES], BRIEF_TEXT: asked, DELTAS_TEXT: "", PROFILE_TEXT: profile}
-        read = _code_read(workspace, None, aim, ledger, repositories)
+        read = _code_read(workspace, None, aim, ledger, repositories, say_sources=True)
         if read is not None:
             print(f"explored  {read.said}")
     context = context_of(read.text) if read is not None and read.text else ""
@@ -2484,5 +2615,8 @@ def run() -> int:
         return main(sys.argv[1:])
     except KeyboardInterrupt:
         with contextlib.suppress(OSError):  # a terminal closed (SIGHUP) takes the stream the line would go to
-            print(f"{PROG}: interrupted. `{PROG} status` says where things stand", file=sys.stderr)
+            print(
+                f"{PROG}: interrupted: nothing more was written. `{PROG} status` says where things stand",
+                file=sys.stderr,
+            )
         return EXIT_INTERRUPTED

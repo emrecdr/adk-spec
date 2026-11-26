@@ -336,13 +336,13 @@ def kept_ids(deltas: Mapping[str, Delta]) -> dict[tuple[str, str], list[str]]:
     return kept
 
 
-def _by_id(deltas: Mapping[str, Delta]) -> dict[str, Requirement | Removal]:
+def by_id(deltas: Mapping[str, Delta]) -> dict[str, Requirement | Removal]:
     """Every requirement a change's deltas add, modify or remove, by its ID."""
     return {req.id: req for delta in deltas.values() for req in (*delta.added, *delta.modified, *delta.removed)}
 
 
 def revision(before: Mapping[str, Delta], after: Mapping[str, Delta]) -> tuple[list[str], list[str], list[str]]:
     """What a revision did to a change's requirements, by ID: added, changed and dropped, each in order."""
-    old, new = _by_id(before), _by_id(after)
+    old, new = by_id(before), by_id(after)
     changed = sorted(req_id for req_id in old.keys() & new.keys() if old[req_id] != new[req_id])
     return sorted(new.keys() - old.keys()), changed, sorted(old.keys() - new.keys())

@@ -3,6 +3,8 @@ line the diff really holds makes one `met`."""
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from conftest import (
     CANNED_VERDICTS,
@@ -204,7 +206,7 @@ def test_verify_sets_verified_when_every_requirement_is_met(tmp_path, capsys, fa
         and "return passkey(user)" in report
     )
     out = capsys.readouterr().out
-    assert REPORT in out and "verify 120 in 1 call" in out and "archive passkeys" in out
+    assert REPORT in out and "tokens    120 in 1 call\n" in out and "archive passkeys" in out
     assert read(listed(ws)[0]).command == "verify" and len(fake_provider.requests) == 1
     assert run(tmp_path, "archive", "passkeys") == 0
 
@@ -892,3 +894,28 @@ def test_a_tool_calls_verify_refuses_a_timeout_not_committed(tmp_path, capsys, m
     monkeypatch.setenv("SPEC_TOOL_CALL", "1")
     assert run(tmp_path, "verify", "passkeys") == 2
     assert "not the committed one" in capsys.readouterr().err and not fake_provider.requests
+
+
+def test_verify_says_its_outcome_and_names_each_requirement(tmp_path, capsys, fake_provider) -> None:
+    """The audit of 25 November (U3): `verify` named requirements by ID alone and never said how it ended; a verdict
+    not met keeps the reason a person acts on."""
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    with_tests(tmp_path, "print('12 passed')")
+    fake_provider.answers_when(VERIFY, verdicts(**{"004": {"verdict": "unmet", "reason": "no handler reads it"}}))
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys") == 1
+    out = capsys.readouterr().out
+    assert re.search(r"^unmet     REQ-AUTH-004  \S.*: no handler reads it$", out, re.MULTILINE), out
+    assert re.search(r"^met       REQ-AUTH-002  \S", out, re.MULTILINE)
+    assert "verified  no: 2 of 3 met, tests passed\n" in out
+
+
+def test_an_override_says_why_the_change_is_verified(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review of phase 22: `verified  yes: 2 of 3 met` read as a contradiction with no reason."""
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    fake_provider.answers_when(VERIFY, verdicts(**{"004": {"verdict": "unmet", "reason": "no handler reads it"}}))
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys", "--override", "known gap") == 0
+    assert "verified  yes, by override: 2 of 3 met, no tests run\n" in capsys.readouterr().out

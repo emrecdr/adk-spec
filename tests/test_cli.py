@@ -333,7 +333,7 @@ def test_ctrl_c_is_one_sentence_and_130(monkeypatch, capsys) -> None:
 
     monkeypatch.setattr(cli, "main", interrupted)
     assert cli.run() == 130
-    assert "interrupted. `adk-spec status` says where things stand" in capsys.readouterr().err
+    assert "interrupted: nothing more was written. `adk-spec status` says where things stand" in capsys.readouterr().err
 
 
 def test_the_installed_command_reads_what_a_person_types_as_utf8(monkeypatch) -> None:
@@ -486,7 +486,7 @@ def test_yes_takes_the_suggestion_and_is_an_answer_where_none_is_suggested(monke
     # Found by review: "yes" taken for "No, keep it" stored the opposite of the person's yes. An answer reaches the
     # next draft beside its question, so a plain "yes" always says what the person meant.
     assert cli._answered(asked) == ["Yes, eight hours.", "yes: every device", "Each one.", "yes", "yes", ""]
-    assert "`=` takes the suggestion, and `yes` one that says yes" in capsys.readouterr().out
+    assert "= takes the suggestion, and yes one that says yes" in capsys.readouterr().out
 
 
 def test_one_change_whose_state_does_not_read_stops_no_other(tmp_path, capsys) -> None:
@@ -528,3 +528,29 @@ def test_a_change_json_saved_as_utf16_stops_no_other_change_either(tmp_path, cap
     assert run(tmp_path, "validate") == 1
     assert "ERROR change.unreadable .spec/changes/other/change.json" in capsys.readouterr().out
     workspace.taken(workspace.specs()[0])
+
+
+@pytest.mark.parametrize(
+    ("command", "calls"),
+    [
+        ("approve", "on a standard or strict change whose check is missing or out of date"),
+        ("status", "no"),
+        ("propose", "yes"),
+        ("plan", "yes; it reads the code too, unless the change has a context.md or --no-explore is given"),
+    ],
+)
+def test_each_commands_help_says_what_it_does_and_whether_it_calls_a_model(capsys, command: str, calls: str) -> None:
+    """The audit of 25 November (U5): a command's help listed its options alone."""
+    with pytest.raises(SystemExit):
+        main([command, "--help"])
+    out = " ".join(capsys.readouterr().out.split())  # as argparse wraps it
+    assert f"Calls a model: {calls}." in out
+
+
+def test_the_help_names_the_flow_of_one_change_and_how_to_revise_one(capsys) -> None:
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    assert "One change: propose, approve, implement, verify, archive." in " ".join(capsys.readouterr().out.split())
+    with pytest.raises(SystemExit):
+        main(["propose", "--help"])
+    assert "an open change's name revises it" in " ".join(capsys.readouterr().out.split())

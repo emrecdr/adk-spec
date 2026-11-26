@@ -52,7 +52,7 @@ def test_plan_writes_tasks_a_person_can_then_approve(tmp_path, capsys, fake_prov
     assert not any(task.done for group in loaded.change.tasks for task in group.tasks)
     assert openings(fake_provider) == [TASKS]
     out = capsys.readouterr().out
-    assert ".spec/changes/passkeys/tasks.md" in out and "120 total" in out and "approve passkeys" in out
+    assert ".spec/changes/passkeys/tasks.md" in out and "tokens    120 in 1 call\n" in out and "approve passkeys" in out
     approved(tmp_path)
 
 
@@ -276,10 +276,7 @@ def test_plan_reads_the_code_and_the_tasks_are_shown_what_it_found(tmp_path, cap
     assert shown == context.rstrip("\n"), "the tasks stage reads the file as it was written"
     out = capsys.readouterr().out
     assert "explored  1 file: 1 statement kept" in out and CONTEXT in out
-    assert (
-        "tokens    scout 120 in 1 call, survey 120 in 1 call, review 120 in 1 call, tasks 120 in 1 call: 480 total"
-        in out
-    )
+    assert "tokens    480 in 4 calls\n" in out
 
 
 def test_a_context_that_is_there_is_kept_and_read(tmp_path, fake_provider) -> None:

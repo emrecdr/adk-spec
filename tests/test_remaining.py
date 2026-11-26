@@ -54,8 +54,8 @@ def test_verify_writes_the_remaining_work_and_names_it(tmp_path, capsys, fake_pr
     capsys.readouterr()
     assert run(tmp_path, "verify", "passkeys") == 1
     assert "Still five." in (tmp_path / LEFT).read_text(encoding="utf-8")
-    (wrote,) = [line for line in capsys.readouterr().out.splitlines() if line.startswith("wrote ")]
-    assert REPORT in wrote and LEFT in wrote
+    out = capsys.readouterr().out
+    assert f"wrote     {REPORT}\n" in out and f"\n          {LEFT}\n" in out, "one file a line (U3)"
 
 
 def test_the_remaining_work_is_removed_once_everything_is_met(tmp_path, fake_provider) -> None:
@@ -202,3 +202,9 @@ def test_a_reason_of_the_models_own_is_never_said_as_codes() -> None:
         Verdict("REQ-AUTH-004", "unclear", (), NO_VERDICT),
     ]
     assert "What code found" not in render_remaining("passkeys", remaining(said, GROUPS, frozenset()))
+
+
+def test_each_requirement_left_is_named_beside_its_id() -> None:
+    """The audit of 25 November (U3): an assistant sent to this report had to look each ID up in the specs."""
+    text = render_remaining("passkeys", remaining(SAID, GROUPS, frozenset()), names={"REQ-AUTH-002": "Lockout"})
+    assert "## REQ-AUTH-002 Lockout: " in text

@@ -44,13 +44,13 @@ def test_the_summary_holds_the_why_the_requirements_and_the_verdicts() -> None:
     assert "- REQ-AUTH-002: unmet" in text and "- Tests: passed" in text
 
 
-def test_verify_writes_the_summary_and_names_it_on_its_one_line(tmp_path, capsys) -> None:
+def test_verify_writes_the_summary_and_names_each_file_on_a_line(tmp_path, capsys) -> None:
+    """The audit of 25 November (U3): the two paths on one line ran past 150 characters."""
     approved_in_a_repository(tmp_path)
     implemented(tmp_path)
     capsys.readouterr()
     assert run(tmp_path, "verify", "passkeys") == 0
-    (wrote,) = [line for line in capsys.readouterr().out.splitlines() if line.startswith("wrote ")]
-    assert REPORT in wrote and SUMMARY in wrote
+    assert f"wrote     {REPORT}\n          {SUMMARY}\n" in capsys.readouterr().out
     assert "Approved by reviewer" in read_text(tmp_path / SUMMARY)
 
 

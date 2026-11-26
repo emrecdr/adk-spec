@@ -47,7 +47,8 @@ def test_init_reads_the_code_writes_the_profile_and_drafts_the_rules(tmp_path, c
     assert run(tmp_path, "init") == 0
     out = capsys.readouterr().out
     said = [line.split()[0] for line in out.splitlines()]
-    assert said == ["made", "wrote", "reading", "explored", "wrote", "drafted", "next"], "the skill, then the reading"
+    # The skill, then the reading; the unset test command said before the next step (U8).
+    assert said == ["made", "wrote", "reading", "explored", "wrote", "drafted", "tests", "next"], out
     assert "wrote     .spec/profile.md\n" in out
     assert "drafted   1 rule into .spec/constitution.md: keep, edit or delete each\n" in out
     assert read_text(tmp_path / PROFILE).startswith("# This repository\n\nRead from the repository at commit ")
@@ -253,3 +254,30 @@ def test_a_refresh_writes_the_skill_where_a_workspace_made_before_it_has_none(tm
     capsys.readouterr()
     assert run(tmp_path, "init", "--refresh") == 0
     assert (tmp_path / SKILL).is_file() and f"wrote     {SKILL}" in capsys.readouterr().out
+
+
+def test_init_says_no_test_command_is_set_until_one_is(tmp_path, capsys) -> None:
+    """The audit of 25 November (U8): `verify` said so only after the work was done, its verdicts then resting on the
+    diff alone."""
+    assert run(tmp_path, "init", "--no-explore") == 0
+    assert "tests     none named: set [verify] test in .spec/config.toml\n" in capsys.readouterr().out
+
+
+def test_init_says_nothing_of_the_test_command_once_one_is_set(tmp_path, capsys) -> None:
+    """Found by the code review of phase 22: only the unset case was held."""
+    assert run(tmp_path, "init", "--no-explore") == 0
+    config = tmp_path / ".spec/config.toml"
+    config.write_text(config.read_text(encoding="utf-8") + '\n[verify]\ntest = ["pytest"]\n', encoding="utf-8")
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert "tests     none named" not in capsys.readouterr().out
+
+
+def test_init_with_a_config_that_does_not_read_still_ends_with_its_next_step(tmp_path, capsys) -> None:
+    """Found by the code review of phase 22: asking the config for its test command stopped a refresh at its end."""
+    assert run(tmp_path, "init", "--no-explore") == 0
+    config = tmp_path / ".spec/config.toml"
+    config.write_text(config.read_text(encoding="utf-8").replace("[project]", "[project]\nbogus = 1"), encoding="utf-8")
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert "next      " in capsys.readouterr().out

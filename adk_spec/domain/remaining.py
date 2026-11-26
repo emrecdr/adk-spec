@@ -4,7 +4,7 @@ files its tasks named that the diff never touched), then the model's reason, whi
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from .model import TaskGroup
@@ -57,9 +57,11 @@ def _touched(path: str, touched: frozenset[str]) -> bool:
     return path in touched or any(one.startswith(f"{path}/") for one in touched)
 
 
-def render_remaining(change_id: str, left: Sequence[Left], *, last: str = "verify") -> str:
+def render_remaining(
+    change_id: str, left: Sequence[Left], *, last: str = "verify", names: Mapping[str, str] | None = None
+) -> str:
     """The report of what `change_id` has left to do, and `last`, the command that follows: `verify`, or `archive`
-    for a tier that owes no verification."""
+    for a tier that owes no verification. Each requirement is named beside its ID, from `names`."""
     lines = [
         f"# Remaining: {change_id}",
         "",
@@ -67,7 +69,8 @@ def render_remaining(change_id: str, left: Sequence[Left], *, last: str = "verif
         "",
     ]
     for one in left:
-        lines += [f"## {one.id}: {one.verdict}", ""]
+        named = (names or {}).get(one.id)
+        lines += [f"## {one.id}{f' {named}' if named else ''}: {one.verdict}", ""]
         if one.ticked:
             lines.append(f"- Ticked, yet unmet: {', '.join(one.ticked)}")
         if one.open:
