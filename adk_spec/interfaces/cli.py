@@ -426,12 +426,14 @@ def _skill(workspace: Workspace) -> None:
     shown = workspace.shown(workspace.root.joinpath(*SKILL_PARTS))
     try:
         done = write_skill(workspace.root)
-    except (PathError, OSError, NotTextError) as exc:
-        why = exc.strerror if isinstance(exc, OSError) and exc.strerror else exc
-        print(f"skipped   {shown}: {why}")
+    except NotTextError:  # its own message names the path again, at length (the code review of phase 23)
+        print(f"skipped   {shown}: not UTF-8; save it as UTF-8")
         return
-    if done is not None:
-        print(f"{done:<10}{shown}{': edited, so the new text was not written' if done == 'kept' else ''}")
+    except (PathError, OSError) as exc:
+        print(f"skipped   {shown}: {exc.strerror if isinstance(exc, OSError) and exc.strerror else exc}")
+        return
+    if done is not None:  # a skill the repository holds already may be its own: said as not adk-spec's, not edited
+        print(f"{done:<10}{shown}{': not the text adk-spec wrote' if done == 'kept' else ''}")
 
 
 def _unheld(root: Path) -> Path:

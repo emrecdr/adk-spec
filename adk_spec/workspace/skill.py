@@ -65,7 +65,8 @@ to run. A strict change's plan waits for the person to read its brief and specs:
 3. Tick each task's box, `- [ ]` to `- [x]`, once it is done. Ticking keeps the approval; any other edit of the
    change's files voids it, so change no other file in `.spec/`.
 4. Run `adk-spec status` and do the step it names: `adk-spec verify <id>` where the change owes a verification, and
-   work on what it finds `unmet` or `unclear`. Put `reports/summary.md` in the pull request.
+   work on what it finds `unmet` or `unclear`. Put `.spec/changes/<id>/reports/summary.md`, which `verify` writes, in
+   the pull request.
 """
 
 
@@ -76,7 +77,7 @@ SHIPPED = frozenset(
         "sha256:47e9424dde775d1682a9dbb08b956f3f933c792782f0caada80e61998adde8c9",  # 18f9839
         "sha256:ed51f2d572f68659c5618cc99be09ad981ef2c0863dca489a948e22ec9d278f0",  # 83bd317
         "sha256:b581cfcb44924462d53add2a3e76ada3efaa4db63aae9dcbf8bba4a6d7ffc33d",  # a22a99c
-        "sha256:5d7901403e18555914687d4e485f6d4df80fda5c2cc038ee27d6bd1319a962a2",  # phase 23
+        "sha256:570612a819a5952f5e8c5922a18e059d44007a612e8cd7cfa0bae6b60602650f",  # phase 23
     }
 )
 
