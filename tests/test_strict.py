@@ -112,9 +112,14 @@ def test_a_strict_revision_stops_before_the_plan_as_a_new_one_does(tmp_path, fak
     assert asked(fake_provider, TASKS) == 0
 
 
-def planned(root, fake_provider) -> None:
-    """A strict change, `ledger`, proposed and planned: ready to be approved, its check finding nothing."""
-    fake_provider.answers_if_asked(CHECK, {"findings": []})  # an approval that stops first asks no check
+def planned(root, fake_provider, *, check_asked: bool = True) -> None:
+    """A strict change, `ledger`, proposed and planned: ready to be approved, its check finding nothing; a default
+    where the test's approval stops before the check is asked (the code review of phase 21: excused for every test,
+    a reworded opening went unnamed in the seven that ask it)."""
+    if check_asked:
+        fake_provider.answers_when(CHECK, {"findings": []})
+    else:
+        fake_provider.answers_if_asked(CHECK, {"findings": []})
     seeded(root)
     assert strict_proposed(root) == 0
     assert run(root, "plan", "ledger", "--no-explore") == 0
@@ -158,7 +163,7 @@ def test_a_strict_change_approved_once_is_not_verified(tmp_path, capsys, fake_pr
 
 
 def test_a_warning_blocks_a_strict_approval_and_no_override_sets_it_aside(tmp_path, capsys, fake_provider) -> None:
-    planned(tmp_path, fake_provider)
+    planned(tmp_path, fake_provider, check_asked=False)
     tasks = tmp_path / FOLDER / "tasks.md"
     write_text(tasks, "\n".join(line for line in read_text(tasks).splitlines() if "verify:" not in line) + "\n")
     capsys.readouterr()
@@ -299,7 +304,7 @@ def test_an_approved_strict_change_revised_as_it_stands_names_the_step_that_chan
 
 def test_a_strict_revision_with_a_ticked_task_names_the_plan_that_goes_on(tmp_path, capsys, fake_provider) -> None:
     """Found by the review: the stop named a `plan` that a ticked task refuses, and one that reads the code."""
-    planned(tmp_path, fake_provider)
+    planned(tmp_path, fake_provider, check_asked=False)
     tasks = tmp_path / FOLDER / "tasks.md"
     write_text(tasks, read_text(tasks).replace("- [ ]", "- [x]", 1))
     capsys.readouterr()

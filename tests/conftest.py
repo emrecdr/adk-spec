@@ -248,10 +248,15 @@ class FakeProvider:
         self.requests: list[LlmRequest] = []
         self._matched: set[int] = set()  # each rule a request matched, and each default `answers_if_asked` set
 
-    def clear(self) -> None:
+    def clear(self, *, check: bool = True) -> None:
+        """Every rule and request forgotten, after naming each rule no request matched: a test that clears part-way
+        through is held to its first rules too (the code review of phase 21). Forgotten all the same, so that none
+        reaches the next test."""
+        missed = self.unmatched() if check else []
         self.rules.clear()
         self.requests.clear()
         self._matched.clear()
+        assert not missed, f"no request matched {missed}: a stage's opening changed, or the rule is not needed"
 
     def unmatched(self) -> list[str]:
         """The text of each rule no request matched, but for a default `answers_if_asked` set."""
@@ -345,13 +350,22 @@ LLMRegistry.register(FakeModel)  # process-wide, once; `fake.*` matches nothing 
 
 
 @pytest.fixture
-def fake_provider() -> Iterator[FakeProvider]:
-    """The fake's behaviour for one test; whatever a test sets is gone before the next."""
-    PROVIDER.clear()
+def fake_provider(request: pytest.FixtureRequest) -> Iterator[FakeProvider]:
+    """The fake's behaviour for one test; whatever a test sets is gone before the next, and a rule no request matched
+    fails it. Not where the test's body failed already: it may never have reached the rule (the code review)."""
+    PROVIDER.clear(check=False)
     yield PROVIDER
-    missed = PROVIDER.unmatched()
-    PROVIDER.clear()
-    assert not missed, f"no request matched {missed}: a stage's opening changed, or the rule is not needed"
+    body = getattr(request.node, "body_report", None)
+    PROVIDER.clear(check=body is None or body.passed)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> Iterator[None]:
+    """Each test's body's report kept on the test, for `fake_provider` to read at teardown."""
+    report = yield
+    if call.when == "call":
+        item.body_report = report  # pyrefly: ignore[missing-attribute] - pytest's own items take attributes
+    return report
 
 
 def pytest_configure() -> None:

@@ -34,3 +34,7 @@ whose text no longer matches is passed over in silence, and the test runs on the
   then; `approve`'s check and a pass that did not finish now follow them, and a plan always has its ledger. The seam's
   central `_asked` is typed end to end: `(UsageLedger, Recorder) -> App` in, `Run` and `UsageLedger` out (the
   cleanup reviews).
+- **The code review's three holes closed:** a `clear()` part-way through a test checks the rules it forgets;
+  `planned` excuses its check rule only for the two tests that stop before the check; and a test whose body failed is
+  not given a second, misleading teardown error. Left: a rule matched anywhere in an instruction rather than at its
+  start, queued answers left unused, and a default that would shadow a later rule of the same text (no test does).

@@ -28,3 +28,17 @@ def test_a_default_for_a_stage_that_may_not_be_asked_is_not_named() -> None:
     fake.clear()
     fake.answers_when("You review the files of a change", {"findings": []})
     assert fake.unmatched() == ["You review the files of a change"], "a clear forgets which rules were optional"
+
+
+def test_a_clear_part_way_through_a_test_names_the_rules_it_would_forget() -> None:
+    """Found by the code review of phase 21: a test that cleared the fake part-way through threw its first rules
+    away unchecked. The rules are forgotten all the same, so none reaches the next test."""
+    import pytest
+
+    fake = FakeProvider()
+    fake.answers_when("You write the brief", {"brief": "x"})
+    with pytest.raises(AssertionError, match="You write the brief"):
+        fake.clear()
+    assert fake.rules == [] and fake.unmatched() == []
+    fake.answers_when("You write the brief", {"brief": "x"})
+    fake.clear(check=False)  # a test whose body failed already is not told of rules it never reached
