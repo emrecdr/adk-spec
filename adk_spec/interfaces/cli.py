@@ -15,6 +15,7 @@ import os
 import re
 import signal
 import sys
+import time
 from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -1090,9 +1091,32 @@ def _on_a_terminal() -> bool:
     return stream is not None and stream.isatty()
 
 
-def _working(stage: str, again: bool) -> None:
-    """One line a model call, as it starts: a command that works for a minute is not silent for a minute."""
-    print(f"working   {stage}{', again' if again else ''}", file=sys.stderr, flush=True)
+#: What each stage's call does, in the words a person is shown: the audit of 25 November (U1), the stages' keys
+#: meant nothing to a person, and "review" said two things.
+DOING = {
+    "triage": "sizing the request",
+    "scout": "choosing what to read",
+    "survey": "reading the code",
+    "review": "checking the reading",
+    "brief": "writing the brief",
+    "deltas": "writing the requirements",
+    "design": "writing the design",
+    "tasks": "writing the tasks",
+    "check": "checking the files",
+    "verify": "judging the work",
+}
+
+
+def _working_since(began: float) -> Callable[[str, bool], None]:
+    """What says one line a model call, as it starts, with the time since `began`: a command that works for a minute
+    is not silent for a minute, and shows how long it has worked."""
+
+    def working(stage: str, again: bool) -> None:
+        minutes, seconds = divmod(int(time.monotonic() - began), 60)
+        doing = f"{DOING.get(stage, stage)}{', again' if again else ''}"
+        print(f"working   {doing}  {minutes}:{seconds:02}", file=sys.stderr, flush=True)
+
+    return working
 
 
 @dataclass
@@ -1113,7 +1137,7 @@ def _recording(workspace: Workspace, command: str, change: str | None) -> Genera
     from ..orchestration.recorder import Recorder
 
     keep = workspace.config().keep_runs
-    kept = _Kept(Recorder(heard=_working if _on_a_terminal() else None), change)
+    kept = _Kept(Recorder(heard=_working_since(time.monotonic()) if _on_a_terminal() else None), change)
     try:
         yield kept
     except KeyboardInterrupt:
@@ -1130,11 +1154,13 @@ def _recording(workspace: Workspace, command: str, change: str | None) -> Genera
 
 
 def _spent(ledger: UsageLedger) -> str:
-    """What a command's stages spent, from its ledger: each stage with its calls, then the total."""
-    stages = ", ".join(
-        f"{name} {row.total:,} in {row.calls} call{'' if row.calls == 1 else 's'}" for name, row in ledger.spent.items()
-    )
-    return f"{stages}: {ledger.total.total:,} total" if stages else "nothing"
+    """What a command spent, from its ledger: its tokens and calls, and the ceiling they are held to where one is set.
+    The split by stage is in the run's recording: the audit of 25 November (U2), the line ran to 190 characters."""
+    calls = sum(row.calls for row in ledger.spent.values())
+    if not calls:
+        return "nothing"
+    ceiling = f", of {ledger.ceiling:,}" if ledger.ceiling else ""
+    return f"{ledger.total.total:,} in {calls} call{'' if calls == 1 else 's'}{ceiling}"
 
 
 def _propose(args: argparse.Namespace, workspace: Workspace) -> int:

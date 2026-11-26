@@ -204,7 +204,7 @@ def test_verify_sets_verified_when_every_requirement_is_met(tmp_path, capsys, fa
         and "return passkey(user)" in report
     )
     out = capsys.readouterr().out
-    assert REPORT in out and "verify 120 in 1 call" in out and "archive passkeys" in out
+    assert REPORT in out and "tokens    120 in 1 call\n" in out and "archive passkeys" in out
     assert read(listed(ws)[0]).command == "verify" and len(fake_provider.requests) == 1
     assert run(tmp_path, "archive", "passkeys") == 0
 

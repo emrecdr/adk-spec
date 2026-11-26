@@ -35,7 +35,14 @@ def test_a_terminal_is_told_each_stage_as_it_starts_and_a_second_try_is_marked(
     assert run(tmp_path, "propose", REQUEST, "--tier", "lean", "--id", "told") == 0
     said = capsys.readouterr()
     lines = [line for line in said.err.splitlines() if line.startswith("working")]
-    assert lines == ["working   brief", "working   deltas", "working   deltas, again", "working   tasks"]
+    # The audit of 25 November (U1): what a call does, in plain words, and the time since the command began.
+    assert all(re.search(r"  \d+:\d\d$", line) for line in lines), lines
+    assert [re.sub(r"  \d+:\d\d$", "", line) for line in lines] == [
+        "working   writing the brief",
+        "working   writing the requirements",
+        "working   writing the requirements, again",
+        "working   writing the tasks",
+    ]
     assert "working" not in said.out, "what a script reads holds no progress"
 
 

@@ -63,7 +63,7 @@ def test_an_open_point_becomes_a_question_with_no_model_asked_to_word_it(
     out = capsys.readouterr().out
     assert f"1. {ASKED}" in out and "suggested: Evergreen browsers only" in out
     assert "The brief leaves 1 point open." in out
-    assert "triage 120 in 1 call, brief 240 in 2 calls, deltas 120 in 1 call, tasks 120 in 1 call: 600 total" in out
+    assert "tokens    600 in 5 calls\n" in out
     assert len(fake_provider.requests) == 5, "triage, two briefs, the deltas and the tasks: no call words a question"
 
 

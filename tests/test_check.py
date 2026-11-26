@@ -134,7 +134,7 @@ def test_check_writes_a_report_and_records_what_it_read(tmp_path, capsys, fake_p
     report = read_text(tmp_path / REPORT)
     assert "check.ambiguity" in report and "brief.md:25" in report and "Which browsers are in scope" in report
     out = capsys.readouterr().out
-    assert REPORT in out and "check 120 in 1 call: 120 total" in out and "approve passkeys" in out
+    assert REPORT in out and "tokens    120 in 1 call\n" in out and "approve passkeys" in out
     sent = str(fake_provider.requests[0].config.system_instruction)
     assert "=== brief.md\n# Sign in with a passkey" in sent and "=== specs/auth/spec.md\n# Delta: auth" in sent
     assert read(listed(ws)[0]).command == "check"
@@ -177,7 +177,7 @@ def test_approve_makes_the_check_a_standard_change_owes(tmp_path, capsys, fake_p
     out = capsys.readouterr().out
     assert len(fake_provider.requests) == 1 and state(ws).status == "approved" and state(ws).check.blocking == 0
     assert re.search(rf"checked   {re.escape(REPORT)}: \d+ findings?, 0 blocking", out)
-    assert "approved `passkeys` by reviewer" in out and "tokens    check 120 in 1 call: 120 total" in out
+    assert "approved `passkeys` by reviewer" in out and "tokens    120 in 1 call\n" in out
     assert "next      implement tasks.md, then run `adk-spec verify passkeys`" in out
     assert "check.ambiguity" in read_text(tmp_path / REPORT), "the report is written as `check` writes it"
 
