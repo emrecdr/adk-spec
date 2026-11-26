@@ -35,8 +35,11 @@ test command and the approval's base. No model call, command, flag or `change.js
 
 - **How the command knows it runs for a tool.** The server sets `SPEC_TOOL_CALL=1` in the command's environment, as
   it already shapes that environment for `validate`. An assistant edits files, not the server's environment.
-- **"Committed as it stands"** is `git status --porcelain --ignored -- .spec/config.toml` printing nothing: tracked,
-  not ignored, neither staged nor changed. Untracked or ignored counts as not committed.
+- **"Committed"** is the command as read held to the one the checked-out commit's `.spec/config.toml` names, read by
+  the same reader (`git show HEAD:...`): asked of `git status` first, a config untracked where status lists none, or
+  one the index marks unchanged, read as committed (the code review). An edit that leaves the command alone is no
+  refusal, and the refusal asks the person, not the assistant, to commit.
+- **A signal ignored before the command started stays ignored**, as `nohup` sets SIGHUP (the code review).
 - **SIGTERM before SIGKILL, for the command only.** The project's tests are still stopped outright, as before: a test
   tree that hears a signal may not end.
 

@@ -318,3 +318,40 @@ async def test_the_verify_tool_diffs_from_the_approvals_base_and_says_it_runs_fo
     tools = {tool.name: tool for tool in await build_server(tmp_path).list_tools()}
     assert "bases" not in tools["verify"].input_schema["properties"]
     assert child_environment(["verify", "--", "pk"])["SPEC_TOOL_CALL"] == "1"
+
+
+@_posix_only
+def test_a_signal_ignored_before_the_command_started_stays_ignored() -> None:
+    """Found by the code review of phase 20: `nohup adk-spec verify` stopped when its terminal closed, the ignored
+    SIGHUP turned into an interrupt."""
+    held = {number: signal.getsignal(number) for number in (signal.SIGHUP, signal.SIGTERM)}
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    try:
+        cli.interrupt_on_signals()
+        assert signal.getsignal(signal.SIGHUP) is signal.SIG_IGN
+        assert signal.getsignal(signal.SIGTERM) is signal.default_int_handler
+    finally:
+        for number, handler in held.items():
+            signal.signal(number, handler)
+
+
+@_posix_only
+def test_an_interrupt_while_a_command_is_given_time_still_stops_it() -> None:
+    """Found by the code review of phase 20: an interrupt in the wait after SIGTERM skipped the stop that follows, and
+    a command that does not hear SIGTERM ran on."""
+    from adk_spec.workspace.process import started, stop
+
+    deaf = (
+        "import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\nprint('ready', flush=True)\ntime.sleep(60)"
+    )
+    process = started([sys.executable, "-c", deaf], env=dict(os.environ))
+    assert process.stdout is not None and process.stdout.readline() == b"ready\n"
+
+    def interrupted(timeout=None):  # noqa: ARG001 - Popen.wait's own
+        raise KeyboardInterrupt
+
+    process.wait = interrupted  # pyrefly: ignore[bad-assignment] - an interrupt in the wait, as a second Ctrl-C
+    with pytest.raises(KeyboardInterrupt):
+        stop(process)
+    del process.wait
+    assert process.wait(timeout=5) != 0

@@ -109,15 +109,17 @@ def _asked_to_stop(processes: list[subprocess.Popen[bytes]]) -> None:
     outright, a command left its tests running, in a session of their own. A project's tests are still stopped
     outright (`run_kept`): a test tree that hears a signal may not end. Windows ends a process with no signal it could
     hear."""
-    if not WINDOWS:
+    try:
+        if not WINDOWS:
+            for process in processes:
+                _signalled(process, signal.SIGTERM)
+            ends = time.monotonic() + DRAIN_S
+            for process in processes:
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    process.wait(timeout=max(0.0, ends - time.monotonic()))
+    finally:  # the code review of phase 20: an interrupt in the wait skipped this, and a deaf command ran on
         for process in processes:
-            _signalled(process, signal.SIGTERM)
-        ends = time.monotonic() + DRAIN_S
-        for process in processes:
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=max(0.0, ends - time.monotonic()))
-    for process in processes:
-        _stopped(process, WINDOWS)
+            _stopped(process, WINDOWS)
 
 
 @dataclass(frozen=True)

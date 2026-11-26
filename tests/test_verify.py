@@ -838,7 +838,8 @@ def test_a_tool_calls_verify_refuses_a_test_command_not_committed(tmp_path, caps
     capsys.readouterr()
     assert run(tmp_path, "verify", "passkeys") == 2
     said = capsys.readouterr().err
-    assert ".spec/config.toml" in said and "not committed" in said
+    assert ".spec/config.toml" in said and "not the committed one" in said and "Ask the person" in said
+    assert "Commit them" not in said, "the code review of phase 20: the assistant would commit its own edit"
     assert not ran.exists() and not fake_provider.requests
 
 
@@ -846,9 +847,34 @@ def test_a_tool_calls_verify_refuses_a_test_command_not_committed(tmp_path, caps
 def test_a_tool_calls_verify_runs_a_committed_test_command(tmp_path, monkeypatch) -> None:
     approved_in_a_repository(tmp_path, tier="lean")
     ran = tmp_path.parent / f"{tmp_path.name}-ran"
-    with_tests(tmp_path, f"open({str(ran)!r}, 'w').write('ran')")
+    with_tests(tmp_path, f"import os; open({str(ran)!r}, 'w').write(str(os.environ.get('SPEC_TOOL_CALL')))")
     repository_commit(tmp_path, "the test command")
+    config = tmp_path / ".spec/config.toml"
+    write_text(config, read_text(config) + "\n[limits]\nkeep_runs = 5\n")  # an edit that leaves the command alone
     implemented(tmp_path)
     monkeypatch.setenv("SPEC_TOOL_CALL", "1")
     assert run(tmp_path, "verify", "passkeys") == 0
-    assert ran.exists()
+    assert read_text(ran) == "None", "the tests are not told the command runs for a tool"
+
+
+@pytest.mark.parametrize("hidden", ["untracked, as status does not list", "marked as unchanged in the index"])
+def test_a_tool_calls_verify_reads_the_committed_command_from_the_commit(
+    tmp_path, capsys, monkeypatch, fake_provider, hidden: str
+) -> None:
+    """Found by the code review of phase 20: asked of `git status`, a config untracked where status lists no untracked
+    file, or one the index marks unchanged, read as committed, and the edited command ran."""
+    from conftest import _git
+
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    if hidden.startswith("untracked"):
+        _git(tmp_path, "rm", "-q", "--cached", ".spec/config.toml")
+        _git(tmp_path, "commit", "-q", "-m", "the config untracked")
+        _git(tmp_path, "config", "status.showUntrackedFiles", "no")
+    else:
+        _git(tmp_path, "update-index", "--assume-unchanged", ".spec/config.toml")
+    ran = tmp_path.parent / f"{tmp_path.name}-ran"
+    with_tests(tmp_path, f"open({str(ran)!r}, 'w').write('ran')")
+    monkeypatch.setenv("SPEC_TOOL_CALL", "1")
+    assert run(tmp_path, "verify", "passkeys") == 2
+    assert "not the committed one" in capsys.readouterr().err and not ran.exists() and not fake_provider.requests

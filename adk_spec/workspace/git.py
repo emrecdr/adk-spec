@@ -166,10 +166,11 @@ def resolves(root: Path, ref: str, *, trust: bool = True) -> str | None:
     return _answered(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", no=(1,), trust=trust) or None
 
 
-def committed(root: Path, path: str, *, trust: bool = True) -> bool:
-    """Whether `path` stands in the commit `root` has checked out as it is: tracked, not ignored, neither staged nor
-    changed. A file untracked or ignored is not."""
-    return not git(root, "status", "--porcelain", "--ignored", "--", path, trust=trust).strip()
+def committed_text(root: Path, path: str, *, trust: bool = True) -> str | None:
+    """`path` as the commit `root` has checked out holds it, or nothing where it holds none or there is no commit: read
+    from the commit itself. Found by the code review of phase 20: asked of `git status`, a file untracked where status
+    lists none (`status.showUntrackedFiles`), or one the index marks unchanged, read as committed."""
+    return _answered(root, "show", f"HEAD:{path}", no=(128,), trust=trust)
 
 
 def head(root: Path, *, trust: bool = True) -> str | None:
