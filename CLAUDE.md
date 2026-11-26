@@ -67,7 +67,8 @@ Rules that span files and are easy to break:
   a task box does not. `change.json` also records what adk-spec drafted, so `approve` can name a draft a person
   edited. An older adk-spec refuses a `change.json` with a field it does not know.
 - **Secrets never reach a model or a recording**: `secrets.scrub`/`scrub_lines` on everything sent, the `Scrub`
-  plugin on every app (fail closed), and files or test output holding a private key withheld whole.
+  plugin on every app (fail closed), and files or test output holding a private key withheld whole. A link under
+  `.spec/` is refused once, where `Workspace.find` opens the tree (`paths.refuse_links`), not at each read.
 - **`propose` reads before it drafts**: triage alone, then the reading (`explore.py`) aimed by the request, then the
   brief and deltas from its `context.md` and the profile; the plan reuses that `context.md`. A brief's open points
   name what they wait on (`depends_on`), and a round asks only those answerable now.

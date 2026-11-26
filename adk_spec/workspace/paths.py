@@ -10,6 +10,7 @@ from __future__ import annotations
 import ntpath
 import os
 from pathlib import Path
+from typing import NoReturn
 
 #: Characters no part may hold: the two separators, a NUL, and what Windows forbids in a name.
 FORBIDDEN = frozenset('/\\\x00<>:"|?*')
@@ -30,6 +31,36 @@ def inside(root: Path, *parts: str) -> Path:
         if path.is_symlink() or path.is_junction():
             raise PathError(f"`{part}` is a link, which could lead out of {root}. Replace it with a real folder")
     return path
+
+
+def refuse_links(top: Path) -> None:
+    """`PathError` naming the first link or junction at or under `top`, said from the folder that holds `top`.
+    Found by the audit of 25 November: a link under `.spec` had a command read a file from anywhere and send it to a
+    model, or remove files from another folder; refused once, where the tree is opened, rather than at each of the
+    reads and writes. `top` is asked first, so a link is never walked; then each folder's entries, as the system
+    lists them, before what is in its folders. Emacs' lock, `.#brief.md` beside a file with unsaved edits, a link to
+    nothing, is passed over; any other link to nothing stands where a file or folder is written, and is refused. So is
+    a folder a run removed meanwhile passed over, no lock being held yet."""
+    if top.is_symlink() or top.is_junction():
+        _refused(top, top)
+    pending = [os.fspath(top)]
+    while pending:
+        try:
+            listed = os.scandir(pending.pop())
+        except FileNotFoundError, NotADirectoryError:
+            continue
+        with listed as entries:
+            for entry in sorted(entries, key=lambda one: one.name):
+                linked = entry.is_symlink() or entry.is_junction()
+                if linked and (os.path.exists(entry.path) or not entry.name.startswith(".#")):
+                    _refused(top, Path(entry.path))
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(entry.path)
+
+
+def _refused(top: Path, link: Path) -> NoReturn:
+    shown = link.relative_to(top.parent).as_posix()
+    raise PathError(f"`{shown}` is a link, which could lead out of {top.parent}. Replace it with a real file or folder")
 
 
 def _refuse_name(part: str) -> None:

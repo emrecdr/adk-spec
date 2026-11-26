@@ -286,6 +286,9 @@ _VENDOR = (
 #: white space reached across the strings of a line of code 17 times, `'TOKEN = "ghp_' + ...`; with none, two lines
 #: more matched, each a real value of a test. A password of words holding the other quote is still missed.
 _QUOTED_VALUE = r"([^\"'\n]{6,}|(?:(?!\2)\S){6,})"
+#: A value bare, as a `.env` line or a command's option holds one: eight characters or more, with no blank, quote, `#`
+#: or bracket in it.
+_BARE_VALUE = r"([^\s\"'#(\[][^\s\"'#()\[\]{}]{7,})"
 #: A type annotation between a name and its value, `token: str = ...`, `KEY: Final[str] = ...` or a parameter's
 #: default: read by a replay audit, and reproduced, it hid a credential from both rules and from the redaction.
 #: Measured over 2.4 million lines of the installed packages and this repository: every line the shape matched
@@ -338,13 +341,38 @@ _GENERIC = (
         r"\1\2[REDACTED]\2",
     ),
     (
-        "generic_secret",  # a named value unquoted, a `.env`, YAML or Dockerfile line, holding a digit
+        # A named value unquoted, a `.env`, YAML, Dockerfile or batch line, holding a digit: on a compose file's list
+        # item, after Windows' `set`, the whole in quotes or not, and with a comment after it, which is kept with the
+        # line's end. Not the reference project's: found by the audit of 25 November, these matched no shape.
+        # Measured over 3 million lines of the installed packages and this repository: four lines more, each one
+        # this rule hid already without its comment.
+        "generic_secret",
         re.compile(
-            r"(?im)^([+ -]?[^\S\n]*(?:(?:export|env|arg)[^\S\n]+)?[\w.-]{0,80}?"
+            r"(?im)^([+ -]?[^\S\n]*(?:-[^\S\n]+)?(?:(?:export|env|arg|set)[^\S\n]+)?[\"']?[\w.-]{0,80}?"
             + _NAMED
             + r"\s*[:=]\s*)(?=[^\s#]*\d)"
             + _STAND_IN
-            + r"([^\s\"'#(\[][^\s\"'#()\[\]{}]{7,})\s*$"
+            + _BARE_VALUE
+            + r"(?=[\"']?(?:[^\S\n]+#[^\n]*+)?[^\S\n]*$)"
+        ),
+        r"\1[REDACTED]",
+    ),
+    (
+        # A command's option, `--password=...`, `--token ...` or a container's `-e`, `--env` or `--build-arg` with
+        # `NAME=...`, its value bare or in quotes, holding a digit within its first 200 characters, so a long line of
+        # options stays quick, and opening with no `-`, which is the next option. `-` read first, then what stands
+        # before it, so the scan seeks `-` (measured by review: 71 ms over 3.9 million characters with the look behind
+        # first, 2.8 ms so). Not the reference project's: found by the audit of 25 November, a script's or a CI
+        # file's matched no shape. Measured over the same 3 million lines: no line more.
+        "generic_secret",
+        re.compile(
+            r"(?i)((?:--(?<![\w-]--)[\w-]{0,40}?"
+            + _NAMED
+            + r"(?:=|[^\S\n]+)|-(?<![\w-]-)(?:e|-env|-build-arg)(?:=|[^\S\n]+)[\"']?[\w.-]{0,80}?"
+            + _NAMED
+            + r"=)[\"']?)(?=[^\s\"'#]{0,200}?\d)(?!-)"
+            + _STAND_IN
+            + _BARE_VALUE
         ),
         r"\1[REDACTED]",
     ),
@@ -445,14 +473,29 @@ _KEY_BEGINS_A_LINE = re.compile(r"(?m)^" + _ANY_LEAD + r"(?:" + _KEY_HEADER + r"
 KEY_WORDS: tuple[bytes, ...] = (b"PRIVATE KEY", b"PuTTY-User-Key-File-")
 
 
+#: A private key's header inside a line, as code holds a key in a string, with a run of its base64 holding a digit
+#: on that line or within the next four, after any indent: concatenated literals, a triple-quoted string, a YAML value
+#: holding `\n`, a PGP key's armour or an encrypted key's fields before its base64. Lines are passed over whole, each
+#: one way, and a run is sought only where one begins, so the search stays quick (the second code review: a line of
+#: 1,290 headers took 1.9 s, every start tried; 48 ms so). Code that only names the header has no such run after it;
+#: one with a path or a digest holding a digit there is withheld too, the safe side: one file unread. Not the
+#: reference project's: found by the audit of 25 November, such a key had its header hidden and its body sent.
+#: Measured over the installed packages and this repository: two files more, each a test holding a key in a string.
+_KEY_IN_A_STRING = re.compile(
+    _KEY_HEADER
+    + r"(?:[^\n]*+\n){0,4}?[ \t]*+[^\n]{0,200}?(?<![A-Za-z0-9+/])(?=[A-Za-z0-9+/]{0,200}?\d)[A-Za-z0-9+/]{40,}"
+)
+
+
 def holds_a_key(text: str) -> bool:
-    """Whether a line of `text` begins a private key.
+    """Whether `text` holds a private key: a line that begins with its first line, or its header inside a line with
+    its base64 after it, as code holds a key in a string.
 
     Not the reference project's. A key's block is known to `scrub` by its first and last line together, so a piece
     of one is known for nothing: a hunk of a diff from a key's middle, a key with no last line, a block longer than
     one is read. Text that is shown in pieces is therefore judged by the file it is a piece of: a file that holds a
     key is shown in no piece at all."""
-    return _KEY_BEGINS_A_LINE.search(text) is not None
+    return _KEY_BEGINS_A_LINE.search(text) is not None or _KEY_IN_A_STRING.search(text) is not None
 
 
 #: A private key's first line, wherever in a line it stands.

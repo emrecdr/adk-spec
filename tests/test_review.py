@@ -172,15 +172,20 @@ def test_a_view_that_cannot_be_written_does_not_fail_the_command(tmp_path, monke
     assert run(tmp_path, "rebase", "passkeys") == 0
 
 
-def test_a_change_folder_the_path_rules_refuse_fails_no_finished_command(tmp_path) -> None:
-    """Found by the code review: an open change's folder that is a link stopped `approve` after it was recorded."""
-    ws = seeded(tmp_path)
-    elsewhere = another(ws, OTHER).rename(tmp_path / "elsewhere")
+def test_a_change_folder_that_is_a_link_refuses_approve_before_it_records(tmp_path, capsys) -> None:
+    """Found by the code review: an open change's folder that is a link stopped `approve` after it was recorded.
+    Found by the audit of 25 November: a link under `.spec` is refused when the workspace is opened."""
+    seeded(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
     try:
         (tmp_path / ".spec/changes/other").symlink_to(elsewhere, target_is_directory=True)
     except OSError:
         pytest.skip("no symbolic link can be made here")
-    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 0
+    recorded = read_text(tmp_path / ".spec/changes/passkeys/change.json")
+    assert run(tmp_path, "approve", "passkeys", "--by", "reviewer") == 2
+    assert "`.spec/changes/other` is a link" in capsys.readouterr().err
+    assert read_text(tmp_path / ".spec/changes/passkeys/change.json") == recorded
 
 
 def test_a_strict_change_approved_once_gives_its_second_approver_a_current_view(

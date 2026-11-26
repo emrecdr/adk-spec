@@ -102,8 +102,10 @@ def test_the_summary_says_an_override_and_its_reason() -> None:
     assert "Verified by override: the judge misread the lockout" in text
 
 
-def test_a_changelog_that_is_a_link_is_left_and_the_change_archived(tmp_path, capsys) -> None:
-    """Found by the code review: a linked changelog stopped the archive, refused by the write's path rules."""
+def test_a_changelog_that_is_a_link_refuses_the_archive_before_it_starts(tmp_path, capsys) -> None:
+    """Found by the code review: a linked changelog stopped the archive halfway, refused by the write's path rules.
+    Found by the audit of 25 November: a link under `.spec` is refused when the workspace is opened, so nothing of
+    the archive is done."""
     seeded(tmp_path)
     approved(tmp_path)
     write_text(tmp_path / ".spec/real.md", "# Changelog\n")
@@ -112,11 +114,10 @@ def test_a_changelog_that_is_a_link_is_left_and_the_change_archived(tmp_path, ca
     except OSError:
         pytest.skip("no symbolic link can be made here")
     capsys.readouterr()
-    assert run(tmp_path, "archive", "passkeys") == 0
-    assert (
-        f"kept      {CHANGELOG}: " in capsys.readouterr().out
-        and read_text(tmp_path / ".spec/real.md") == "# Changelog\n"
-    )
+    assert run(tmp_path, "archive", "passkeys") == 2
+    assert f"`{CHANGELOG}` is a link" in capsys.readouterr().err
+    assert state_of(tmp_path)["status"] != "archived"
+    assert read_text(tmp_path / ".spec/real.md") == "# Changelog\n"
 
 
 def test_a_heading_of_a_persons_introduction_is_no_entry() -> None:

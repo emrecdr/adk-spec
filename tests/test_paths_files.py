@@ -7,7 +7,7 @@ import os
 import stat
 
 import pytest
-from conftest import PACKAGE, held_open_from
+from conftest import PACKAGE, held_open_from, on_the_fake, run, seeded
 
 from adk_spec.workspace.files import NotTextError, read_text, write_all, write_text
 from adk_spec.workspace.paths import PathError, inside
@@ -164,3 +164,110 @@ def test_a_folder_whose_stamp_did_not_move_is_listed_again_once_its_size_did(tmp
     os.utime(tmp_path, ns=(before, before))  # a stamp that did not move, as on a coarse file system
     with pytest.raises(PathError, match="only by case"):
         inside(tmp_path, "OTHER")
+
+
+def _linked(link, target, *, folder: bool = False) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=folder)
+    except OSError:
+        pytest.skip("no symbolic link can be made here")
+
+
+def test_a_linked_file_under_spec_is_refused_before_it_is_read(tmp_path, capsys) -> None:
+    """Found by the audit of 25 November: a committed `.spec/profile.md` linked to a file anywhere was read and sent to
+    every model call, and scrubbed by shape only."""
+    seeded(tmp_path)
+    netrc = tmp_path / "netrc"
+    netrc.write_text("machine host login me password elsewhere\n", encoding="utf-8")
+    _linked(tmp_path / ".spec/profile.md", netrc)
+    assert run(tmp_path, "status") == 2
+    said = capsys.readouterr()
+    assert "`.spec/profile.md` is a link" in said.err and "elsewhere" not in said.out + said.err
+
+
+def test_a_linked_runs_folder_is_refused_and_its_target_untouched(tmp_path, capsys, monkeypatch, fake_provider) -> None:
+    """Found by the audit of 25 November: recordings were written into a linked `.spec/runs`, and its target's older
+    `*.json` files removed past the newest twenty."""
+    seeded(tmp_path)
+    theirs = tmp_path / "theirs"
+    theirs.mkdir()
+    for number in range(25):
+        (theirs / f"{number:02}.json").write_text("{}\n", encoding="utf-8")
+    _linked(tmp_path / ".spec/runs", theirs, folder=True)
+    on_the_fake(monkeypatch)
+    request = "Let users sign in with a passkey."
+    assert run(tmp_path, "propose", request, "--tier", "lean", "--no-input", "--no-explore") == 2
+    assert "`.spec/runs` is a link" in capsys.readouterr().err and not fake_provider.requests
+    assert len(list(theirs.glob("*.json"))) == 25, "a run recorded there would have removed six of them"
+
+
+def test_a_link_deep_in_a_change_is_refused_when_the_workspace_is_opened(tmp_path, capsys) -> None:
+    seeded(tmp_path)
+    (tmp_path / ".spec/changes/passkeys/reports").mkdir(exist_ok=True)
+    (tmp_path / "README.md").write_text("# A repository\n", encoding="utf-8")
+    _linked(tmp_path / ".spec/changes/passkeys/reports/review.md", tmp_path / "README.md")
+    assert run(tmp_path, "validate") == 2
+    assert "`.spec/changes/passkeys/reports/review.md` is a link" in capsys.readouterr().err
+
+
+def test_a_spec_folder_that_is_a_link_is_refused(tmp_path, capsys) -> None:
+    real = tmp_path / "real"
+    seeded(real)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _linked(repo / ".spec", real / ".spec", folder=True)
+    assert run(repo, "status") == 2
+    assert "`.spec` is a link" in capsys.readouterr().err
+
+
+def test_init_refuses_a_spec_that_is_a_dangling_link(tmp_path) -> None:
+    gone = tmp_path / "gone"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _linked(repo / ".spec", gone, folder=True)
+    assert run(repo, "init", "--no-explore") == 2
+    assert not gone.exists()
+
+
+def test_an_emacs_lock_link_under_spec_is_passed_over(tmp_path) -> None:
+    """Found by the code review of phase 19: Emacs keeps `.#brief.md` beside a file with unsaved edits, a link to no
+    file, and every command was refused while it stood."""
+    seeded(tmp_path)
+    _linked(tmp_path / ".spec/changes/passkeys/.#brief.md", tmp_path / "user@host.1234:1700000000")
+    assert run(tmp_path, "status") == 0
+
+
+def test_a_folder_removed_while_the_tree_is_walked_is_passed_over(tmp_path, monkeypatch) -> None:
+    """Found by the code review of phase 19: a run that removed a folder while another command opened the
+    workspace, before any lock, stopped that command with a file-system error."""
+    from adk_spec.workspace import paths
+
+    (tmp_path / ".spec/changes/x/specs/gone").mkdir(parents=True)
+    listing = os.scandir
+
+    def removed(path):
+        if str(path).endswith("gone"):
+            raise FileNotFoundError(2, "No such file or directory", str(path))
+        return listing(path)
+
+    monkeypatch.setattr(paths.os, "scandir", removed)
+    paths.refuse_links(tmp_path / ".spec")
+
+
+def test_init_refuses_a_spec_that_is_a_dangling_link_before_writing_through_it(tmp_path) -> None:
+    from adk_spec.workspace.layout import Workspace, WorkspaceError
+
+    gone = tmp_path / "gone"
+    _linked(tmp_path / ".spec", gone, folder=True)
+    with pytest.raises(WorkspaceError, match="already there"):
+        Workspace.init(tmp_path)
+    assert not gone.exists()
+
+
+def test_a_link_to_nothing_where_a_folder_stands_is_refused(tmp_path, capsys) -> None:
+    """Found by the second code review of phase 19: passed over, a change's `reports` linked to a removed folder
+    stopped `verify` when it wrote its report, its model calls paid."""
+    seeded(tmp_path)
+    _linked(tmp_path / ".spec/changes/passkeys/reports", tmp_path / "gone", folder=True)
+    assert run(tmp_path, "status") == 2
+    assert "`.spec/changes/passkeys/reports` is a link" in capsys.readouterr().err

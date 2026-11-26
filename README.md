@@ -811,7 +811,10 @@ among the repository's files, and never part of the diff `verify` sends, so work
 read again.
 
 A file that holds a private key is treated as an excluded path is, with nothing to set up: it is never read, and
-`verify` leaves its changes out and says so.
+`verify` leaves its changes out and says so. A key held in a string, as a test holds one, counts too.
+
+A link anywhere under `.spec/` is refused when a command opens the workspace, before it reads or spends anything:
+it could lead a read or a removal out of the repository. Replace it with a real file or folder.
 
 ### A feature across repositories, in depth
 
