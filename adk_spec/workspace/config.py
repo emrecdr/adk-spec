@@ -52,10 +52,11 @@ KNOWN = {
 }
 
 
-def load_config(path: Path) -> Config:
-    """The settings `path` holds. `ConfigError` names what is unknown, missing or wrong."""
+def load_config(path: Path, text: str | None = None) -> Config:
+    """The settings `path` holds, or `text` read as that file, as a commit holds it. `ConfigError` names what is
+    unknown, missing or wrong."""
     try:
-        held = tomllib.loads(read_text(path))
+        held = tomllib.loads(read_text(path) if text is None else text)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path} is not valid TOML: {exc}") from exc
     for table, keys in held.items():

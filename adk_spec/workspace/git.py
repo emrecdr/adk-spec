@@ -166,6 +166,16 @@ def resolves(root: Path, ref: str, *, trust: bool = True) -> str | None:
     return _answered(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", no=(1,), trust=trust) or None
 
 
+def committed_text(root: Path, path: str, *, trust: bool = True) -> str | None:
+    """`path` as the commit `root` has checked out holds it, or nothing where it holds none or there is no commit: read
+    from the commit itself, from `root` as the folder `path` is in (`./`: plain, git reads it from the repository's
+    top), and with no byte-order mark, as `files.read_text` reads a file. Found by the code review of phase 20: asked
+    of `git status`, a file untracked where status lists none (`status.showUntrackedFiles`), or one the index marks
+    unchanged, read as committed."""
+    held = _answered(root, "show", f"HEAD:./{path}", no=(128,), trust=trust)
+    return None if held is None else held.removeprefix("\ufeff")
+
+
 def head(root: Path, *, trust: bool = True) -> str | None:
     """The commit checked out in `root`, or nothing: no repository, or no commit yet."""
     return resolves(root, "HEAD", trust=trust)

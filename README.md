@@ -515,7 +515,9 @@ as a tool (`uv tool install --editable ~/tools/adk_spec`), or say in the chat ho
 
 **With the MCP server**, `adk-spec-mcp` serves `propose`, `plan`, `check`, `verify`, `status` and `validate` as tools to your coding assistant,
 so you can ask for a change in the chat and have the assistant implement it. Approving and archiving stay yours, in a
-terminal.
+terminal. The `verify` tool runs only a test command committed in `.spec/config.toml`, and diffs from the approval's
+base: an assistant that edits the test command cannot have it run, and `--base` stays a terminal's. The command still
+runs your project's own test files, which the assistant may have written: that is what verifying the work means.
 
 VS Code, in your project's `.vscode/mcp.json`:
 
@@ -737,6 +739,7 @@ with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). `.env.example` lists t
   repository of the change runs the command in its own `.spec/config.toml`, where it has one. The tests are not
   given the variables adk-spec's own `.env` set, your provider's key among them.
   A run is judged by its own exit, and whatever it started, a server say, is stopped when it ends, as on Ctrl-C.
+  A `verify` stopped from outside, by a closed terminal, a `kill` or a cancelled tool call, stops its tests too.
   Output that names a private key is shown in no part. On Windows a batch file (`npm.cmd`) is refused, since
   cmd.exe reads its words again: name the program it runs. The work is judged as it stands after the tests.
 

@@ -13,6 +13,7 @@ import getpass
 import json
 import os
 import re
+import signal
 import sys
 from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
@@ -81,7 +82,7 @@ from ..domain.tasks_md import render_tasks
 from ..domain.text import lines_of, plain, sha256_of
 from ..domain.validate import UNREAD, failed, finding, validate_spec
 from ..domain.verify import TestRun, Verdict, grounded, parts_of_diff
-from ..workspace.config import ConfigError
+from ..workspace.config import ConfigError, load_config
 from ..workspace.context import (
     CONSTITUTION_MAX_CHARS,
     ContextTooLargeError,
@@ -96,11 +97,12 @@ from ..workspace.context import (
 )
 from ..workspace.evidence import evidence_findings, evidence_folded, profile_gone
 from ..workspace.files import NotTextError, append_text, read_text
-from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
+from ..workspace.git import DIFF_MAX_CHARS, GitError, committed_text, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGELOG,
     CHANGES,
+    CONFIG,
     CONSTITUTION,
     EVIDENCE,
     LESSONS,
@@ -123,6 +125,7 @@ from ..workspace.layout import STATE as STATE_FILE
 from ..workspace.layout import TASKS as TASKS_FILE
 from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
+from ..workspace.process import TOOL_CALL
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
 from ..workspace.skill import SKILL_PARTS, write_skill
@@ -1883,14 +1886,39 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     every = [*asked, *source.tests()]
     if not asked:  # found by the fourth audit: a `met` read as tested, with no test run here
         print(f"tests     none named{' here' if every else ''}: set [verify] test in .spec/config.toml")
+    if os.environ.get(TOOL_CALL) == "1":
+        _committed_tests(every)
     runs = []
     for name, root, argv, timeout in every:
         print(f"testing   {f'{name}: ' if name else ''}{scrub(' '.join(argv))[0]}")
-        done = run_tests(root, argv, timeout=timeout, name=name, without=frozenset(_FROM_ENV_FILE))
+        done = run_tests(root, argv, timeout=timeout, name=name, without=frozenset({*_FROM_ENV_FILE, TOOL_CALL}))
         took = "" if done.seconds is None else f" in {done.seconds:.1f} s"
         print(f"tests     {f'{name} ' if name else ''}{done.outcome}{took}")
         runs.append(done)
     return runs
+
+
+def _committed_tests(every: list[tuple[str, Path, tuple[str, ...], int]]) -> None:
+    """`UsageError` where a test command a tool's call would run is not the one its repository's checked-out commit
+    holds, with its timeout, before any test runs: the command as read is held to the commit's `.spec/config.toml`,
+    read the same way, so no index flag or status setting hides an edit, and an edit that leaves the command alone is
+    no refusal. Found by the audit of 25 November: an assistant that edited the test command, which an editor may let
+    it do with no prompt, and then called the `verify` tool ran a command no person approved. A committed command still
+    runs the project's own files, which an assistant may have written: running the work's tests is what `verify` is
+    for."""
+    config = f"{ROOT_NAME}/{CONFIG}"
+    for name, root, argv, timeout in every:
+        try:
+            text = committed_text(root, config, trust=not name)
+            committed = None if text is None else load_config(root / config, text)
+        except GitError, ConfigError:
+            committed = None
+        if committed is None or (committed.test, committed.test_timeout) != (argv, timeout):
+            raise UsageError(
+                f"{f'{name}: ' if name else ''}{config}: the test command is not the committed one, and a tool's call "
+                f"runs only a committed test command. Ask the person to review it and commit it, or to run "
+                f"`{PROG} verify` in a terminal"
+            )
 
 
 def _verdicts(
@@ -2411,6 +2439,18 @@ def _smoked(args: argparse.Namespace) -> int:
     return EXIT_ENGINE if failure else EXIT_OK
 
 
+def interrupt_on_signals() -> None:
+    """A stop asked of the command from outside, a terminal closed (SIGHUP), a `kill` or a server's cancel (SIGTERM),
+    heard as Ctrl-C is: the interrupt path stops the tests it started in a session of their own, lets the lock go and
+    records the run. Found by the audit of 25 November: only Ctrl-C was heard, and the tests ran on with no timeout
+    kept. Windows has no SIGHUP, and ends a process with no signal it could hear."""
+    for name in ("SIGTERM", "SIGHUP"):
+        number = getattr(signal, name, None)
+        if number is None or (name == "SIGHUP" and signal.getsignal(number) is signal.SIG_IGN):
+            continue  # Windows has no SIGHUP; one `nohup` ignores stays ignored, and a SIGTERM is always heard
+        signal.signal(number, signal.default_int_handler)
+
+
 def run() -> int:
     """The process boundary of the installed `adk-spec`."""
     # A Windows console is not UTF-8 by default, and an answer piped in there is read in the ANSI code page. What
@@ -2419,8 +2459,10 @@ def run() -> int:
     for stream, errors in ((sys.stdout, "replace"), (sys.stderr, "replace"), (sys.stdin, "strict")):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors=errors)
+    interrupt_on_signals()
     try:
         return main(sys.argv[1:])
     except KeyboardInterrupt:
-        print(f"{PROG}: interrupted. `{PROG} status` says where things stand", file=sys.stderr)
+        with contextlib.suppress(OSError):  # a terminal closed (SIGHUP) takes the stream the line would go to
+            print(f"{PROG}: interrupted. `{PROG} status` says where things stand", file=sys.stderr)
         return EXIT_INTERRUPTED
