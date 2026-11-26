@@ -144,7 +144,7 @@ class Workspace:
         tree is a link or holds one, dangling or not, before any command reads it."""
         for folder in (start, *start.parents):
             home = folder / ROOT_NAME
-            if home.is_dir() or home.is_symlink():
+            if home.is_dir() or home.is_symlink() or home.is_junction():
                 refuse_links(home)
                 return cls(folder)
         raise WorkspaceError(f"no {ROOT_NAME} folder at or above {start}. Run `adk-spec init` in the repository's root")

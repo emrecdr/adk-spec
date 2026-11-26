@@ -116,7 +116,8 @@ def test_a_changelog_that_is_a_link_refuses_the_archive_before_it_starts(tmp_pat
     capsys.readouterr()
     assert run(tmp_path, "archive", "passkeys") == 2
     assert f"`{CHANGELOG}` is a link" in capsys.readouterr().err
-    assert (tmp_path / ".spec/changes/passkeys").is_dir() and read_text(tmp_path / ".spec/real.md") == "# Changelog\n"
+    assert state_of(tmp_path)["status"] != "archived"
+    assert read_text(tmp_path / ".spec/real.md") == "# Changelog\n"
 
 
 def test_a_heading_of_a_persons_introduction_is_no_entry() -> None:

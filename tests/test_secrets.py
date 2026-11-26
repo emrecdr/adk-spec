@@ -289,6 +289,8 @@ VALUE = "hunter2" + "pass9"
         f"  - POSTGRES_PASSWORD={VALUE}",
         f"+  - SECRET_KEY={VALUE}",
         f"set API_TOKEN={VALUE}",
+        f'  - "POSTGRES_PASSWORD={VALUE}"',
+        f'set "API_TOKEN={VALUE}"',
     ],
 )
 def test_a_credential_line_with_a_comment_or_a_list_mark_is_hidden(line: str) -> None:
@@ -298,7 +300,18 @@ def test_a_credential_line_with_a_comment_or_a_list_mark_is_hidden(line: str) ->
     assert VALUE not in hidden and count == 1
 
 
-@pytest.mark.parametrize("line", [f"mysql --password={VALUE} -h db", f"docker login --token {VALUE} registry"])
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"mysql --password={VALUE} -h db",
+        f"docker login --token {VALUE} registry",
+        f"mysql --password '{VALUE}' -h db",
+        f'mysql --password "{VALUE}" -h db',
+        f"docker run -e POSTGRES_PASSWORD={VALUE} postgres",
+        f"docker run --env POSTGRES_PASSWORD={VALUE} postgres",
+        f"docker build --build-arg NPM_TOKEN={VALUE} .",
+    ],
+)
 def test_a_secret_option_of_a_command_is_hidden(line: str) -> None:
     """Found by the audit of 25 November: an option of a command, in a script or a CI file, matched no shape."""
     hidden, count = scrub(f"{line}\n")
@@ -313,6 +326,7 @@ def test_a_secret_option_of_a_command_is_hidden(line: str) -> None:
         "serve --max-tokens 4096",
         "token = get_token(request)  # why it is read here",
         "API_TOKEN=  # set in CI",
+        "docker login --password-stdin --username=ci-bot2024 ghcr.io",
     ],
 )
 def test_an_option_or_a_line_holding_no_value_is_kept(line: str) -> None:
@@ -342,3 +356,28 @@ def test_a_key_held_in_a_string_is_withheld(text: str) -> None:
 def test_code_naming_a_header_then_a_long_path_is_read() -> None:
     code = f'HEADER = "{BEGINS}"\nLOADER = "src/main/java/com/example/security/KeyLoader"\nFOOTER = "{FOOTER}"\n'
     assert not holds_a_key(code)
+
+
+def test_a_scrubbed_lines_comment_and_line_end_are_kept() -> None:
+    """Found by the code review of phase 19: the comment after a hidden value, and the text's last line end, were
+    hidden with it."""
+    assert scrub(f"DB_PASSWORD={VALUE} # prod\n") == ("DB_PASSWORD=[REDACTED] # prod\n", 1)
+
+
+#: A PGP key's first and last lines, built from parts.
+PGP_HEADER, PGP_FOOTER = "-----BEGIN PGP " + "PRIVATE KEY BLOCK-----", "-----END PGP " + "PRIVATE KEY BLOCK-----"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f'KEY = (\n    "{PGP_HEADER}\\n"\n    "\\n"\n    "{KEY_BODY[0]}\\n"\n    "{PGP_FOOTER}\\n"\n)\n',
+        f'KEY = """{PGP_HEADER}\nVersion: GnuPG v2\n\n{KEY_BODY[0]}\n{PGP_FOOTER}"""\n',
+        f'x = ("{BEGINS}\\n"\n{" " * 44}"{KEY_BODY[0]}\\n")\n',  # a continuation indented far
+        f'String key = "{BEGINS}" + System.getProperty("line.separator") +\n    "{KEY_BODY[0]}";\n',
+    ],
+)
+def test_a_key_in_a_string_after_armour_or_a_far_indent_is_withheld(text: str) -> None:
+    """Found by the code review of phase 19: a PGP key's blank line or `Version:` after its header, a continuation
+    indented forty columns, or more than forty characters after the header on its line hid the key's base64."""
+    assert holds_a_key(text)
