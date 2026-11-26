@@ -275,3 +275,72 @@ def test_an_npmrc_registry_credential_is_hidden(secret: str) -> None:
 def test_an_npmrc_line_that_names_a_variable_is_kept() -> None:
     line = "//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n"
     assert scrub(line) == (line, 0)
+
+
+#: A value as a `.env`, a compose file or a script holds one: eight characters or more, holding a digit.
+VALUE = "hunter2" + "pass9"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"DB_PASSWORD={VALUE} # prod",
+        f"password: {VALUE}  # rotate",
+        f"  - POSTGRES_PASSWORD={VALUE}",
+        f"+  - SECRET_KEY={VALUE}",
+        f"set API_TOKEN={VALUE}",
+    ],
+)
+def test_a_credential_line_with_a_comment_or_a_list_mark_is_hidden(line: str) -> None:
+    """Found by the audit of 25 November: a value followed by a comment, on a compose file's list item or after
+    Windows' `set` matched no shape, and a tracked one reached a model and a committed report."""
+    hidden, count = scrub(f"{line}\n")
+    assert VALUE not in hidden and count == 1
+
+
+@pytest.mark.parametrize("line", [f"mysql --password={VALUE} -h db", f"docker login --token {VALUE} registry"])
+def test_a_secret_option_of_a_command_is_hidden(line: str) -> None:
+    """Found by the audit of 25 November: an option of a command, in a script or a CI file, matched no shape."""
+    hidden, count = scrub(f"{line}\n")
+    assert VALUE not in hidden and count == 1 and hidden.startswith(line.split(VALUE)[0])
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "curl --token $TOKEN https://x",
+        "login --password <pass>",
+        "serve --max-tokens 4096",
+        "token = get_token(request)  # why it is read here",
+        "API_TOKEN=  # set in CI",
+    ],
+)
+def test_an_option_or_a_line_holding_no_value_is_kept(line: str) -> None:
+    assert scrub(f"{line}\n") == (f"{line}\n", 0)
+
+
+#: A line of a key's base64, sixty-four characters, as a key's body holds them.
+BASE64_LINE = "MIIEowIBAAKCAQEA" + "x1yQ9vT3" * 6
+#: A key's first and last lines, built from parts so that no line of this file is one.
+HEADER, FOOTER = "-----BEGIN RSA " + "PRIVATE KEY-----", "-----END RSA " + "PRIVATE KEY-----"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f'KEY = (\n    "{HEADER}\\n"\n    "{BASE64_LINE}\\n"\n    "{FOOTER}\\n"\n)\n',  # concatenated literals
+        f'KEY = """{HEADER}\n{BASE64_LINE}\n{FOOTER}"""\n',  # a triple-quoted string
+        f'deploy:\n  key: "{HEADER}\\n{BASE64_LINE}\\n{FOOTER}"\n',  # a YAML value holding `\n`
+        f"const key = '{HEADER}\\n' +\n  '{BASE64_LINE}\\n' +\n  '{FOOTER}';\n",  # JavaScript's `+`
+        f'+    "{HEADER}\\n"\n+    "{BASE64_LINE}\\n"\n',  # the lines a diff adds of the first
+    ],
+)
+def test_a_key_held_in_a_string_is_withheld(text: str) -> None:
+    """Found by the audit of 25 November: a key a test holds in a string had its header hidden and its body sent, as
+    `holds_a_key` asked for the header at a line's start; the file is now shown in no piece."""
+    assert holds_a_key(text)
+
+
+def test_code_naming_a_header_then_a_long_path_is_read() -> None:
+    code = f'HEADER = "{HEADER}"\nLOADER = "src/main/java/com/example/security/KeyLoader"\nFOOTER = "{FOOTER}"\n'
+    assert not holds_a_key(code)

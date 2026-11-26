@@ -338,13 +338,31 @@ _GENERIC = (
         r"\1\2[REDACTED]\2",
     ),
     (
-        "generic_secret",  # a named value unquoted, a `.env`, YAML or Dockerfile line, holding a digit
+        # A named value unquoted, a `.env`, YAML, Dockerfile or batch line, holding a digit: on a compose file's list
+        # item, and with a comment after it, too. Not the reference project's: found by the audit of 25 November,
+        # either matched no shape. Measured over 3 million lines of the installed packages and this repository: four
+        # lines more, each one this rule hid already without its comment, and none more for the option's shape.
+        "generic_secret",
         re.compile(
-            r"(?im)^([+ -]?[^\S\n]*(?:(?:export|env|arg)[^\S\n]+)?[\w.-]{0,80}?"
+            r"(?im)^([+ -]?[^\S\n]*(?:-[^\S\n]+)?(?:(?:export|env|arg|set)[^\S\n]+)?[\w.-]{0,80}?"
             + _NAMED
             + r"\s*[:=]\s*)(?=[^\s#]*\d)"
             + _STAND_IN
-            + r"([^\s\"'#(\[][^\s\"'#()\[\]{}]{7,})\s*$"
+            + r"([^\s\"'#(\[][^\s\"'#()\[\]{}]{7,})(?:[^\S\n]+#[^\n]*+)?\s*$"
+        ),
+        r"\1[REDACTED]",
+    ),
+    (
+        # A command's option, `--password=...` or `--token ...`, holding a digit within its first 200 characters, so
+        # a long line of options stays quick. Not the reference project's: found by the audit of 25 November, a
+        # script's or a CI file's matched no shape.
+        "generic_secret",
+        re.compile(
+            r"(?i)((?<![\w-])--[\w-]{0,40}?"
+            + _NAMED
+            + r"(?:=|[^\S\n]+))(?=[^\s\"'#]{0,200}?\d)"
+            + _STAND_IN
+            + r"([^\s\"'#(\[][^\s\"'#()\[\]{}]{7,})"
         ),
         r"\1[REDACTED]",
     ),
@@ -445,14 +463,23 @@ _KEY_BEGINS_A_LINE = re.compile(r"(?m)^" + _ANY_LEAD + r"(?:" + _KEY_HEADER + r"
 KEY_WORDS: tuple[bytes, ...] = (b"PRIVATE KEY", b"PuTTY-User-Key-File-")
 
 
+#: A private key's header inside a line, as code holds a key in a string, with a run of its base64 holding a digit on
+#: the rest of that line or the next: concatenated literals, a triple-quoted string, a YAML value holding `\n`. Code
+#: that only names the header has no such run after it, and a path, `src/main/java/...`, holds no digit. Not the
+#: reference project's: found by the audit of 25 November, such a key had its header hidden and its body sent.
+#: Measured over the installed packages and this repository: two files more, each a test holding a key in a string.
+_KEY_IN_A_STRING = re.compile(_KEY_HEADER + r"[^\n]{0,40}?(?:\n[^\n]{0,40}?)?(?=[A-Za-z0-9+/]*\d)[A-Za-z0-9+/]{40,}")
+
+
 def holds_a_key(text: str) -> bool:
-    """Whether a line of `text` begins a private key.
+    """Whether `text` holds a private key: a line that begins with its first line, or its header inside a line with
+    its base64 after it, as code holds a key in a string.
 
     Not the reference project's. A key's block is known to `scrub` by its first and last line together, so a piece
     of one is known for nothing: a hunk of a diff from a key's middle, a key with no last line, a block longer than
     one is read. Text that is shown in pieces is therefore judged by the file it is a piece of: a file that holds a
     key is shown in no piece at all."""
-    return _KEY_BEGINS_A_LINE.search(text) is not None
+    return _KEY_BEGINS_A_LINE.search(text) is not None or _KEY_IN_A_STRING.search(text) is not None
 
 
 #: A private key's first line, wherever in a line it stands.
