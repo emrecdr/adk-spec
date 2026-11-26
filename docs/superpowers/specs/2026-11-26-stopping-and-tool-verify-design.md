@@ -28,6 +28,8 @@ test command and the approval's base. No model call, command, flag or `change.js
 - Windows: a process there is ended with no signal it could hear, and `taskkill /T` already stops the tree by its
   root; a job object (roadmap) holds what it leaves.
 - The same rule for a terminal's `verify`: a person who edited the test command runs it, as before.
+- The project files a committed test command runs (`package.json`'s script, `conftest.py`, a Makefile), which an
+  assistant may have edited: running the work's tests is what `verify` is for; the rule closes only a changed command.
 
 ## Calls made in the design (the builder's)
 

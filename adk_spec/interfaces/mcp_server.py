@@ -33,8 +33,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ..domain.model import Tier
-from ..workspace.process import Started, TimedOut, started, stop, waited
-from .cli import TOOL_CALL
+from ..workspace.process import TOOL_CALL, Started, TimedOut, started, stop, waited
 
 #: A tool's parameter that names a change.
 _Change = Annotated[str, Field(description="The change")]
@@ -83,12 +82,13 @@ def command(root: Path, *args: str) -> list[str]:
 
 
 def child_environment(argv: Sequence[str]) -> dict[str, str]:
-    """The environment a command runs in: this server's, unbuffered, and for `validate` without a CI run's variables.
-    Found by the code review: inside Copilot's cloud agent, which runs on GitHub Actions, `validate` annotated its tool
-    result and wrote the job's summary at each call; another command, `verify`'s run of the tests, keeps them."""
+    """The environment a command runs in: this server's, unbuffered, marked as a tool's call (`TOOL_CALL`: `verify` then
+    runs only a committed test command), and for `validate` without a CI run's variables. Found by the code review:
+    inside Copilot's cloud agent, which runs on GitHub Actions, `validate` annotated its tool result and wrote the
+    job's summary at each call; another command, `verify`'s run of the tests, keeps them."""
     ci = ("GITHUB_ACTIONS", "GITHUB_STEP_SUMMARY") if argv and argv[0] == "validate" else ()
     held = {name: value for name, value in os.environ.items() if name not in ci}
-    return {**held, "PYTHONUNBUFFERED": "1", TOOL_CALL: "1"}  # the audit of 25 November: `verify` runs a committed test
+    return {**held, "PYTHONUNBUFFERED": "1", TOOL_CALL: "1"}
 
 
 async def ran(root: Path, argv: list[str]) -> str:
@@ -107,7 +107,8 @@ async def ran(root: Path, argv: list[str]) -> str:
             _said(exc.output, f"adk-spec did not finish within {TOOL_TIMEOUT_S:g} s, and was stopped")
         ) from None
     except BaseException:  # the call cancelled: nothing waits for the answer any longer
-        stop(process)
+        with anyio.CancelScope(shield=True):  # asked to stop, a command is given time, which blocks no other call
+            await anyio.to_thread.run_sync(stop, process)
         raise
     finally:
         RUNNING.discard(process)
@@ -132,8 +133,7 @@ def stop_on_signals() -> None:
 
 
 def _stopped_by(signum: int, _frame: object) -> None:
-    for process in list(RUNNING):
-        stop(process)
+    stop(*RUNNING)
     os._exit(128 + signum)  # at once, as the signal's own action: a thread reading the protocol would hold an exit
 
 
@@ -189,8 +189,8 @@ def build_server(root: Path) -> MCPServer:
         annotations=WRITES,
     )
     async def verify(id: _Change) -> str:
-        """From the approval's base, always: found by the audit of 25 November, the tool's `bases` let the work being
-        judged choose where its diff starts. A person passes `--base` in a terminal."""
+        # From the approval's base, always: found by the audit of 25 November, the tool's `bases` let the work being
+        # judged choose where its diff starts. A person passes `--base` in a terminal.
         return await ran(root, ["verify", "--", id])
 
     @server.tool(description="List each open change and what comes next with it.", annotations=READS)
@@ -221,5 +221,4 @@ def main(argv: list[str] | None = None) -> None:
     try:
         build_server(Path(args.root).resolve()).run("stdio")
     finally:  # the editor closed the protocol's stream: what still runs is stopped
-        for process in list(RUNNING):
-            stop(process)
+        stop(*RUNNING)

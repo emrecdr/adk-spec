@@ -17,11 +17,12 @@ from conftest import seeded
 from mcp.server.mcpserver.exceptions import ToolError
 
 from adk_spec.interfaces import cli, mcp_server
-from adk_spec.interfaces.mcp_server import INSTRUCTIONS, build_server
+from adk_spec.interfaces.mcp_server import INSTRUCTIONS, build_server, child_environment
 from adk_spec.workspace.lock import _alive
 from adk_spec.workspace.skill import SKILL_TEXT
 
 ROOT = Path(__file__).resolve().parents[1]
+_posix_only = pytest.mark.skipif(os.name == "nt", reason="Windows ends a process with no signal it could hear")
 
 
 def _sleeper(marker: Path) -> str:
@@ -126,7 +127,7 @@ async def test_a_call_the_assistant_cancels_stops_the_command(tmp_path, monkeypa
     assert not mcp_server.RUNNING
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Windows ends a process with no signal it could hear")
+@_posix_only
 @pytest.mark.asyncio
 async def test_a_server_the_editor_stops_stops_the_commands_it_runs(tmp_path) -> None:
     """Found by review: each command runs in a session of its own, which hears no signal sent to the server, and an
@@ -253,8 +254,6 @@ def test_the_skill_init_writes_keeps_the_rules_the_server_gives() -> None:
 def test_validate_the_server_runs_is_not_told_it_runs_in_github_actions(monkeypatch) -> None:
     """Found by the code review: inside Copilot's cloud agent, which runs on GitHub Actions, `validate` annotated its
     tool result and wrote the job's summary each time an assistant asked it."""
-    from adk_spec.interfaces.mcp_server import child_environment
-
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", "/tmp/summary.md")
     held = child_environment(["validate"])
@@ -264,8 +263,6 @@ def test_validate_the_server_runs_is_not_told_it_runs_in_github_actions(monkeypa
 
 def test_only_validate_is_kept_from_github_actions(monkeypatch) -> None:
     """Found by the code review: `verify`'s run of the project's tests lost the CI variables its suite may read."""
-    from adk_spec.interfaces.mcp_server import child_environment
-
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     assert child_environment(["verify", "x"])["GITHUB_ACTIONS"] == "true"
 
@@ -282,7 +279,7 @@ def _testing(marker: Path) -> str:
     """)
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Windows ends a process with no signal it could hear")
+@_posix_only
 @pytest.mark.asyncio
 async def test_a_cancelled_call_stops_the_tests_its_command_started(tmp_path, monkeypatch) -> None:
     """Found by the audit of 25 November: the tests run in a session of their own, and a cancel that stopped the
@@ -297,7 +294,7 @@ async def test_a_cancelled_call_stops_the_tests_its_command_started(tmp_path, mo
     assert await _ended(pid), "the tests still run after the call that started them was cancelled"
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Windows ends a process with no signal it could hear")
+@_posix_only
 @pytest.mark.parametrize("heard", ["SIGHUP", "SIGTERM"])
 @pytest.mark.asyncio
 async def test_a_command_hung_up_on_stops_its_tests(tmp_path, heard: str) -> None:
@@ -318,8 +315,6 @@ async def test_a_command_hung_up_on_stops_its_tests(tmp_path, heard: str) -> Non
 async def test_the_verify_tool_diffs_from_the_approvals_base_and_says_it_runs_for_a_tool(tmp_path) -> None:
     """Found by the audit of 25 November: the tool's `bases` let the work being judged choose where its diff starts;
     and the command is told it runs for a tool, so that it runs only a committed test command."""
-    from adk_spec.interfaces.mcp_server import child_environment
-
     tools = {tool.name: tool for tool in await build_server(tmp_path).list_tools()}
     assert "bases" not in tools["verify"].input_schema["properties"]
     assert child_environment(["verify", "--", "pk"])["SPEC_TOOL_CALL"] == "1"

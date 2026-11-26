@@ -13,6 +13,7 @@ import getpass
 import json
 import os
 import re
+import signal
 import sys
 from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
@@ -124,6 +125,7 @@ from ..workspace.layout import STATE as STATE_FILE
 from ..workspace.layout import TASKS as TASKS_FILE
 from ..workspace.lock import held as lock_held
 from ..workspace.paths import PathError
+from ..workspace.process import TOOL_CALL
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
 from ..workspace.skill import SKILL_PARTS, write_skill
@@ -138,8 +140,6 @@ EXIT_USAGE = 2
 #: The engine or the provider failed.
 EXIT_ENGINE = 3
 EXIT_INTERRUPTED = 130
-#: Set by `adk-spec-mcp` in the environment of each command it runs: the command runs for a coding assistant's call.
-TOOL_CALL = "SPEC_TOOL_CALL"
 
 PROG = "adk-spec"
 #: The checkout's root, whose `.env` alone is read: never one of the repository being worked on.
@@ -1899,15 +1899,17 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
 
 
 def _committed_tests(every: list[tuple[str, Path, tuple[str, ...], int]]) -> None:
-    """`UsageError` where a test command a tool's call would run is not committed, before any runs. Found by the audit
-    of 25 November: an assistant that edited `.spec/config.toml`, which an editor may let it do with no prompt, and
-    then called the `verify` tool ran a command no person approved; committing it is a step the person takes."""
-    for name, root, _argv, _timeout in every:
-        if not committed(root, f"{ROOT_NAME}/{CONFIG}", trust=not name):
-            config = f"{f'{name}: ' if name else ''}{ROOT_NAME}/{CONFIG}"
+    """`UsageError` where a repository whose tests a tool's call would run has changes to its `.spec/config.toml` that
+    are not committed, before any test runs. Found by the audit of 25 November: an assistant that edited the test
+    command, which an editor may let it do with no prompt, and then called the `verify` tool ran a command no person
+    approved; committing it is a step the person takes. A committed command still runs the project's own files, which
+    an assistant may have written: running the work's tests is what `verify` is for."""
+    config = f"{ROOT_NAME}/{CONFIG}"
+    for name, root, *_ in every:
+        if not committed(root, config, trust=not name):
             raise UsageError(
-                f"{config} names a test command that is not committed, and a tool's call runs only a committed one. "
-                f"Commit it, or run `{PROG} verify` in a terminal"
+                f"{f'{name}: ' if name else ''}{config} has changes that are not committed, and a tool's call runs "
+                f"only a committed test command. Commit them, or run `{PROG} verify` in a terminal"
             )
 
 
@@ -2434,8 +2436,6 @@ def interrupt_on_signals() -> None:
     heard as Ctrl-C is: the interrupt path stops the tests it started in a session of their own, lets the lock go and
     records the run. Found by the audit of 25 November: only Ctrl-C was heard, and the tests ran on with no timeout
     kept. Windows has no SIGHUP, and ends a process with no signal it could hear."""
-    import signal
-
     for name in ("SIGTERM", "SIGHUP"):
         if (number := getattr(signal, name, None)) is not None:
             signal.signal(number, signal.default_int_handler)

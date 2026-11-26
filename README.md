@@ -516,7 +516,8 @@ as a tool (`uv tool install --editable ~/tools/adk_spec`), or say in the chat ho
 **With the MCP server**, `adk-spec-mcp` serves `propose`, `plan`, `check`, `verify`, `status` and `validate` as tools to your coding assistant,
 so you can ask for a change in the chat and have the assistant implement it. Approving and archiving stay yours, in a
 terminal. The `verify` tool runs only a test command committed in `.spec/config.toml`, and diffs from the approval's
-base: an assistant that edits the test command cannot have it run, and `--base` stays a terminal's.
+base: an assistant that edits the test command cannot have it run, and `--base` stays a terminal's. The command still
+runs your project's own test files, which the assistant may have written: that is what verifying the work means.
 
 VS Code, in your project's `.vscode/mcp.json`:
 

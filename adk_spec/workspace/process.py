@@ -58,6 +58,8 @@ def run(
         return waited(process, timeout)
 
 
+#: Set by `adk-spec-mcp` in the environment of each command it starts: the command runs for a coding assistant's call.
+TOOL_CALL = "SPEC_TOOL_CALL"
 #: A program `started` returns, as one outside this module names it.
 type Started = subprocess.Popen[bytes]
 
@@ -83,37 +85,39 @@ def waited(process: subprocess.Popen[bytes], timeout: float) -> subprocess.Compl
     try:
         out, err = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        _asked_to_stop(process)
+        _asked_to_stop([process])
         try:  # the output to its end, which Windows reads on threads, for as long as a stopped tree takes
             out, err = process.communicate(timeout=DRAIN_S)
         except subprocess.TimeoutExpired as late:  # a process that left the session holds it: what came is kept
             out, err = late.output or b"", late.stderr or b""
         raise subprocess.TimeoutExpired(argv, timeout, output=out, stderr=err) from None
     except BaseException:  # an interrupt: a session of its own hears none, so it is stopped here
-        _asked_to_stop(process)
+        _asked_to_stop([process])
         raise
     return subprocess.CompletedProcess(argv, process.returncode, out, err)
 
 
-def stop(process: subprocess.Popen[bytes]) -> None:
-    """A started program and every process it started, stopped. One that ended and was waited for is not: its number
+def stop(*processes: subprocess.Popen[bytes]) -> None:
+    """Started programs and every process each started, stopped. One that ended and was waited for is not: its number
     may already be another process's."""
-    if process.poll() is None:
-        _asked_to_stop(process)
+    _asked_to_stop([process for process in processes if process.poll() is None])
 
 
-def _asked_to_stop(process: subprocess.Popen[bytes]) -> None:
-    """A command asked to stop, as a terminal asks, and given `DRAIN_S` to stop what it started; then stopped whole,
-    with what is left of its session. Found by the audit of 25 November: stopped outright, a command left its tests
-    running, in a session of their own. A project's tests are still stopped outright (`run_kept`): a test tree that
-    hears a signal may not end. Windows ends a process with no signal it could hear."""
+def _asked_to_stop(processes: list[subprocess.Popen[bytes]]) -> None:
+    """Commands asked to stop, as a terminal asks, all at once, and given `DRAIN_S` together to stop what they
+    started; then each stopped whole, with what is left of its session. Found by the audit of 25 November: stopped
+    outright, a command left its tests running, in a session of their own. A project's tests are still stopped
+    outright (`run_kept`): a test tree that hears a signal may not end. Windows ends a process with no signal it could
+    hear."""
     if not WINDOWS:
-        with contextlib.suppress(ProcessLookupError):  # it ended on its own meanwhile
-            os.killpg(process.pid, signal.SIGTERM)  # pyrefly: ignore[missing-attribute] - not on Windows, nor run there
+        for process in processes:
+            _signalled(process, signal.SIGTERM)
         ends = time.monotonic() + DRAIN_S
-        while process.poll() is None and time.monotonic() < ends:
-            time.sleep(0.05)
-    _stopped(process, WINDOWS)
+        for process in processes:
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                process.wait(timeout=max(0.0, ends - time.monotonic()))
+    for process in processes:
+        _stopped(process, WINDOWS)
 
 
 @dataclass(frozen=True)
@@ -194,6 +198,11 @@ def _stopped(process: subprocess.Popen[bytes], windows: bool) -> None:
         with contextlib.suppress(subprocess.TimeoutExpired):  # found by the fourth audit: the stop itself was unbounded
             subprocess.run([taskkill, "/F", "/T", "/PID", str(process.pid)], capture_output=True, timeout=DRAIN_S)
     else:
-        with contextlib.suppress(ProcessLookupError):  # it ended on its own meanwhile
-            os.killpg(process.pid, signal.SIGKILL)  # pyrefly: ignore[missing-attribute] - not on Windows, nor run there
+        _signalled(process, signal.SIGKILL)  # pyrefly: ignore[missing-attribute] - not on Windows, nor run there
     process.kill()
+
+
+def _signalled(process: subprocess.Popen[bytes], number: int) -> None:
+    """`number` sent to the session a process leads, outside Windows."""
+    with contextlib.suppress(ProcessLookupError):  # it ended on its own meanwhile
+        os.killpg(process.pid, number)  # pyrefly: ignore[missing-attribute] - not on Windows, nor run there
