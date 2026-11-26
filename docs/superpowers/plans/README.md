@@ -46,14 +46,15 @@ How it is applied in every phase below:
 | 17 | Freshness and proof notes | `2026-11-25-adk-spec-freshness-and-proof-notes.md` | From an outside discovery report, each option checked by four verifiers: the profile's quotes checked against the code (`status`, `propose`); a drafted `[P]` held to its rule. A `verify` note on proofs the work removed was built and taken out after three reviews. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
 | 18 | Context kept and said | `2026-11-25-context-kept-and-said-design.md` | From the owner's question whether context is lost between the layers: the person's answers kept in `context.md`; the reading's cuts said (statements and unknowns past their budgets, the searches and listings made); unknowns and what was left out above the statements; a folded tree naming the top files; a cut test output marked. The exact scrubbed-quote check (a quote is looked for as it was shown) replaced phase 17's guess by shape. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
 | 19 | Secrets and links | `2026-11-26-adk-spec-secrets-and-links.md` | From the audit of 25 November, its P0, each checked again in the code: credential lines with a comment, a compose list mark, `set` or a command's option scrubbed, with `-e`, `--env` and `--build-arg`, bare or in quotes; a key held in a string withheld; a link under `.spec/` refused when the workspace is opened, Emacs' lock passed over. Left out: `.netrc` lines, Docker's `auth`, a connection string's password with no digit, a Dockerfile's legacy `ENV NAME value`; the walk costs 172 ms over 2,000 archived changes. No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
+| 20 | Stopping and the verify tool | `2026-11-26-adk-spec-stopping-and-tool-verify.md` | From the audit of 25 November, its H1 and S4: SIGTERM and SIGHUP heard as Ctrl-C, and a command asked with SIGTERM before it is stopped whole, so a cancelled tool call, a closed terminal or a `kill` stops the tests it started; the MCP `verify` tool runs only a test command committed as it stands, and takes no `bases`. Windows unchanged (the job object waits). No model call, command, flag or `change.json` field. | Built test first; merged after its cleanup and code review |
 
 ## The plan being followed now
 
 Phase 19, secrets and links (`2026-11-26-secrets-and-links-design.md`): the audit of 25 November's P0
 (`docs/reports/2026-11-25-codebase-audit.md`), built test first on the branch `secrets-links`, then cleaned up and
-code-reviewed. Next, as the owner chose: phase 20, the audit's H1 (a command's tests left running when it is stopped)
-and S4 (the MCP `verify` tool). Phase 18's second step, which changes what models are told, waits for a live
-measurement on the owner's go-ahead.
+code-reviewed; then phase 20, stopping and the verify tool (`2026-11-26-stopping-and-tool-verify-design.md`), the
+audit's H1 and S4, on the branch `stopping`. The audit's P1 UX and Skill items are next to choose. Phase 18's second
+step, which changes what models are told, waits for a live measurement on the owner's go-ahead.
 
 Phase 17 is done: the profile checked against the code and `[P]` held to its rule; its `verify` note on the proofs a
 work removed was taken out after three reviews.

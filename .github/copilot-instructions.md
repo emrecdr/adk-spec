@@ -64,7 +64,8 @@ without ADK; nothing builds at import except `adk_spec/agent.py`, the shape `adk
   mismatch, token ledger, scrub), the two provider arms (`models.py`, `settings.py`).
 - **interfaces**: `cli.py` (argparse, the commands and their printing), `login.py` (Copilot device flow),
   `mcp_server.py` (`adk-spec-mcp`: six commands as MCP tools, each running `python -P -m adk_spec` in its own process;
-  no tool approves, archives, overrides or names another repository, which stay the person's).
+  no tool approves, archives, overrides or names another repository, which stay the person's; the `verify` tool runs
+  only a committed test command, from the approval's base, as `SPEC_TOOL_CALL` tells the command).
 
 Rules that span files and are easy to break:
 
