@@ -393,6 +393,8 @@ def _init(args: argparse.Namespace) -> int:
             kept, code = _described(workspace)
             _drafted(workspace, kept)
     later = f"; `{PROG} init --refresh` reads the code" if args.no_explore else ""
+    if not workspace.config().test:  # the audit of 25 November (U8): `verify` said so only once the work was done
+        print(f"tests     none named: set [verify] test in {ROOT_NAME}/{CONFIG}")
     print(f'next      keep what is true in constitution.md, then run `{PROG} propose "<what you want>"`{later}')
     return code if args.refresh else EXIT_OK
 
