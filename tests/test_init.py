@@ -212,11 +212,54 @@ def test_init_writes_a_skill_an_assistant_reads_in_the_form_the_standard_asks(tm
         assert said in body, said
 
 
-def test_init_never_writes_over_a_skill_that_is_there(tmp_path, capsys) -> None:
-    repository(tmp_path, FILES)
-    write_text(tmp_path / SKILL, "---\nname: adk-spec\ndescription: mine\n---\n\nMine.\n")
+def test_a_refresh_keeps_a_skill_a_person_edited_and_says_so(tmp_path, capsys) -> None:
+    """The skill is the person's once they edit it: a refresh keeps it, in one line (the audit of 25 November, C3)."""
     assert run(tmp_path, "init", "--no-explore") == 0
-    assert read_text(tmp_path / SKILL).endswith("Mine.\n") and "SKILL.md" not in capsys.readouterr().out
+    write_text(tmp_path / SKILL, read_text(tmp_path / SKILL) + "Mine.\n")
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert read_text(tmp_path / SKILL).endswith("Mine.\n")
+    assert f"kept      {SKILL}: not the text adk-spec wrote" in capsys.readouterr().out
+
+
+def test_a_refresh_replaces_a_skill_adk_spec_wrote_with_its_text_now(tmp_path, capsys, monkeypatch) -> None:
+    """The audit of 25 November (C3): written once, an install never had a better skill. A text adk-spec shipped is
+    known by its hash, and replaced; nothing is written into the file to know it by."""
+    from adk_spec.domain.text import sha256_of
+    from adk_spec.workspace import skill
+
+    older = "---\nname: adk-spec\ndescription: an older text\n---\n"
+    monkeypatch.setattr(skill, "SHIPPED", skill.SHIPPED | {sha256_of(older)})
+    assert run(tmp_path, "init", "--no-explore") == 0
+    write_text(tmp_path / SKILL, older)
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert read_text(tmp_path / SKILL) == skill.SKILL_TEXT and f"replaced  {SKILL}" in capsys.readouterr().out
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert SKILL not in capsys.readouterr().out, "the text it has now is said no more"
+
+
+def test_every_skill_text_adk_spec_wrote_is_known_by_its_fingerprint() -> None:
+    """Change the skill's text and add its fingerprint: every one shipped stays, so a refresh knows each as its own."""
+    from adk_spec.domain.text import sha256_of
+    from adk_spec.workspace.skill import SHIPPED, SKILL_TEXT
+
+    now = sha256_of(SKILL_TEXT)
+    assert now in SHIPPED, f"add {now} to SHIPPED, and keep every other"
+    shipped = {  # 18f9839, 83bd317, a22a99c: whole, as a truncated or wrong one would keep every such skill as edited
+        "sha256:47e9424dde775d1682a9dbb08b956f3f933c792782f0caada80e61998adde8c9",
+        "sha256:ed51f2d572f68659c5618cc99be09ad981ef2c0863dca489a948e22ec9d278f0",
+        "sha256:b581cfcb44924462d53add2a3e76ada3efaa4db63aae9dcbf8bba4a6d7ffc33d",
+    }
+    assert shipped <= SHIPPED
+
+
+def test_the_skill_says_what_to_run_for_what_the_person_asks() -> None:
+    """The audit of 25 November (C1): the skill listed the commands, not which to run for a plain request."""
+    from adk_spec.workspace.skill import SKILL_TEXT
+
+    for asked in ('"what is next?"', "a feature, a fix", '"is it done?"', '"implement <id>"'):
+        assert asked in SKILL_TEXT, asked
 
 
 @pytest.mark.parametrize("held", [".claude", ".Claude/"], ids=["a-file", "a-case-twin"])
@@ -231,6 +274,24 @@ def test_a_skill_that_cannot_be_written_is_a_line_and_init_ends_well(tmp_path, c
     assert run(tmp_path, "init", "--no-explore") == 0
     said = capsys.readouterr().out
     assert f"skipped   {SKILL}: " in said and "next" in said and (tmp_path / ".spec").is_dir()
+
+
+def test_a_skill_that_is_no_text_is_a_line_and_a_refresh_ends_well(tmp_path, capsys) -> None:
+    """Read to be known, a skill saved as UTF-16 is a short line, never a failed refresh."""
+    assert run(tmp_path, "init", "--no-explore") == 0
+    (tmp_path / SKILL).write_bytes("Mine".encode("utf-16"))
+    capsys.readouterr()
+    assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
+    assert f"skipped   {SKILL}: not UTF-8; save it as UTF-8\n" in capsys.readouterr().out
+
+
+def test_a_first_init_keeps_a_skill_the_repository_has_and_says_so_plainly(tmp_path, capsys) -> None:
+    """Found by the code review of phase 23: a skill of the repository's own was said to be edited."""
+    repository(tmp_path, FILES)
+    write_text(tmp_path / SKILL, "---\nname: adk-spec\ndescription: mine\n---\n\nMine.\n")
+    assert run(tmp_path, "init", "--no-explore") == 0
+    assert read_text(tmp_path / SKILL).endswith("Mine.\n")
+    assert f"kept      {SKILL}: not the text adk-spec wrote" in capsys.readouterr().out
 
 
 def test_the_skill_is_no_part_of_the_code_a_reading_or_verify_sees(tmp_path) -> None:

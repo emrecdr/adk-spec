@@ -249,6 +249,10 @@ def test_the_skill_init_writes_keeps_the_rules_the_server_gives() -> None:
     for said in ("take minutes", "status", "strict"):
         assert said in INSTRUCTIONS and said in SKILL_TEXT, said
     assert "background" in SKILL_TEXT and "Then call verify" not in INSTRUCTIONS
+    # The audit of 25 November (U12): the report verify leaves for the pull request; remaining.md is named by the
+    # step `status` and `verify` print.
+    summary = ".spec/changes/<id>/reports/summary.md"  # where it is (the code review of phase 23)
+    assert summary in INSTRUCTIONS and summary in SKILL_TEXT
 
 
 def test_validate_the_server_runs_is_not_told_it_runs_in_github_actions(monkeypatch) -> None:

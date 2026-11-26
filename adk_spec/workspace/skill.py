@@ -2,15 +2,18 @@
 
 The owner's choice, 23 November 2026, after the third audit: a skill, in the open Agent Skills form (agentskills.io),
 is read by GitHub Copilot and by Claude Code from `.claude/skills/`, so an assistant knows how to use adk-spec with
-nothing set up, where the MCP server needs an editor's configuration. It is written once and is the person's after
-that: never written over, and committed with the repository as `.spec/` is.
+nothing set up, where the MCP server needs an editor's configuration. It is committed with the repository as `.spec/`
+is. A refresh gives it the text adk-spec has now where it holds one adk-spec wrote, known by its hash; one a person
+edited is theirs, and kept (the audit of 25 November, C3: written once, an install never had a better text).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
-from .files import write_text
+from ..domain.text import sha256_of
+from .files import read_text, write_text
 from .paths import inside
 
 #: Where the skill stands, from the repository's root: the folder's name is the skill's, as the standard asks.
@@ -34,13 +37,14 @@ finished work is judged against them. adk-spec never edits code: you implement.
 Run them in the repository. Where the shell does not find `adk-spec`, ask the person how it is installed: often
 `uv run --project <path to adk-spec> adk-spec`.
 
-- `adk-spec status`: each open change and its next step. Run it first.
-- `adk-spec propose --no-input "<request>"`: drafts a change. It asks no question and prints each point left open
-  with a suggested answer: put them to the person, then revise the change with their answers,
+- `adk-spec status`: each open change and its next step. Run it first, and for "what is next?" or "where are we?".
+- `adk-spec propose --no-input "<request>"`: drafts a change, for a feature, a fix or a change of behaviour. It asks no
+  question and prints each point left open with a suggested answer: put them to the person, then revise the change
+  with their answers,
   `adk-spec propose --no-input --id <id> "<the answers>"`.
 - `adk-spec plan <id>`: drafts the tasks again, after the brief or the specs changed.
 - `adk-spec check <id>`: checks the change's files against each other.
-- `adk-spec verify <id>`: runs the project's tests and judges the work against each requirement.
+- `adk-spec verify <id>`: runs the project's tests and judges the work against each requirement, for "is it done?".
 - `adk-spec validate`: checks the structure of the specs.
 
 `propose`, `plan`, `check` and `verify` call a model, cost tokens and take minutes, `propose` the most: run each with
@@ -53,7 +57,7 @@ another repository with `--with`. Approving, archiving and setting a finding asi
 and another repository's code would be sent to a model: when a change needs one of them, tell the person the command
 to run. A strict change's plan waits for the person to read its brief and specs: run `plan` for it once they say so.
 
-## Implementing an approved change
+## Implementing an approved change, for "implement <id>"
 
 1. Read `brief.md`, the specs under `specs/`, `context.md` and `design.md`, where there is one, in
    `.spec/changes/<id>/`.
@@ -61,15 +65,34 @@ to run. A strict change's plan waits for the person to read its brief and specs:
 3. Tick each task's box, `- [ ]` to `- [x]`, once it is done. Ticking keeps the approval; any other edit of the
    change's files voids it, so change no other file in `.spec/`.
 4. Run `adk-spec status` and do the step it names: `adk-spec verify <id>` where the change owes a verification, and
-   work on what it finds `unmet` or `unclear`.
+   work on what it finds `unmet` or `unclear`. Put `.spec/changes/<id>/reports/summary.md`, which `verify` writes, in
+   the pull request.
 """
 
 
-def write_skill(root: Path) -> Path | None:
-    """The skill written into the repository at `root`, where it has none: the path written, or nothing where one is
-    there already, which is the person's."""
+#: The fingerprint of each skill text adk-spec has written: a skill holding one is adk-spec's, and a refresh gives it
+#: the text adk-spec has now. A test holds the list to the text: change it, and add its fingerprint here.
+SHIPPED = frozenset(
+    {
+        "sha256:47e9424dde775d1682a9dbb08b956f3f933c792782f0caada80e61998adde8c9",  # 18f9839
+        "sha256:ed51f2d572f68659c5618cc99be09ad981ef2c0863dca489a948e22ec9d278f0",  # 83bd317
+        "sha256:b581cfcb44924462d53add2a3e76ada3efaa4db63aae9dcbf8bba4a6d7ffc33d",  # a22a99c
+        "sha256:570612a819a5952f5e8c5922a18e059d44007a612e8cd7cfa0bae6b60602650f",  # phase 23
+    }
+)
+
+
+def write_skill(root: Path) -> Literal["wrote", "replaced", "kept"] | None:
+    """The skill written into the repository at `root`: `wrote` where it had none, `replaced` where it held a text
+    adk-spec wrote before, `kept` where a person edited it, which is theirs; nothing where it holds the text now."""
     path = inside(root, *SKILL_PARTS)
-    if path.exists():
+    if not path.exists():
+        write_text(path, SKILL_TEXT)
+        return "wrote"
+    held = sha256_of(read_text(path))
+    if held == sha256_of(SKILL_TEXT):
         return None
+    if held not in SHIPPED:
+        return "kept"
     write_text(path, SKILL_TEXT)
-    return path
+    return "replaced"
