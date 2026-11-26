@@ -181,14 +181,13 @@ What happens inside `propose`:
 1. **Triage:** Picks `standard` (`--tier standard` skips triage `[Built]`).
 2. **Brief & Interactive Clarification `[Built]`:** If the request has open questions (up to 3 per round, max 3 rounds), `adk-spec` asks interactively:
    ```text
-   The brief leaves 2 points open. A line answers. `=` takes the suggestion.
-   An empty line leaves the point open.
+   2 points are open. Type an answer and press Enter; = takes the suggestion, and yes one that says yes; an empty line leaves it open in brief.md.
    1. Should enterprise SSO accounts be allowed to register passkeys?
       suggested: Allow passkeys as an optional second method unless SSO-enforced.
-   > =
+   answer> =
    2. How long should WebAuthn challenge nonces remain valid?
       suggested: Expire challenge nonces after 5 minutes.
-   > 3 minutes, single-use
+   answer> 3 minutes, single-use
    ```
 3. **Delta Specs `[Built]`:** Creates/updates capability specs with stable IDs (e.g., `REQ-AUTH-004: Passkey Sign-In`) and `GIVEN`/`WHEN`/`THEN` scenarios.
 4. **Brownfield Exploration & Review `[Built: P6–P7]`:** Reads tracked source files (`git grep` searches first, then folders, then files), rejects unquoted statements, attaches enclosing block signatures (`in: def start_session(...)`), and lets the `review` LLM flag any remaining unknowns in `.spec/changes/<id>/context.md`. *(Every reading starts from `.spec/profile.md` `[Built: P8]`.)*

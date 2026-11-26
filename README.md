@@ -177,7 +177,7 @@ Then check it:
 
 ```shell
 adk-spec smoke --check      # says whether the arm is ready; sends nothing
-adk-spec smoke              # one small model call, to prove the arm answers
+adk-spec smoke              # one small model call, to prove the provider answers
 ```
 
 Two more settings, both optional: `SPEC_FALLBACK_MODEL` names a second model tried when the first answers 429, 5xx
@@ -198,6 +198,7 @@ wrote     .claude/skills/adk-spec/SKILL.md
 reading   the code, to describe this repository: up to 7 model calls. --no-explore skips it
 explored  42 files: 18 statements kept
 wrote     .spec/profile.md
+tests     none named: set [verify] test in .spec/config.toml
 next      keep what is true in constitution.md, then run `adk-spec propose "<what you want>"`
 ```
 
@@ -241,20 +242,23 @@ each with a suggested answer:
 ```text
 sized     standard: a new way to sign in, within one capability
 explored  6 files: 9 statements kept
-The brief leaves 1 point open. A line answers. `=` takes the suggestion, and `yes` one that says yes.
-An empty line leaves the point open.
+1 point is open. Type an answer and press Enter; = takes the suggestion, and yes one that says yes; an empty line leaves it open in brief.md.
 1. Which browsers are in scope?
    suggested: Evergreen browsers only
-=
+answer> =
 wrote     .spec/changes/sign-in-with-a-passkey, a standard draft
           .spec/changes/sign-in-with-a-passkey/brief.md
           .spec/changes/sign-in-with-a-passkey/specs/auth/spec.md
           .spec/changes/sign-in-with-a-passkey/context.md
           .spec/changes/sign-in-with-a-passkey/tasks.md
-tokens    triage 1,204 in 1 call, scout 2,310 in 1 call, survey 9,871 in 2 calls, …: 23,149 total
+tokens    23,149 in 9 calls
 read      brief.md (25 lines, 1 assumption) first
+review    .spec/changes/sign-in-with-a-passkey/reports/review.md: 1 added
 next      run `adk-spec approve sign-in-with-a-passkey`
 ```
+
+While a model works, a terminal is told what it does and how long the command has run, `working   reading the code
+0:47`; a pipe or a script is not.
 
 Answering a question: type your answer, `=` (or `yes` where the suggestion is a yes) to take the suggestion, or an
 empty line to leave the point open. A point left open stays in `brief.md` as `[NEEDS CLARIFICATION: …]`, and the
@@ -329,7 +333,7 @@ adk-spec approve sign-in-with-a-passkey
 
 ```text
 checked   .spec/changes/sign-in-with-a-passkey/reports/check.md: 1 finding, 0 blocking
-tokens    check 1,393 in 1 call: 1,393 total
+tokens    1,393 in 1 call
 approved `sign-in-with-a-passkey` by ana: 3 files recorded
 next      implement tasks.md, then run `adk-spec verify sign-in-with-a-passkey`
 ```
@@ -365,9 +369,11 @@ adk-spec verify sign-in-with-a-passkey
 ```text
 testing   uv run pytest -q
 tests     passed in 4.2 s
-met       REQ-AUTH-004  The new passkey handler starts a session for a registered passkey.
+met       REQ-AUTH-004  Sign in with a passkey
+verified  yes: 1 of 1 met, tests passed
 wrote     .spec/changes/sign-in-with-a-passkey/reports/verify.md
-tokens    verify 3,866 in 1 call: 3,866 total
+          .spec/changes/sign-in-with-a-passkey/reports/summary.md
+tokens    3,866 in 1 call
 next      run `adk-spec archive sign-in-with-a-passkey`
 ```
 
@@ -436,7 +442,7 @@ adk-spec propose "Fix the typo in the login docstring"
 
 ```text
 no spec is owed: A typo in a comment changes no behaviour.
-tokens    triage 1,180 in 1 call: 1,180 total
+tokens    1,180 in 1 call
 ```
 
 Nothing is written. Make the edit as usual.
@@ -452,8 +458,8 @@ wrote     .spec/changes/argon2, a strict draft
           .spec/changes/argon2/brief.md
           .spec/changes/argon2/specs/auth/spec.md
           .spec/changes/argon2/context.md
-plan      waits: a strict change is read first. Read brief.md and the specs, then `adk-spec plan argon2 --no-explore`
-next      run `adk-spec plan argon2`
+plan      waits: the change is read before it is planned
+next      read brief.md and the specs, then run `adk-spec plan argon2 --no-explore`
 ```
 
 A strict change stops after the brief and the specs, so that the design and the tasks are drafted from what you
