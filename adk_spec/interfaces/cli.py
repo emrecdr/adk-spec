@@ -806,7 +806,8 @@ def _said_check(made: _Checked, state: ChangeState) -> None:
     print(f"checked   {made.report}: {count} finding{'' if count == 1 else 's'}, {len(stopped)} blocking")
     if made.dropped:  # found by the fourth audit: said by `check` alone, never by the check `approve` makes
         print(f"note      {left_out(made.dropped)}")
-    print(f"tokens    {_spent(made.ledger)}")
+    if made.ledger is not None:
+        print(f"tokens    {_spent(made.ledger)}")
 
 
 def _refused(change_id: str, blockers: list[Finding]) -> int:
@@ -1128,11 +1129,8 @@ def _recording(workspace: Workspace, command: str, change: str | None) -> Genera
                 write_run(workspace, held, keep=keep)
 
 
-def _spent(ledger: UsageLedger | None) -> str:
-    """What a command's stages spent, from its ledger: each stage with its calls, then the total; where no model was
-    asked, there is no ledger, and that is said."""
-    if ledger is None:
-        return "none: no model was asked"
+def _spent(ledger: UsageLedger) -> str:
+    """What a command's stages spent, from its ledger: each stage with its calls, then the total."""
     stages = ", ".join(
         f"{name} {row.total:,} in {row.calls} call{'' if row.calls == 1 else 's'}" for name, row in ledger.spent.items()
     )
@@ -1174,12 +1172,12 @@ def _asked(
     workspace: Workspace,
     command: str,
     change_id: str | None,
-    build: Callable[[Any, Any], Any],
+    build: Callable[[UsageLedger, Recorder], App],
     seed: dict[str, Any],
     read: Callable[[dict[str, Any]], Any],
     *,
     ledger: UsageLedger | None = None,
-) -> tuple[Any, Any, Any, str | None]:
+) -> tuple[Run, Any, UsageLedger, str | None]:
     """One recorded run of an app that `build` makes from the command's ledger and its recorder: the run, the
     answer `read` finds in its state, the ledger, and the failure where there is no answer to use. A command that
     makes more than one pass hands its own `ledger` on, so the ceiling is the command's and not a pass's."""
@@ -1208,10 +1206,11 @@ def _learned(workspace: Workspace, state: Mapping[str, Any]) -> None:
 
 
 def _unfinished(sentence: str, ledger: UsageLedger | None) -> int:
-    """How a command ends where its model pass gave no answer to use: the sentence, what was spent, and the
-    engine's code."""
+    """How a command ends where its model pass gave no answer to use: the sentence, what was spent where a model was
+    asked, and the engine's code."""
     print(f"{PROG}: {sentence}", file=sys.stderr)
-    print(f"tokens    {_spent(ledger)}")
+    if ledger is not None:  # as `check` and `verify` say it: no tokens line where no model was asked
+        print(f"tokens    {_spent(ledger)}")
     return EXIT_ENGINE
 
 
@@ -1330,8 +1329,8 @@ class _Planned:
     """A plan as it was drafted: each file written, and whether it replaced one; the ledger of the model's pass;
     and why the pass did not end well, where it did not, in which case nothing was written."""
 
+    ledger: UsageLedger
     written: list[tuple[Path, bool]] = field(default_factory=list)
-    ledger: UsageLedger | None = None
     failure: str | None = None
     #: What the reading of the code before it came to, in the words a person is shown; empty where none was made.
     explored: str = ""
@@ -1406,7 +1405,7 @@ def _plan_made(
     there = {name for name in files if (folder / name).is_file()}
     workspace.rewrite_change(state, files)  # the plan and the state as one set, the plan recorded as drafted
     written = [(folder / name, name in there) for name in files]
-    return _Planned([*read, *written], ledger, explored=said)
+    return _Planned(ledger, [*read, *written], explored=said)
 
 
 def _persons_design(workspace: Workspace, change_id: str, state: ChangeState) -> bool:
@@ -1516,7 +1515,7 @@ def _reading(
     seed: dict[str, Any],
     ledger: UsageLedger | None,
     source: Source,
-) -> tuple[Any, str | None]:
+) -> tuple[Explored, str | None]:
     """One recorded reading of the code through `source`, seeded with `seed`: what it kept, as `explored` reads it,
     and why it ended early, where it did. What it kept is in its state, also where it failed."""
     from ..orchestration.explore import build_explore_app, explored
@@ -1687,7 +1686,7 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
 
 def _judged(
     workspace: Workspace, change: Change, specs: dict[str, Spec], texts: dict[str, str]
-) -> tuple[list[Finding], int, Any, str | None]:
+) -> tuple[list[Finding], int, UsageLedger, str | None]:
     """The model's pass of a check: its findings that point at something, each with its path in the change's
     folder; how many pointed at nothing; the ledger; and the failure, where the pass did not end well."""
     from ..orchestration.models import require_ready
@@ -1944,7 +1943,7 @@ def _committed_tests(every: list[tuple[str, Path, tuple[str, ...], int]]) -> Non
 
 def _verdicts(
     workspace: Workspace, change: Change, text: str, added: frozenset[str], gone: frozenset[str], tests: str
-) -> tuple[list[Verdict], Any, str | None]:
+) -> tuple[list[Verdict], UsageLedger, str | None]:
     """The model's verdicts on a diff, each held to the lines the diff really holds; the ledger; and the failure,
     where the run did not end well."""
     from ..orchestration.graph import build_verify_app

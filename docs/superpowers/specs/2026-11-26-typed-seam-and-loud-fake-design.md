@@ -30,3 +30,7 @@ whose text no longer matches is passed over in silence, and the test runs on the
 - **Measured first:** 3 of 1,274 tests set a rule no request matched. One set a triage rule only to show triage is
   not asked, which `asked()` shows alone: the rule goes. Two strict tests share `planned`'s check rule, a default for
   an `approve` that may not run the check: it becomes `answers_if_asked`.
+- **What typing found:** a check made with no model has no ledger. `check` and `verify` already print no tokens line
+  then; `approve`'s check and a pass that did not finish now follow them, and a plan always has its ledger. The seam's
+  central `_asked` is typed end to end: `(UsageLedger, Recorder) -> App` in, `Run` and `UsageLedger` out (the
+  cleanup reviews).
