@@ -166,6 +166,12 @@ def resolves(root: Path, ref: str, *, trust: bool = True) -> str | None:
     return _answered(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", no=(1,), trust=trust) or None
 
 
+def committed(root: Path, path: str, *, trust: bool = True) -> bool:
+    """Whether `path` stands in the commit `root` has checked out as it is: tracked, not ignored, neither staged nor
+    changed. A file untracked or ignored is not."""
+    return not git(root, "status", "--porcelain", "--ignored", "--", path, trust=trust).strip()
+
+
 def head(root: Path, *, trust: bool = True) -> str | None:
     """The commit checked out in `root`, or nothing: no repository, or no commit yet."""
     return resolves(root, "HEAD", trust=trust)

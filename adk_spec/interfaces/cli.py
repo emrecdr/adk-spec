@@ -96,11 +96,12 @@ from ..workspace.context import (
 )
 from ..workspace.evidence import evidence_findings, evidence_folded, profile_gone
 from ..workspace.files import NotTextError, append_text, read_text
-from ..workspace.git import DIFF_MAX_CHARS, GitError, head, is_repository, resolves
+from ..workspace.git import DIFF_MAX_CHARS, GitError, committed, head, is_repository, resolves
 from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
     CHANGELOG,
     CHANGES,
+    CONFIG,
     CONSTITUTION,
     EVIDENCE,
     LESSONS,
@@ -137,6 +138,8 @@ EXIT_USAGE = 2
 #: The engine or the provider failed.
 EXIT_ENGINE = 3
 EXIT_INTERRUPTED = 130
+#: Set by `adk-spec-mcp` in the environment of each command it runs: the command runs for a coding assistant's call.
+TOOL_CALL = "SPEC_TOOL_CALL"
 
 PROG = "adk-spec"
 #: The checkout's root, whose `.env` alone is read: never one of the repository being worked on.
@@ -1883,6 +1886,8 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     every = [*asked, *source.tests()]
     if not asked:  # found by the fourth audit: a `met` read as tested, with no test run here
         print(f"tests     none named{' here' if every else ''}: set [verify] test in .spec/config.toml")
+    if os.environ.get(TOOL_CALL) == "1":
+        _committed_tests(every)
     runs = []
     for name, root, argv, timeout in every:
         print(f"testing   {f'{name}: ' if name else ''}{scrub(' '.join(argv))[0]}")
@@ -1891,6 +1896,19 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
         print(f"tests     {f'{name} ' if name else ''}{done.outcome}{took}")
         runs.append(done)
     return runs
+
+
+def _committed_tests(every: list[tuple[str, Path, tuple[str, ...], int]]) -> None:
+    """`UsageError` where a test command a tool's call would run is not committed, before any runs. Found by the audit
+    of 25 November: an assistant that edited `.spec/config.toml`, which an editor may let it do with no prompt, and
+    then called the `verify` tool ran a command no person approved; committing it is a step the person takes."""
+    for name, root, _argv, _timeout in every:
+        if not committed(root, f"{ROOT_NAME}/{CONFIG}", trust=not name):
+            config = f"{f'{name}: ' if name else ''}{ROOT_NAME}/{CONFIG}"
+            raise UsageError(
+                f"{config} names a test command that is not committed, and a tool's call runs only a committed one. "
+                f"Commit it, or run `{PROG} verify` in a terminal"
+            )
 
 
 def _verdicts(

@@ -77,7 +77,7 @@ async def test_each_tool_hands_the_command_what_the_terminal_would(tmp_path, mon
         "propose": {"request": request, "id": "pk", "tier": "strict"},
         "plan": {"id": "pk", "replace": True, "no_explore": True},
         "check": {"id": "pk", "no_model": True},
-        "verify": {"id": "pk", "bases": ["api=abc"]},
+        "verify": {"id": "pk"},
         "status": {"include_archived": True},
         "validate": {"id": "pk", "strict": True},
     }
@@ -87,7 +87,7 @@ async def test_each_tool_hands_the_command_what_the_terminal_would(tmp_path, mon
     assert read["propose"]["request"] == request and read["propose"]["no_input"]
     assert (read["propose"]["id"], read["propose"]["tier"]) == ("pk", "strict")
     assert (read["plan"]["replace"], read["plan"]["no_explore"]) == (True, True)
-    assert read["check"]["no_model"] and read["verify"]["base"] == ["api=abc"] and read["verify"]["override"] is None
+    assert read["check"]["no_model"] and read["verify"]["base"] == [] and read["verify"]["override"] is None
     assert read["status"]["all"] and read["validate"]["strict"] and read["validate"]["id"] == "pk"
 
 
@@ -312,3 +312,14 @@ async def test_a_command_hung_up_on_stops_its_tests(tmp_path, heard: str) -> Non
         assert await _ended(pid), "the tests still run after their command was stopped"
     finally:
         running.kill()
+
+
+@pytest.mark.asyncio
+async def test_the_verify_tool_diffs_from_the_approvals_base_and_says_it_runs_for_a_tool(tmp_path) -> None:
+    """Found by the audit of 25 November: the tool's `bases` let the work being judged choose where its diff starts;
+    and the command is told it runs for a tool, so that it runs only a committed test command."""
+    from adk_spec.interfaces.mcp_server import child_environment
+
+    tools = {tool.name: tool for tool in await build_server(tmp_path).list_tools()}
+    assert "bases" not in tools["verify"].input_schema["properties"]
+    assert child_environment(["verify", "--", "pk"])["SPEC_TOOL_CALL"] == "1"

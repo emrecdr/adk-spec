@@ -825,3 +825,30 @@ def test_the_work_is_judged_as_it_stands_after_the_tests(tmp_path, fake_provider
     assert run(tmp_path, "verify", "passkeys") == 0
     assert "# touched by the tests" in str(fake_provider.requests[-1].config.system_instruction)
     assert run(tmp_path, "archive", "passkeys") == 0
+
+
+def test_a_tool_calls_verify_refuses_a_test_command_not_committed(tmp_path, capsys, monkeypatch, fake_provider) -> None:
+    """Found by the audit of 25 November: an assistant that edited `.spec/config.toml`, which an editor may let it do
+    with no prompt, and then called the `verify` tool ran a command no person approved."""
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    ran = tmp_path.parent / f"{tmp_path.name}-ran"
+    with_tests(tmp_path, f"open({str(ran)!r}, 'w').write('ran')")
+    monkeypatch.setenv("SPEC_TOOL_CALL", "1")
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys") == 2
+    said = capsys.readouterr().err
+    assert ".spec/config.toml" in said and "not committed" in said
+    assert not ran.exists() and not fake_provider.requests
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_a_tool_calls_verify_runs_a_committed_test_command(tmp_path, monkeypatch) -> None:
+    approved_in_a_repository(tmp_path, tier="lean")
+    ran = tmp_path.parent / f"{tmp_path.name}-ran"
+    with_tests(tmp_path, f"open({str(ran)!r}, 'w').write('ran')")
+    repository_commit(tmp_path, "the test command")
+    implemented(tmp_path)
+    monkeypatch.setenv("SPEC_TOOL_CALL", "1")
+    assert run(tmp_path, "verify", "passkeys") == 0
+    assert ran.exists()

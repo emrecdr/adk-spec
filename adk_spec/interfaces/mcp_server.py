@@ -34,6 +34,7 @@ from pydantic import Field
 
 from ..domain.model import Tier
 from ..workspace.process import Started, TimedOut, started, stop, waited
+from .cli import TOOL_CALL
 
 #: A tool's parameter that names a change.
 _Change = Annotated[str, Field(description="The change")]
@@ -86,7 +87,8 @@ def child_environment(argv: Sequence[str]) -> dict[str, str]:
     Found by the code review: inside Copilot's cloud agent, which runs on GitHub Actions, `validate` annotated its tool
     result and wrote the job's summary at each call; another command, `verify`'s run of the tests, keeps them."""
     ci = ("GITHUB_ACTIONS", "GITHUB_STEP_SUMMARY") if argv and argv[0] == "validate" else ()
-    return {**{name: value for name, value in os.environ.items() if name not in ci}, "PYTHONUNBUFFERED": "1"}
+    held = {name: value for name, value in os.environ.items() if name not in ci}
+    return {**held, "PYTHONUNBUFFERED": "1", TOOL_CALL: "1"}  # the audit of 25 November: `verify` runs a committed test
 
 
 async def ran(root: Path, argv: list[str]) -> str:
@@ -186,14 +188,10 @@ def build_server(root: Path) -> MCPServer:
         description="Run the project's tests and judge the work against each requirement of a change.",
         annotations=WRITES,
     )
-    async def verify(
-        id: _Change,
-        bases: Annotated[
-            list[str] | None,
-            Field(description="Commits the work started from, as REF or NAME=REF; left out: the approval's"),
-        ] = None,
-    ) -> str:
-        return await ran(root, ["verify", *(f"--base={base}" for base in bases or ()), "--", id])
+    async def verify(id: _Change) -> str:
+        """From the approval's base, always: found by the audit of 25 November, the tool's `bases` let the work being
+        judged choose where its diff starts. A person passes `--base` in a terminal."""
+        return await ran(root, ["verify", "--", id])
 
     @server.tool(description="List each open change and what comes next with it.", annotations=READS)
     async def status(
