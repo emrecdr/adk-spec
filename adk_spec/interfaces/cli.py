@@ -1064,6 +1064,8 @@ def _loaded(path: Path) -> set[str]:
 def _line() -> str:
     """One line a person typed, or nothing where the input is over, closed, or holds bytes that are no text."""
     try:
+        if sys.stdin.isatty():  # where a person types: a pipe, a script and a test read what they read before (U6)
+            print("answer> ", end="", flush=True)
         return sys.stdin.readline()
     except OSError, ValueError:  # a closed stream; a `UnicodeDecodeError` is a `ValueError`
         return ""
@@ -1073,9 +1075,12 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     """A round of questions put to the person on the terminal, one at a time: the answer to each, in their order.
     A line is the answer; `=` takes the suggestion; an empty line leaves the point open; the end of the input, or
     no input at all, answers every question still to come with nothing."""
-    points = "1 point" if len(questions) == 1 else f"{len(questions)} points"
-    print(f"The brief leaves {points} open. A line answers. `=` takes the suggestion, and `yes` one that says yes.")
-    print("An empty line leaves the point open.")
+    points = "1 point is" if len(questions) == 1 else f"{len(questions)} points are"
+    # The audit of 25 November (U6): "A line answers" said little of what to do.
+    print(
+        f"{points} open. Type an answer and press Enter; = takes the suggestion, and yes one that says yes; an empty "
+        "line leaves it open in brief.md."
+    )
     answers: list[str] = []
     ended = sys.stdin is None  # a process started with no terminal and no pipe
     for number, question in enumerate(questions, 1):
@@ -2582,5 +2587,8 @@ def run() -> int:
         return main(sys.argv[1:])
     except KeyboardInterrupt:
         with contextlib.suppress(OSError):  # a terminal closed (SIGHUP) takes the stream the line would go to
-            print(f"{PROG}: interrupted. `{PROG} status` says where things stand", file=sys.stderr)
+            print(
+                f"{PROG}: interrupted: nothing more was written. `{PROG} status` says where things stand",
+                file=sys.stderr,
+            )
         return EXIT_INTERRUPTED

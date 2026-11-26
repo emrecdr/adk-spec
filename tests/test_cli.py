@@ -333,7 +333,7 @@ def test_ctrl_c_is_one_sentence_and_130(monkeypatch, capsys) -> None:
 
     monkeypatch.setattr(cli, "main", interrupted)
     assert cli.run() == 130
-    assert "interrupted. `adk-spec status` says where things stand" in capsys.readouterr().err
+    assert "interrupted: nothing more was written. `adk-spec status` says where things stand" in capsys.readouterr().err
 
 
 def test_the_installed_command_reads_what_a_person_types_as_utf8(monkeypatch) -> None:
@@ -486,7 +486,7 @@ def test_yes_takes_the_suggestion_and_is_an_answer_where_none_is_suggested(monke
     # Found by review: "yes" taken for "No, keep it" stored the opposite of the person's yes. An answer reaches the
     # next draft beside its question, so a plain "yes" always says what the person meant.
     assert cli._answered(asked) == ["Yes, eight hours.", "yes: every device", "Each one.", "yes", "yes", ""]
-    assert "`=` takes the suggestion, and `yes` one that says yes" in capsys.readouterr().out
+    assert "= takes the suggestion, and yes one that says yes" in capsys.readouterr().out
 
 
 def test_one_change_whose_state_does_not_read_stops_no_other(tmp_path, capsys) -> None:

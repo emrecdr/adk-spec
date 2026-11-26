@@ -62,7 +62,9 @@ def test_an_open_point_becomes_a_question_with_no_model_asked_to_word_it(
     assert markers(brief_md(tmp_path, "asked")) == []
     out = capsys.readouterr().out
     assert f"1. {ASKED}" in out and "suggested: Evergreen browsers only" in out
-    assert "The brief leaves 1 point open." in out
+    # The audit of 25 November (U6): said plainly, with no prompt where no terminal is typed at.
+    assert "1 point is open. Type an answer and press Enter; = takes the suggestion, and yes one that says yes" in out
+    assert "answer> " not in out
     assert "tokens    600 in 5 calls\n" in out
     assert len(fake_provider.requests) == 5, "triage, two briefs, the deltas and the tasks: no call words a question"
 
@@ -114,7 +116,7 @@ def test_no_input_asks_nothing_and_the_lean_tier_asks_nothing(tmp_path, capsys, 
     fake_provider.answers_when(BRIEF, BRIEF_WITH_A_MARKER)
     assert proposed(tmp_path, "--tier", "standard", "--no-input", "--id", "quiet") == 0
     assert proposed(tmp_path, "--tier", "lean", "--id", "lean-one") == 0
-    assert "A line answers" not in capsys.readouterr().out
+    assert "Type an answer and press Enter" not in capsys.readouterr().out
     assert len(fake_provider.requests) == 4, "a brief and the deltas, twice: no plan is drafted on a point left open"
     for change in ("quiet", "lean-one"):
         assert len(markers(brief_md(tmp_path, change))) == 1, "the point stands in the file, for a person to settle"
@@ -274,7 +276,7 @@ def test_a_spent_ceiling_asks_the_person_nothing(tmp_path, monkeypatch, capsys, 
     monkeypatch.setattr("sys.stdin", io.StringIO("Chrome and Firefox\n"))
     assert proposed(tmp_path, "--tier", "standard", "--id", "spent") == 3
     told = capsys.readouterr()
-    assert ASKED not in told.out and "A line answers" not in told.out
+    assert ASKED not in told.out and "Type an answer and press Enter" not in told.out
     assert "token ceiling of 100 is spent" in told.err and "open points were not put to you" in told.err
     assert "raise [limits] max_tokens in .spec/config.toml" in told.err, "found by the fourth audit: no fix was named"
     assert len(fake_provider.requests) == 1 and not (tmp_path / ".spec/changes/spent").exists()
@@ -340,3 +342,18 @@ def test_the_persons_answers_are_kept_in_context_md_and_scrubbed(tmp_path, monke
     context = read_text(tmp_path / ".spec/changes/kept/context.md")
     assert f"## The person's answers\n\n- {ASKED} -> Chrome and Firefox, key [REDACTED" in context
     assert key not in context and context.index("## The person's answers") < context.index("## What was read")
+
+
+def test_a_person_typing_at_a_terminal_is_shown_where_to_answer(tmp_path, monkeypatch, capsys, fake_provider) -> None:
+    """The audit of 25 November (U6): the question round showed no mark of where to type."""
+
+    class Typed(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    seeded(tmp_path)
+    fake_provider.answers_when(TRIAGE, STANDARD)
+    fake_provider.answers_each_time(BRIEF, iter([BRIEF_WITH_A_MARKER, CANNED_BRIEF]))
+    monkeypatch.setattr("sys.stdin", Typed("Chrome and Firefox\n"))
+    assert proposed(tmp_path, "--id", "typed") == 0
+    assert "answer> " in capsys.readouterr().out
