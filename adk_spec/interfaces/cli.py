@@ -1372,6 +1372,7 @@ def _plan_made(
     ledger: UsageLedger | None = None,
     explore: bool = True,
     repositories: Mapping[str, str] | None = None,
+    sources_said: bool = False,
     lessons: str | None = None,
 ) -> _Planned:
     """A draft change's tasks drafted, and first its design where the brief owes one, from what a reading of the
@@ -1398,7 +1399,8 @@ def _plan_made(
 
     held = state.repositories if repositories is None else repositories
     source = _source(workspace, held)
-    _said_sources(source, held)
+    if not sources_said:
+        _said_sources(source, held)
     seed = {
         RULES: constitution_text(workspace),
         BRIEF_TEXT: render_brief(brief),
@@ -1488,6 +1490,8 @@ def _code_read(
     seed: dict[str, Any],
     ledger: UsageLedger,
     repositories: Mapping[str, str],
+    *,
+    say_sources: bool = False,
 ) -> _Read | None:
     """One reading of the repository's code, of its installed libraries and of the repositories a change names,
     seeded with `seed` and the files a stage may name: what it came to. Nothing where there is no repository or no
@@ -1500,6 +1504,8 @@ def _code_read(
     if source is None or not source.paths:  # found by the fourth audit: said by `init` alone
         print("explored  nothing: no git repository here, or no file in it")
         return None
+    if say_sources:  # before their code is sent (the audit of 25 November, U4)
+        _said_sources(source, repositories)
     # Asked after only once there is code to read: a plan outside a repository needs no reading model.
     if why := require_ready(roles=ROLES):
         raise UsageError(why)
@@ -2124,7 +2130,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
         _plan_command(workspace, change_id, change, args.no_explore) if DEMANDS[tier].read_first and drafted else None
     )
     # The plan reads the lessons again, with any this run learned; a file that is no text was said already.
-    planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None}
+    planned = {"keep": keep, "review": review, "lessons": "" if lessons is None else None, "sources_said": bool(read)}
     # With no question asked, each open point is printed with its suggestion, for an assistant to put to the person.
     # Found by the third audit: the editor's tools promised them in the output, which held their count alone.
     unasked = questions_of(BriefDraft.model_validate(state[BRIEF_KEY]), every=True) if args.no_input else []
@@ -2176,6 +2182,7 @@ def _then_planned(
     review: str | None = None,
     lessons: str | None = None,
     unasked: Sequence[Mapping[str, str]] = (),
+    sources_said: bool = False,
 ) -> int:
     """What `propose` does once its change is written: the plan, in the same command and under the same ceiling.
     An open point comes before it, since its answer shapes the tasks: none is drafted on a guess. A revised change
@@ -2204,7 +2211,15 @@ def _then_planned(
     # The change is written by now: a plan that does not end well leaves it a draft, and `plan` finishes it.
     try:
         made = _plan_made(  # the code was read before the brief, or is not to be: the plan reads none
-            workspace, change_id, specs, of_specs, replace=False, ledger=ledger, explore=False, lessons=lessons
+            workspace,
+            change_id,
+            specs,
+            of_specs,
+            replace=False,
+            ledger=ledger,
+            explore=False,
+            lessons=lessons,
+            sources_said=sources_said,  # by the reading, before the brief (the audit of 25 November, U4)
         )
     except NotYetError as exc:  # the calls so far are paid for: what stopped the plan is said as any other failure
         made = _Planned(ledger=ledger, failure=str(exc))
@@ -2332,7 +2347,7 @@ def _drafts(
     if explore:  # aimed by the request, the brief to come
         asked = f"# A change is requested\n\n## The request\n\n{seed[REQUEST].strip()}\n"
         aim = {RULES: seed[RULES], BRIEF_TEXT: asked, DELTAS_TEXT: "", PROFILE_TEXT: profile}
-        read = _code_read(workspace, None, aim, ledger, repositories)
+        read = _code_read(workspace, None, aim, ledger, repositories, say_sources=True)
         if read is not None:
             print(f"explored  {read.said}")
     context = context_of(read.text) if read is not None and read.text else ""

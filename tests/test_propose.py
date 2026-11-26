@@ -709,3 +709,15 @@ def test_the_tokens_line_names_the_ceiling_where_one_is_set(tmp_path, capsys, fa
     assert proposed(tmp_path, "--id", "held", "--no-explore") == 0
     assert "tokens    480 in 4 calls, of 80,000\n" in capsys.readouterr().out
     assert fake_provider.requests
+
+
+@pytest.mark.usefixtures("fake_provider")
+def test_the_other_repositories_are_said_before_the_reading_and_once(tmp_path, capsys) -> None:
+    """The audit of 25 November (U4): `with` and `left out` stood inside the list of files written, read as if a file
+    were left out, and named only after the repositories' code was sent."""
+    root = beside(tmp_path)
+    capsys.readouterr()
+    assert proposed(root, "--id", "spans", "--tier", "lean", "--with", "../api") == 0
+    out = capsys.readouterr().out
+    assert out.count("with      api from ../api\n") == 1, out
+    assert out.index("with      api") < out.index("explored  "), out
