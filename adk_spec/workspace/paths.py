@@ -38,8 +38,9 @@ def refuse_links(top: Path) -> None:
     Found by the audit of 25 November: a link under `.spec` had a command read a file from anywhere and send it to a
     model, or remove files from another folder; refused once, where the tree is opened, rather than at each of the
     reads and writes. `top` is asked first, so a link is never walked; then each folder's entries, as the system
-    lists them, before what is in its folders. A link to nothing leads nowhere, as Emacs leaves `.#brief.md` beside a
-    file with unsaved edits, and is passed over; so is a folder a run removed meanwhile, no lock being held yet."""
+    lists them, before what is in its folders. Emacs' lock, `.#brief.md` beside a file with unsaved edits, a link to
+    nothing, is passed over; any other link to nothing stands where a file or folder is written, and is refused. So is
+    a folder a run removed meanwhile passed over, no lock being held yet."""
     if top.is_symlink() or top.is_junction():
         _refused(top, top)
     pending = [os.fspath(top)]
@@ -50,7 +51,8 @@ def refuse_links(top: Path) -> None:
             continue
         with listed as entries:
             for entry in sorted(entries, key=lambda one: one.name):
-                if (entry.is_symlink() or entry.is_junction()) and os.path.exists(entry.path):
+                linked = entry.is_symlink() or entry.is_junction()
+                if linked and (os.path.exists(entry.path) or not entry.name.startswith(".#")):
                     _refused(top, Path(entry.path))
                 if entry.is_dir(follow_symlinks=False):
                     pending.append(entry.path)

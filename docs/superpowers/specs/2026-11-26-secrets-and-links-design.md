@@ -37,9 +37,10 @@ new command and no new flag.
   raises `PathError` at the first link or junction. Not each of the twenty reads: one missed would reopen the hole.
   `PathError`, not `WorkspaceError`, so `init`'s check for a workspace above does not take a link for none.
 - **Every link refused, not only one that leads out.** A link to a file inside the repository can name its `.env`;
-  the code reading refuses every link too, and so do the writes (`inside()`). A link to nothing is passed over (the
-  code review: Emacs keeps one beside a file with unsaved edits): it leads no read anywhere, and every write makes a
-  new file and replaces the link itself. The walk costs 172 ms over 2,000 archived changes, measured.
+  the code reading refuses every link too, and so do the writes (`inside()`). Emacs' lock, `.#name`, a link to
+  nothing beside a file with unsaved edits, is passed over (the code review); any other link to nothing is refused,
+  as it may stand where a folder is made, which would fail after a run paid (the second review). The walk costs
+  172 ms over 2,000 archived changes, measured.
 - **Three tests change what they pin.** A linked `lessons.md`, `changelog.md` or change folder no longer lets the
   command run on: it is refused before anything is recorded or spent, which is what those tests guarded (no command
   stopped half done, no paid draft lost). The linked `lessons.md` was read and sent to drafting: the hole itself.

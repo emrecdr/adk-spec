@@ -368,7 +368,7 @@ _GENERIC = (
         re.compile(
             r"(?i)((?:--(?<![\w-]--)[\w-]{0,40}?"
             + _NAMED
-            + r"(?:=|[^\S\n]+)|-(?<![\w-]-)(?:e|-env|-build-arg)[^\S\n]+[\w.-]{0,80}?"
+            + r"(?:=|[^\S\n]+)|-(?<![\w-]-)(?:e|-env|-build-arg)(?:=|[^\S\n]+)[\"']?[\w.-]{0,80}?"
             + _NAMED
             + r"=)[\"']?)(?=[^\s\"'#]{0,200}?\d)(?!-)"
             + _STAND_IN
@@ -476,12 +476,14 @@ KEY_WORDS: tuple[bytes, ...] = (b"PRIVATE KEY", b"PuTTY-User-Key-File-")
 #: A private key's header inside a line, as code holds a key in a string, with a run of its base64 holding a digit
 #: on that line or within the next four, after any indent: concatenated literals, a triple-quoted string, a YAML value
 #: holding `\n`, a PGP key's armour or an encrypted key's fields before its base64. Lines are passed over whole, each
-#: one way, so the search stays linear. Code that only names the header has no such run after it; one with a path or
-#: a digest holding a digit there is withheld too, the safe side: one file unread. Not the reference project's: found
-#: by the audit of 25 November, such a key had its header hidden and its body sent. Measured over the installed
-#: packages and this repository: two files more, each a test holding a key in a string.
+#: one way, and a run is sought only where one begins, so the search stays quick (the second code review: a line of
+#: 1,290 headers took 1.9 s, every start tried; 48 ms so). Code that only names the header has no such run after it;
+#: one with a path or a digest holding a digit there is withheld too, the safe side: one file unread. Not the
+#: reference project's: found by the audit of 25 November, such a key had its header hidden and its body sent.
+#: Measured over the installed packages and this repository: two files more, each a test holding a key in a string.
 _KEY_IN_A_STRING = re.compile(
-    _KEY_HEADER + r"(?:[^\n]*+\n){0,4}?[ \t]*+[^\n]{0,200}?(?=[A-Za-z0-9+/]{0,200}?\d)[A-Za-z0-9+/]{40,}"
+    _KEY_HEADER
+    + r"(?:[^\n]*+\n){0,4}?[ \t]*+[^\n]{0,200}?(?<![A-Za-z0-9+/])(?=[A-Za-z0-9+/]{0,200}?\d)[A-Za-z0-9+/]{40,}"
 )
 
 

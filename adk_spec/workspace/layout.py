@@ -141,7 +141,7 @@ class Workspace:
     @classmethod
     def find(cls, start: Path) -> Workspace:
         """The workspace `start` is in: the nearest folder at or above it that holds `.spec`. `PathError` where that
-        tree is a link or holds one, dangling or not, before any command reads it."""
+        tree is a link or holds one, before any command reads it: `refuse_links`, which passes over Emacs' lock."""
         for folder in (start, *start.parents):
             home = folder / ROOT_NAME
             if home.is_dir() or home.is_symlink() or home.is_junction():

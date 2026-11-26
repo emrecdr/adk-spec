@@ -310,6 +310,10 @@ def test_a_credential_line_with_a_comment_or_a_list_mark_is_hidden(line: str) ->
         f"docker run -e POSTGRES_PASSWORD={VALUE} postgres",
         f"docker run --env POSTGRES_PASSWORD={VALUE} postgres",
         f"docker build --build-arg NPM_TOKEN={VALUE} .",
+        f'docker run -e "POSTGRES_PASSWORD={VALUE}" postgres',
+        f"docker run -e 'POSTGRES_PASSWORD={VALUE}' postgres",
+        f"docker run --env=POSTGRES_PASSWORD={VALUE} postgres",
+        f'docker build --build-arg="NPM_TOKEN={VALUE}" .',
     ],
 )
 def test_a_secret_option_of_a_command_is_hidden(line: str) -> None:
@@ -381,3 +385,14 @@ def test_a_key_in_a_string_after_armour_or_a_far_indent_is_withheld(text: str) -
     """Found by the code review of phase 19: a PGP key's blank line or `Version:` after its header, a continuation
     indented forty columns, or more than forty characters after the header on its line hid the key's base64."""
     assert holds_a_key(text)
+
+
+def test_a_line_of_key_headers_is_judged_quickly() -> None:
+    """Found by the second code review of phase 19: a line of 1,290 headers before four lines of letters took 1.9 s,
+    each header's search trying every start on each line; a run starts only where one can begin."""
+    import time
+
+    text = 'k = "' + BEGINS * 1290 + "\n" + ("a" * 250 + "\n") * 4
+    started = time.perf_counter()
+    assert not holds_a_key(text)
+    assert time.perf_counter() - started < 0.5

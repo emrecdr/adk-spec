@@ -229,7 +229,7 @@ def test_init_refuses_a_spec_that_is_a_dangling_link(tmp_path) -> None:
     assert not gone.exists()
 
 
-def test_a_dangling_link_under_spec_leads_nowhere_and_is_passed_over(tmp_path) -> None:
+def test_an_emacs_lock_link_under_spec_is_passed_over(tmp_path) -> None:
     """Found by the code review of phase 19: Emacs keeps `.#brief.md` beside a file with unsaved edits, a link to no
     file, and every command was refused while it stood."""
     seeded(tmp_path)
@@ -262,3 +262,12 @@ def test_init_refuses_a_spec_that_is_a_dangling_link_before_writing_through_it(t
     with pytest.raises(WorkspaceError, match="already there"):
         Workspace.init(tmp_path)
     assert not gone.exists()
+
+
+def test_a_link_to_nothing_where_a_folder_stands_is_refused(tmp_path, capsys) -> None:
+    """Found by the second code review of phase 19: passed over, a change's `reports` linked to a removed folder
+    stopped `verify` when it wrote its report, its model calls paid."""
+    seeded(tmp_path)
+    _linked(tmp_path / ".spec/changes/passkeys/reports", tmp_path / "gone", folder=True)
+    assert run(tmp_path, "status") == 2
+    assert "`.spec/changes/passkeys/reports` is a link" in capsys.readouterr().err
