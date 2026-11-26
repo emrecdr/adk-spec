@@ -87,7 +87,6 @@ def test_a_request_that_needs_no_spec_writes_nothing(tmp_path, capsys, fake_prov
 def test_a_tier_given_by_hand_is_not_asked_of_the_model(tmp_path, capsys, fake_provider) -> None:
     """Found by the cleanup review: with a tier given, triage was still called, and nothing read its answer."""
     seeded(tmp_path)
-    fake_provider.answers_when(TRIAGE, {"tier": "none", "capabilities": [], "reason": "a typo"})
     assert proposed(tmp_path, "--tier", "standard", "--no-input", "--id", "forced") == 0
     assert state_of(tmp_path, "forced")["tier"] == "standard"
     assert asked(fake_provider, TRIAGE) == 0 and "triage" not in capsys.readouterr().out

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from importlib import metadata
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from ..domain.brief_md import assumption_count, parse_brief, render_brief
 from ..domain.changelog_md import changelog_entry, with_entry
@@ -131,6 +131,15 @@ from ..workspace.runs import write as write_run
 from ..workspace.skill import SKILL_PARTS, write_skill
 from ..workspace.source import NAME, Source, SourceError, Work, repositories_named
 from ..workspace.tests import run_tests
+
+if TYPE_CHECKING:  # the engine's types, for the checker alone: the command starts with no engine module loaded
+    from google.adk.apps.app import App
+
+    from ..orchestration.explore import Explored
+    from ..orchestration.graph import Known
+    from ..orchestration.plugins import UsageLedger
+    from ..orchestration.recorder import Recorder
+    from ..orchestration.run import Run
 
 EXIT_OK = 0
 #: A gate refused, or findings at the bar.
@@ -488,7 +497,7 @@ def _assessed(workspace: Workspace, change_id: str, living: dict[str, Spec], *, 
     return Assessed(loaded, found, stale, unchecked, drifted, files, seen)
 
 
-def _beside(workspace: Workspace, change: Any, living: dict[str, Spec]) -> dict[str, str]:
+def _beside(workspace: Workspace, change: Change, living: dict[str, Spec]) -> dict[str, str]:
     """The fingerprint of what a check reads beside a change's own files, by its path from the root: the rules of
     the repository, and the living spec of each capability the change touches. A check is of all of it: one that
     found something in the rules is stale once the rules change, as it is once a file of the change does."""
@@ -797,7 +806,8 @@ def _said_check(made: _Checked, state: ChangeState) -> None:
     print(f"checked   {made.report}: {count} finding{'' if count == 1 else 's'}, {len(stopped)} blocking")
     if made.dropped:  # found by the fourth audit: said by `check` alone, never by the check `approve` makes
         print(f"note      {left_out(made.dropped)}")
-    print(f"tokens    {_spent(made.ledger)}")
+    if made.ledger is not None:
+        print(f"tokens    {_spent(made.ledger)}")
 
 
 def _refused(change_id: str, blockers: list[Finding]) -> int:
@@ -1056,7 +1066,7 @@ def _answered(questions: list[dict[str, Any]]) -> list[str]:
     return answers
 
 
-def _ran(app: Any, seed: dict[str, Any], prompt: str) -> Any:
+def _ran(app: App, seed: dict[str, Any], prompt: str) -> Run:
     """One run of `app`, with the engine's own log quieted for its length: ADK logs a failed node with its whole
     traceback, and the command says the failure in one line."""
     import asyncio
@@ -1090,7 +1100,7 @@ class _Kept:
     """What a command says for its recording: the plugin that hears its calls, the change it is about, and how it
     ended."""
 
-    recorder: Any
+    recorder: Recorder
     change: str | None
     outcome: str = ""
 
@@ -1119,7 +1129,7 @@ def _recording(workspace: Workspace, command: str, change: str | None) -> Genera
                 write_run(workspace, held, keep=keep)
 
 
-def _spent(ledger: Any) -> str:
+def _spent(ledger: UsageLedger) -> str:
     """What a command's stages spent, from its ledger: each stage with its calls, then the total."""
     stages = ", ".join(
         f"{name} {row.total:,} in {row.calls} call{'' if row.calls == 1 else 's'}" for name, row in ledger.spent.items()
@@ -1162,12 +1172,12 @@ def _asked(
     workspace: Workspace,
     command: str,
     change_id: str | None,
-    build: Callable[[Any, Any], Any],
+    build: Callable[[UsageLedger, Recorder], App],
     seed: dict[str, Any],
     read: Callable[[dict[str, Any]], Any],
     *,
-    ledger: Any = None,
-) -> tuple[Any, Any, Any, str | None]:
+    ledger: UsageLedger | None = None,
+) -> tuple[Run, Any, UsageLedger, str | None]:
     """One recorded run of an app that `build` makes from the command's ledger and its recorder: the run, the
     answer `read` finds in its state, the ledger, and the failure where there is no answer to use. A command that
     makes more than one pass hands its own `ledger` on, so the ceiling is the command's and not a pass's."""
@@ -1195,15 +1205,16 @@ def _learned(workspace: Workspace, state: Mapping[str, Any]) -> None:
             workspace.learn(sent_back)
 
 
-def _unfinished(sentence: str, ledger: Any) -> int:
-    """How a command ends where its model pass gave no answer to use: the sentence, what was spent, and the
-    engine's code."""
+def _unfinished(sentence: str, ledger: UsageLedger | None) -> int:
+    """How a command ends where its model pass gave no answer to use: the sentence, what was spent where a model was
+    asked, and the engine's code."""
     print(f"{PROG}: {sentence}", file=sys.stderr)
-    print(f"tokens    {_spent(ledger)}")
+    if ledger is not None:  # as `check` and `verify` say it: no tokens line where no model was asked
+        print(f"tokens    {_spent(ledger)}")
     return EXIT_ENGINE
 
 
-def _deltas_text(change: Any) -> str:
+def _deltas_text(change: Change) -> str:
     """A change's deltas as a stage reads them: each as its file, in the order of their capabilities."""
     return "\n".join(render_delta(delta) for _capability, delta in sorted(change.deltas.items()))
 
@@ -1318,8 +1329,8 @@ class _Planned:
     """A plan as it was drafted: each file written, and whether it replaced one; the ledger of the model's pass;
     and why the pass did not end well, where it did not, in which case nothing was written."""
 
+    ledger: UsageLedger
     written: list[tuple[Path, bool]] = field(default_factory=list)
-    ledger: Any = None
     failure: str | None = None
     #: What the reading of the code before it came to, in the words a person is shown; empty where none was made.
     explored: str = ""
@@ -1332,7 +1343,7 @@ def _plan_made(
     of_specs: list[Finding],
     *,
     replace: bool,
-    ledger: Any = None,
+    ledger: UsageLedger | None = None,
     explore: bool = True,
     repositories: Mapping[str, str] | None = None,
     lessons: str | None = None,
@@ -1380,7 +1391,7 @@ def _plan_made(
     seed[CONTEXT_TEXT] = context_text(workspace, change_id)
     read = [(context, False)] if context else []
 
-    def build(ledger: Any, recorder: Any) -> Any:
+    def build(ledger: UsageLedger, recorder: Recorder) -> App:
         return build_plan_app(design=drafts_design, ledger=ledger, recorder=recorder, **serves)
 
     run, tasks, ledger, failure = _asked(workspace, "plan", change_id, build, seed, read_tasks, ledger=ledger)
@@ -1394,7 +1405,7 @@ def _plan_made(
     there = {name for name in files if (folder / name).is_file()}
     workspace.rewrite_change(state, files)  # the plan and the state as one set, the plan recorded as drafted
     written = [(folder / name, name in there) for name in files]
-    return _Planned([*read, *written], ledger, explored=said)
+    return _Planned(ledger, [*read, *written], explored=said)
 
 
 def _persons_design(workspace: Workspace, change_id: str, state: ChangeState) -> bool:
@@ -1404,7 +1415,7 @@ def _persons_design(workspace: Workspace, change_id: str, state: ChangeState) ->
 
 
 def _read_code(
-    workspace: Workspace, change_id: str, seed: dict[str, Any], ledger: Any, repositories: Mapping[str, str]
+    workspace: Workspace, change_id: str, seed: dict[str, Any], ledger: UsageLedger, repositories: Mapping[str, str]
 ) -> tuple[str, Path | None]:
     """The repository's code read for a change, and `context.md` written from what was kept: what to say of it, and
     the file where one was written. Nothing is read where the change has a `context.md` already, which is then a
@@ -1446,7 +1457,11 @@ _CONTEXT_TITLE = "Context"
 
 
 def _code_read(
-    workspace: Workspace, change_id: str | None, seed: dict[str, Any], ledger: Any, repositories: Mapping[str, str]
+    workspace: Workspace,
+    change_id: str | None,
+    seed: dict[str, Any],
+    ledger: UsageLedger,
+    repositories: Mapping[str, str],
 ) -> _Read | None:
     """One reading of the repository's code, of its installed libraries and of the repositories a change names,
     seeded with `seed` and the files a stage may name: what it came to. Nothing where there is no repository or no
@@ -1494,20 +1509,25 @@ def _context_written(workspace: Workspace, change_id: str, read: _Read | None, a
 
 
 def _reading(
-    workspace: Workspace, label: str, change_id: str | None, seed: dict[str, Any], ledger: Any, source: Source
-) -> tuple[Any, str | None]:
+    workspace: Workspace,
+    label: str,
+    change_id: str | None,
+    seed: dict[str, Any],
+    ledger: UsageLedger | None,
+    source: Source,
+) -> tuple[Explored, str | None]:
     """One recorded reading of the code through `source`, seeded with `seed`: what it kept, as `explored` reads it,
     and why it ended early, where it did. What it kept is in its state, also where it failed."""
     from ..orchestration.explore import build_explore_app, explored
 
-    def build(ledger: Any, recorder: Any) -> Any:
+    def build(ledger: UsageLedger, recorder: Recorder) -> App:
         return build_explore_app(source=source, ledger=ledger, recorder=recorder)
 
     run, _none, _ledger, failure = _asked(workspace, label, change_id, build, seed, lambda _state: None, ledger=ledger)
     return explored(run.state), failure
 
 
-def _explored_said(found: Any, others: int, failure: str | None) -> str:
+def _explored_said(found: Explored, others: int, failure: str | None) -> str:
     """What a reading came to, in one line: `9 files in 3 repositories: 14 statements kept, 3 left out, 2 unknown`,
     and why it ended early, where it did; or why it kept nothing."""
     if not found.statements:
@@ -1524,7 +1544,7 @@ def _explored_said(found: Any, others: int, failure: str | None) -> str:
 def _found_text(
     workspace: Workspace,
     title: str,
-    found: Any,
+    found: Explored,
     *,
     partial: str | None,
     others: Mapping[str, str | None] | None = None,
@@ -1593,7 +1613,7 @@ class _Checked:
     findings: list[Finding] = field(default_factory=list)
     report: str = ""
     dropped: int = 0
-    ledger: Any = None
+    ledger: UsageLedger | None = None
     failure: str | None = None
 
 
@@ -1665,8 +1685,8 @@ def _reviewed(args: argparse.Namespace, workspace: Workspace) -> int:
 
 
 def _judged(
-    workspace: Workspace, change: Any, specs: dict[str, Spec], texts: dict[str, str]
-) -> tuple[list[Finding], int, Any, str | None]:
+    workspace: Workspace, change: Change, specs: dict[str, Spec], texts: dict[str, str]
+) -> tuple[list[Finding], int, UsageLedger, str | None]:
     """The model's pass of a check: its findings that point at something, each with its path in the change's
     folder; how many pointed at nothing; the ledger; and the failure, where the pass did not end well."""
     from ..orchestration.models import require_ready
@@ -1687,7 +1707,7 @@ def _judged(
         CHANGE_FILES: files_text(texts),
     }
 
-    def build(ledger: Any, recorder: Any) -> Any:
+    def build(ledger: UsageLedger, recorder: Recorder) -> App:
         return build_check_app(ledger=ledger, recorder=recorder)
 
     _run, answer, ledger, failure = _asked(workspace, "check", change.state.id, build, seed, read_check)
@@ -1922,8 +1942,8 @@ def _committed_tests(every: list[tuple[str, Path, tuple[str, ...], int]]) -> Non
 
 
 def _verdicts(
-    workspace: Workspace, change: Any, text: str, added: frozenset[str], gone: frozenset[str], tests: str
-) -> tuple[list[Verdict], Any, str | None]:
+    workspace: Workspace, change: Change, text: str, added: frozenset[str], gone: frozenset[str], tests: str
+) -> tuple[list[Verdict], UsageLedger, str | None]:
     """The model's verdicts on a diff, each held to the lines the diff really holds; the ledger; and the failure,
     where the run did not end well."""
     from ..orchestration.graph import build_verify_app
@@ -1941,7 +1961,7 @@ def _verdicts(
         TESTS: tests,
     }
 
-    def build(ledger: Any, recorder: Any) -> Any:
+    def build(ledger: UsageLedger, recorder: Recorder) -> App:
         return build_verify_app(ledger=ledger, required=added | gone, recorder=recorder)
 
     _run, answer, ledger, failure = _asked(workspace, "verify", change.state.id, build, seed, read_verify)
@@ -2096,7 +2116,7 @@ def _then_planned(
     change_id: str,
     specs: dict[str, Spec],
     of_specs: list[Finding],
-    ledger: Any,
+    ledger: UsageLedger,
     *,
     keep: str | None,
     review: str | None = None,
@@ -2223,9 +2243,9 @@ def _first_reads(workspace: Workspace, change_id: str) -> str:
 def _drafts(
     args: argparse.Namespace,
     workspace: Workspace,
-    known: Any,
-    ledger: Any,
-    recorder: Any,
+    known: Known,
+    ledger: UsageLedger,
+    recorder: Recorder,
     seed: dict[str, Any],
     change: Change | None,
     repositories: Mapping[str, str],
@@ -2268,7 +2288,7 @@ def _drafts(
     return _rounds(args, workspace, known, ledger, recorder, seed, tier), read
 
 
-def _sized_first(workspace: Workspace, ledger: Any, recorder: Any, seed: dict[str, Any]) -> dict[str, Any]:
+def _sized_first(workspace: Workspace, ledger: UsageLedger, recorder: Recorder, seed: dict[str, Any]) -> dict[str, Any]:
     """The request sized alone: its tier under the state's key, or the failure that stopped it."""
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import build_triage_app
@@ -2281,9 +2301,9 @@ def _sized_first(workspace: Workspace, ledger: Any, recorder: Any, seed: dict[st
 def _rounds(
     args: argparse.Namespace,
     workspace: Workspace,
-    known: Any,
-    ledger: Any,
-    recorder: Any,
+    known: Known,
+    ledger: UsageLedger,
+    recorder: Recorder,
     seed: dict[str, Any],
     tier: Tier | None,
 ) -> dict[str, Any]:
@@ -2299,7 +2319,7 @@ def _rounds(
         app = build_propose_app(known, ask=not args.no_input, entry=entry, ledger=ledger, recorder=recorder)
         run = _ran(app, seed, "propose")
         _learned(workspace, run.state)
-        state = {**run.state, FAILURE: run.state.get(FAILURE) or run.failure}
+        state: dict[str, Any] = {**run.state, FAILURE: run.state.get(FAILURE) or run.failure}
         if state[FAILURE] or state.get(ASKING) is None:
             return state
         if why := ledger.refusal():  # asking costs no call, so nothing else would stop it: no answer could be used
@@ -2310,7 +2330,7 @@ def _rounds(
 def _written(
     args: argparse.Namespace,
     workspace: Workspace,
-    known: Any,
+    known: Known,
     state: dict[str, Any],
     tier: Tier,
     repositories: Mapping[str, str],
