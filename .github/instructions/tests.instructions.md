@@ -9,7 +9,8 @@ applyTo: "tests/**"
 - Never name a helper `test*`: pytest would collect it.
 - No test calls a real model or the network. The `fake_provider` fixture (`tests/conftest.py`) answers each stage:
   `answers_when(text, payload)` and `answers_each_time(text, payloads)` match on text in the stage's instruction,
-  usually its opening line, and `raises_when` makes a stage fail. `on_the_fake(monkeypatch)` puts a model-calling
+  usually its opening line, and `raises_when` makes a stage fail. A rule no request matched fails the test;
+  `answers_if_asked` sets a default for a stage the test may not reach. `on_the_fake(monkeypatch)` puts a model-calling
   command on the fake model. An autouse fixture, `_nothing_from_the_shell`, clears every `SPEC_*` variable and the
   providers' keys, and points the Copilot token folder at an empty one, so no test reads the developer's login.
 - The fake model exists only inside the pytest process. A test that runs adk-spec in a subprocess gets no fake model:

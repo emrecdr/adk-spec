@@ -88,7 +88,8 @@ of the evidence, changelog or report files enters an approval's fingerprints.
 - **Golden rule, the owner's:** few commands and simple one-pass flows, little detail on screen. Do not add a
   subcommand; make an existing command do more.
 - Tests: the `fake_provider` fixture (`tests/conftest.py`) answers each stage by the opening of its instruction
-  (`answers_when`, `answers_each_time`); `seeded(tmp_path)` makes a workspace with a living spec and one change. Test
+  (`answers_when`, `answers_each_time`; `answers_if_asked` for a stage a test may not reach), and fails a test whose
+  rule no request matched; `seeded(tmp_path)` makes a workspace with a living spec and one change. Test
   names are sentences of the behaviour; do not name a helper `test*`. Ruff keeps complexity at 10 and lines at 120.
 - `.github/copilot-instructions.md` gives GitHub Copilot the same guidance as this file, with folder rules in
   `.github/instructions/`, and `.github/workflows/copilot-setup-steps.yml` readies Copilot's cloud agent: change them
