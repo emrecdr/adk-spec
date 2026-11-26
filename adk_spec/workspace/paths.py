@@ -32,6 +32,25 @@ def inside(root: Path, *parts: str) -> Path:
     return path
 
 
+def refuse_links(top: Path) -> None:
+    """`PathError` naming the first link or junction at or under `top`, said from the folder that holds `top`.
+    Found by the audit of 25 November: a link under `.spec` had a command read a file from anywhere and send it to a
+    model, or remove files from another folder; refused once, where the tree is opened, rather than at each of the
+    reads and writes."""
+    for found in (top, *_under(top)):
+        if found.is_symlink() or found.is_junction():
+            shown = found.relative_to(top.parent).as_posix()
+            raise PathError(
+                f"`{shown}` is a link, which could lead out of {top.parent}. Replace it with a real file or folder"
+            )
+
+
+def _under(top: Path):
+    """Every file and folder under `top`, a folder's own before what is in its folders; a link is never followed."""
+    for folder, folders, files in os.walk(top):
+        yield from (Path(folder, name) for name in sorted([*folders, *files]))
+
+
 def _refuse_name(part: str) -> None:
     if part in ("", ".", ".."):
         raise PathError(f"`{part}` names no file or folder of its own")

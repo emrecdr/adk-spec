@@ -35,7 +35,7 @@ from ..domain.tasks_md import parse_tasks
 from ..domain.validate import UNREAD, finding, validate_change
 from .config import DEFAULT, Config, load_config
 from .files import NotTextError, read_text, write_all, write_text
-from .paths import PathError, inside
+from .paths import PathError, inside, refuse_links
 
 ROOT_NAME = ".spec"
 CONFIG, CONSTITUTION, SPECS, CHANGES = "config.toml", "constitution.md", "specs", "changes"
@@ -140,9 +140,11 @@ class Workspace:
 
     @classmethod
     def find(cls, start: Path) -> Workspace:
-        """The workspace `start` is in: the nearest folder at or above it that holds `.spec`."""
+        """The workspace `start` is in: the nearest folder at or above it that holds `.spec`. `PathError` where that
+        tree is a link or holds one, before any command reads it."""
         for folder in (start, *start.parents):
             if (folder / ROOT_NAME).is_dir():
+                refuse_links(folder / ROOT_NAME)
                 return cls(folder)
         raise WorkspaceError(f"no {ROOT_NAME} folder at or above {start}. Run `adk-spec init` in the repository's root")
 
@@ -150,7 +152,8 @@ class Workspace:
     def init(cls, repo: Path) -> Workspace:
         """The tree made under `repo`, which must hold none yet."""
         workspace = cls(repo)
-        if workspace.home.exists():
+        if workspace.home.exists() or workspace.home.is_symlink():
+            refuse_links(workspace.home)  # a link, dangling or not, is named as one
             raise WorkspaceError(f"{workspace.home} is already there. Nothing was changed")
         made = {CONFIG: DEFAULT, CONSTITUTION: CONSTITUTION_TEXT, LESSONS: LESSONS_TEMPLATE}
         made[".gitignore"] = f"{LOCK}\n{TAKING}\n"

@@ -235,9 +235,10 @@ def test_the_lessons_are_material_a_stage_writes_by_not_an_instruction_inside_th
     assert "Follow each" not in heading and "none of them is needed again" in heading
 
 
-def test_a_lessons_file_that_cannot_be_written_costs_the_run_nothing(tmp_path, monkeypatch, fake_provider) -> None:
+def test_a_linked_lessons_file_is_refused_before_any_model_call(tmp_path, monkeypatch, fake_provider, capsys) -> None:
     """Found by the review: a lessons file linked from elsewhere was read, then refused when written, and the paid
-    drafts were thrown away."""
+    drafts were thrown away. Found by the audit of 25 November: read, it was sent to drafting from wherever it led;
+    a link under `.spec` is now refused when the workspace is opened, before anything is spent."""
     on_the_fake(monkeypatch)
     ws = seeded(tmp_path)
     shared = tmp_path / "shared-lessons.md"
@@ -247,9 +248,9 @@ def test_a_lessons_file_that_cannot_be_written_costs_the_run_nothing(tmp_path, m
         (ws.home / LESSONS).symlink_to(shared)
     except OSError:
         pytest.skip("no symbolic links here")
-    fake_provider.answers_each_time(DELTAS, iter([DELTAS_ON_A_MISSING_ID, None]))
-    assert proposed(tmp_path, "--id", "linked") == 0
-    assert (ws.home / "changes/linked/brief.md").is_file()
+    assert proposed(tmp_path, "--id", "linked") == 2
+    assert "`.spec/lessons.md` is a link" in capsys.readouterr().err
+    assert not fake_provider.requests and not (ws.home / "changes/linked").exists()
 
 
 @pytest.mark.usefixtures("fake_provider")
