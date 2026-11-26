@@ -72,7 +72,7 @@ from ..domain.lifecycle import (
     verify_blockers,
 )
 from ..domain.merge import MergeError, apply_delta
-from ..domain.model import TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
+from ..domain.model import PASSED, TIERS, Brief, Change, ChangeState, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.remaining import remaining, render_remaining
 from ..domain.report_md import left_out, place, render_check, render_tests, render_verify
 from ..domain.review_md import render_review, review_said
@@ -1873,16 +1873,16 @@ def _verified(args: argparse.Namespace, workspace: Workspace) -> int:
         workspace.drop(args.id, EVIDENCE)
     # What is left, where the next step points, and what a reviewer of the pull request reads, an override's reason
     # with it: aids each, written after the record, so neither loses it.
+    names = _requirement_names(change)
     touched = frozenset(path for path, _text in parts_of_diff(work.text) if path)
     left = remaining(verdicts, change.tasks or (), touched) if after.status != "verified" else []
     aids = {
         SUMMARY: render_summary(change, after),
-        REMAINING: render_remaining(args.id, left, last=DEMANDS[state.tier].closing) if left else None,
+        REMAINING: render_remaining(args.id, left, last=DEMANDS[state.tier].closing, names=names) if left else None,
     }
     wrote += _aids_written(workspace, args.id, aids)
-    for one in verdicts:
-        print(f"{one.verdict:<8}  {one.id}  {one.reason}")
-    print(f"wrote     {', '.join(workspace.shown(path) for path in wrote)}")
+    _said_verdicts(verdicts, names, runs, verified=after.status == "verified")
+    _wrote(workspace, wrote)
     if ledger is not None:
         print(f"tokens    {_spent(ledger)}")
     _say_next(workspace, args.id, specs, drift=False)  # found by the fourth audit: the diff was made a third time
@@ -1965,6 +1965,34 @@ def _committed_tests(every: list[tuple[str, Path, tuple[str, ...], int]]) -> Non
                 f"runs only a committed test command. Ask the person to review it and commit it, or to run "
                 f"`{PROG} verify` in a terminal"
             )
+
+
+def _requirement_names(change: Change) -> dict[str, str]:
+    """Each requirement the change adds, modifies or removes, by its ID: its name."""
+    held = change.deltas.values()
+    return {one.id: one.name for delta in held for one in (*delta.added, *delta.modified, *delta.removed)}
+
+
+def _said_verdicts(verdicts: list[Verdict], names: Mapping[str, str], runs: list[TestRun], *, verified: bool) -> None:
+    """Each verdict, its requirement named, and the model's reason where it is not met, the one a person acts on;
+    then how the verification ended. The audit of 25 November (U3): requirements were named by ID alone, and the
+    outcome was the next line's to imply."""
+    for one in verdicts:
+        why = "" if one.verdict == "met" else f": {one.reason}"
+        print(f"{one.verdict:<8}  {one.id}  {names.get(one.id, '')}{why}".rstrip())
+    met = sum(one.verdict == "met" for one in verdicts)
+    if not runs:
+        tests = "no tests run"
+    else:
+        tests = "tests passed" if all(run.outcome == PASSED for run in runs) else "tests failed"
+    judged = f"{met} of {len(verdicts)} met, " if verdicts else ""
+    print(f"verified  {'yes' if verified else 'no'}: {judged}{tests}")
+
+
+def _wrote(workspace: Workspace, paths: Sequence[Path]) -> None:
+    """The files a command wrote, one a line."""
+    for at, path in enumerate(paths):
+        print(f"{'wrote' if at == 0 else '':<10}{workspace.shown(path)}")
 
 
 def _verdicts(

@@ -892,3 +892,20 @@ def test_a_tool_calls_verify_refuses_a_timeout_not_committed(tmp_path, capsys, m
     monkeypatch.setenv("SPEC_TOOL_CALL", "1")
     assert run(tmp_path, "verify", "passkeys") == 2
     assert "not the committed one" in capsys.readouterr().err and not fake_provider.requests
+
+
+def test_verify_says_its_outcome_and_names_each_requirement(tmp_path, capsys, fake_provider) -> None:
+    """The audit of 25 November (U3): `verify` named requirements by ID alone and never said how it ended; a verdict
+    not met keeps the reason a person acts on."""
+    import re
+
+    approved_in_a_repository(tmp_path, tier="lean")
+    implemented(tmp_path)
+    with_tests(tmp_path, "print('12 passed')")
+    fake_provider.answers_when(VERIFY, verdicts(**{"004": {"verdict": "unmet", "reason": "no handler reads it"}}))
+    capsys.readouterr()
+    assert run(tmp_path, "verify", "passkeys") == 1
+    out = capsys.readouterr().out
+    assert re.search(r"^unmet     REQ-AUTH-004  \S.*: no handler reads it$", out, re.MULTILINE), out
+    assert re.search(r"^met       REQ-AUTH-002  \S", out, re.MULTILINE)
+    assert "verified  no: 2 of 3 met, tests passed\n" in out
