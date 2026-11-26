@@ -141,10 +141,11 @@ class Workspace:
     @classmethod
     def find(cls, start: Path) -> Workspace:
         """The workspace `start` is in: the nearest folder at or above it that holds `.spec`. `PathError` where that
-        tree is a link or holds one, before any command reads it."""
+        tree is a link or holds one, dangling or not, before any command reads it."""
         for folder in (start, *start.parents):
-            if (folder / ROOT_NAME).is_dir():
-                refuse_links(folder / ROOT_NAME)
+            home = folder / ROOT_NAME
+            if home.is_dir() or home.is_symlink():
+                refuse_links(home)
                 return cls(folder)
         raise WorkspaceError(f"no {ROOT_NAME} folder at or above {start}. Run `adk-spec init` in the repository's root")
 
@@ -152,8 +153,7 @@ class Workspace:
     def init(cls, repo: Path) -> Workspace:
         """The tree made under `repo`, which must hold none yet."""
         workspace = cls(repo)
-        if workspace.home.exists() or workspace.home.is_symlink():
-            refuse_links(workspace.home)  # a link, dangling or not, is named as one
+        if workspace.home.exists(follow_symlinks=False):  # a dangling link too: written through, it leads elsewhere
             raise WorkspaceError(f"{workspace.home} is already there. Nothing was changed")
         made = {CONFIG: DEFAULT, CONSTITUTION: CONSTITUTION_TEXT, LESSONS: LESSONS_TEMPLATE}
         made[".gitignore"] = f"{LOCK}\n{TAKING}\n"

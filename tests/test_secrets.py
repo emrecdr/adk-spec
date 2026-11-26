@@ -319,20 +319,18 @@ def test_an_option_or_a_line_holding_no_value_is_kept(line: str) -> None:
     assert scrub(f"{line}\n") == (f"{line}\n", 0)
 
 
-#: A line of a key's base64, sixty-four characters, as a key's body holds them.
-BASE64_LINE = "MIIEowIBAAKCAQEA" + "x1yQ9vT3" * 6
-#: A key's first and last lines, built from parts so that no line of this file is one.
-HEADER, FOOTER = "-----BEGIN RSA " + "PRIVATE KEY-----", "-----END RSA " + "PRIVATE KEY-----"
+#: A key's last line, built from parts so that no line of this file is one.
+FOOTER = "-----END RSA " + "PRIVATE KEY-----"
 
 
 @pytest.mark.parametrize(
     "text",
     [
-        f'KEY = (\n    "{HEADER}\\n"\n    "{BASE64_LINE}\\n"\n    "{FOOTER}\\n"\n)\n',  # concatenated literals
-        f'KEY = """{HEADER}\n{BASE64_LINE}\n{FOOTER}"""\n',  # a triple-quoted string
-        f'deploy:\n  key: "{HEADER}\\n{BASE64_LINE}\\n{FOOTER}"\n',  # a YAML value holding `\n`
-        f"const key = '{HEADER}\\n' +\n  '{BASE64_LINE}\\n' +\n  '{FOOTER}';\n",  # JavaScript's `+`
-        f'+    "{HEADER}\\n"\n+    "{BASE64_LINE}\\n"\n',  # the lines a diff adds of the first
+        f'KEY = (\n    "{BEGINS}\\n"\n    "{KEY_BODY[0]}\\n"\n    "{FOOTER}\\n"\n)\n',  # concatenated literals
+        f'KEY = """{BEGINS}\n{KEY_BODY[0]}\n{FOOTER}"""\n',  # a triple-quoted string
+        f'deploy:\n  key: "{BEGINS}\\n{KEY_BODY[0]}\\n{FOOTER}"\n',  # a YAML value holding `\n`
+        f"const key = '{BEGINS}\\n' +\n  '{KEY_BODY[0]}\\n' +\n  '{FOOTER}';\n",  # JavaScript's `+`
+        f'+    "{BEGINS}\\n"\n+    "{KEY_BODY[0]}\\n"\n',  # the lines a diff adds of the first
     ],
 )
 def test_a_key_held_in_a_string_is_withheld(text: str) -> None:
@@ -342,5 +340,5 @@ def test_a_key_held_in_a_string_is_withheld(text: str) -> None:
 
 
 def test_code_naming_a_header_then_a_long_path_is_read() -> None:
-    code = f'HEADER = "{HEADER}"\nLOADER = "src/main/java/com/example/security/KeyLoader"\nFOOTER = "{FOOTER}"\n'
+    code = f'HEADER = "{BEGINS}"\nLOADER = "src/main/java/com/example/security/KeyLoader"\nFOOTER = "{FOOTER}"\n'
     assert not holds_a_key(code)

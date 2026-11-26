@@ -175,8 +175,9 @@ def test_a_view_that_cannot_be_written_does_not_fail_the_command(tmp_path, monke
 def test_a_change_folder_that_is_a_link_refuses_approve_before_it_records(tmp_path, capsys) -> None:
     """Found by the code review: an open change's folder that is a link stopped `approve` after it was recorded.
     Found by the audit of 25 November: a link under `.spec` is refused when the workspace is opened."""
-    ws = seeded(tmp_path)
-    elsewhere = another(ws, OTHER).rename(tmp_path / "elsewhere")
+    seeded(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
     try:
         (tmp_path / ".spec/changes/other").symlink_to(elsewhere, target_is_directory=True)
     except OSError:

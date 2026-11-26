@@ -10,6 +10,7 @@ from __future__ import annotations
 import ntpath
 import os
 from pathlib import Path
+from typing import NoReturn
 
 #: Characters no part may hold: the two separators, a NUL, and what Windows forbids in a name.
 FORBIDDEN = frozenset('/\\\x00<>:"|?*')
@@ -36,19 +37,23 @@ def refuse_links(top: Path) -> None:
     """`PathError` naming the first link or junction at or under `top`, said from the folder that holds `top`.
     Found by the audit of 25 November: a link under `.spec` had a command read a file from anywhere and send it to a
     model, or remove files from another folder; refused once, where the tree is opened, rather than at each of the
-    reads and writes."""
-    for found in (top, *_under(top)):
-        if found.is_symlink() or found.is_junction():
-            shown = found.relative_to(top.parent).as_posix()
-            raise PathError(
-                f"`{shown}` is a link, which could lead out of {top.parent}. Replace it with a real file or folder"
-            )
+    reads and writes. `top` is asked first, so a link is never walked; then each folder's entries, as the system
+    lists them, before what is in its folders."""
+    if top.is_symlink() or top.is_junction():
+        _refused(top, top)
+    pending = [os.fspath(top)]
+    while pending:
+        with os.scandir(pending.pop()) as entries:
+            for entry in sorted(entries, key=lambda one: one.name):
+                if entry.is_symlink() or entry.is_junction():
+                    _refused(top, Path(entry.path))
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(entry.path)
 
 
-def _under(top: Path):
-    """Every file and folder under `top`, a folder's own before what is in its folders; a link is never followed."""
-    for folder, folders, files in os.walk(top):
-        yield from (Path(folder, name) for name in sorted([*folders, *files]))
+def _refused(top: Path, link: Path) -> NoReturn:
+    shown = link.relative_to(top.parent).as_posix()
+    raise PathError(f"`{shown}` is a link, which could lead out of {top.parent}. Replace it with a real file or folder")
 
 
 def _refuse_name(part: str) -> None:

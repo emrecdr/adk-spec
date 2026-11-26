@@ -7,7 +7,7 @@ import os
 import stat
 
 import pytest
-from conftest import PACKAGE, held_open_from
+from conftest import PACKAGE, held_open_from, run, seeded
 
 from adk_spec.workspace.files import NotTextError, read_text, write_all, write_text
 from adk_spec.workspace.paths import PathError, inside
@@ -176,10 +176,8 @@ def _linked(link, target, *, folder: bool = False) -> None:
 def test_a_linked_file_under_spec_is_refused_before_it_is_read(tmp_path, capsys) -> None:
     """Found by the audit of 25 November: a committed `.spec/profile.md` linked to a file anywhere was read and sent to
     every model call, and scrubbed by shape only."""
-    from conftest import run, seeded
-
     seeded(tmp_path)
-    netrc = tmp_path.parent / f"{tmp_path.name}-netrc"
+    netrc = tmp_path / "netrc"
     netrc.write_text("machine host login me password elsewhere\n", encoding="utf-8")
     _linked(tmp_path / ".spec/profile.md", netrc)
     assert run(tmp_path, "status") == 2
@@ -190,10 +188,8 @@ def test_a_linked_file_under_spec_is_refused_before_it_is_read(tmp_path, capsys)
 def test_a_linked_runs_folder_is_refused_and_its_target_untouched(tmp_path, capsys) -> None:
     """Found by the audit of 25 November: recordings were written into a linked `.spec/runs`, and its target's older
     `*.json` files removed past the newest twenty."""
-    from conftest import run, seeded
-
     seeded(tmp_path)
-    theirs = tmp_path.parent / f"{tmp_path.name}-theirs"
+    theirs = tmp_path / "theirs"
     theirs.mkdir()
     for number in range(25):
         (theirs / f"{number:02}.json").write_text("{}\n", encoding="utf-8")
@@ -203,8 +199,6 @@ def test_a_linked_runs_folder_is_refused_and_its_target_untouched(tmp_path, caps
 
 
 def test_a_link_deep_in_a_change_is_refused_when_the_workspace_is_opened(tmp_path, capsys) -> None:
-    from conftest import run, seeded
-
     seeded(tmp_path)
     (tmp_path / ".spec/changes/passkeys/reports").mkdir(exist_ok=True)
     _linked(tmp_path / ".spec/changes/passkeys/reports/review.md", tmp_path / "README.md")
@@ -213,8 +207,6 @@ def test_a_link_deep_in_a_change_is_refused_when_the_workspace_is_opened(tmp_pat
 
 
 def test_a_spec_folder_that_is_a_link_is_refused(tmp_path, capsys) -> None:
-    from conftest import run, seeded
-
     real = tmp_path / "real"
     seeded(real)
     repo = tmp_path / "repo"
@@ -225,8 +217,6 @@ def test_a_spec_folder_that_is_a_link_is_refused(tmp_path, capsys) -> None:
 
 
 def test_init_refuses_a_spec_that_is_a_dangling_link(tmp_path) -> None:
-    from conftest import run
-
     gone = tmp_path / "gone"
     repo = tmp_path / "repo"
     repo.mkdir()
