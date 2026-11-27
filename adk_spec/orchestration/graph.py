@@ -144,10 +144,10 @@ def _app(edges: list[Any], ledger: UsageLedger, recorder: BasePlugin | None = No
     return App(name=NAME, root_agent=Workflow(name=NAME, edges=edges), plugins=roster(ledger, recorder))
 
 
-def build_triage_app(*, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:
+def build_triage_app(known: Known, *, ledger: UsageLedger, recorder: BasePlugin | None = None) -> App:
     """Triage alone, behind its gate: the tier under `TIER`, `none` among them. `propose` sizes a request first, so
     that one owing no spec spends no reading of the code, and the brief is drafted after the reading, from it."""
-    return _app(_opening(_ended, "triage", "START", _ended), ledger, recorder)
+    return _app(_opening(_ended, "triage", "START", _ended, known), ledger, recorder)
 
 
 def build_smoke_app() -> App:
@@ -305,12 +305,22 @@ def _ended() -> Event:
     return Event(output="ended")
 
 
-def _sized(ctx: Context) -> Event:
-    """The model's tier, and the capabilities it found, which the brief starts from. `none` ends the run with nothing
-    drafted. Found by the third audit: the chat gave the brief no capabilities, where `propose` gives them."""
-    chosen = Triage.model_validate(ctx.state[triage_stage.KEY])
-    found = {TIER: chosen.tier, SIZED: triage_stage.sized_text(chosen)}
-    return Event(route=NONE if chosen.tier == "none" else GO, state=found)
+def _sizing(known: Known) -> Callable[[Context], Event]:
+    def sized(ctx: Context) -> Event:
+        """The model's tier, and the capabilities it found, which the brief starts from. `none` ends the run with
+        nothing drafted. Found by the third audit: the chat gave the brief no capabilities, where `propose` gives
+        them. Their living specs past what the deltas stage is given stop the run here, before the reading and the
+        brief are paid for (an outside audit of 171f1c4, H7)."""
+        chosen = Triage.model_validate(ctx.state[triage_stage.KEY])
+        if chosen.tier != "none":
+            try:
+                living_text(known.living, chosen.capabilities)
+            except ContextTooLargeError as exc:
+                return Event(route=STOP, state={FAILURE: f"context: {exc}"})
+        found = {TIER: chosen.tier, SIZED: triage_stage.sized_text(chosen)}
+        return Event(route=NONE if chosen.tier == "none" else GO, state=found)
+
+    return sized
 
 
 def _open_points(ask: bool) -> Callable[[Context], Event]:
@@ -367,7 +377,7 @@ def _propose_edges(
     open_points = _open_points(ask)
     brief, brief_gate = brief_stage.build_brief(), checked(brief_stage.KEY, _check_brief, learns=True)
     return [
-        *_opening(brief, entry, start, ended),
+        *_opening(brief, entry, start, ended, known),
         (brief, brief_gate),
         (brief_gate, {OK: open_points, AGAIN: brief, GIVE_UP: ended}),
         (open_points, {NONE: gathered, SOME: _ended}),  # a run that asks ends there; a chat never asks
@@ -375,15 +385,16 @@ def _propose_edges(
     ]
 
 
-def _opening(brief: Any, entry: Entry, start: Any, ended: Any) -> list[Any]:
+def _opening(brief: Any, entry: Entry, start: Any, ended: Any, known: Known) -> list[Any]:
     """The edges up to the brief: through triage for a request to size, straight to it otherwise."""
     if entry == "brief":
         return [(start, brief)]
     triage, triage_gate = triage_stage.build_triage(), checked(triage_stage.KEY, lambda _state: [])
+    sized = _sizing(known)
     return [
         (start, triage, triage_gate),
-        (triage_gate, {OK: _sized, AGAIN: triage, GIVE_UP: ended}),
-        (_sized, {GO: brief, NONE: ended}),
+        (triage_gate, {OK: sized, AGAIN: triage, GIVE_UP: ended}),
+        (sized, {GO: brief, NONE: ended, STOP: ended}),
     ]
 
 

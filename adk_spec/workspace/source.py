@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from ..domain.secrets import KEY_WORDS, holds_a_key, scrub_lines
-from ..domain.text import lines_of, normalise, plain, sha256_of
+from ..domain.text import counted, lines_of, normalise, plain, sha256_of
 from ..domain.verify import parts_of_diff
 from .config import Config, ConfigError, load_config
 from .context import tree_text
@@ -146,10 +146,6 @@ class _Round:
 def _named(asked: str, missing: str) -> str:
     """A model's own word for what it asked, as it may be printed."""
     return plain(asked)[:LINE_MAX_CHARS] or missing
-
-
-def _counted(count: int, one: str, many: str) -> str:
-    return f"{count:,} {one if count == 1 else many}"
 
 
 def _indent(line: str) -> int:
@@ -411,7 +407,7 @@ class Source:
         blocks = [tree_text(self._here.paths)]
         for one in self._others.values():
             listed = tree_text([one.full(path) for path in one.paths])
-            blocks.append(f"=== {one.name} ({_counted(len(one.paths), 'file', 'files')})\n{listed}")
+            blocks.append(f"=== {one.name} ({counted(len(one.paths), 'file')})\n{listed}")
         if libraries := self.libraries():
             blocks.append(libraries)
         return "\n".join(blocks)
@@ -583,7 +579,7 @@ class Source:
             got.left_out.append(f"{_named(asked, '(no folder)')}/: git lists nothing under it")
             return
         listed = under[:FOLDER_MAX_PATHS]
-        note = _counted(len(under), "file", "files")
+        note = counted(len(under), "file")
         note += f", the first {len(listed)} listed" if len(listed) < len(under) else ""
         label = f"{'.' if whole else folder}/ ({note})"
         if not got.shows("\n".join([f"=== {label}", *listed])):
@@ -610,7 +606,7 @@ class Source:
                 break
         if not searched:  # a search git refused everywhere is said among what was left out, and shows nothing
             return
-        note = _counted(len(rows), "line", "lines")
+        note = counted(len(rows), "line")
         note = f"more than {SEARCH_MAX_LINES} lines, the first {SEARCH_MAX_LINES} shown" if more else note
         shown = [f"{path}:{number}:{text}" for path, number, text in rows]
         label = f"search: {term} ({note})"

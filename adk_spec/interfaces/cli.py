@@ -13,7 +13,6 @@ import getpass
 import json
 import os
 import re
-import shutil
 import signal
 import sys
 import time
@@ -139,7 +138,7 @@ from ..workspace.layout import (
 from ..workspace.lock import held as lock_held
 from ..workspace.mcp_setup import MCP_FILE, OLDER_PARTS, write_mcp
 from ..workspace.paths import PathError
-from ..workspace.process import TOOL_CALL
+from ..workspace.process import TOOL_CALL, on_path
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
 from ..workspace.skill import SKILL_PARTS, write_skill
@@ -430,47 +429,46 @@ def _skill(workspace: Workspace) -> None:
     shown = workspace.shown(workspace.root.joinpath(*SKILL_PARTS))
     try:
         done = write_skill(workspace.root)
-    except NotTextError:  # its own message names the path again, at length (the code review of phase 23)
-        print(f"skipped   {shown}: not UTF-8; save it as UTF-8")
-        return
-    except (PathError, OSError) as exc:
-        print(f"skipped   {shown}: {exc.strerror if isinstance(exc, OSError) and exc.strerror else exc}")
+    except (NotTextError, PathError, OSError) as exc:
+        _skipped(shown, exc)
         return
     if done is not None:  # a skill the repository holds already may be its own: said as not adk-spec's, not edited
         print(f"{done:<10}{shown}{': not the text adk-spec wrote' if done == 'kept' else ''}")
 
 
-#: What `init` says of the repository's `.mcp.json`, by what it did: its label, and why where it did not write.
-_MCP_SAID = {
-    "wrote": ("wrote", ""),
-    "added": ("added", ": adk-spec beside the servers it held"),
-    "kept": ("kept", ": it names adk-spec already, in words of yours"),
-    "unread": ("skipped", ": it is no JSON object of servers; add adk-spec to it by hand"),
+def _skipped(shown: str, exc: Exception) -> None:
+    """A file `init` could not write, said on one line: never a failed `init` (the code review of phase 23)."""
+    if isinstance(exc, NotTextError):  # its own message names the path again, at length
+        print(f"skipped   {shown}: not UTF-8; save it as UTF-8")
+    else:
+        print(f"skipped   {shown}: {exc.strerror if isinstance(exc, OSError) and exc.strerror else exc}")
+
+
+#: Why `init` did what it did to the repository's `.mcp.json`, said after the file, by what it did.
+_MCP_WHY = {
+    "wrote": "",
+    "added": ": adk-spec beside the servers it held",
+    "kept": ": it names adk-spec already, in words of yours",
+    "skipped": ": it is no JSON object of servers; add adk-spec to it by hand",
 }
 
 
 def _mcp(workspace: Workspace) -> None:
-    """adk-spec's MCP server added to the repository's `.mcp.json`, which VS Code's Copilot and Claude Code read; and
-    the install that puts `adk-spec-mcp` on PATH where it is not, as the entry names it alone (the owner's choice,
-    27 November 2026). One that cannot be written is a line, never a failed `init`, as the skill's is."""
+    """adk-spec's MCP server added to the repository's `.mcp.json`, and the install named where `adk-spec-mcp`,
+    which the entry runs, is not on PATH (the owner's choices, 27 November 2026)."""
     shown = workspace.shown(workspace.root / MCP_FILE)
     try:
         done = write_mcp(workspace.root)
-    except NotTextError:
-        print(f"skipped   {shown}: not UTF-8; save it as UTF-8")
-        return
-    except (PathError, OSError) as exc:
-        print(f"skipped   {shown}: {exc.strerror if isinstance(exc, OSError) and exc.strerror else exc}")
+    except (NotTextError, PathError, OSError) as exc:
+        _skipped(shown, exc)
         return
     if done == "elsewhere":
         print(f"kept      {workspace.shown(workspace.root.joinpath(*OLDER_PARTS))}: it starts adk-spec already")
         return
     if done is not None:
-        label, why = _MCP_SAID[done]
-        print(f"{label:<10}{shown}{why}")
-    if done in (None, "wrote", "added") and shutil.which("adk-spec-mcp") is None:
-        here = Path(__file__).resolve().parents[2]
-        named = f'"{here}"' if " " in str(here) else str(here)
+        print(f"{done:<10}{shown}{_MCP_WHY[done]}")
+    if done in (None, "wrote", "added") and on_path("adk-spec-mcp") is None:
+        named = f'"{CHECKOUT}"' if " " in str(CHECKOUT) else str(CHECKOUT)
         print(
             f"mcp       adk-spec-mcp is not on PATH, so no editor can start it: run uv tool install --editable {named}"
         )
@@ -672,13 +670,10 @@ def _say_next(
     # is written for the person who gives it. Found by the code review: a second approver read the view of before.
     owed = owes_approval(assessed.state, assessed.stale)
     view = _view_written(workspace, change_id, deltas, living) if owed and deltas else None
-    if view is not None and first:
-        path, overlaps = view
-        named = path.relative_to(workspace.home / CHANGES / change_id).as_posix()
-        print(f"read      {first}, then {named} ({review_said(deltas, overlaps)})")
-    elif view is not None:
-        path, overlaps = view
-        print(f"review    {workspace.shown(path)}: {review_said(deltas, overlaps)}")
+    if view is not None:
+        shown, overlaps = view
+        said = review_said(deltas, overlaps)
+        print(f"read      {first}, then {REPORTS}/{REVIEW} ({said})" if first else f"review    {shown}: {said}")
     elif first:
         print(f"read      {first} first")
     phrase = assessed.step.phrase
@@ -687,8 +682,8 @@ def _say_next(
 
 def _view_written(
     workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]
-) -> tuple[Path, dict[str, list[str]]] | None:
-    """The approver's view of a change written again: where it is, and the overlaps it names. None where it
+) -> tuple[str, dict[str, list[str]]] | None:
+    """The approver's view of a change written again: where it is, as shown, and the overlaps it names. None where it
     cannot be written, a file that will not open or a folder the path rules refuse: the view is an aid, and found by
     the code review, its fault failed commands whose work was done."""
     overlaps = _overlaps(workspace, change_id, deltas)
@@ -696,7 +691,7 @@ def _view_written(
         path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps))
     except OSError, WorkspaceError:
         return None
-    return path, overlaps
+    return workspace.shown(path), overlaps
 
 
 def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
@@ -760,11 +755,10 @@ def _validate(args: argparse.Namespace) -> int:
     if github:
         print(f"::stop-commands::{token}")
     _printed(found)
-    errors = sum(held.severity == "ERROR" for held in found)
-    warnings = sum(held.severity == "WARNING" for held in found)
-    notes = sum(held.severity == "INFO" for held in found)  # counted where printed (the audit of 25 November, U10)
+    severities = Counter(held.severity for held in found)
+    notes = severities["INFO"]  # counted where printed (the audit of 25 November, U10)
     said = f", {counted(notes, 'note')}" if notes else ""
-    print(f"{counted(errors, 'error')}, {counted(warnings, 'warning')}{said}")
+    print(f"{counted(severities['ERROR'], 'error')}, {counted(severities['WARNING'], 'warning')}{said}")
     if github:
         print(f"::{token}::")
         _annotated(workspace, found, failed=stops)
@@ -823,8 +817,16 @@ def _status(args: argparse.Namespace) -> int:
             )
             continue
         state, step = assessed.state, assessed.step
-        row = {"id": change_id, "tier": state.tier, "status": state.status, "actor": step.actor, "next": step.phrase}
-        rows.append({**row, "tasks": _progress(assessed.loaded.change)})  # empty for a draft
+        rows.append(
+            {
+                "id": change_id,
+                "tier": state.tier,
+                "status": state.status,
+                "actor": step.actor,
+                "next": step.phrase,
+                "tasks": _progress(assessed.loaded.change),  # empty for a draft
+            }
+        )
     if args.json:
         print(json.dumps({"changes": rows}, indent=2))
     elif not rows:
@@ -1052,7 +1054,7 @@ def _said_approved(held: ChangeState, by: str, count: int) -> None:
         said = f"once, by {by}"
     else:
         said = f"by {by}" + (f", after {held.approval.by}" if held.approval and held.approval.second else "")
-    print(f"approved  {held.id} {said}: {count} files recorded")
+    print(f"approved  {held.id} {said}: {counted(count, 'file')} recorded")
 
 
 def _began(workspace: Workspace, state: ChangeState) -> dict[str, str]:
@@ -1105,7 +1107,7 @@ def _archive(args: argparse.Namespace) -> int:
         print(f"{PROG}: `{args.id}` is not archived, and no spec was written", file=sys.stderr)
         if any(held.code == "delta.base-stale" for held in refused):
             view = _view_written(workspace, args.id, loaded.change.deltas, living)
-            shown = workspace.shown(view[0]) if view else "the current requirement"
+            shown = view[0] if view else "the current requirement"
             print(
                 f"{PROG}: the living spec changed after this delta was based on it: read {shown}, update the delta, "
                 f"then run `{PROG} rebase {args.id}` and approve again",
@@ -2470,17 +2472,6 @@ def _first_reads(workspace: Workspace, change_id: str) -> str:
     return " and ".join(first)
 
 
-def _past_the_cap(known: Known, capabilities: Sequence[str]) -> str | None:
-    """Why the living specs triage named are past what the deltas stage is given, as that stage says it; None where
-    they fit. Asked before the reading spends: found by an outside audit of 171f1c4 (H7), the cap was met only after
-    minutes of reading and the brief were paid for."""
-    try:
-        living_text(known.living, capabilities)
-    except ContextTooLargeError as exc:
-        return f"context: {exc}"
-    return None
-
-
 def _drafts(
     args: argparse.Namespace,
     workspace: Workspace,
@@ -2512,15 +2503,13 @@ def _drafts(
 
     tier = args.tier
     if tier is None:
-        sized = _sized_first(workspace, ledger, recorder, seed)
+        sized = _sized_first(workspace, known, ledger, recorder, seed)
         tier = sized.get(TIER)
         if sized.get(FAILURE) or tier in (None, "none"):
             return sized, None
         # The brief starts from the capabilities triage found. Found live: told nothing of them, a brief named three
         # for a two-function change triage had sized as one, and the deltas stage could not fill them.
         if not isinstance(found := read_triage(sized), str):
-            if (past := _past_the_cap(known, found.capabilities)) is not None:
-                return {**sized, FAILURE: past}, None
             seed = {**seed, SIZED: sized_text(found)}
             # Said before the reading spends: a wrong tier is stopped here, and named with --tier.
             print(f"sized     {tier}: {plain(found.reason)}")
@@ -2539,12 +2528,15 @@ def _drafts(
     return _rounds(args, workspace, known, ledger, recorder, seed, tier), read
 
 
-def _sized_first(workspace: Workspace, ledger: UsageLedger, recorder: Recorder, seed: dict[str, Any]) -> dict[str, Any]:
-    """The request sized alone: its tier under the state's key, or the failure that stopped it."""
+def _sized_first(
+    workspace: Workspace, known: Known, ledger: UsageLedger, recorder: Recorder, seed: dict[str, Any]
+) -> dict[str, Any]:
+    """The request sized alone: its tier under the state's key, or the failure that stopped it, the living specs it
+    names past what a stage is given among them."""
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import build_triage_app
 
-    run = _ran(build_triage_app(ledger=ledger, recorder=recorder), seed, "propose")
+    run = _ran(build_triage_app(known, ledger=ledger, recorder=recorder), seed, "propose")
     _learned(workspace, run.state)
     return {**run.state, FAILURE: run.state.get(FAILURE) or run.failure}
 

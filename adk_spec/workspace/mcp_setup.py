@@ -24,12 +24,12 @@ SERVER, ENTRY = "adk-spec", {"type": "stdio", "command": "adk-spec-mcp"}
 #: VS Code's older file, which the README once had a person write by hand.
 OLDER_PARTS = (".vscode", "mcp.json")
 
-Done = Literal["wrote", "added", "kept", "unread", "elsewhere"]
+Done = Literal["wrote", "added", "kept", "skipped", "elsewhere"]
 
 
 def write_mcp(root: Path) -> Done | None:
     """adk-spec's entry in the `.mcp.json` of the repository at `root`: `wrote` where there was no file, `added`
-    beside the servers it holds, `kept` where it names adk-spec in other words, which are the person's, `unread` where
+    beside the servers it holds, `kept` where it names adk-spec in other words, which are the person's, `skipped` where
     it is no JSON object of servers, left as it is, and `elsewhere` where `.vscode/mcp.json` starts adk-spec already,
     which VS Code would start twice; nothing where it holds the entry now. `PathError` where the file is a link."""
     path = inside(root, MCP_FILE)
@@ -37,10 +37,10 @@ def write_mcp(root: Path) -> Done | None:
     try:
         held = json.loads(read_text(path)) if existed else {}
     except json.JSONDecodeError:  # a comment too, which plain JSON has none of
-        return "unread"
+        return "skipped"
     servers = held.get("mcpServers", {}) if isinstance(held, dict) else None
     if not isinstance(servers, dict):
-        return "unread"
+        return "skipped"
     if SERVER in servers:
         return None if servers[SERVER] == ENTRY else "kept"
     older = root.joinpath(*OLDER_PARTS)

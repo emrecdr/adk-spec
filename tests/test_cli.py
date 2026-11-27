@@ -585,7 +585,8 @@ def test_status_shows_the_tasks_ticked_of_a_change_past_its_draft(tmp_path, caps
     seeded(tmp_path)
     capsys.readouterr()
     assert run(tmp_path, "status") == 0
-    assert "/" not in capsys.readouterr().out.split("passkeys", 1)[1].split("\n", 1)[0], "a draft shows no count"
+    (row,) = [line for line in capsys.readouterr().out.splitlines() if "passkeys" in line]
+    assert "/" not in row, "a draft shows no count"
     approved(tmp_path)
     tasks = tmp_path / ".spec/changes/passkeys/tasks.md"
     text = read_text(tasks)

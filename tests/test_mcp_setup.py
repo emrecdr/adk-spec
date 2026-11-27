@@ -66,10 +66,10 @@ def test_a_vscode_setup_that_starts_adk_spec_already_is_not_doubled(tmp_path, ca
 
 
 def test_init_names_the_install_where_adk_spec_mcp_is_not_on_path(tmp_path, capsys, monkeypatch) -> None:
-    monkeypatch.setattr(cli.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(cli, "on_path", lambda _name: None)
     out = _initialised(tmp_path / "missing", capsys)
     assert "adk-spec-mcp is not on PATH" in out and "uv tool install --editable " in out
-    monkeypatch.setattr(cli.shutil, "which", lambda name: f"/bin/{name}")
+    monkeypatch.setattr(cli, "on_path", lambda name: f"/bin/{name}")
     assert "not on PATH" not in _initialised(tmp_path / "found", capsys)
 
 
