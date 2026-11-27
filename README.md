@@ -608,7 +608,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}  # the merge with the target would read as drifted work
           fetch-depth: 0  # the history, to compare the work with what was verified
           persist-credentials: false  # no token is left for the steps after
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - run: uv tool install <where your team keeps adk-spec>  # it is not on PyPI
       - run: adk-spec validate --strict
 ```
