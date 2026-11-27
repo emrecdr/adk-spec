@@ -28,6 +28,7 @@ from google.adk.utils.env_utils import is_enterprise_mode_enabled
 from google.auth.exceptions import GoogleAuthError
 from google.genai import types
 
+from ..domain.secrets import scrub
 from .settings import copilot_token, fallback_name, model_name, model_pick, pin_copilot_dir, provider, quiet_litellm
 
 #: The Copilot arm's provider, as LiteLLM names it.
@@ -268,6 +269,11 @@ _WRAPPED = re.compile(r"(?:\w+Error: )?\w+Exception - (.*)", re.DOTALL)
 
 
 def said(error: Exception) -> str:
+    """A provider's error in its own words, scrubbed, as they may echo what was sent (an outside audit of 171f1c4)."""
+    return scrub(_words(error), cut=True)[0]
+
+
+def _words(error: Exception) -> str:
     """A provider's error in its own words: genai's `.message`; LiteLLM's with the class it puts before them gone
     and the provider's body unwrapped, a JSON body read as its code and the sentence it holds."""
     message = str(getattr(error, "message", None) or error).removeprefix(f"litellm.{type(error).__name__}: ")

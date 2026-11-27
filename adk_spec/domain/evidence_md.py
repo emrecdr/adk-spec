@@ -118,8 +118,8 @@ def suspects(proofs: Sequence[tuple[int, Proof]], holds: Callable[[Proof], bool 
             found.append(
                 finding(
                     "spec.evidence-gone",
-                    f"{req} has none of its evidence left in the code ({files}, proved by {one.change}). Verify a "
-                    "change that keeps it, or delete its lines once that is reviewed.",
+                    f"{req} has none of its evidence left in the files git tracks ({files}, proved by {one.change}). "
+                    "Verify a change that keeps it, or delete its lines once that is reviewed.",
                     path=path,
                     line=first,
                 )

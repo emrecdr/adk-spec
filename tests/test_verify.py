@@ -849,14 +849,17 @@ def test_a_tool_calls_verify_refuses_a_test_command_not_committed(tmp_path, caps
 def test_a_tool_calls_verify_runs_a_committed_test_command(tmp_path, monkeypatch) -> None:
     approved_in_a_repository(tmp_path, tier="lean")
     ran = tmp_path.parent / f"{tmp_path.name}-ran"
-    with_tests(tmp_path, f"import os; open({str(ran)!r}, 'w').write(str(os.environ.get('SPEC_TOOL_CALL')))")
+    asked = "' '.join(str(os.environ.get(name)) for name in ('SPEC_TOOL_CALL', 'GOOGLE_API_KEY'))"
+    with_tests(tmp_path, f"import os; open({str(ran)!r}, 'w').write({asked})")
     repository_commit(tmp_path, "the test command")
     config = tmp_path / ".spec/config.toml"
     write_text(config, read_text(config) + "\n[limits]\nkeep_runs = 5\n")  # an edit that leaves the command alone
     implemented(tmp_path)
     monkeypatch.setenv("SPEC_TOOL_CALL", "1")
+    monkeypatch.setenv("GOOGLE_API_KEY", "a-key-the-tests-must-not-see")
     assert run(tmp_path, "verify", "passkeys") == 0
-    assert read_text(ran) == "None", "the tests are not told the command runs for a tool"
+    # Nor do they hold the provider's key (an outside audit of 171f1c4): a tool's call runs code an assistant wrote.
+    assert read_text(ran) == "None None"
 
 
 @pytest.mark.parametrize("hidden", ["untracked, as status does not list", "marked as unchanged in the index"])

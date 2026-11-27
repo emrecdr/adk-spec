@@ -5,57 +5,94 @@ against the code, so that a requirement whose proving lines are gone from it is 
 from __future__ import annotations
 
 import functools
+import itertools
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
 from ..domain.context_md import quoted_statements
 from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
-from ..domain.secrets import scrub_lines
+from ..domain.secrets import holds_a_key, scrub_lines
 from ..domain.text import QUOTE_MIN_CHARS, plain, quoted_at
 from ..domain.validate import finding
 from .config import ConfigError
 from .files import NotTextError, read_text
-from .git import GitError, grep
+from .git import GitError, grep, tracked
 from .layout import CHANGES, EVIDENCE, PROFILE, SPECS, Workspace
-from .source import FILE_MAX_BYTES, LIBRARY_SCHEMES
+from .paths import linked
+from .source import FILE_MAX_BYTES, LIBRARY_SCHEMES, own_config
 
 #: How many of the files a quote's search names are read whole to find it.
 ELSEWHERE_MAX = 20
 
 
-def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
+def holds(root: Path, proof: Proof, exclude: Sequence[str] | None) -> bool | None:
     """Whether `proof`'s quote is still in the code, as `quote_holds` says."""
     return quote_holds(root, proof.repository, proof.path, proof.quote, exclude)
 
 
-def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Sequence[str]) -> bool | None:
+def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Sequence[str] | None) -> bool | None:
     """Whether `quote` is still in the code: in `path`, or else in another file of its repository, so that a moved
     function reads as moved. None where its repository is not there to look in, as another one is not in CI, where
     git refuses the search, outside a repository say, or where the quote is too short to find anywhere. `root` is
     the folder that holds `.spec/`; `repository` is `.` for its own; `exclude`, the person's patterns, apply to its
-    own."""
+    own, and None, where their config does not read, makes its quotes unknown.
+
+    Only a file git tracks is read, with its repository's exclusions and through no link: what a reading could be
+    shown, and what a pull request's author can read already. A path git does not track is looked for as one gone,
+    so that whether a file is there, ignored or untracked, never shows (an outside audit of 171f1c4; the code review
+    of phase 25: a pull request writes its own `.gitignore`)."""
     own = repository == "."
     folder = root if own else root / repository
     if len(plain(quote)) < QUOTE_MIN_CHARS or not _within(folder, repository, path, own=own):  # too short to find
         return None
-    if (first := _found(folder / path, quote)) is None:  # past what a reading reads: unknown
+    held = (None if exclude is None else tuple(exclude)) if own else _their_exclusions(folder)
+    if held is None or (listed := _listed(folder, held, own)) is None:
         return None
-    if first:  # read first: a quote that holds asks git nothing
-        return True
+    if path in listed:
+        if linked(folder, path):
+            return None
+        if (found := _found(folder / path, quote)) is not False:  # held, or unknown: past the cap, or a key's
+            return found
+    return _elsewhere(folder, quote, held, listed, own=own)
+
+
+def _elsewhere(folder: Path, quote: str, exclude: tuple[str, ...], listed: frozenset[str], *, own: bool) -> bool | None:
+    """Whether `quote` is in another file `listed` under `folder`, found by its longest word: None where git refuses
+    the search, or where a file that may hold it is past the cap (the code review of phase 24)."""
     try:
         term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
-        hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
+        hits = grep(folder, term, exclude=exclude, trust=own) if term else []
     except GitError:
         return None
-    named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]
-    unknown = False  # a file past the cap may hold it: unknown, not gone (the code review of phase 24)
-    for one in named:
+    named = (one for one in dict.fromkeys(hit.split(":", 1)[0] for hit in hits) if one in listed)
+    unknown = False
+    for one in itertools.islice((one for one in named if not linked(folder, one)), ELSEWHERE_MAX):
         if (found := _found(folder / one, quote)) is None:
             unknown = True
         elif found:
             return True
     return None if unknown else False
+
+
+@functools.lru_cache(maxsize=8)
+def _listed(folder: Path, exclude: tuple[str, ...], own: bool) -> frozenset[str] | None:
+    """Every file git tracks under `folder`, less `exclude`: what a quote may be looked for in, asked once a command.
+    None where git refuses, kept too, so that a slow git is waited on once, not once a quote."""
+    try:
+        return frozenset(tracked(folder, exclude=exclude, trust=own))
+    except GitError:
+        return None
+
+
+def _their_exclusions(folder: Path) -> tuple[str, ...] | None:
+    """Another repository's own exclusions, as the code reading takes them (`own_config`); None where its config does
+    not read, so that its quotes are unknown rather than looked for in what it keeps out."""
+    try:
+        held = own_config(folder)
+    except ConfigError, NotTextError, OSError:
+        return None
+    return held.exclude if held else ()
 
 
 def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
@@ -71,10 +108,10 @@ def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
 
 
 def _found(path: Path, quote: str) -> bool | None:
-    """Whether `quote` is in the file at `path`, as it stands or as a reading or a diff is shown it, scrubbed: a quote
-    taken from what a model saw may hold a secret's stand-in, whole or cut through. Found by phase 17's reviews, where
-    guessing such a quote by its shape missed some and took ordinary code for others. None where the file is past
-    what a reading reads, which is not read (the audit of 25 November, H3)."""
+    """Whether `quote` is in the file at `path` as a reading or a diff is shown it, scrubbed: a quote taken from what
+    a model saw holds a secret's stand-in, never the secret, and one matched against the raw text would tell a guess
+    at a secret from a wrong one (an outside audit of 171f1c4). None where the file is past what a reading reads,
+    which is not read (the audit of 25 November, H3)."""
     try:
         stamp = path.stat()
     except OSError:
@@ -83,10 +120,13 @@ def _found(path: Path, quote: str) -> bool | None:
         return None
     if (text := _text(path, stamp.st_mtime_ns, stamp.st_size)) is None:
         return False
-    if quoted_at(quote, text) is not None:
-        return True
-    # A stand-in opens on `[` and ends on `]`: a quote of neither is not of the scrubbed text alone, nor costs a scrub.
-    return ("[" in quote or "]" in quote) and quoted_at(quote, _scrubbed(text)) is not None
+    if holds_a_key(text):  # withheld from every reading, so no quote is of it
+        return None
+    # A quote with no stand-in's bracket that is not in the text is not in its scrubbed text: the scrub, which costs
+    # four times the search, is spent only to decide a hit.
+    if "[" not in quote and "]" not in quote and quoted_at(quote, text) is None:
+        return False
+    return quoted_at(quote, _scrubbed(text)) is not None
 
 
 @functools.lru_cache(maxsize=32)
@@ -109,6 +149,7 @@ def _fresh() -> None:
     """The files a command read forgotten: kept only for one command (the code review of phase 24)."""
     _text.cache_clear()
     _scrubbed.cache_clear()
+    _listed.cache_clear()
 
 
 def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[Finding]:
@@ -163,13 +204,14 @@ def profile_gone(workspace: Workspace) -> tuple[int, int]:
     return held.count(False), len(held)
 
 
-def _excluded(workspace: Workspace) -> tuple[str, ...]:
-    """The person's exclude patterns; none where the config does not read. Found by the code review: read first, a
-    fault in it, or no config at all, stopped `validate` and `status` where no evidence was kept."""
+def _excluded(workspace: Workspace) -> tuple[str, ...] | None:
+    """The person's exclude patterns; None where the config does not read, which makes each quote unknown. Found by
+    the code review: read first, a fault in it, or no config at all, stopped `validate` and `status` where no
+    evidence was kept."""
     try:
         return workspace.config().exclude
     except ConfigError, NotTextError, OSError:
-        return ()
+        return None
 
 
 def evidence_folded(
