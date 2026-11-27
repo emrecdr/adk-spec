@@ -50,6 +50,7 @@ How it is applied in every phase below:
 | 21 | A typed seam and a loud fake | `2026-11-26-typed-seam-and-loud-fake-design.md` | From the audit of 25 November, its A1 and A2, with no change of behaviour: the CLI's seam with the engine typed under `TYPE_CHECKING` (the checker then found four ledgers that may be none); a rule of the tests' fake model that no request matched fails its test, `answers_if_asked` for a default. The 71 copied stage openings in the tests are left: a reworded one now fails loudly. | Built test first; merged after its cleanup and code review |
 | 22 | Plainer output | `2026-11-26-plainer-output-design.md` | From the audit of 25 November, its U1-U8: progress in plain words with the time; one figure for what was spent; `verify` saying its outcome and naming each requirement, `remaining.md` too; the other repositories said before the reading, once; each command's help saying what it does and whether it calls a model; the question round said plainly, with a prompt at a terminal; `init` saying no test command is set; the README's samples as printed. No command or flag. | Built test first; merged after its cleanup and code review |
 | 23 | The skill's routes and its refresh | `2026-11-26-skill-routes-and-refresh-design.md` | From the audit of 25 November, its C1-C3 and U12: the skill says what to run for what a person asks and stops at their decisions; it names where `reports/summary.md` is, as the MCP instructions do, and leaves remaining.md to the step `status` and `verify` print; `init --refresh` replaces a skill whose text adk-spec shipped, known by its hash, and keeps an edited one. C2 changed by validation: no second copy in `.agents/skills/`, which Copilot would list twice; the README says how to copy it for Antigravity. | Built test first; merged after its cleanup and code review |
+| 24 | Small hardening | `2026-11-27-small-hardening-design.md` | From the audit of 25 November, its P2, triaged: the README's CI example pinned and read-only (S7); `login` loads LiteLLM in production mode (S8); a job-summary cell holds no Markdown of its own (S9); untracked files past what a diff is read for refused by their size (H2); an evidence check reads each file once, and none past the reading's cap (H3). Left, with reasons: H4, H5, S6, A3, A7. | Built test first; merged after its cleanup and code review |
 
 ## The plan being followed now
 
@@ -60,8 +61,9 @@ audit's H1 and S4, on the branch `stopping`; then phase 21, a typed seam and a l
 (`2026-11-26-typed-seam-and-loud-fake-design.md`), the audit's A1 and A2, on the branch `typed-seam`; then phase 22,
 plainer output (`2026-11-26-plainer-output-design.md`), the audit's U1-U8, on the branch `plainer`; then phase 23, the
 skill's routes and its refresh (`2026-11-26-skill-routes-and-refresh-design.md`), the audit's C1-C3, on the branch
-`skill`. The audit's P0 and P1 are done; its P2 items are left to choose. Phase 18's second step, which changes what
-models are told, waits for a live measurement on the owner's go-ahead.
+`skill`. The audit's P0 and P1 are done; its P2 is triaged in `2026-11-27-small-hardening-design.md`: phase 24 the small
+hardening, on the branch `hardening`; next, the plain lines (U9-U11, U13, C6) and the small refactors (A4-A6, A8). Phase
+18's second step, which changes what models are told, waits for a live measurement on the owner's go-ahead.
 
 Phase 17 is done: the profile checked against the code and `[P]` held to its rule; its `verify` note on the proofs a
 work removed was taken out after three reviews.
