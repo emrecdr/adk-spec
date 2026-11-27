@@ -4,6 +4,7 @@ against the code, so that a requirement whose proving lines are gone from it is 
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
@@ -17,7 +18,7 @@ from .config import ConfigError
 from .files import NotTextError, read_text
 from .git import GitError, grep
 from .layout import CHANGES, EVIDENCE, PROFILE, SPECS, Workspace
-from .source import LIBRARY_SCHEMES
+from .source import FILE_MAX_BYTES, LIBRARY_SCHEMES
 
 #: How many of the files a quote's search names are read whole to find it.
 ELSEWHERE_MAX = 20
@@ -38,7 +39,9 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     folder = root if own else root / repository
     if len(plain(quote)) < QUOTE_MIN_CHARS or not _within(folder, repository, path, own=own):  # too short to find
         return None
-    if _found(folder / path, quote):  # read first: a quote that holds asks git nothing
+    if (first := _found(folder / path, quote)) is None:  # past what a reading reads: unknown
+        return None
+    if first:  # read first: a quote that holds asks git nothing
         return True
     try:
         term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
@@ -61,18 +64,40 @@ def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
     return (folder / path).resolve().is_relative_to(folder.resolve())
 
 
-def _found(path: Path, quote: str) -> bool:
+def _found(path: Path, quote: str) -> bool | None:
     """Whether `quote` is in the file at `path`, as it stands or as a reading or a diff is shown it, scrubbed: a quote
     taken from what a model saw may hold a secret's stand-in, whole or cut through. Found by phase 17's reviews, where
-    guessing such a quote by its shape missed some and took ordinary code for others."""
+    guessing such a quote by its shape missed some and took ordinary code for others. None where the file is past
+    what a reading reads, which is not read (the audit of 25 November, H3)."""
     try:
-        text = read_text(path)
-    except NotTextError, OSError:
+        stamp = path.stat()
+    except OSError:
+        return False
+    if stamp.st_size > FILE_MAX_BYTES:
+        return None
+    held = (str(path), stamp.st_mtime_ns, stamp.st_size)
+    if (text := _text(*held)) is None:
         return False
     if quoted_at(quote, text) is not None:
         return True
     # A stand-in opens on `[` and ends on `]`: a quote of neither is not of the scrubbed text alone, nor costs a scrub.
-    return ("[" in quote or "]" in quote) and quoted_at(quote, scrub_lines(text)[0]) is not None
+    return ("[" in quote or "]" in quote) and quoted_at(quote, _scrubbed(*held)) is not None
+
+
+@functools.lru_cache(maxsize=32)
+def _text(path: str, _mtime: int, _size: int) -> str | None:
+    """A file's text, kept by its path and stamp: a file many quotes name is read once a command, not once a quote
+    (the audit of 25 November, H3). None where it is no text, or cannot be read."""
+    try:
+        return read_text(Path(path))
+    except NotTextError, OSError:
+        return None
+
+
+@functools.lru_cache(maxsize=8)
+def _scrubbed(path: str, mtime: int, size: int) -> str:
+    """A file's text as a reading or a diff is shown it, scrubbed, kept as `_text` is."""
+    return scrub_lines(_text(path, mtime, size) or "")[0]
 
 
 def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[Finding]:

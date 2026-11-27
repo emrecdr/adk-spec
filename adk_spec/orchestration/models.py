@@ -151,13 +151,19 @@ def _litellm():  # unannotated: a checker then knows the module and its typed fl
     """LiteLLM, imported where the Copilot arm needs it and nowhere else. On its own import it reads `.env` unless
     told it runs in production, and fetches a price list unless `LITELLM_LOCAL_MODEL_COST_MAP` is set. It reads
     `GITHUB_COPILOT_TOKEN_DIR` as written, so it is handed the folder readiness and the login read."""
-    os.environ.setdefault("LITELLM_MODE", "PRODUCTION")
-    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")  # the pinned version's own model map
+    quiet_litellm()
     pin_copilot_dir()
     trust_the_system()  # before LiteLLM's import, which keeps the certificate context it makes then
     import litellm
 
     return litellm
+
+
+def quiet_litellm() -> None:
+    """What LiteLLM is told before it is first imported: that it runs in production, so it reads no `.env`, and that
+    it has its own model map, so it fetches no price list. `login` imports it too (the audit of 25 November, S8)."""
+    os.environ.setdefault("LITELLM_MODE", "PRODUCTION")
+    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")  # the pinned version's own model map
 
 
 def _has_mcp() -> bool:

@@ -5,6 +5,7 @@ holds what `validate` printed above them."""
 
 from __future__ import annotations
 
+import html
 from collections.abc import Sequence
 
 from .model import Finding
@@ -56,6 +57,12 @@ def _property(text: str) -> str:
     return _data(text).replace(":", "%3A").replace(",", "%2C")
 
 
+#: What Markdown reads as its own in a table cell, each escaped by a backslash: a pipe would end the cell, a bracket
+#: or a bang open a link or an image, a star, an underscore or a backtick emphasis or code.
+_MARKS = str.maketrans({mark: f"\\{mark}" for mark in "\\`*_[]!|"})
+
+
 def _cell(text: str) -> str:
-    """A table cell: on one line, a pipe kept from ending it."""
-    return flat(text).replace("|", "\\|")
+    """A table cell: on one line, and text only: no Markdown or HTML of its own, as a folder name or a finding's
+    text from a pull request would render as a link or an image on the run's page (the audit of 25 November, S9)."""
+    return html.escape(flat(text), quote=False).translate(_MARKS)

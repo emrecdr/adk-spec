@@ -292,3 +292,12 @@ def test_a_committed_file_is_read_from_the_folder_asked_of_with_no_byte_order_ma
     repository(tmp_path, {"svc/.spec/config.toml": "\ufeff[project]\n", ".spec/config.toml": "the top's\n"})
     assert committed_text(tmp_path / "svc", ".spec/config.toml") == "[project]"
     assert committed_text(tmp_path / "svc", ".spec/absent.toml") is None
+
+
+def test_untracked_files_past_what_a_diff_is_read_for_are_refused_before_any_is_read(tmp_path) -> None:
+    """The audit of 25 November (H2): a data file nobody ignored was diffed and held whole, several times over, by
+    every `status` of a verified change, before the diff was refused for its length."""
+    commit = repository(tmp_path, {"src/a.py": "x = 1\n"})
+    (tmp_path / "dump.csv").write_text("a,b\n" * 250_000, encoding="utf-8")  # 1,000,000 bytes
+    with pytest.raises(layer.GitError, match="bytes of files"):
+        layer.diffs(tmp_path, commit, exclude=())

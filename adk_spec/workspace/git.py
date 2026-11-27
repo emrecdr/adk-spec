@@ -34,6 +34,9 @@ DIFF_MAX_CHARS = 200_000
 #: Past this many files that git neither tracks nor ignores, a diff is refused: a virtual environment or a build
 #: folder nobody ignored would be read file by file as new work.
 UNTRACKED_MAX = 500
+#: Past this many bytes of files git neither tracks nor ignores, a diff is refused by their size, before each is
+#: diffed and held whole: four times what a stage may be given, as such a diff is refused once read anyway.
+UNTRACKED_MAX_BYTES = 4 * DIFF_MAX_CHARS
 #: Settings that change what git prints, reads or runs, fixed for every call. Set through the environment, they
 #: outrank every config file, the repository's own included.
 _SETTLED = {
@@ -255,11 +258,24 @@ def diffs(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", tr
             f"{len(new):,} files under {root} are neither tracked nor ignored. Add them to git, or ignore what is "
             "no source, such as a virtual environment or a build folder"
         )
+    if (size := sum(_size(root / path) for path in new)) > UNTRACKED_MAX_BYTES:  # the audit of 25 November, H2
+        raise GitError(
+            f"{size:,} bytes of files under {root} are neither tracked nor ignored, past what a diff is read for. Add "
+            "them to git, or ignore what is no source, such as a data file or a build folder"
+        )
     added = "".join(
         git(root, "diff", *_PLAIN, *named, "--no-index", "--", "/dev/null", path, ok=(0, 1), trust=trust)
         for path in new
     )
     return changed + added, _settled(unmoved + added)
+
+
+def _size(path: Path) -> int:
+    """The bytes a file holds, a link's own, or none where it is gone."""
+    try:
+        return path.lstat().st_size
+    except OSError:
+        return 0
 
 
 def _settled(text: str) -> str:

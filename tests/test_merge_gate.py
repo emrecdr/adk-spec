@@ -163,3 +163,13 @@ def test_the_plain_output_is_read_by_github_as_no_command(tmp_path, capsys, monk
     resumed = lines.index(f"::{token}::")
     assert all(not line.startswith("::warning") for line in lines[:resumed])
     assert any(line.startswith("::warning") for line in lines[resumed:])
+
+
+def test_a_summary_cell_holds_no_markdown_of_its_own() -> None:
+    """The audit of 25 November (S9): a folder name or a finding's text from a pull request rendered on the run's
+    page as a link or an image."""
+    held = Finding(
+        severity="ERROR", code="x.y", message="see [here](https://e.example) ![i](https://e/i.png) <b>", path="p.md"
+    )
+    row = next(line for line in step_summary([held], failed=True).splitlines() if "x.y" in line)
+    assert r"see \[here\](https://e.example) \!\[i\](https://e/i.png) &lt;b&gt;" in row, row

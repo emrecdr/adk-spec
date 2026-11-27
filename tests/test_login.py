@@ -98,3 +98,16 @@ def test_the_token_is_its_owners_alone(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(Authenticator, "get_api_key", lambda _self: "key")
     assert main(["login"]) == 0
     assert stat.S_IMODE((tmp_path / "access-token").stat().st_mode) == 0o600
+
+
+def test_login_tells_litellm_it_runs_in_production_before_it_is_imported(monkeypatch, tmp_path) -> None:
+    """The audit of 25 November (S8): imported as it stood, LiteLLM read a `.env` up from its own folder and fetched a
+    price list from the network."""
+    monkeypatch.delenv("LITELLM_MODE", raising=False)
+    monkeypatch.delenv("LITELLM_LOCAL_MODEL_COST_MAP", raising=False)
+    monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path))
+    device_flow(monkeypatch)
+    github_answers(monkeypatch, {"access_token": "granted"})
+    monkeypatch.setattr(Authenticator, "get_api_key", lambda _self: "key")
+    assert main(["login"]) == 0
+    assert (os.environ["LITELLM_MODE"], os.environ["LITELLM_LOCAL_MODEL_COST_MAP"]) == ("PRODUCTION", "True")
