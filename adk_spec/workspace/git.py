@@ -184,6 +184,17 @@ def head(root: Path, *, trust: bool = True) -> str | None:
     return resolves(root, "HEAD", trust=trust)
 
 
+def label(root: Path, *, exclude: Sequence[str], trust: bool = True) -> str:
+    """What the files under `root` are, as a kept code graph names them (agreed with adk-review, amb #721-#725): the
+    commit checked out, with `+dirty` where a file under `root` differs from it or is not tracked yet, so that a
+    reader never takes a graph of unsaved work for the commit; `working tree` where there is no commit."""
+    commit = head(root, trust=trust)
+    if commit is None:
+        return "working tree"
+    changed = git(root, "status", "--porcelain", "--untracked-files=normal", *_here(exclude), trust=trust)
+    return f"{commit}+dirty" if changed.strip() else commit
+
+
 def _here(exclude: Sequence[str]) -> tuple[str, ...]:
     """What limits a git command to the files under the folder it runs in: none of `.spec/`, and none a person
     excluded. Each of `exclude` is read as a `.gitignore` reads the common patterns, and never as less: `as_globs`

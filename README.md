@@ -320,7 +320,9 @@ shown, and none past 10 MB of Python. It is a second opinion, never the source o
 ranks first for your request beside the list of files, and a stage may read one definition by its name
 (`src/app.py::Reader.read`); the review is told of files ranked first that no round read and of a member a statement
 names that its class defines nowhere; the plan is told what imports the files the reading found and which tests import
-them. Each is a lead a stage confirms by reading.
+them. Each is a lead a stage confirms by reading. The graph is kept in `.codegraph/` at your project's root, a folder
+that ignores itself, so adk-review and other tools use the same one; it names the commit it was built from, with
+`+dirty` where your work is not committed.
 
 `tasks.md` is the work, test first, each task naming the requirements it serves, its files and how to check it:
 

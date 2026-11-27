@@ -121,3 +121,16 @@ Decided with adk-review's session (the owner's rule, amb #719 to #725): the grap
 the project root, the owner's request, with safeguards both tools keep, in codegraph v0.2; an import two files answer
 is ambiguous with its candidates listed; adk-review's ancestor rule is ported once merged on its side.
 
+## The graph kept for every tool (phase 30)
+
+The owner asked that whichever tool builds the graph, it is kept in one place, `.codegraph/` under the project, so
+each tool uses the same one. Decided with adk-review's session (amb #721-#732), in codegraph v0.2: `store.save` and
+`store.load`, the library's only I/O; a folder that ignores itself; a write whole or not at all, never through a link;
+a reader that takes only a graph this version wrote, up to a cap; `load(commit=)`, None for a graph of another commit
+or of unsaved work, told from the file's first bytes.
+
+adk-spec keeps each graph it builds there, labelled by the commit checked out, `+dirty` where a file under the project
+differs from it or is not tracked yet, and never an empty one, which would say the repository holds no code. A write
+that fails changes nothing and says nothing. adk-spec does not read the kept graph back: building it costs about a
+second, below the 10 MB cap, and a graph another tool built keeps that tool's rules for tests and exclusions.
+

@@ -49,7 +49,7 @@ filterwarnings = [
 
 [tool.uv.sources]
 # Pinned by commit: a reviewed bump of the rev is the only way a change of the graph reaches adk-spec.
-codegraph = { git = "https://github.com/emrecdr/codegraph", rev = "c8463feb62e84f8ba7d363383b36c71aa72c962c" }
+codegraph = { git = "https://github.com/emrecdr/codegraph", rev = "17f2189552b4497353c72c729dee37eddde758d0" }
 
 [tool.uv]
 # A release is taken three days after it is published, never sooner.

@@ -46,9 +46,9 @@ from ..domain.verify import parts_of_diff
 from .config import Config, ConfigError, load_config
 from .context import tree_text
 from .files import NotTextError, read_text
-from .git import GitError, diffs, grep, head, is_repository, top
+from .git import GitError, diffs, grep, head, is_repository, label, top
 from .git import files as listed_by_git
-from .graph import GRAPH_MAX_BYTES, built, empty, shared
+from .graph import GRAPH_MAX_BYTES, built, empty, kept, shared
 from .installed import Environment, environments
 from .layout import CONFIG, ROOT_NAME
 from .paths import linked
@@ -432,12 +432,21 @@ class Source:
     def graph(self) -> Graph:
         """The code graph of this repository's Python files as a reading may show them, scrubbed, a key's file
         withheld: built once a command for the repository, whichever source asks, and empty past `GRAPH_MAX_BYTES` of
-        Python, where the reading runs as before."""
+        Python, where the reading runs as before. A graph built is kept in `.codegraph/` for every tool, labelled by
+        the commit it was built from; an empty one is not, as it would say the repository holds no code."""
         if self._graph is None:
             here, python = self._here, [path for path in self._here.paths if path.endswith(PYTHON)]
             small = _bytes(here.root, python) <= GRAPH_MAX_BYTES
-            self._graph = shared(str(here.root), python, lambda: built(python, here.lines) if small else empty())
+            self._graph = shared(str(here.root), python, lambda: self._built(python) if small else empty())
         return self._graph
+
+    def _built(self, python: list[str]) -> Graph:
+        here = self._here
+        try:
+            commit = label(here.root, exclude=here.exclude)
+        except GitError:  # git cannot say: the label claims no commit
+            commit = "working tree"
+        return kept(built(python, here.lines, commit=commit), here.root)
 
     def libraries(self) -> str:
         """The installed libraries as a stage is told of them, and how to read one: nothing where none are read."""
