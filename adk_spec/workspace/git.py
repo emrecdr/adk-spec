@@ -258,7 +258,11 @@ def diffs(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", tr
             f"{len(new):,} files under {root} are neither tracked nor ignored. Add them to git, or ignore what is "
             "no source, such as a virtual environment or a build folder"
         )
-    if (size := sum(_size(root / path) for path in new)) > UNTRACKED_MAX_BYTES:  # the audit of 25 November, H2
+    sizes = {path: _size(root / path) for path in new}
+    if sum(sizes.values()) > UNTRACKED_MAX_BYTES:  # past the limit: what the repository's attributes show as binary
+        for path in _binary(root, list(sizes), trust=trust):
+            sizes[path] = 0
+    if (size := sum(sizes.values())) > UNTRACKED_MAX_BYTES:  # the audit of 25 November, H2
         raise GitError(
             f"{size:,} bytes of files under {root} are neither tracked nor ignored, past what a diff is read for. Add "
             "them to git, or ignore what is no source, such as a data file or a build folder"
@@ -268,6 +272,14 @@ def diffs(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", tr
         for path in new
     )
     return changed + added, _settled(unmoved + added)
+
+
+def _binary(root: Path, paths: list[str], *, trust: bool) -> list[str]:
+    """Which of `paths` the repository's own `.gitattributes` makes binary, `binary` or `-diff`, so that a diff shows
+    each on one line: asked of git once, where the bytes alone were past the limit (the code review of phase 24)."""
+    said = git(root, "check-attr", "-z", "binary", "diff", "--", *paths, trust=trust).split("\0")
+    held = zip(said[0::3], said[1::3], said[2::3], strict=False)
+    return [path for path, name, value in held if (name, value) in (("binary", "set"), ("diff", "unset"))]
 
 
 def _size(path: Path) -> int:

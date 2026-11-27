@@ -6,6 +6,7 @@ holds what `validate` printed above them."""
 from __future__ import annotations
 
 import html
+import re
 from collections.abc import Sequence
 
 from .model import Finding
@@ -59,10 +60,13 @@ def _property(text: str) -> str:
 
 #: What opens Markdown of its own in a table cell, each escaped by a backslash: a pipe would end the cell, a bracket
 #: open a link or an image, a star, an underscore or a backtick emphasis or code (`__init__.py` would read in bold).
-_MARKS = str.maketrans({mark: f"\\{mark}" for mark in "\\`*_[|"})
+_MARKS = str.maketrans({mark: f"\\{mark}" for mark in "\\`*_[|~@"})
+#: What GitHub links with no brackets at all, an address: its scheme's colon, or the dot after `www`, said as an entity.
+_ADDRESS = re.compile(r"(?i)\b(https?|ftp)(:)(?=//)|\b(www)(\.)")
 
 
 def _cell(text: str) -> str:
     """A table cell: on one line, and text only: no Markdown or HTML of its own, as a folder name or a finding's
     text from a pull request would render as a link or an image on the run's page (the audit of 25 November, S9)."""
-    return html.escape(flat(text), quote=False).translate(_MARKS)
+    escaped = html.escape(flat(text), quote=False).translate(_MARKS)
+    return _ADDRESS.sub(lambda m: f"{m[1] or m[3]}{'&#58;' if m[2] else '&#46;'}", escaped)

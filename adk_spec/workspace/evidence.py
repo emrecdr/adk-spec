@@ -49,7 +49,13 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     except GitError:
         return None
     named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]
-    return any(_found(folder / one, quote) for one in named)
+    unknown = False  # a file past the cap may hold it: unknown, not gone (the code review of phase 24)
+    for one in named:
+        if (found := _found(folder / one, quote)) is None:
+            unknown = True
+        elif found:
+            return True
+    return None if unknown else False
 
 
 def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
@@ -99,9 +105,16 @@ def _scrubbed(text: str) -> str:
     return scrub_lines(text)[0]
 
 
+def _fresh() -> None:
+    """The files a command read forgotten: kept only for one command (the code review of phase 24)."""
+    _text.cache_clear()
+    _scrubbed.cache_clear()
+
+
 def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[Finding]:
     """A note for each suspect requirement of the `living` specs, and for each evidence line that does not read. A
     requirement the living spec no longer holds is not checked, nor any of a living spec that does not read."""
+    _fresh()
     found: list[Finding] = []
     exclude = _excluded(workspace)
     for capability in workspace.capabilities():
@@ -134,6 +147,7 @@ def profile_gone(workspace: Workspace) -> tuple[int, int]:
     for: none where there is no profile that reads. Phase 17: every drafting stage reads the profile, and nothing else
     checks it. A library's quote is not looked for, nor counted one that could not be: unknown is not gone. Read
     whole: found by its code review, the cap a stage reads it at could halve a quote."""
+    _fresh()
     path = workspace.home / PROFILE
     try:
         text = read_text(path) if path.is_file() else ""

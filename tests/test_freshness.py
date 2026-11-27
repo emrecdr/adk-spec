@@ -207,3 +207,12 @@ def test_a_quote_in_a_file_past_what_a_reading_reads_is_unknown(tmp_path, monkey
     monkeypatch.setattr(evidence, "FILE_MAX_BYTES", 10)
     repository(tmp_path, {"big.txt": "x" * 100})
     assert quote_holds(tmp_path, ".", "big.txt", "xxxxxxxxxxxx", ()) is None
+
+
+def test_a_quote_moved_into_a_file_past_the_cap_is_unknown_not_gone(tmp_path, monkeypatch) -> None:
+    """Found by the code review of phase 24: the search of other files read a file past the cap as not holding it."""
+    from adk_spec.workspace import evidence
+
+    monkeypatch.setattr(evidence, "FILE_MAX_BYTES", 60)
+    repository(tmp_path, {"src/a.py": "x = 1\n", "gen/big.py": "def start_session(user):\n" + "#" * 80 + "\n"})
+    assert quote_holds(tmp_path, ".", "src/a.py", "def start_session(user):", ()) is None

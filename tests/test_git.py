@@ -312,3 +312,12 @@ def test_an_untracked_binary_file_is_no_size_a_diff_reads(tmp_path, monkeypatch)
     (tmp_path / "logo.png").write_bytes(b"\x89PNG\0" + b"x" * 500)
     changed, _settled = layer.diffs(tmp_path, commit, exclude=())
     assert "logo.png" in changed
+
+
+def test_an_untracked_file_its_attributes_make_binary_is_no_size_a_diff_reads(tmp_path, monkeypatch) -> None:
+    """Found by the code review of phase 24: a `*.csv binary` file is one line of the diff, and was counted whole."""
+    monkeypatch.setattr(layer, "UNTRACKED_MAX_BYTES", 100)
+    commit = repository(tmp_path, {"src/a.py": "x = 1\n", ".gitattributes": "*.csv binary\n"})
+    (tmp_path / "data.csv").write_text("a,b\n" * 50, encoding="utf-8")
+    changed, _settled = layer.diffs(tmp_path, commit, exclude=())
+    assert "data.csv" in changed
