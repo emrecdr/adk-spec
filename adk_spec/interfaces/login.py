@@ -23,7 +23,7 @@ from typing import Any
 
 import truststore
 
-from ..orchestration.settings import copilot_key, copilot_token, pin_copilot_dir
+from ..orchestration.settings import copilot_key, copilot_token, pin_copilot_dir, quiet_litellm
 
 
 def keep_private(token: Path) -> None:
@@ -91,8 +91,6 @@ def main(argv: list[str]) -> int:
         print("[copilot] re-authenticate with: adk-spec login --force")
         return 0
     import httpx
-
-    from ..orchestration.models import quiet_litellm
 
     quiet_litellm()  # before LiteLLM's first import
     from litellm.llms.github_copilot.authenticator import (

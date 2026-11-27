@@ -294,10 +294,21 @@ def test_a_committed_file_is_read_from_the_folder_asked_of_with_no_byte_order_ma
     assert committed_text(tmp_path / "svc", ".spec/absent.toml") is None
 
 
-def test_untracked_files_past_what_a_diff_is_read_for_are_refused_before_any_is_read(tmp_path) -> None:
+def test_untracked_files_past_what_a_diff_is_read_for_are_refused_by_their_size(tmp_path, monkeypatch) -> None:
     """The audit of 25 November (H2): a data file nobody ignored was diffed and held whole, several times over, by
     every `status` of a verified change, before the diff was refused for its length."""
+    monkeypatch.setattr(layer, "UNTRACKED_MAX_BYTES", 100)
     commit = repository(tmp_path, {"src/a.py": "x = 1\n"})
-    (tmp_path / "dump.csv").write_text("a,b\n" * 250_000, encoding="utf-8")  # 1,000,000 bytes
-    with pytest.raises(layer.GitError, match="bytes of files"):
+    (tmp_path / "dump.csv").write_text("a,b\n" * 50, encoding="utf-8")
+    with pytest.raises(layer.GitError, match="200 bytes of files"):
         layer.diffs(tmp_path, commit, exclude=())
+
+
+def test_an_untracked_binary_file_is_no_size_a_diff_reads(tmp_path, monkeypatch) -> None:
+    """Found by the cleanup review of phase 24: git shows a binary file on one line, and an untracked image was
+    counted whole against the limit."""
+    monkeypatch.setattr(layer, "UNTRACKED_MAX_BYTES", 100)
+    commit = repository(tmp_path, {"src/a.py": "x = 1\n"})
+    (tmp_path / "logo.png").write_bytes(b"\x89PNG\0" + b"x" * 500)
+    changed, _settled = layer.diffs(tmp_path, commit, exclude=())
+    assert "logo.png" in changed

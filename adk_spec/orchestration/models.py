@@ -15,7 +15,6 @@ import functools
 import importlib.util
 import json
 import logging
-import os
 import re
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -29,7 +28,7 @@ from google.adk.utils.env_utils import is_enterprise_mode_enabled
 from google.auth.exceptions import GoogleAuthError
 from google.genai import types
 
-from .settings import copilot_token, fallback_name, model_name, model_pick, pin_copilot_dir, provider
+from .settings import copilot_token, fallback_name, model_name, model_pick, pin_copilot_dir, provider, quiet_litellm
 
 #: The Copilot arm's provider, as LiteLLM names it.
 COPILOT = "github_copilot"
@@ -157,13 +156,6 @@ def _litellm():  # unannotated: a checker then knows the module and its typed fl
     import litellm
 
     return litellm
-
-
-def quiet_litellm() -> None:
-    """What LiteLLM is told before it is first imported: that it runs in production, so it reads no `.env`, and that
-    it has its own model map, so it fetches no price list. `login` imports it too (the audit of 25 November, S8)."""
-    os.environ.setdefault("LITELLM_MODE", "PRODUCTION")
-    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")  # the pinned version's own model map
 
 
 def _has_mcp() -> bool:

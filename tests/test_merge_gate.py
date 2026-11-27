@@ -172,4 +172,4 @@ def test_a_summary_cell_holds_no_markdown_of_its_own() -> None:
         severity="ERROR", code="x.y", message="see [here](https://e.example) ![i](https://e/i.png) <b>", path="p.md"
     )
     row = next(line for line in step_summary([held], failed=True).splitlines() if "x.y" in line)
-    assert r"see \[here\](https://e.example) \!\[i\](https://e/i.png) &lt;b&gt;" in row, row
+    assert r"see \[here](https://e.example) !\[i](https://e/i.png) &lt;b&gt;" in row, row

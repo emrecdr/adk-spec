@@ -187,15 +187,23 @@ def test_a_quote_too_short_to_look_for_is_unknown(tmp_path) -> None:
     assert quote_holds(tmp_path, ".", "src/app.py", "x = 1", ()) is None
 
 
-def test_a_file_shared_by_many_quotes_is_read_once_and_one_too_large_is_not_read(tmp_path, monkeypatch) -> None:
-    """The audit of 25 November (H3): each quote read its file whole again, and a file of any size was read."""
+def test_a_file_shared_by_many_quotes_is_read_once(tmp_path, monkeypatch) -> None:
+    """The audit of 25 November (H3): each quote read its file whole again."""
     from adk_spec.workspace import evidence
 
-    repository(tmp_path, {"src/a.py": "def start_session(user):\n    return user\n", "big.txt": "x" * 2_000_001})
+    repository(tmp_path, {"src/a.py": "def start_session(user):\n    return user\n"})
     reads: list[str] = []
     real = evidence.read_text
     monkeypatch.setattr(evidence, "read_text", lambda path: reads.append(path.name) or real(path))
     assert quote_holds(tmp_path, ".", "src/a.py", "def start_session(user):", ())
     assert quote_holds(tmp_path, ".", "src/a.py", "    return user", ())
     assert reads.count("a.py") == 1
-    assert quote_holds(tmp_path, ".", "big.txt", "xxxxxxxxxxxx", ()) is None and "big.txt" not in reads
+
+
+def test_a_quote_in_a_file_past_what_a_reading_reads_is_unknown(tmp_path, monkeypatch) -> None:
+    """The audit of 25 November (H3): a file of any size was read whole for a quote; a reading reads none so large."""
+    from adk_spec.workspace import evidence
+
+    monkeypatch.setattr(evidence, "FILE_MAX_BYTES", 10)
+    repository(tmp_path, {"big.txt": "x" * 100})
+    assert quote_holds(tmp_path, ".", "big.txt", "xxxxxxxxxxxx", ()) is None

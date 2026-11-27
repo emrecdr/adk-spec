@@ -57,9 +57,9 @@ def _property(text: str) -> str:
     return _data(text).replace(":", "%3A").replace(",", "%2C")
 
 
-#: What Markdown reads as its own in a table cell, each escaped by a backslash: a pipe would end the cell, a bracket
-#: or a bang open a link or an image, a star, an underscore or a backtick emphasis or code.
-_MARKS = str.maketrans({mark: f"\\{mark}" for mark in "\\`*_[]!|"})
+#: What opens Markdown of its own in a table cell, each escaped by a backslash: a pipe would end the cell, a bracket
+#: open a link or an image, a star, an underscore or a backtick emphasis or code (`__init__.py` would read in bold).
+_MARKS = str.maketrans({mark: f"\\{mark}" for mark in "\\`*_[|"})
 
 
 def _cell(text: str) -> str:

@@ -100,7 +100,7 @@ def test_the_token_is_its_owners_alone(monkeypatch, tmp_path) -> None:
     assert stat.S_IMODE((tmp_path / "access-token").stat().st_mode) == 0o600
 
 
-def test_login_tells_litellm_it_runs_in_production_before_it_is_imported(monkeypatch, tmp_path) -> None:
+def test_login_sets_litellms_production_settings(monkeypatch, tmp_path) -> None:
     """The audit of 25 November (S8): imported as it stood, LiteLLM read a `.env` up from its own folder and fetched a
     price list from the network."""
     monkeypatch.delenv("LITELLM_MODE", raising=False)

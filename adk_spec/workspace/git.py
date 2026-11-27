@@ -271,9 +271,16 @@ def diffs(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", tr
 
 
 def _size(path: Path) -> int:
-    """The bytes a file holds, a link's own, or none where it is gone."""
+    """The bytes a file adds to a diff: what it holds, a link's own; none where it is gone, or where git shows it as
+    binary, on one line, as it does a file whose first 8,000 bytes hold a NUL (the cleanup review of phase 24: an
+    untracked image was counted whole)."""
     try:
-        return path.lstat().st_size
+        if path.is_symlink():
+            return path.lstat().st_size
+        with path.open("rb") as held:
+            if b"\0" in held.read(8000):
+                return 0
+        return path.stat().st_size
     except OSError:
         return 0
 

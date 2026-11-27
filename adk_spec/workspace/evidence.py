@@ -75,29 +75,28 @@ def _found(path: Path, quote: str) -> bool | None:
         return False
     if stamp.st_size > FILE_MAX_BYTES:
         return None
-    held = (str(path), stamp.st_mtime_ns, stamp.st_size)
-    if (text := _text(*held)) is None:
+    if (text := _text(path, stamp.st_mtime_ns, stamp.st_size)) is None:
         return False
     if quoted_at(quote, text) is not None:
         return True
     # A stand-in opens on `[` and ends on `]`: a quote of neither is not of the scrubbed text alone, nor costs a scrub.
-    return ("[" in quote or "]" in quote) and quoted_at(quote, _scrubbed(*held)) is not None
+    return ("[" in quote or "]" in quote) and quoted_at(quote, _scrubbed(text)) is not None
 
 
 @functools.lru_cache(maxsize=32)
-def _text(path: str, _mtime: int, _size: int) -> str | None:
+def _text(path: Path, _mtime: int, _size: int) -> str | None:
     """A file's text, kept by its path and stamp: a file many quotes name is read once a command, not once a quote
     (the audit of 25 November, H3). None where it is no text, or cannot be read."""
     try:
-        return read_text(Path(path))
+        return read_text(path)
     except NotTextError, OSError:
         return None
 
 
-@functools.lru_cache(maxsize=8)
-def _scrubbed(path: str, mtime: int, size: int) -> str:
-    """A file's text as a reading or a diff is shown it, scrubbed, kept as `_text` is."""
-    return scrub_lines(_text(path, mtime, size) or "")[0]
+@functools.lru_cache(maxsize=32)  # as many as `_text`: one quote's search names up to 21 files (measured: 8 never hit)
+def _scrubbed(text: str) -> str:
+    """A file's text as a reading or a diff is shown it, scrubbed, kept by the text `_text` keeps."""
+    return scrub_lines(text)[0]
 
 
 def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[Finding]:

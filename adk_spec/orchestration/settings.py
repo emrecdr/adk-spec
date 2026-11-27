@@ -58,6 +58,13 @@ def copilot_key() -> Path:
     return copilot_dir() / (os.environ.get("GITHUB_COPILOT_API_KEY_FILE") or "api-key.json")
 
 
+def quiet_litellm() -> None:
+    """What LiteLLM is told before it is first imported: that it runs in production, so it reads no `.env`, and that
+    it has its own model map, so it fetches no price list. `login` imports it too (the audit of 25 November, S8)."""
+    os.environ.setdefault("LITELLM_MODE", "PRODUCTION")
+    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")  # the pinned version's own model map
+
+
 def pin_copilot_dir() -> None:
     """The Copilot folder and its files written for LiteLLM, which reads them as written: `GITHUB_COPILOT_TOKEN_DIR`
     with its `~` expanded, and a blank file name dropped. LiteLLM would read `~/tokens` as a folder named `~` and
