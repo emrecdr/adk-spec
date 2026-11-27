@@ -6,7 +6,7 @@ description = "Spec-driven development on Google ADK: models draft the specs, co
 requires-python = ">=3.14,<3.15"
 dependencies = [
     # Pinned: a bump lands only measured live on both arms.
-    "google-adk==2.14.1",
+    "google-adk==2.15.0",
     # Held: ADK declares litellm below 1.106.3, and 1.110.0 removed the names the login imports.
     "litellm==1.106.2",
     "mcp==2.3.0",
@@ -28,7 +28,7 @@ build-backend = "hatchling.build"
 packages = ["adk_spec"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff==0.17.5", "pyrefly==1.4.1"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24", "ruff==0.17.6", "pyrefly==1.5.0"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

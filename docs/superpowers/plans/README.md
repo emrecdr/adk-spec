@@ -568,7 +568,7 @@ and a step moves to code only where its output is a function of its input with n
 - Two items of the outside audit of 22 November 2026, deferred with their reasons. Untracked files diffed in Python
   rather than one `git` process each: faster on Windows, but the diff's text would change, and every change verified
   before it would read as drifted unless the text matched git's byte for byte; a Windows run should first show the
-  cost. LiteLLM's private names in `login.py` and `catalog.py` replaced: ADK 2.14.1 holds LiteLLM below 1.106.3
+  cost. LiteLLM's private names in `login.py` and `catalog.py` replaced: ADK 2.15.0 holds LiteLLM below 1.106.3
   itself, so no upgrade follows, and a new login flow needs a live login to prove.
 - Plan 4's live proof: one `propose` and a 25-call measurement, on a go-ahead.
 - Plan 5's live proof: one standard change through the four commands, on a go-ahead. `approve` calls a model

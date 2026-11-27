@@ -609,7 +609,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}  # the merge with the target would read as drifted work
           fetch-depth: 0  # the history, to compare the work with what was verified
           persist-credentials: false  # no token is left for the steps after
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - run: uv tool install <where your team keeps adk-spec>  # it is not on PyPI
       - run: adk-spec validate --strict
 ```
@@ -893,8 +893,6 @@ the product; this is for watching.
 
 - Windows: set `PYTHONUTF8=1` in the user environment. LiteLLM may otherwise read its own files as cp1252.
 - Windows on ARM64: set `UV_PYTHON_ARCH=x86_64`. LiteLLM ships no wheel for native ARM64.
-- macOS: install the Xcode Command Line Tools while `google-adk` is 2.14.1. `watchdog` 6.0.0 builds from source on
-  Python 3.14.
 - Behind a company proxy that re-signs HTTPS, adk-spec trusts the operating system's certificate store.
 
 ## Developing adk-spec
