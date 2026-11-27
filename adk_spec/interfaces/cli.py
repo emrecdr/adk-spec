@@ -24,7 +24,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
 
-from ..domain.brief_md import assumption_count, parse_brief, render_brief
+from ..domain.brief_md import assumption_count, marker_of, parse_brief, render_brief
 from ..domain.changelog_md import changelog_entry, with_entry
 from ..domain.check import nameable, owed, removed, tasked
 from ..domain.ci_md import annotation_lines, step_summary
@@ -487,11 +487,29 @@ def _drafted(workspace: Workspace, statements: Sequence[Any]) -> None:
 
 
 def _new(args: argparse.Namespace) -> int:
+    """A change written by hand: its state, and a brief to fill, its sections in order and each part to write an
+    open point that `validate` names (the audit of 25 November, U13)."""
     workspace = _workspace(args)
     tier = args.tier or workspace.config().default_tier
-    folder = workspace.new_change(args.id, tier)
-    print(f"made {workspace.shown(folder)}, a {tier} draft: write its brief.md, its deltas and its tasks.md")
+    folder = workspace.new_change(args.id, tier, {BRIEF_FILE: _brief_to_fill(args.id)})
+    print(f"made      {workspace.shown(folder)}, a {tier} draft")
+    _say_next(workspace, args.id, workspace.specs()[0])
     return EXIT_OK
+
+
+def _brief_to_fill(change_id: str) -> str:
+    """The brief `new` writes: every section, those a person must write each holding the question it answers."""
+    return render_brief(
+        Brief(
+            title=change_id.replace("-", " ").capitalize(),
+            why=marker_of("Why is this change needed?"),
+            what_changes=marker_of("What changes, as a person using it sees it?"),
+            non_goals="None.",
+            capabilities=(),
+            impact="None.",
+            assumptions="None.",
+        )
+    )
 
 
 def _prefix(change_id: str) -> str:
@@ -596,29 +614,43 @@ def _living(workspace: Workspace, refused: str) -> dict[str, Spec]:
 
 
 def _say_next(
-    workspace: Workspace, change_id: str, living: dict[str, Spec], *, drift: bool = True, plan: str | None = None
+    workspace: Workspace,
+    change_id: str,
+    living: dict[str, Spec],
+    *,
+    drift: bool = True,
+    plan: str | None = None,
+    first: str | None = None,
 ) -> None:
     """The line every command that changes a change ends on: what comes next, read from the files as they now are.
     Without `drift`, git is not asked whether the work moved: `verify` has just measured it. A `plan` the step names
     is said as `plan` gives it, with the flags this run's plan goes on with: found by the cleanup review, a second
     wording of the step named a plan its holds refused. Where no approval covers the change's files, a person reads
-    it before approving: its view, `reports/review.md`, is written again first."""
+    it before approving: its view, `reports/review.md`, is written again first. What a person reads `first`, where a
+    plan was just drafted, is said on one line with the view (the audit of 25 November, U9)."""
     assessed = _assessed(workspace, change_id, living, drift=drift)
     deltas = assessed.loaded.change.deltas
     # A draft, a strict one approved once among them, or an approved change edited since, owes an approval: its view
     # is written for the person who gives it. Found by the code review: a second approver read the view of before.
     owed = owes_approval(assessed.state, assessed.stale)
-    if owed and deltas and (view := _view_written(workspace, change_id, deltas, living)):
-        shown, overlaps = view
-        print(f"review    {shown}: {review_said(deltas, overlaps)}")
+    view = _view_written(workspace, change_id, deltas, living) if owed and deltas else None
+    if view is not None and first:
+        path, overlaps = view
+        named = path.relative_to(workspace.home / CHANGES / change_id).as_posix()
+        print(f"read      {first}, then {named} ({review_said(deltas, overlaps)})")
+    elif view is not None:
+        path, overlaps = view
+        print(f"review    {workspace.shown(path)}: {review_said(deltas, overlaps)}")
+    elif first:
+        print(f"read      {first} first")
     phrase = assessed.step.phrase
     print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
 
 
 def _view_written(
     workspace: Workspace, change_id: str, deltas: Mapping[str, Delta], living: Mapping[str, Spec]
-) -> tuple[str, dict[str, list[str]]] | None:
-    """The approver's view of a change written again: where it is, as shown, and the overlaps it names. None where it
+) -> tuple[Path, dict[str, list[str]]] | None:
+    """The approver's view of a change written again: where it is, and the overlaps it names. None where it
     cannot be written, a file that will not open or a folder the path rules refuse: the view is an aid, and found by
     the code review, its fault failed commands whose work was done."""
     overlaps = _overlaps(workspace, change_id, deltas)
@@ -626,7 +658,7 @@ def _view_written(
         path = workspace.write_report(change_id, REVIEW, render_review(change_id, deltas, living, overlaps))
     except OSError, WorkspaceError:
         return None
-    return workspace.shown(path), overlaps
+    return path, overlaps
 
 
 def _overlaps(workspace: Workspace, change_id: str, deltas: Mapping[str, Delta]) -> dict[str, list[str]]:
@@ -692,7 +724,9 @@ def _validate(args: argparse.Namespace) -> int:
     _printed(found)
     errors = sum(held.severity == "ERROR" for held in found)
     warnings = sum(held.severity == "WARNING" for held in found)
-    print(f"{errors} error{'' if errors == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}")
+    notes = sum(held.severity == "INFO" for held in found)  # counted where printed (the audit of 25 November, U10)
+    said = f", {notes} note{'' if notes == 1 else 's'}" if notes else ""
+    print(f"{errors} error{'' if errors == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}{said}")
     if github:
         print(f"::{token}::")
         _annotated(workspace, found, failed=stops)
@@ -746,26 +780,39 @@ def _status(args: argparse.Namespace) -> int:
                 continue
             assessed = _assessed(workspace, change_id, living)
         except WorkspaceError as exc:  # one change that does not read stops no other: it is named, and why
-            rows.append({"id": change_id, "tier": "-", "status": "unread", "actor": "you", "next": str(exc)})
+            rows.append(
+                {"id": change_id, "tier": "-", "status": "unread", "actor": "you", "next": str(exc), "tasks": ""}
+            )
             continue
         state, step = assessed.state, assessed.step
         row = {"id": change_id, "tier": state.tier, "status": state.status, "actor": step.actor, "next": step.phrase}
-        rows.append(row)
+        rows.append({**row, "tasks": _progress(assessed.loaded.change)})  # empty for a draft
     if args.json:
         print(json.dumps({"changes": rows}, indent=2))
     elif not rows:
         print(f'no open changes: run {PROG} propose "<what you want>"')
     else:
         width = max(len(row["id"]) for row in rows)
+        ticked = max(len(row["tasks"]) for row in rows)  # a column only where a row has a count
         groups = [(heading, [row for row in rows if row["actor"] == actor]) for actor, heading in GROUPS]
         for at, (heading, held) in enumerate(group for group in groups if group[1]):
             print(("\n" if at else "") + heading)
             for row in held:
-                print(f"  {row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
+                count = f"{row['tasks']:<{ticked}}  " if ticked else ""
+                print(f"  {row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {count}{row['next']}")
     if not args.json:
         _suspects_said(workspace, living)
         _profile_said(workspace)
     return EXIT_OK
+
+
+def _progress(change: Change) -> str:
+    """How many of a change's tasks are ticked, of how many, once it is past its draft: `3/7`. Empty for a draft, and
+    for a list off its grammar, whose fault `validate` says (the audit of 25 November, U13)."""
+    tasks = [task for group in change.tasks or () for task in group.tasks]
+    if change.state.status == "draft" or not tasks:
+        return ""
+    return f"{sum(task.done for task in tasks)}/{len(tasks)}"
 
 
 def _suspects_said(workspace: Workspace, living: Mapping[str, Spec]) -> None:
@@ -967,7 +1014,7 @@ def _said_approved(held: ChangeState, by: str, count: int) -> None:
         said = f"once, by {by}"
     else:
         said = f"by {by}" + (f", after {held.approval.by}" if held.approval and held.approval.second else "")
-    print(f"approved `{held.id}` {said}: {count} files recorded")
+    print(f"approved  {held.id} {said}: {count} files recorded")
 
 
 def _began(workspace: Workspace, state: ChangeState) -> dict[str, str]:
@@ -1020,7 +1067,7 @@ def _archive(args: argparse.Namespace) -> int:
         print(f"{PROG}: `{args.id}` is not archived, and no spec was written", file=sys.stderr)
         if any(held.code == "delta.base-stale" for held in refused):
             view = _view_written(workspace, args.id, loaded.change.deltas, living)
-            shown = view[0] if view else "the current requirement"
+            shown = workspace.shown(view[0]) if view else "the current requirement"
             print(
                 f"{PROG}: the living spec changed after this delta was based on it: read {shown}, update the delta, "
                 f"then run `{PROG} rebase {args.id}` and approve again",
@@ -1032,7 +1079,7 @@ def _archive(args: argparse.Namespace) -> int:
     if (logged := _logged(workspace, args.id, loaded.change.deltas)) is not None:
         files[CHANGELOG] = logged
     workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}), files=files)
-    print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
+    print(f"archived  {args.id}: folded into {', '.join(sorted(merged)) or 'no spec'}")
     for shown in left:
         print(f"kept      {shown}: it would not read or be written, a link or not UTF-8: nothing was added")
     if logged is None:
@@ -1040,6 +1087,7 @@ def _archive(args: argparse.Namespace) -> int:
             f"kept      {workspace.shown(workspace.home / CHANGELOG)}: it would not read or be written, a link, not "
             f"UTF-8 or a code fence never closed: the entry of `{args.id}` was not added, so add it by hand"
         )
+    print("next      commit .spec/ with the code")
     return EXIT_OK
 
 
@@ -2216,11 +2264,12 @@ def _open_said(unasked: Sequence[Mapping[str, str]]) -> None:
 
 
 def _plan_command(workspace: Workspace, change_id: str, change: Change | None, no_explore: bool) -> str:
-    """The `plan` that goes on after a stop, with `--no-explore` where the person gave it, the change is revised, or
-    a `context.md` is there to keep. Found by review: said always, it kept a plan from reading where propose's reading
-    wrote nothing. Never with `--replace`: a ticked list is the person's to throw away, as the `kept` line says."""
+    """The `plan` that goes on after a stop, with `--no-explore` where the person gave it or the change is revised,
+    and no `context.md` is there, which makes `plan` skip the reading anyway (the audit of 25 November, U9). Found by
+    review: said always, it kept a plan from reading where propose's reading wrote nothing. Never with `--replace`: a
+    ticked list is the person's to throw away, as the `kept` line says."""
     there = (workspace.home / CHANGES / change_id / CONTEXT_FILE).is_file()
-    flags = " --no-explore" if no_explore or change is not None or there else ""
+    flags = " --no-explore" if (no_explore or change is not None) and not there else ""
     return f"`{PROG} plan {change_id}{flags}`"
 
 
@@ -2302,8 +2351,7 @@ def _then_planned(
     for path, _replaced in made.written:
         print(f"          {workspace.shown(path)}")
     print(f"tokens    {_spent(ledger)}")
-    print(f"read      {_first_reads(workspace, change_id)} first")
-    _say_next(workspace, change_id, specs)
+    _say_next(workspace, change_id, specs, first=_first_reads(workspace, change_id))
     return EXIT_OK
 
 
@@ -2379,6 +2427,17 @@ def _first_reads(workspace: Workspace, change_id: str) -> str:
     return " and ".join(first)
 
 
+def _past_the_cap(known: Known, capabilities: Sequence[str]) -> str | None:
+    """Why the living specs triage named are past what the deltas stage is given, as that stage says it; None where
+    they fit. Asked before the reading spends: found by an outside audit of 171f1c4 (H7), the cap was met only after
+    minutes of reading and the brief were paid for."""
+    try:
+        living_text(known.living, capabilities)
+    except ContextTooLargeError as exc:
+        return f"context: {exc}"
+    return None
+
+
 def _drafts(
     args: argparse.Namespace,
     workspace: Workspace,
@@ -2409,6 +2468,8 @@ def _drafts(
         # The brief starts from the capabilities triage found. Found live: told nothing of them, a brief named three
         # for a two-function change triage had sized as one, and the deltas stage could not fill them.
         if not isinstance(found := read_triage(sized), str):
+            if (past := _past_the_cap(known, found.capabilities)) is not None:
+                return {**sized, FAILURE: past}, None
             seed = {**seed, SIZED: sized_text(found)}
             # Said before the reading spends: a wrong tier is stopped here, and named with --tier.
             print(f"sized     {tier}: {plain(found.reason)}")

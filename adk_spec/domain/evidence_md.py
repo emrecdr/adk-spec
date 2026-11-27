@@ -119,7 +119,8 @@ def suspects(proofs: Sequence[tuple[int, Proof]], holds: Callable[[Proof], bool 
                 finding(
                     "spec.evidence-gone",
                     f"{req} has none of its evidence left in the files git tracks ({files}, proved by {one.change}). "
-                    "Verify a change that keeps it, or delete its lines once that is reviewed.",
+                    f'Run `adk-spec propose "keep {req}: its evidence is gone"` and verify that change, or delete '
+                    "its lines once that is reviewed.",
                     path=path,
                     line=first,
                 )

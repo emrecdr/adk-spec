@@ -252,8 +252,7 @@ wrote     .spec/changes/sign-in-with-a-passkey, a standard draft
           .spec/changes/sign-in-with-a-passkey/context.md
           .spec/changes/sign-in-with-a-passkey/tasks.md
 tokens    23,149 in 9 calls
-read      brief.md (25 lines, 1 assumption) first
-review    .spec/changes/sign-in-with-a-passkey/reports/review.md: 1 added
+read      brief.md (25 lines, 1 assumption), then reports/review.md (1 added)
 next      run `adk-spec approve sign-in-with-a-passkey`
 ```
 
@@ -334,7 +333,7 @@ adk-spec approve sign-in-with-a-passkey
 ```text
 checked   .spec/changes/sign-in-with-a-passkey/reports/check.md: 1 finding, 0 blocking
 tokens    1,393 in 1 call
-approved `sign-in-with-a-passkey` by ana: 3 files recorded
+approved  sign-in-with-a-passkey by ana: 3 files recorded
 next      implement tasks.md, then run `adk-spec verify sign-in-with-a-passkey`
 ```
 
@@ -398,7 +397,8 @@ adk-spec archive sign-in-with-a-passkey
 ```
 
 ```text
-archived `sign-in-with-a-passkey`: folded into auth
+archived  sign-in-with-a-passkey: folded into auth
+next      commit .spec/ with the code
 ```
 
 `.spec/specs/auth/spec.md` now holds `REQ-AUTH-004`. Commit the change with the code it describes.
@@ -406,8 +406,8 @@ archived `sign-in-with-a-passkey`: folded into auth
 `archive` also keeps the lines `verify` proved each requirement with, in `.spec/specs/auth/evidence.md`, one line
 each. Later, `validate` and `status` look for those lines in the code. A requirement none of whose lines is found,
 in its file or anywhere else in the repository, is noted as suspect: a refactor may have broken it. This is a note
-only, and it never fails CI. To clear it, verify a change that keeps the requirement, or delete its lines in a
-reviewed commit. A line from another repository is checked only where that repository is there. A line is looked
+only, and it never fails CI. To clear it, run the `adk-spec propose "keep REQ-…: its evidence is gone"` its note
+names and verify that change, or delete its lines in a reviewed commit. A line from another repository is checked only where that repository is there. A line is looked
 for only in files git tracks, with each repository's own exclusions, and in their text as a model is shown it, its
 secrets hidden: never in `.git/`, an untracked file, or a secret's own value. A new file counts once you `git add` it.
 
@@ -427,10 +427,10 @@ adk-spec archive trailing-space
 ```
 
 ```text
-approved `trailing-space` by ana: 3 files recorded
+approved  trailing-space by ana: 3 files recorded
 next      implement tasks.md, then run `adk-spec archive trailing-space`
 …
-archived `trailing-space`: folded into auth
+archived  trailing-space: folded into auth
 ```
 
 A lean change owes no check and no verification. Without `--tier`, `propose` sizes the request itself and may call
@@ -464,7 +464,7 @@ wrote     .spec/changes/argon2, a strict draft
 tokens    18,240 in 7 calls
 plan      waits: the change is read before it is planned
 review    .spec/changes/argon2/reports/review.md: 2 added
-next      read brief.md and the specs, then run `adk-spec plan argon2 --no-explore`
+next      read brief.md and the specs, then run `adk-spec plan argon2`
 ```
 
 A strict change stops after the brief and the specs, so that the design and the tasks are drafted from what you
@@ -573,8 +573,9 @@ A `propose` that reads the code takes minutes. A change that spans other reposit
 adk-spec new drop-remember-me --tier lean
 ```
 
-This makes `.spec/changes/drop-remember-me/` with its state file and no model call. Write `brief.md`, `tasks.md`
-and one `specs/<capability>/spec.md` per capability, with whole requirement blocks under `## ADDED Requirements`,
+This makes `.spec/changes/drop-remember-me/` with its state file and a `brief.md` to fill, and no model call: each
+part of the brief to write holds a `[NEEDS CLARIFICATION: …]` that `validate` names. Fill it, write `tasks.md` and
+one `specs/<capability>/spec.md` per capability, with whole requirement blocks under `## ADDED Requirements`,
 `## MODIFIED Requirements` and `## REMOVED Requirements`, then `adk-spec validate drop-remember-me`, `approve` and
 `archive` as above.
 
@@ -623,12 +624,14 @@ adk-spec status
 
 ```text
 Waiting on you
-  sign-in-with-a-passkey  standard  approved  implement tasks.md, then run `adk-spec verify sign-in-with-a-passkey`
-  argon2                  strict    draft     run `adk-spec approve argon2`
+  sign-in-with-a-passkey  standard  approved  2/5  implement tasks.md, then run `adk-spec verify sign-in-with-a-passkey`
+  argon2                  strict    draft          run `adk-spec approve argon2`
 
 Ready to run
-  trailing-space          lean      draft     run `adk-spec plan trailing-space`
+  trailing-space          lean      draft          run `adk-spec plan trailing-space`
 ```
+
+A change past its draft shows how many of its tasks are ticked.
 
 `--all` lists archived changes too; `--json` prints the list for a script. Where quotes of `.spec/profile.md` are no
 longer in the code, `status` says how many on one line, and so does `propose` before it spends anything: run

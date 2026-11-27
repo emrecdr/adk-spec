@@ -321,3 +321,19 @@ def test_a_quote_cut_inside_a_stand_in_holds_while_its_line_stands(tmp_path) -> 
     repository(tmp_path, {"src/conf.py": f'KEY = "{key}"\n'})
     cut = proof(quote='KEY = "[REDACTE', path="src/conf.py")
     assert holds(tmp_path, cut, ()) is True
+
+
+def test_validate_counts_the_notes_it_prints(tmp_path, capsys) -> None:
+    """The audit of 25 November (U10): the count left out the notes printed above it."""
+    archived(tmp_path)
+    assert validated(tmp_path, capsys)[1].splitlines()[-1] == "0 errors, 0 warnings"
+    write_text(tmp_path / "src/auth.py", AFTER.replace("return passkey(user)", "return webauthn(user)"))
+    assert validated(tmp_path, capsys)[1].splitlines()[-1] == "0 errors, 0 warnings, 1 note"
+
+
+def test_a_suspect_requirement_names_the_change_that_keeps_it(tmp_path, capsys) -> None:
+    """The audit of 25 November (C6): the note named no command to clear it."""
+    archived(tmp_path)
+    write_text(tmp_path / "src/auth.py", AFTER.replace("return passkey(user)", "return webauthn(user)"))
+    (gone,) = [line for line in validated(tmp_path, capsys)[1].splitlines() if "spec.evidence-gone" in line]
+    assert '`adk-spec propose "keep REQ-AUTH-004: its evidence is gone"`' in gone

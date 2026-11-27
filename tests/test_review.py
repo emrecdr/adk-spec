@@ -120,7 +120,7 @@ def test_a_proposed_change_gets_its_view(tmp_path, capsys, monkeypatch) -> None:
     seeded(tmp_path)
     assert run(tmp_path, "propose", "Let users sign in with a passkey.", "--id", "fresh", "--no-input") == 0
     assert (tmp_path / ".spec/changes/fresh/reports/review.md").is_file()
-    assert "review    .spec/changes/fresh/reports/review.md" in capsys.readouterr().out
+    assert ", then reports/review.md (" in capsys.readouterr().out  # with what to read first (U9)
 
 
 def test_an_approved_change_is_not_given_the_view_again(tmp_path) -> None:

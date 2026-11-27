@@ -612,7 +612,9 @@ def test_the_plan_command_after_a_stop_reads_the_code_where_no_context_was_writt
     assert _plan_command(ws, "passkeys", None, False) == "`adk-spec plan passkeys`"
     assert _plan_command(ws, "passkeys", None, True) == "`adk-spec plan passkeys --no-explore`"
     (tmp_path / ".spec/changes/passkeys/context.md").write_text("# Context: passkeys\n", encoding="utf-8")
-    assert _plan_command(ws, "passkeys", None, False) == "`adk-spec plan passkeys --no-explore`"
+    # A context.md there makes `plan` skip the reading: the flag would say it twice (the audit of 25 November, U9).
+    assert _plan_command(ws, "passkeys", None, False) == "`adk-spec plan passkeys`"
+    assert _plan_command(ws, "passkeys", None, True) == "`adk-spec plan passkeys`"
 
 
 def test_plan_on_a_verified_change_names_a_new_change_not_a_revision(tmp_path, capsys, fake_provider) -> None:

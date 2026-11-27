@@ -177,7 +177,7 @@ def test_approve_makes_the_check_a_standard_change_owes(tmp_path, capsys, fake_p
     out = capsys.readouterr().out
     assert len(fake_provider.requests) == 1 and state(ws).status == "approved" and state(ws).check.blocking == 0
     assert re.search(rf"checked   {re.escape(REPORT)}: \d+ findings?, 0 blocking", out)
-    assert "approved `passkeys` by reviewer" in out and "tokens    120 in 1 call\n" in out
+    assert "approved  passkeys by reviewer" in out and "tokens    120 in 1 call\n" in out
     assert "next      implement tasks.md, then run `adk-spec verify passkeys`" in out
     assert "check.ambiguity" in read_text(tmp_path / REPORT), "the report is written as `check` writes it"
 

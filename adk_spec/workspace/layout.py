@@ -250,9 +250,9 @@ class Workspace:
         folder = self.home / CHANGES
         return sorted(entry.name for entry in folder.iterdir()) if folder.is_dir() else []
 
-    def new_change(self, change_id: str, tier: Tier) -> Path:
-        """A new draft change's folder, holding its state file."""
-        return self.write_change(ChangeState(id=change_id, tier=tier, needs_design=owes_design(tier)), {})
+    def new_change(self, change_id: str, tier: Tier, files: Mapping[str, str] | None = None) -> Path:
+        """A new draft change's folder, holding its state file and `files`, each by its path in the folder."""
+        return self.write_change(ChangeState(id=change_id, tier=tier, needs_design=owes_design(tier)), files or {})
 
     def taken(self, specs: Mapping[str, Spec]) -> set[str]:
         """Every requirement ID that is spoken for: in a living spec of `specs`, retired there, or spelled in a
