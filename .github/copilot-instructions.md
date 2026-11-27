@@ -40,7 +40,7 @@ uv run python scripts/dump_instructions.py                   # every stage's ins
 
 CI runs the four gate commands on Windows, Ubuntu and macOS with `PYTHONUTF8=1`. Ruff keeps complexity at 10 and lines
 at 120. Pins: uv resolves with `exclude-newer = "P3D"` (a three-day cooldown on every release). `litellm` is held at
-1.106.2 because `google-adk` 2.14.1 caps it; `login.py` also uses LiteLLM's private Copilot names. Do not raise either
+1.106.2 because `google-adk` 2.15.0 caps it; `login.py` also uses LiteLLM's private Copilot names. Do not raise either
 pin.
 
 ## Architecture

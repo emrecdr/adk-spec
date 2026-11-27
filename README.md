@@ -892,8 +892,6 @@ the product; this is for watching.
 
 - Windows: set `PYTHONUTF8=1` in the user environment. LiteLLM may otherwise read its own files as cp1252.
 - Windows on ARM64: set `UV_PYTHON_ARCH=x86_64`. LiteLLM ships no wheel for native ARM64.
-- macOS: install the Xcode Command Line Tools while `google-adk` is 2.14.1. `watchdog` 6.0.0 builds from source on
-  Python 3.14.
 - Behind a company proxy that re-signs HTTPS, adk-spec trusts the operating system's certificate store.
 
 ## Developing adk-spec
