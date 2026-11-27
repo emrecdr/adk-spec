@@ -79,6 +79,17 @@ source of truth about codebase". So in adk-spec's first use:
 
 Nothing adk-spec writes, gates or says rests on the graph alone.
 
+The owner then added: "use Codegraph as a cross-check resource, but also use it to validate and to improve the output,
+may be we can find some points by Codegraph which we missed by code reading analyzing". So the graph also finds what
+the reading missed, and each finding is a lead the reading confirms before it changes the output:
+
+5. **Files the reading missed:** files the graph ranks high for the request that no round read are read in a "more"
+   round, within its budget.
+6. **Reach the drafts missed:** importers and tests of the files a change touches that the brief and tasks leave out
+   become points to check; the tests that reach them are named for the tasks to run.
+7. **Names that do not exist:** a symbol the brief, the deltas or the tasks name that the code defines nowhere is a
+   finding before approval, as a quote not found is.
+
 ## Order of the work
 
 1. The library, v1, in its own repository, with its own gate; reviewed by adk-review's session.
