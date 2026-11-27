@@ -324,3 +324,20 @@ def test_an_untracked_file_its_attributes_make_binary_is_no_size_a_diff_reads(tm
     (tmp_path / "data.csv").write_text("a,b\n" * 50, encoding="utf-8")
     changed, _settled = layer.diffs(tmp_path, commit, exclude=())
     assert "data.csv" in changed
+
+
+def test_a_commit_is_said_only_where_its_python_files_are_exactly_the_commits(tmp_path) -> None:
+    """What a kept code graph is labelled by (the code review of phase 30): HEAD and its Python files, where none
+    under the folder is changed, untracked, or one git is told to look past, which `status` does not show."""
+    python = (".py", ".pyi")
+    commit = repository(tmp_path, {"app/a.py": "x = 1\n", "README.md": "# A\n"})
+    assert layer.committed(tmp_path, suffixes=python) == (commit, ["app/a.py"])
+    (tmp_path / "README.md").write_text("# B\n", encoding="utf-8")
+    assert layer.committed(tmp_path, suffixes=python) == (commit, ["app/a.py"]), "a document is no Python"
+    (tmp_path / "app/b.py").write_text("y = 1\n", encoding="utf-8")
+    assert layer.committed(tmp_path, suffixes=python) is None, "an untracked Python file"
+    (tmp_path / "app/b.py").unlink()
+    (tmp_path / "app/a.py").write_text("x = 2\n", encoding="utf-8")
+    assert layer.committed(tmp_path, suffixes=python) is None, "a changed Python file"
+    _git(tmp_path, "update-index", "--assume-unchanged", "app/a.py")
+    assert layer.committed(tmp_path, suffixes=python) is None, "a file git is told to look past"

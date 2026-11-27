@@ -121,3 +121,21 @@ Decided with adk-review's session (the owner's rule, amb #719 to #725): the grap
 the project root, the owner's request, with safeguards both tools keep, in codegraph v0.2; an import two files answer
 is ambiguous with its candidates listed; adk-review's ancestor rule is ported once merged on its side.
 
+## The graph kept for every tool (phase 30)
+
+The owner asked that whichever tool builds the graph, it is kept in one place, `.codegraph/` under the project, so
+each tool uses the same one. Decided with adk-review's session (amb #721-#732), in codegraph v0.2: `store.save` and
+`store.load`, the library's only I/O; a folder that ignores itself; a write whole or not at all, never through a link;
+a reader that takes only a graph this version wrote, up to a cap; `load(commit=)`, None for a graph of another commit
+or of unsaved work, told from the file's first bytes.
+
+adk-spec keeps a graph there only where it is exactly a commit's, as the label promises every reader (its code
+review found a narrower graph passing for the commit's; agreed with adk-review, amb #736): HEAD, no Python file under
+the project changed or untracked, none git is told to look past (assume-unchanged, outside a sparse checkout), and
+every Python file the commit holds there in the graph, none excluded by the person or withheld as a key's, too big or
+not UTF-8. Otherwise it keeps nothing and leaves the kept graph alone, so a graph of unsaved work never replaces a
+commit's. A write that fails says nothing. A known limit: a person who commits or stashes during a model call, after
+the reading cached a file, may leave a graph of the earlier text under the new commit; readers confirm what they take
+from it. adk-spec does not read the kept graph back: building it costs about a second, below the 10 MB cap, and a
+graph another tool built keeps that tool's rules for tests and exclusions.
+

@@ -30,7 +30,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "codegraph", git = "https://github.com/emrecdr/codegraph?rev=c8463feb62e84f8ba7d363383b36c71aa72c962c" },
+    { name = "codegraph", git = "https://github.com/emrecdr/codegraph?rev=bafc76efa87103caaa75c63ec5392fc011d26d07" },
     { name = "google-adk", specifier = "==2.15.0" },
     { name = "litellm", specifier = "==1.106.2" },
     { name = "mcp", specifier = "==2.3.0" },
@@ -334,8 +334,8 @@ wheels = [
 
 [[package]]
 name = "codegraph"
-version = "0.1.0"
-source = { git = "https://github.com/emrecdr/codegraph?rev=c8463feb62e84f8ba7d363383b36c71aa72c962c#c8463feb62e84f8ba7d363383b36c71aa72c962c" }
+version = "0.2.0"
+source = { git = "https://github.com/emrecdr/codegraph?rev=bafc76efa87103caaa75c63ec5392fc011d26d07#bafc76efa87103caaa75c63ec5392fc011d26d07" }
 
 [[package]]
 name = "colorama"

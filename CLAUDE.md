@@ -49,7 +49,8 @@ import except `adk_spec/agent.py`, the shape `adk web` loads.
   set of repositories a change spans (`git.py`, `source.py`), the project's installed libraries a reading may open
   offline as `python:`/`node:` paths (`installed.py`), the Agent Skill `init` writes into the repository (`skill.py`; a
   refresh replaces one whose text is in `SHIPPED`), the MCP entry it adds to the root `.mcp.json` (`mcp_setup.py`), the
-  code graph beside the reading, a hint and leads a stage confirms, never the source of truth (`graph.py`), config, what
+  code graph beside the reading, a hint and leads a stage confirms, never the source of truth, kept in the root's
+  `.codegraph/` for every tool (`graph.py`), config, what
   stages are given (`context.py`), running the project's tests (`tests.py`, `process.py`).
 - **orchestration**: ADK `Workflow` graphs (`graph.py`), one schema-bound `LlmAgent` per stage (`stages/`), the gate
   after each stage (`gate.py`), the code reading (`explore.py`), plugins every app carries (`plugins.py`: schema

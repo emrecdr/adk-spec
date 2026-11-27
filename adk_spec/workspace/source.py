@@ -37,7 +37,7 @@ from itertools import zip_longest
 from pathlib import Path
 from typing import NamedTuple
 
-from codegraph import Graph
+from codegraph import Graph, store
 from codegraph.extract import PYTHON
 
 from ..domain.secrets import KEY_WORDS, holds_a_key, scrub_lines
@@ -46,7 +46,7 @@ from ..domain.verify import parts_of_diff
 from .config import Config, ConfigError, load_config
 from .context import tree_text
 from .files import NotTextError, read_text
-from .git import GitError, diffs, grep, head, is_repository, top
+from .git import GitError, committed, diffs, grep, head, is_repository, top
 from .git import files as listed_by_git
 from .graph import GRAPH_MAX_BYTES, built, empty, shared
 from .installed import Environment, environments
@@ -432,12 +432,28 @@ class Source:
     def graph(self) -> Graph:
         """The code graph of this repository's Python files as a reading may show them, scrubbed, a key's file
         withheld: built once a command for the repository, whichever source asks, and empty past `GRAPH_MAX_BYTES` of
-        Python, where the reading runs as before."""
+        Python, where the reading runs as before. A graph that is exactly a commit's is kept in `.codegraph/` too, for
+        every tool (the owner's request)."""
         if self._graph is None:
             here, python = self._here, [path for path in self._here.paths if path.endswith(PYTHON)]
             small = _bytes(here.root, python) <= GRAPH_MAX_BYTES
-            self._graph = shared(str(here.root), python, lambda: built(python, here.lines) if small else empty())
+            self._graph = shared(str(here.root), python, lambda: self._built(python) if small else empty())
         return self._graph
+
+    def _built(self, python: list[str]) -> Graph:
+        """The graph of `python`, kept where it is exactly the commit's, as its label says to every reader (agreed with
+        adk-review, amb #736): every Python file the commit holds here, none changed, excluded or withheld. A narrower
+        one, or one of unsaved work, is not kept, and leaves the one kept alone; a write that fails says nothing."""
+        here = self._here
+        try:
+            held = committed(here.root, suffixes=PYTHON)
+        except GitError:  # git cannot say: nothing is kept
+            held = None
+        graph = built(python, here.lines, commit=held[0] if held else "working tree")
+        if held and sorted(held[1]) == [file.path for file in graph.files]:
+            with contextlib.suppress(store.StoreError):
+                store.save(graph, here.root)
+        return graph
 
     def libraries(self) -> str:
         """The installed libraries as a stage is told of them, and how to read one: nothing where none are read."""

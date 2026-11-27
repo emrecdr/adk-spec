@@ -100,14 +100,15 @@ _MEMBER = re.compile(r"`([A-Z]\w*)\.([A-Za-z_]\w*)`")
 _BUILT: dict[tuple[str, tuple[str, ...]], Graph] = {}
 
 
-def built(paths: Iterable[str], lines: Callable[[str], list[str] | str]) -> Graph:
+def built(paths: Iterable[str], lines: Callable[[str], list[str] | str], *, commit: str) -> Graph:
     """The graph of the Python files among `paths`, each as `lines` gives it, which is how a reading may show it: a file
-    `lines` will not give (a key's, a link, past what a reading reads) is no part of it."""
+    `lines` will not give (a key's, a link, past what a reading reads) is no part of it. `commit` labels what it was
+    built from."""
     sources: dict[str, str] = {}
     for path in paths:
         if path.endswith(PYTHON) and isinstance(held := lines(path), list):
             sources[path] = "\n".join(held)
-    return build(sources, commit="working tree")
+    return build(sources, commit=commit)
 
 
 def shared(root: str, paths: Sequence[str], make: Callable[[], Graph]) -> Graph:
