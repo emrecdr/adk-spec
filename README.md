@@ -312,8 +312,16 @@ The system SHALL let a user sign in with a passkey.
 
 `context.md` is what the reading found: what exists, where the change plugs in, conventions, risks and what is still
 unknown, each statement quoting a file and line. It also keeps your answers to the questions `propose` asked, and says
-what the reading left out. `tasks.md` is the work, test first, each task naming the
-requirements it serves, its files and how to check it:
+what the reading left out.
+
+Where your repository holds Python, the reading also has a code graph beside it
+([codegraph](https://github.com/emrecdr/codegraph), shared with adk-review), built from the same text a reading may be
+shown. It is a second opinion, never the source of truth: the scout sees the files it ranks first for your request
+beside the list of files, and a stage may read one definition by its name (`src/app.py::Reader.read`); the review is
+told of files ranked first that no round read and of names a statement gives that the code defines nowhere; the plan
+is told what imports and tests the files the reading found. Each is a lead a stage confirms by reading.
+
+`tasks.md` is the work, test first, each task naming the requirements it serves, its files and how to check it:
 
 ```markdown
 - [ ] T001 [REQ-AUTH-004] Write the failing passkey sign-in test

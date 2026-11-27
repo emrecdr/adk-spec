@@ -37,6 +37,12 @@ CHANGE_FILES = "change_files"
 TIER = "tier"
 #: The state key the repository's files are read from, as paths.
 TREE = "tree"
+#: What the code graph adds beside the reading (the owner, 27 November 2026: a hint and leads, never the source of
+#: truth): the files it ranks first, as a stage is shown them and as their paths; what imports and tests the files a
+#: reading found.
+RANKED = "ranked"
+RANKED_PATHS = "ranked_paths"
+REACH = "reach"
 #: The state key a change's `context.md` is read from: what a reading of the code found for it.
 CONTEXT_TEXT = "context_text"
 #: A change's deltas as they stand, given where a request revises the change.
@@ -78,6 +84,8 @@ LIVING_SPECS = section("## The living specs the change touches", "living", LIVIN
 THE_BRIEF = section("## The brief", "brief", BRIEF_TEXT)
 THE_DELTAS = section("## The requirement deltas", "deltas", DELTAS_TEXT, optional=True)
 FILES = section("## The files of this repository", "tree", TREE, optional=True)
+THE_RANKED = section("## The files the code graph ranks first", "ranked", RANKED, optional=True)
+THE_REACH = section("## What imports and tests the files the reading found", "reach", REACH, optional=True)
 THE_CONTEXT = section("## What the repository already holds", "context", CONTEXT_TEXT, optional=True)
 THE_PROFILE = section("## What is known of this repository", "profile", PROFILE_TEXT, optional=True)
 #: The project's installed libraries a reading may ask to read, for the stages that ask after the scout. Found live:

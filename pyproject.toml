@@ -10,6 +10,8 @@ dependencies = [
     # Held: ADK declares litellm below 1.106.3, and 1.110.0 removed the names the login imports.
     "litellm==1.106.2",
     "mcp==2.3.0",
+    # The code graph, shared with adk-review: its own repository, pinned by commit below.
+    "codegraph",
     "pydantic>=2.12",
     "python-dotenv>=1.0",
     # Certificates through the operating system's store, for a company proxy that re-signs HTTPS.
@@ -44,6 +46,10 @@ filterwarnings = [
     "ignore:Items 'device_code', 'user_code', 'verification_uri' on TypedDict class '_DeviceCode':UserWarning",
     "ignore:Items 'access_token', 'error' on TypedDict class '_AccessTokenPoll':UserWarning",
 ]
+
+[tool.uv.sources]
+# Pinned by commit: a reviewed bump of the rev is the only way a change of the graph reaches adk-spec.
+codegraph = { git = "https://github.com/emrecdr/codegraph", rev = "c8463feb62e84f8ba7d363383b36c71aa72c962c" }
 
 [tool.uv]
 # A release is taken three days after it is published, never sooner.

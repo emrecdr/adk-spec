@@ -37,10 +37,11 @@ def survey(*statements: dict, files: tuple[str, ...] = ()) -> dict:
     return {"statements": list(statements), "more_files": list(files), "more_folders": [], "more_searches": []}
 
 
-async def read(root, files: dict[str, str] | None = None):
+async def read(root, files: dict[str, str] | None = None, extra: dict | None = None):
     repository(root, files or FILES)
     held = Source.of(root, exclude=())
     seed = {BRIEF_TEXT: "# Sign in with a passkey\n", DELTAS_TEXT: "", RULES_TEXT: "", TREE: tree_text(held.paths)}
+    seed |= extra or {}
     return await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
 
 
@@ -337,3 +338,29 @@ async def test_a_review_naming_one_unknown_twice_keeps_it_once(tmp_path, fake_pr
     found = explored((await read(tmp_path)).state)
     assert found.unknown[0] == ("Who owns sessions?", "src"), "first named stays first, with where it may be answered"
     assert len(found.unknown) == 8 and found.unknown_over == 1
+
+
+@pytest.mark.asyncio
+async def test_the_scout_is_shown_the_files_the_code_graph_ranks_first(tmp_path, fake_provider) -> None:
+    """A hint beside the tree, never in its place (the owner, 27 November 2026)."""
+    from adk_spec.orchestration.stages import RANKED
+
+    await read(tmp_path, extra={RANKED: "- src/app.py: defines `login`"})
+    (scout,) = sent(fake_provider, SCOUT)
+    assert between(scout, "ranked") == "- src/app.py: defines `login`" and "src/auth/session.py" in between(
+        scout, "tree"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_review_is_given_the_leads_the_code_graph_finds(tmp_path, fake_provider) -> None:
+    """The owner: the graph finds what the reading missed, and the review, which reads it, confirms each or not."""
+    from adk_spec.orchestration.stages import RANKED_PATHS
+
+    fake_provider.answers_when(SURVEY, survey({**APP, "note": "`Session.close` ends it here."}))
+    await read(tmp_path, extra={RANKED_PATHS: ["src/auth/session.py", "src/app.py"]})
+    (review,) = sent(fake_provider, REVIEW)
+    assert between(review, "leads") == (
+        "- Ranked first for this change, and not read: src/auth/session.py\n"
+        "- Statement 1 names `Session.close`, which the code defines nowhere"
+    )

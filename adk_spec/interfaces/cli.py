@@ -34,6 +34,7 @@ from ..domain.context_md import (
     PROFILE_SECTIONS,
     SECTIONS,
     drafted_rules,
+    quoted_statements,
     render_context,
     unknown_count,
     with_answers,
@@ -110,6 +111,7 @@ from ..workspace.context import (
 from ..workspace.evidence import evidence_findings, evidence_folded, profile_gone
 from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, committed_text, head, is_repository, resolves
+from ..workspace.graph import ranked, ranked_text, reach_text
 from ..workspace.layout import (
     BRIEF_FILE,
     CHANGELOG,
@@ -510,7 +512,12 @@ def _described(workspace: Workspace) -> tuple[list[Any], int]:
         return [], EXIT_USAGE
     print(f"reading   the code, to describe this repository: up to {MAX_CALLS} model calls. --no-explore skips it")
     # No profile and no deltas: a refresh reads the code afresh, not the profile it is about to replace.
-    seed = {RULES_TEXT: constitution_text(workspace), BRIEF_TEXT: DESCRIBE, TREE: source.tree()}
+    seed = {
+        RULES_TEXT: constitution_text(workspace),
+        BRIEF_TEXT: DESCRIBE,
+        TREE: source.tree(),
+        **_ranked_for(source, ""),
+    }
     found, failure = _reading(workspace, "init", None, seed, None, source)
     print(f"explored  {_explored_said(found, 0, failure)}")
     if not found.statements:
@@ -1558,6 +1565,7 @@ def _plan_made(
         LESSONS_TEXT,
         LIVING,
         PROFILE_TEXT,
+        REACH,
         RULES_TEXT,
         TREE,
     )
@@ -1584,6 +1592,10 @@ def _plan_made(
         ledger = UsageLedger(workspace.config().max_tokens or None)
     said, context = _read_code(workspace, change_id, seed, ledger, held) if explore else ("", None)
     seed[CONTEXT_TEXT] = context_text(workspace, change_id)
+    if (
+        source is not None and (graph := source.graph()) is not None
+    ):  # a lead for the tasks: what reaches what was found
+        seed[REACH] = reach_text(graph, [path for path, _quote in quoted_statements(seed[CONTEXT_TEXT])])
     read = [(context, False)] if context else []
 
     def build(ledger: UsageLedger, recorder: Recorder) -> App:
@@ -1664,7 +1676,7 @@ def _code_read(
     file in it. `propose` reads before the brief, `plan` where a change has no `context.md`: one reading, one scope."""
     from ..orchestration.explore import ROLES
     from ..orchestration.models import require_ready
-    from ..orchestration.stages import TREE
+    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, TREE
 
     source = _source(workspace, repositories, installed=True)
     if source is None or not source.paths:  # found by the fourth audit: said by `init` alone
@@ -1676,12 +1688,25 @@ def _code_read(
     if why := require_ready(roles=ROLES):
         raise UsageError(why)
     with ledger.held_to_half("the reading"):
-        found, failure = _reading(workspace, "explore", change_id, {**seed, TREE: source.tree()}, ledger, source)
+        asked = f"{seed.get(BRIEF_TEXT, '')}\n{seed.get(DELTAS_TEXT, '')}"
+        aimed = {**seed, TREE: source.tree(), **_ranked_for(source, asked)}
+        found, failure = _reading(workspace, "explore", change_id, aimed, ledger, source)
     said = _explored_said(found, len(source.names), failure)
     if not found.statements:
         return _Read(said, "")
     partial = "; ".join(part for part in (failure, *source.missing) if part) or None
     return _Read(said, _found_text(workspace, _CONTEXT_TITLE, found, partial=partial, others=source.commits()))
+
+
+def _ranked_for(source: Source, asked: str) -> dict[str, Any]:
+    """What the scout is shown beside the tree: the files the code graph ranks first for what is `asked`, or the most
+    imported where nothing is, as for `init`. A hint, never in the tree's place (the owner, 27 November 2026); empty
+    where the repository holds no Python file or no name shares a word with the request."""
+    from ..orchestration.stages import RANKED, RANKED_PATHS
+
+    graph = source.graph()
+    found = ranked(graph, asked) if graph is not None else []
+    return {RANKED: ranked_text(found), RANKED_PATHS: [path for path, _reason in found]}
 
 
 def _context_said(workspace: Workspace, change_id: str, read: _Read | None, answers: str) -> None:

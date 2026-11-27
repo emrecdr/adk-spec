@@ -17,6 +17,7 @@ from . import (
     THE_DELTAS,
     THE_LESSONS,
     THE_PROFILE,
+    THE_REACH,
     instruction,
     read_back,
     section,
@@ -44,13 +45,26 @@ Mark a task parallel only where it touches other files than its neighbours and w
 Write no task for anything the brief lists as a non-goal.
 Name files by the paths the repository uses. Where a file is new, put it beside its kind.
 Where what the repository already holds is given, name the files it names and follow the conventions it gives.
-Where it lists something as still unknown, do not plan on it as if it were known: a task that depends on it says so."""
+Where it lists something as still unknown, do not plan on it as if it were known: a task that depends on it says so.
+What imports and tests the files the reading found comes from the code graph, not from reading: a task that changes such
+a file keeps what imports it working, and names the tests that reach it in its check."""
 
 
 def build_tasks() -> LlmAgent:
     design = section("## The design", "design", DESIGN_TEXT, optional=True)
     text = instruction(
-        OPENING, GUIDE, RULES, THE_LESSONS, LIVING_SPECS, THE_PROFILE, FILES, THE_CONTEXT, THE_BRIEF, THE_DELTAS, design
+        OPENING,
+        GUIDE,
+        RULES,
+        THE_LESSONS,
+        LIVING_SPECS,
+        THE_PROFILE,
+        FILES,
+        THE_CONTEXT,
+        THE_REACH,
+        THE_BRIEF,
+        THE_DELTAS,
+        design,
     )
     return stage(KEY, "Breaks a change into tasks.", text, TasksDraft)
 

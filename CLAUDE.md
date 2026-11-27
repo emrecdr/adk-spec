@@ -30,7 +30,9 @@ standard or strict change whose check is missing or stale, `init` (without `--no
 command run from a shell has no offline model.
 
 Pins: uv resolves with `exclude-newer = "P3D"` (a three-day cooldown on every release). `litellm` is held at 1.106.2
-because `google-adk` 2.15.0 caps it; `login.py` also uses LiteLLM's private Copilot names.
+because `google-adk` 2.15.0 caps it; `login.py` also uses LiteLLM's private Copilot names. `codegraph` (the code graph,
+shared with adk-review) is a uv git source pinned by commit: a bump is a reviewed change of the rev, decided with
+adk-review's session.
 
 ## Architecture
 
@@ -46,8 +48,9 @@ import except `adk_spec/agent.py`, the shape `adk web` loads.
 - **workspace**: the `.spec/` tree (`layout.py`), atomic writes (`files.py`), the writer lock (`lock.py`), git and the
   set of repositories a change spans (`git.py`, `source.py`), the project's installed libraries a reading may open
   offline as `python:`/`node:` paths (`installed.py`), the Agent Skill `init` writes into the repository (`skill.py`; a
-  refresh replaces one whose text is in `SHIPPED`), the MCP entry it adds to the root `.mcp.json` (`mcp_setup.py`),
-  config, what stages are given (`context.py`), running the project's tests (`tests.py`, `process.py`).
+  refresh replaces one whose text is in `SHIPPED`), the MCP entry it adds to the root `.mcp.json` (`mcp_setup.py`), the
+  code graph beside the reading, a hint and leads a stage confirms, never the source of truth (`graph.py`), config, what
+  stages are given (`context.py`), running the project's tests (`tests.py`, `process.py`).
 - **orchestration**: ADK `Workflow` graphs (`graph.py`), one schema-bound `LlmAgent` per stage (`stages/`), the gate
   after each stage (`gate.py`), the code reading (`explore.py`), plugins every app carries (`plugins.py`: schema
   mismatch, token ledger, scrub), the two provider arms (`models.py`, `settings.py`).

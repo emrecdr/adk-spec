@@ -23,11 +23,12 @@ from ..domain.convert import to_statements
 from ..domain.drafts import ReviewDraft, ScoutDraft, SurveyDraft
 from ..domain.model import Statement
 from ..domain.text import plain
+from ..workspace.graph import undefined
 from ..workspace.source import Source, merged
 from .gate import AGAIN, GIVE_UP, OK, checked, tries_key
 from .graph import NONE, SOME, _app, _ended
 from .plugins import UsageLedger
-from .stages import LIBRARIES
+from .stages import LIBRARIES, RANKED_PATHS
 from .stages import review as review_stage
 from .stages import scout as scout_stage
 from .stages import survey as survey_stage
@@ -251,16 +252,37 @@ def _grounded(ctx: Context, source: Source) -> Event:
     return Event(route=SOME if on else NONE, state=update)
 
 
-def _to_review(ctx: Context) -> Event:
-    """The review started anew on what was kept, numbered: its own tries, and no answer of the review before. No
-    review where nothing was kept, or where the reviews of the budget ran."""
-    state = ctx.state.to_dict()
-    found, reviews = explored(state), state.get(REVIEWS) or 0
-    if not found.statements or reviews >= REVIEW_BUDGET:
-        return Event(route=NONE)
-    anew = {review_stage.KEY: None, tries_key(review_stage.KEY): 0, REVIEWS: reviews + 1}
-    numbered = {review_stage.NUMBERED: _numbered(found.statements), review_stage.NOT_READ: "\n".join(found.left_out)}
-    return Event(route=SOME, state={**anew, **numbered})
+def _reviewing(source: Source) -> Callable[[Context], Event]:
+    def to_review(ctx: Context) -> Event:
+        """The review started anew on what was kept, numbered, with what the code graph suggests checking: its own
+        tries, and no answer of the review before. No review where nothing was kept, or where the reviews ran."""
+        state = ctx.state.to_dict()
+        found, reviews = explored(state), state.get(REVIEWS) or 0
+        if not found.statements or reviews >= REVIEW_BUDGET:
+            return Event(route=NONE)
+        anew = {review_stage.KEY: None, tries_key(review_stage.KEY): 0, REVIEWS: reviews + 1}
+        numbered = {
+            review_stage.NUMBERED: _numbered(found.statements),
+            review_stage.NOT_READ: "\n".join(found.left_out),
+        }
+        return Event(
+            route=SOME, state={**anew, **numbered, review_stage.LEADS: _leads(state, found.statements, source)}
+        )
+
+    return to_review
+
+
+def _leads(state: Mapping[str, Any], statements: Sequence[Statement], source: Source) -> str:
+    """What the code graph suggests the review check: the files it ranked first for the change that no round read, and
+    the names a statement gives that the code defines nowhere. Leads, which the review weighs by what it read: the
+    graph reads names and imports, never the code (the owner, 27 November 2026)."""
+    seen = set(state.get(SEEN) or {})
+    unread = [path for path in state.get(RANKED_PATHS) or () if path not in seen]
+    lines = [f"- Ranked first for this change, and not read: {', '.join(unread)}"] if unread else []
+    graph = source.graph()
+    for number, name in undefined(graph, statements) if graph is not None else ():
+        lines.append(f"- Statement {number} names `{name}`, which the code defines nowhere")
+    return "\n".join(lines)
 
 
 def _weighed(ctx: Context) -> Event:
@@ -293,6 +315,7 @@ def build_explore_app(*, source: Source, ledger: UsageLedger, recorder: BasePlug
     then asked once more. At most seven model calls: one scout, four surveys, two reviews. Every way out ends the
     run: what was kept is read from its state by `explored`."""
     first_look, next_look, review_look, grounded = _looking(source)
+    to_review = _reviewing(source)
     scout, scout_gate = scout_stage.build_scout(), checked(scout_stage.KEY, lambda _state: [])
     survey, survey_gate = survey_stage.build_survey(), checked(survey_stage.KEY, lambda _state: [])
     review, review_gate = review_stage.build_review(), checked(review_stage.KEY, lambda _state: [])
@@ -302,9 +325,9 @@ def build_explore_app(*, source: Source, ledger: UsageLedger, recorder: BasePlug
         (first_look, {SOME: survey, NONE: _ended}),
         (survey, survey_gate),
         (survey_gate, {OK: grounded, AGAIN: survey, GIVE_UP: _ended}),
-        (grounded, {SOME: next_look, NONE: _to_review}),
-        (next_look, {SOME: survey, NONE: _to_review}),
-        (_to_review, {SOME: review, NONE: _ended}),
+        (grounded, {SOME: next_look, NONE: to_review}),
+        (next_look, {SOME: survey, NONE: to_review}),
+        (to_review, {SOME: review, NONE: _ended}),
         (review, review_gate),
         (review_gate, {OK: _weighed, AGAIN: review, GIVE_UP: _ended}),
         (_weighed, {SOME: review_look, NONE: _ended}),
