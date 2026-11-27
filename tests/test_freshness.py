@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from conftest import on_the_fake, repository, run, seeded
 
@@ -102,7 +104,8 @@ def test_outside_a_repository_a_quote_not_in_its_file_is_not_counted(tmp_path) -
         write_text(tmp_path / path, text)
     write_text(tmp_path / "src/old.py", "def begin(user):\n")
     write_text(tmp_path / ".spec/profile.md", PROFILE)
-    assert profile_gone(ws) == (0, 1), "git cannot look elsewhere: the gone one is unknown, not gone"
+    # Outside a repository git lists nothing, so nothing is looked for: each is unknown (an outside audit of 171f1c4).
+    assert profile_gone(ws) == (0, 0)
 
 
 def test_a_profile_statement_is_never_looked_for_outside_the_repository(tmp_path) -> None:
@@ -216,3 +219,48 @@ def test_a_quote_moved_into_a_file_past_the_cap_is_unknown_not_gone(tmp_path, mo
     monkeypatch.setattr(evidence, "FILE_MAX_BYTES", 60)
     repository(tmp_path, {"src/a.py": "x = 1\n", "gen/big.py": "def start_session(user):\n" + "#" * 80 + "\n"})
     assert quote_holds(tmp_path, ".", "src/a.py", "def start_session(user):", ()) is None
+
+
+def test_a_quote_is_looked_for_only_in_a_file_git_lists(tmp_path) -> None:
+    """Found by an outside audit of 171f1c4, and reproduced: an evidence line could learn whether a string is in
+    `.git/config`, which holds a CI runner's token, or in an ignored `.env`, from whether `validate` noted it gone."""
+    from conftest import _git
+
+    repository(tmp_path, {"src/a.py": "x = 1\n", ".gitignore": ".env\n"})
+    (tmp_path / ".env").write_text("SECRET_TOKEN=abcd1234efgh\n", encoding="utf-8")
+    _git(tmp_path, "config", "http.extraheader", "AUTHORIZATION: basic c2VjcmV0dG9rZW4=")
+    for path, guess in ((".env", "SECRET_TOKEN=abcd1234"), (".git/config", "AUTHORIZATION: basic c2Vj")):
+        assert quote_holds(tmp_path, ".", path, guess, ()) is None, path
+
+
+def test_a_quote_over_a_secret_is_never_matched_against_the_secret(tmp_path) -> None:
+    """Found by an outside audit of 171f1c4: matched against the raw text first, a guess at a tracked file's
+    password held where a wrong one did not."""
+    repository(tmp_path, {"src/settings.py": 'PASSWORD = "hunter2pass9"\n'})
+    right = quote_holds(tmp_path, ".", "src/settings.py", 'PASSWORD = "hunter2pass9"', ())
+    wrong = quote_holds(tmp_path, ".", "src/settings.py", 'PASSWORD = "zzzzzzzz99"', ())
+    assert right is wrong is False
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a link needs a privilege on Windows that a test run does not hold")
+def test_a_quote_in_a_file_reached_through_a_link_is_unknown(tmp_path) -> None:
+    from conftest import _git
+
+    repository(tmp_path, {"src/a.py": "x = 1\n", ".gitignore": ".env\n"})
+    (tmp_path / ".env").write_text("SECRET_TOKEN=abcd1234efgh\n", encoding="utf-8")
+    (tmp_path / "src/env").symlink_to(tmp_path / ".env")
+    _git(tmp_path, "add", "src/env")
+    assert quote_holds(tmp_path, ".", "src/env", "SECRET_TOKEN=abcd1234", ()) is None
+
+
+def test_another_repositorys_quote_honours_its_own_exclusions(tmp_path) -> None:
+    """Found by an outside audit of 171f1c4: another repository's evidence was looked for with no exclusions."""
+    seeded(tmp_path / "app")
+    repository(
+        tmp_path / "api",
+        {
+            ".spec/config.toml": '[project]\ndefault_tier = "lean"\n\n[repository]\nexclude = ["secrets/**"]\n',
+            "secrets/key.txt": "the token value here\n",
+        },
+    )
+    assert quote_holds(tmp_path / "app", "../api", "secrets/key.txt", "the token value here", ()) is None

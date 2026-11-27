@@ -136,6 +136,11 @@ def _python(root: Path, globs: Sequence[str]) -> Environment | None:
     where, site = found
     held = _Gathering(site.relative_to(root).as_posix(), globs)
     for info in sorted(site.glob("*.dist-info")):
+        if not _folder(info):  # through a link it is another folder's (an outside audit of 171f1c4)
+            continue
+        if held.full:  # past the cap: counted, never read
+            held.past += 1
+            continue
         name, version = _metadata(info / "METADATA")
         if not name:
             continue

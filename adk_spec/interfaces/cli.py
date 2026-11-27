@@ -142,7 +142,7 @@ from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
 from ..workspace.skill import SKILL_PARTS, write_skill
 from ..workspace.source import NAME, Source, SourceError, Work, repositories_named
-from ..workspace.tests import run_tests
+from ..workspace.tests import PROVIDER_KEYS, run_tests
 
 if TYPE_CHECKING:  # the engine's types, for the checker alone: the command starts with no engine module loaded
     from google.adk.apps.app import App
@@ -249,7 +249,8 @@ def _parser() -> _Top:
     init.add_argument(
         "--refresh",
         action="store_true",
-        help="read the code again and rewrite the profile; with --no-explore, add the skill where it is missing",
+        help="read the code again and rewrite the profile; with --no-explore, write the skill where it is missing or "
+        "holds a text adk-spec wrote",
     )
     init.set_defaults(handler=_init)
 
@@ -2006,7 +2007,8 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     runs = []
     for name, root, argv, timeout in every:
         print(f"testing   {f'{name}: ' if name else ''}{scrub(' '.join(argv))[0]}")
-        done = run_tests(root, argv, timeout=timeout, name=name, without=frozenset({*_FROM_ENV_FILE, TOOL_CALL}))
+        keys = PROVIDER_KEYS if os.environ.get(TOOL_CALL) == "1" else ()  # a tool's call runs an assistant's code
+        done = run_tests(root, argv, timeout=timeout, name=name, without=frozenset({*_FROM_ENV_FILE, TOOL_CALL, *keys}))
         took = "" if done.seconds is None else f" in {done.seconds:.1f} s"
         print(f"tests     {f'{name} ' if name else ''}{done.outcome}{took}")
         runs.append(done)

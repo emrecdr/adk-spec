@@ -267,3 +267,17 @@ def test_an_environment_reached_through_a_linked_folder_is_not_read(tmp_path, li
     link.parent.mkdir(parents=True, exist_ok=True)
     link.symlink_to(tmp_path / "elsewhere" / ".venv" / linked, target_is_directory=True)
     assert environments(root) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a link needs a privilege on Windows that a test run does not hold")
+def test_a_package_folder_reached_through_a_link_is_not_read(tmp_path) -> None:
+    """Found by an outside audit of 171f1c4: a `*.dist-info` linked out of the repository was read through."""
+    root = _repository(tmp_path / "repository")
+    site = python_environment(root)
+    elsewhere = tmp_path / "elsewhere" / "evil-1.0.dist-info"
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "METADATA").write_text("Metadata-Version: 2.4\nName: evil\nVersion: 1.0\n", encoding="utf-8")
+    (elsewhere / "RECORD").write_text("evil/__init__.py,sha256=x,1\n", encoding="utf-8")
+    (site / "evil-1.0.dist-info").symlink_to(elsewhere, target_is_directory=True)
+    (found,) = environments(root)
+    assert [name for name, _version, _tops in found.packages] == ["httpx"]

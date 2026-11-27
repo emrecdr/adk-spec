@@ -52,8 +52,8 @@ adk-spec drafts and checks spec-driven changes in the repository this server was
 models. propose drafts a change from a request, or, given the id of an open change, revises it; it asks no question:
 points the brief leaves open come back in its output, so ask the person, then revise with propose and the change's
 id. plan drafts a change's tasks again; check checks its files; verify judges the work against each requirement;
-status lists the open changes and what comes next; validate checks the files' structure. propose and plan call a
-model several times and take minutes, propose the most: call them once per request, never to poll. A strict change's
+status lists the open changes and what comes next; validate checks the files' structure. propose, plan, check and
+verify call a model and take minutes, propose the most: call each once per request, never to poll. A strict change's
 plan waits for the person to read its brief and specs: call plan for it once they say so. A change that
 spans other repositories is started by the person in a terminal, with `adk-spec propose --with`; the tools then keep
 them.

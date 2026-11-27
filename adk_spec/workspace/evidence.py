@@ -5,6 +5,7 @@ against the code, so that a requirement whose proving lines are gone from it is 
 from __future__ import annotations
 
 import functools
+import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
@@ -14,10 +15,10 @@ from ..domain.model import ChangeState, Delta, Finding, Spec
 from ..domain.secrets import scrub_lines
 from ..domain.text import QUOTE_MIN_CHARS, plain, quoted_at
 from ..domain.validate import finding
-from .config import ConfigError
+from .config import ConfigError, load_config
 from .files import NotTextError, read_text
-from .git import GitError, grep
-from .layout import CHANGES, EVIDENCE, PROFILE, SPECS, Workspace
+from .git import GitError, files, grep
+from .layout import CHANGES, CONFIG, EVIDENCE, PROFILE, ROOT_NAME, SPECS, Workspace
 from .source import FILE_MAX_BYTES, LIBRARY_SCHEMES
 
 #: How many of the files a quote's search names are read whole to find it.
@@ -39,23 +40,69 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     folder = root if own else root / repository
     if len(plain(quote)) < QUOTE_MIN_CHARS or not _within(folder, repository, path, own=own):  # too short to find
         return None
-    if (first := _found(folder / path, quote)) is None:  # past what a reading reads: unknown
-        return None
-    if first:  # read first: a quote that holds asks git nothing
-        return True
+    # Only what a reading could be shown: a file git lists, with the repository's own exclusions, through no link.
+    # Found by an outside audit of 171f1c4, and reproduced: any path was read, so an evidence line could learn from
+    # `validate`'s notes whether a guess was in `.git/config`, a CI runner's token, or an ignored `.env`.
+    held = tuple(exclude) if own else _their_exclusions(folder)
     try:
-        term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
-        hits = grep(folder, term, exclude=exclude if own else (), trust=own) if term else []
+        listed = None if held is None else _listed(folder, held, own)
     except GitError:
         return None
-    named = list(dict.fromkeys(hit.split(":", 1)[0] for hit in hits))[:ELSEWHERE_MAX]
-    unknown = False  # a file past the cap may hold it: unknown, not gone (the code review of phase 24)
-    for one in named:
+    if listed is None or _linked(folder, path):
+        return None
+    if path in listed:
+        if (first := _found(folder / path, quote)) is None:  # past what a reading reads: unknown
+            return None
+        if first:  # read first: a quote that holds asks git nothing
+            return True
+    elif os.path.lexists(folder / path):  # there, and not listed: ignored, excluded or git's own, never read
+        return None
+    return _elsewhere(folder, quote, held or (), listed, own=own)
+
+
+def _elsewhere(folder: Path, quote: str, exclude: tuple[str, ...], listed: frozenset[str], *, own: bool) -> bool | None:
+    """Whether `quote` is in another file `listed` under `folder`, found by its longest word: None where git refuses
+    the search, or where a file that may hold it is past the cap (the code review of phase 24)."""
+    try:
+        term = max(plain(quote).split(), key=len, default="")  # a fixed string git finds on one line, NUL-free
+        hits = grep(folder, term, exclude=exclude, trust=own) if term else []
+    except GitError:
+        return None
+    named = [one for one in dict.fromkeys(hit.split(":", 1)[0] for hit in hits) if one in listed]
+    unknown = False
+    for one in [one for one in named if not _linked(folder, one)][:ELSEWHERE_MAX]:
         if (found := _found(folder / one, quote)) is None:
             unknown = True
         elif found:
             return True
     return None if unknown else False
+
+
+@functools.lru_cache(maxsize=8)
+def _listed(folder: Path, exclude: tuple[str, ...], own: bool) -> frozenset[str]:
+    """Every file git lists under `folder`, less `exclude`: what a quote may be looked for in, asked once a command."""
+    return frozenset(files(folder, exclude=exclude, trust=own))
+
+
+def _their_exclusions(folder: Path) -> tuple[str, ...] | None:
+    """Another repository's own exclusions, from its `.spec/config.toml`, none where it has none; None where it does
+    not read, so that its quotes are unknown rather than looked for in what it keeps out."""
+    config = folder / ROOT_NAME / CONFIG
+    try:
+        return load_config(config).exclude if config.is_file() else ()
+    except ConfigError, NotTextError, OSError:
+        return None
+
+
+def _linked(folder: Path, path: str) -> bool:
+    """Whether the file at `path`, or a folder on the way to it, is a link or a junction: read through, it is another
+    folder's, one git does not list."""
+    at = folder
+    for part in path.split("/"):
+        at = at / part
+        if at.is_symlink() or at.is_junction():
+            return True
+    return False
 
 
 def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
@@ -71,10 +118,10 @@ def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
 
 
 def _found(path: Path, quote: str) -> bool | None:
-    """Whether `quote` is in the file at `path`, as it stands or as a reading or a diff is shown it, scrubbed: a quote
-    taken from what a model saw may hold a secret's stand-in, whole or cut through. Found by phase 17's reviews, where
-    guessing such a quote by its shape missed some and took ordinary code for others. None where the file is past
-    what a reading reads, which is not read (the audit of 25 November, H3)."""
+    """Whether `quote` is in the file at `path` as a reading or a diff is shown it, scrubbed: a quote taken from what
+    a model saw holds a secret's stand-in, never the secret, and one matched against the raw text would tell a guess
+    at a secret from a wrong one (an outside audit of 171f1c4). None where the file is past what a reading reads,
+    which is not read (the audit of 25 November, H3)."""
     try:
         stamp = path.stat()
     except OSError:
@@ -83,10 +130,7 @@ def _found(path: Path, quote: str) -> bool | None:
         return None
     if (text := _text(path, stamp.st_mtime_ns, stamp.st_size)) is None:
         return False
-    if quoted_at(quote, text) is not None:
-        return True
-    # A stand-in opens on `[` and ends on `]`: a quote of neither is not of the scrubbed text alone, nor costs a scrub.
-    return ("[" in quote or "]" in quote) and quoted_at(quote, _scrubbed(text)) is not None
+    return quoted_at(quote, _scrubbed(text)) is not None
 
 
 @functools.lru_cache(maxsize=32)
@@ -109,6 +153,7 @@ def _fresh() -> None:
     """The files a command read forgotten: kept only for one command (the code review of phase 24)."""
     _text.cache_clear()
     _scrubbed.cache_clear()
+    _listed.cache_clear()
 
 
 def evidence_findings(workspace: Workspace, living: Mapping[str, Spec]) -> list[Finding]:

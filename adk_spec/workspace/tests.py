@@ -34,6 +34,11 @@ WITHHELD = "(the output names a private key, so none of it is shown)"
 _BATCH = (".bat", ".cmd")
 
 
+#: The keys a provider's client reads from the environment for adk-spec's own model calls: dropped from a test run a
+#: tool's call starts, which runs code an assistant wrote (an outside audit of 171f1c4).
+PROVIDER_KEYS = ("GOOGLE_API_KEY", "GEMINI_API_KEY")
+
+
 def run_tests(
     root: Path, argv: Sequence[str], *, timeout: int, name: str = "", without: frozenset[str] = frozenset()
 ) -> TestRun:

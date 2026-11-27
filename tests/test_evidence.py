@@ -317,6 +317,6 @@ def test_a_quote_cut_inside_a_stand_in_holds_while_its_line_stands(tmp_path) -> 
     from adk_spec.workspace.evidence import holds
 
     key = "AKIA" + "IOSFODNN7EXAMPLE"
-    write_text(tmp_path / "src/conf.py", f'KEY = "{key}"\n')
+    repository(tmp_path, {"src/conf.py": f'KEY = "{key}"\n'})
     cut = proof(quote='KEY = "[REDACTE', path="src/conf.py")
     assert holds(tmp_path, cut, ()) is True

@@ -248,6 +248,8 @@ def test_the_skill_init_writes_keeps_the_rules_the_server_gives() -> None:
     # change owes no verification; and a strict change's plan waits for the person to read its brief.
     for said in ("take minutes", "status", "strict"):
         assert said in INSTRUCTIONS and said in SKILL_TEXT, said
+    # An outside audit of 171f1c4: the server named two of the four commands that call a model.
+    assert "propose, plan, check and verify" in " ".join(INSTRUCTIONS.split())
     assert "background" in SKILL_TEXT and "Then call verify" not in INSTRUCTIONS
     # The audit of 25 November (U12): the report verify leaves for the pull request; remaining.md is named by the
     # step `status` and `verify` print.
@@ -275,8 +277,9 @@ def _testing(marker: Path) -> str:
     """A command that hears a stop as `adk-spec` does, then runs a test run that waits a minute, its pid in `marker`:
     a `verify` stopped while the project's tests run."""
     return textwrap.dedent(f"""
-        import os, sys
+        import os, signal, sys
         from adk_spec.interfaces.cli import interrupt_on_signals
+        signal.signal(signal.SIGHUP, signal.SIG_DFL)  # a runner that ignores SIGHUP passes that on (outside audit)
         from adk_spec.workspace.process import run_kept
         interrupt_on_signals()
         run_kept([sys.executable, "-c", {_sleeper(marker)!r}], env=dict(os.environ), timeout=120, keep=1000)

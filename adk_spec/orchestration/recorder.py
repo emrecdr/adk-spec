@@ -52,6 +52,8 @@ class Recorder(BasePlugin):
         if self._sent is None:
             return
         (sent, started), self._sent = self._sent, None
+        if came.get("error"):  # a provider's own words may echo what was sent (an outside audit of 171f1c4)
+            came["error"] = scrub(came["error"], cut=True)[0]
         self._kept.append(Call(**sent, **came, seconds=round(time.perf_counter() - started, 3)))
 
     @override

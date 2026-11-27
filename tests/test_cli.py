@@ -554,3 +554,10 @@ def test_the_help_names_the_flow_of_one_change_and_how_to_revise_one(capsys) -> 
     with pytest.raises(SystemExit):
         main(["propose", "--help"])
     assert "an open change's name revises it" in " ".join(capsys.readouterr().out.split())
+
+
+def test_inits_help_says_a_refresh_upgrades_an_unedited_skill(capsys) -> None:
+    """An outside audit of 171f1c4: the help still said a refresh only adds a skill where it is missing."""
+    with pytest.raises(SystemExit):
+        main(["init", "--help"])
+    assert "holds a text adk-spec wrote" in " ".join(capsys.readouterr().out.split())
