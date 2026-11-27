@@ -40,21 +40,24 @@ def test_a_file_git_does_not_track_yet_reads_as_added(tmp_path) -> None:
     )
 
 
-def test_the_works_fingerprint_text_is_the_same_once_it_is_added_or_committed(tmp_path) -> None:
+@pytest.mark.parametrize("end", ["\n", "\r\n"], ids=["LF", "CRLF"])
+def test_the_works_fingerprint_text_is_the_same_once_it_is_added_or_committed(tmp_path, end) -> None:
     """Found by the fourth audit: a new file read as untracked came after every tracked one, and a moved file as a
     deletion and an addition until it was added, then as a rename. The work's fingerprint moved with git's index,
     so a change verified and then committed read as drifted, and `archive` refused it. The diff a stage is shown
-    keeps a move short: shown whole, a refactor that moved files was past what `verify` is given."""
+    keeps a move short: shown whole, a refactor that moved files was past what `verify` is given. The fingerprint is
+    compared, as `archive` does: with CRLF, as on Windows, a file git keeps as written shows `\\r` once added that
+    its untracked or unstaged diff did not, and the fingerprint settles line ends (Windows CI)."""
     base = repository(tmp_path, {"z.py": "x = 1\n", "old.py": "def f():\n    return 1\n"})
-    (tmp_path / "z.py").write_text("x = 2\n", encoding="utf-8")
-    (tmp_path / "a.py").write_text("y = 1\n", encoding="utf-8")
+    (tmp_path / "z.py").write_bytes(f"x = 2{end}".encode())
+    (tmp_path / "a.py").write_bytes(f"y = 1{end}".encode())
     (tmp_path / "old.py").rename(tmp_path / "moved.py")
     _shown, before = diffs(tmp_path, base, exclude=())
     _git(tmp_path, "add", "-A")
     shown, staged = diffs(tmp_path, base, exclude=())
-    assert staged == before and "rename from old.py" in shown and "+def f():" not in shown
+    assert sha256_of(staged) == sha256_of(before) and "rename from old.py" in shown and "+def f():" not in shown
     _git(tmp_path, "commit", "-q", "-m", "the work")
-    assert diffs(tmp_path, base, exclude=())[1] == before
+    assert sha256_of(diffs(tmp_path, base, exclude=())[1]) == sha256_of(before)
 
 
 def test_the_works_fingerprint_is_the_same_once_a_crlf_file_is_committed_as_it_is(tmp_path) -> None:
@@ -299,7 +302,7 @@ def test_untracked_files_past_what_a_diff_is_read_for_are_refused_by_their_size(
     every `status` of a verified change, before the diff was refused for its length."""
     monkeypatch.setattr(layer, "UNTRACKED_MAX_BYTES", 100)
     commit = repository(tmp_path, {"src/a.py": "x = 1\n"})
-    (tmp_path / "dump.csv").write_text("a,b\n" * 50, encoding="utf-8")
+    (tmp_path / "dump.csv").write_bytes(b"a,b\n" * 50)  # bytes: text mode writes CRLF on Windows, 250 of them
     with pytest.raises(layer.GitError, match="200 bytes of files"):
         layer.diffs(tmp_path, commit, exclude=())
 
