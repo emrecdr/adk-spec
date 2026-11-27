@@ -407,7 +407,9 @@ archived `sign-in-with-a-passkey`: folded into auth
 each. Later, `validate` and `status` look for those lines in the code. A requirement none of whose lines is found,
 in its file or anywhere else in the repository, is noted as suspect: a refactor may have broken it. This is a note
 only, and it never fails CI. To clear it, verify a change that keeps the requirement, or delete its lines in a
-reviewed commit. A line from another repository is checked only where that repository is there.
+reviewed commit. A line from another repository is checked only where that repository is there. A line is looked
+for only in files git lists, with each repository's own exclusions, and in their text as a model is shown it, its
+secrets hidden: never in `.git/`, an ignored file, or a secret's own value.
 
 It also puts an entry first in `.spec/changelog.md`: the change and the day, then each requirement it added,
 modified and removed. Anything you write below the heading is kept as it is. A changelog with a code fence never
@@ -528,7 +530,8 @@ as a tool (`uv tool install --editable ~/tools/adk_spec`), or say in the chat ho
 so you can ask for a change in the chat and have the assistant implement it. Approving and archiving stay yours, in a
 terminal. The `verify` tool runs only a test command committed in `.spec/config.toml`, and diffs from the approval's
 base: an assistant that edits the test command cannot have it run, and `--base` stays a terminal's. The command still
-runs your project's own test files, which the assistant may have written: that is what verifying the work means.
+runs your project's own test files, which the assistant may have written: that is what verifying the work means. Run
+for a tool, they are not given your provider's key (`GOOGLE_API_KEY`, `GEMINI_API_KEY`).
 
 VS Code, in your project's `.vscode/mcp.json`:
 
