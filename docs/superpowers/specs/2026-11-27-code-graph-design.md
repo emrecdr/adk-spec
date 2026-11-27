@@ -42,7 +42,7 @@ seventh of the cost.
 
 ## Part 2: adk-spec's use of it (the owner's call on scope)
 
-1. **Ranked files for the scout.** In place of the folded tree, the scout is shown the files ranked by a personalised
+1. **Ranked files for the scout.** Beside the folded tree, the scout is shown the files ranked by a personalised
    PageRank over imports, definitions and tests, seeded by the request's words matched to names, each with one
    reason ("defines `Source`"). Pure Python ranked 10,000 nodes in 0.23 s.
 2. **Read by symbol.** A stage may name a symbol; code looks up its exact lines and reads only those: never a path
@@ -60,9 +60,24 @@ No new command: `propose` and `init` use it, and nothing more is printed.
 1. **Python only in v1.** JS/TS files are listed as unparsed, so a query says "at least"; v2 adds JS/TS import edges
    by regular expression, with no dependency.
 2. **adk-spec's first scope is items 1 to 4**, with no change of flow: ranked files for the scout, reading by symbol,
-   exact `within`, hubs for `init`.
+   exact `within`, hubs for `init`; ranking and hubs live in adk-spec, on top of the library's facts (the owner's
+   later call), and the graph only checks, as below.
 3. **The library's repository is `~/Projects/playground/codegraph`**, local, with no remote. adk-spec's session builds
    v1 test first; adk-review's session reviews it and contributes its measured module-resolution code and tests.
+
+## The graph checks, it never decides (the owner, 27 November 2026)
+
+The owner's words: "at first, currently, use code graph as an validation, double check resource, not use as only
+source of truth about codebase". So in adk-spec's first use:
+
+1. **The scout keeps its tree of paths.** The graph's ranked files are given beside it as a hint, never in its place,
+   and a file the scout names that the graph does not know is still read.
+2. **Reading by symbol** takes the graph's lines to locate a symbol; the text read is always the file's own, and a
+   range that no longer fits the file is not used.
+3. **Exact `within`** uses the graph's ranges only where they agree with the file; indentation decides otherwise.
+4. **Hubs** reach the profile as a hint the model checks against what it read, never as a statement of their own.
+
+Nothing adk-spec writes, gates or says rests on the graph alone.
 
 ## Order of the work
 
