@@ -533,28 +533,27 @@ base: an assistant that edits the test command cannot have it run, and `--base` 
 runs your project's own test files, which the assistant may have written: that is what verifying the work means. Run
 for a tool, they are not given your provider's key (`GOOGLE_API_KEY`, `GEMINI_API_KEY`).
 
-VS Code, in your project's `.vscode/mcp.json`:
+`adk-spec init` adds the server to `.mcp.json` at your repository's root, which VS Code (GitHub Copilot's agent
+mode) and Claude Code read: commit it with `.spec/`. The entry is the same on every machine, so no path is written
+by hand, on Windows neither:
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "adk-spec": {
       "type": "stdio",
-      "command": "uv",
-      "args": ["run", "--project", "/path/to/adk_spec", "adk-spec-mcp", "--root", "${workspaceFolder}"]
+      "command": "adk-spec-mcp"
     }
   }
 }
 ```
 
-Claude Code, from your project's folder:
-
-```shell
-claude mcp add adk-spec -- uv run --project /path/to/adk_spec adk-spec-mcp --root "$PWD"
-```
-
-(With the installed tool: `"command": "adk-spec-mcp", "args": ["--root", "${workspaceFolder}"]`, and
-`claude mcp add adk-spec -- adk-spec-mcp --root "$PWD"`.)
+It runs `adk-spec-mcp` from your PATH, which the installed tool puts there: `uv tool install --editable
+~/tools/adk_spec`, or on Windows `uv tool install --editable "$HOME\tools\adk_spec"`, then restart VS Code so that
+it sees the new PATH. `init` says so where `adk-spec-mcp` is not on PATH. A `.mcp.json` with other servers keeps
+them, and an `adk-spec` entry you wrote is yours and left as it is. Where `.vscode/mcp.json` starts adk-spec already,
+`init` writes no second entry, which VS Code would start twice. In a repository set up before, `adk-spec init
+--refresh --no-explore` adds it. Another editor starts the same command, `adk-spec-mcp`, in the repository's folder.
 
 Then, in the chat:
 

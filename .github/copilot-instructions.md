@@ -56,9 +56,10 @@ without ADK; nothing builds at import except `adk_spec/agent.py`, the shape `adk
   scrubbing (`secrets.py`), conversion of model drafts (`drafts.py` → `convert.py`).
 - **workspace**: the `.spec/` tree (`layout.py`), atomic writes (`files.py`), the writer lock (`lock.py`), git and the
   set of repositories a change spans (`git.py`, `source.py`), the project's installed libraries a reading may open
-  offline as `python:`/`node:` paths (`installed.py`), the Agent Skill `init` writes into the repository (`skill.py`;
-  a refresh replaces one whose text is in `SHIPPED`), config, what stages are given (`context.py`), running the
-  project's tests and other programs (`tests.py`, `process.py`).
+  offline as `python:`/`node:` paths (`installed.py`), the Agent Skill `init` writes into the repository (`skill.py`; a
+  refresh replaces one whose text is in `SHIPPED`), the MCP entry it adds to the root `.mcp.json` (`mcp_setup.py`),
+  config, what stages are given (`context.py`), running the project's tests and other programs (`tests.py`,
+  `process.py`).
 - **orchestration**: ADK `Workflow` graphs (`graph.py`), one schema-bound `LlmAgent` per stage (`stages/`), the gate
   after each stage (`gate.py`), the code reading (`explore.py`), plugins every app carries (`plugins.py`: schema
   mismatch, token ledger, scrub), the two provider arms (`models.py`, `settings.py`).

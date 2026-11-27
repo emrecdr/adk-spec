@@ -48,7 +48,7 @@ def test_init_reads_the_code_writes_the_profile_and_drafts_the_rules(tmp_path, c
     out = capsys.readouterr().out
     said = [line.split()[0] for line in out.splitlines()]
     # The skill, then the reading; the unset test command said before the next step (U8).
-    assert said == ["made", "wrote", "reading", "explored", "wrote", "drafted", "tests", "next"], out
+    assert said == ["made", "wrote", "wrote", "reading", "explored", "wrote", "drafted", "tests", "next"], out
     assert "wrote     .spec/profile.md\n" in out
     assert "drafted   1 rule into .spec/constitution.md: keep, edit or delete each\n" in out
     assert read_text(tmp_path / PROFILE).startswith("# This repository\n\nRead from the repository at commit ")

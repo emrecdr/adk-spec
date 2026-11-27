@@ -13,6 +13,7 @@ import getpass
 import json
 import os
 import re
+import shutil
 import signal
 import sys
 import time
@@ -136,6 +137,7 @@ from ..workspace.layout import (
     findings_of,
 )
 from ..workspace.lock import held as lock_held
+from ..workspace.mcp_setup import MCP_FILE, OLDER_PARTS, write_mcp
 from ..workspace.paths import PathError
 from ..workspace.process import TOOL_CALL
 from ..workspace.runs import Recording
@@ -249,8 +251,8 @@ def _parser() -> _Top:
     init.add_argument(
         "--refresh",
         action="store_true",
-        help="read the code again and rewrite the profile, and write the skill where it is missing or holds a text "
-        "adk-spec wrote; with --no-explore, only the skill",
+        help="read the code again and rewrite the profile, write the skill where it is missing or holds a text "
+        "adk-spec wrote, and add adk-spec to .mcp.json where it has none; with --no-explore, only the last two",
     )
     init.set_defaults(handler=_init)
 
@@ -405,6 +407,7 @@ def _init(args: argparse.Namespace) -> int:
         workspace = Workspace.init(_unheld(Path(args.root).absolute()))
         print(f"made      {workspace.shown(workspace.home)}")
     _skill(workspace)
+    _mcp(workspace)
     code = EXIT_OK
     if not args.no_explore:
         _load_env()
@@ -435,6 +438,42 @@ def _skill(workspace: Workspace) -> None:
         return
     if done is not None:  # a skill the repository holds already may be its own: said as not adk-spec's, not edited
         print(f"{done:<10}{shown}{': not the text adk-spec wrote' if done == 'kept' else ''}")
+
+
+#: What `init` says of the repository's `.mcp.json`, by what it did: its label, and why where it did not write.
+_MCP_SAID = {
+    "wrote": ("wrote", ""),
+    "added": ("added", ": adk-spec beside the servers it held"),
+    "kept": ("kept", ": it names adk-spec already, in words of yours"),
+    "unread": ("skipped", ": it is no JSON object of servers; add adk-spec to it by hand"),
+}
+
+
+def _mcp(workspace: Workspace) -> None:
+    """adk-spec's MCP server added to the repository's `.mcp.json`, which VS Code's Copilot and Claude Code read; and
+    the install that puts `adk-spec-mcp` on PATH where it is not, as the entry names it alone (the owner's choice,
+    27 November 2026). One that cannot be written is a line, never a failed `init`, as the skill's is."""
+    shown = workspace.shown(workspace.root / MCP_FILE)
+    try:
+        done = write_mcp(workspace.root)
+    except NotTextError:
+        print(f"skipped   {shown}: not UTF-8; save it as UTF-8")
+        return
+    except (PathError, OSError) as exc:
+        print(f"skipped   {shown}: {exc.strerror if isinstance(exc, OSError) and exc.strerror else exc}")
+        return
+    if done == "elsewhere":
+        print(f"kept      {workspace.shown(workspace.root.joinpath(*OLDER_PARTS))}: it starts adk-spec already")
+        return
+    if done is not None:
+        label, why = _MCP_SAID[done]
+        print(f"{label:<10}{shown}{why}")
+    if done in (None, "wrote", "added") and shutil.which("adk-spec-mcp") is None:
+        here = Path(__file__).resolve().parents[2]
+        named = f'"{here}"' if " " in str(here) else str(here)
+        print(
+            f"mcp       adk-spec-mcp is not on PATH, so no editor can start it: run uv tool install --editable {named}"
+        )
 
 
 def _unheld(root: Path) -> Path:
