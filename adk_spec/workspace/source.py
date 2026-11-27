@@ -28,6 +28,7 @@ What cannot be given is left out and named, and is never an error: a reading goe
 
 from __future__ import annotations
 
+import contextlib
 import mmap
 import re
 from collections.abc import Mapping, Sequence
@@ -35,6 +36,9 @@ from dataclasses import dataclass, field
 from itertools import zip_longest
 from pathlib import Path
 from typing import NamedTuple
+
+from codegraph import Graph
+from codegraph.extract import PYTHON
 
 from ..domain.secrets import KEY_WORDS, holds_a_key, scrub_lines
 from ..domain.text import counted, lines_of, normalise, plain, sha256_of
@@ -44,6 +48,7 @@ from .context import tree_text
 from .files import NotTextError, read_text
 from .git import GitError, diffs, grep, head, is_repository, top
 from .git import files as listed_by_git
+from .graph import GRAPH_MAX_BYTES, built, empty, shared
 from .installed import Environment, environments
 from .layout import CONFIG, ROOT_NAME
 from .paths import linked
@@ -66,6 +71,8 @@ TERM_MAX_CHARS = 100
 HOLDS_A_KEY = "holds a private key, which is never shown"
 #: A file asked for with a range of lines: `src/app.py:120-260`.
 _RANGE = re.compile(r"(?P<path>.+):(?P<first>[0-9]{1,9})-(?P<last>[0-9]{1,9})")
+#: What parts a file's path from a definition's name, where a stage asks for one alone: `src/app.py::Reader.read`.
+_DEFINED = "::"
 #: How much of the line that opens a statement's block is kept.
 WITHIN_MAX_CHARS = 120
 #: The name of another repository, which prefixes its paths: a short word.
@@ -146,6 +153,15 @@ class _Round:
 def _named(asked: str, missing: str) -> str:
     """A model's own word for what it asked, as it may be printed."""
     return plain(asked)[:LINE_MAX_CHARS] or missing
+
+
+def _bytes(root: Path, paths: Sequence[str]) -> int:
+    """How much the files at `paths` under `root` hold, by the file system's word: a file it cannot size counts none."""
+    total = 0
+    for path in paths:
+        with contextlib.suppress(OSError):
+            total += (root / path).stat().st_size
+    return total
 
 
 def _indent(line: str) -> int:
@@ -380,6 +396,7 @@ class Source:
         #: The other repositories that were read, and a line for each one that was not.
         self.names = tuple(self._others)
         self.missing = tuple(missing)
+        self._graph: Graph | None = None
 
     @classmethod
     def of(
@@ -411,6 +428,16 @@ class Source:
         if libraries := self.libraries():
             blocks.append(libraries)
         return "\n".join(blocks)
+
+    def graph(self) -> Graph:
+        """The code graph of this repository's Python files as a reading may show them, scrubbed, a key's file
+        withheld: built once a command for the repository, whichever source asks, and empty past `GRAPH_MAX_BYTES` of
+        Python, where the reading runs as before."""
+        if self._graph is None:
+            here, python = self._here, [path for path in self._here.paths if path.endswith(PYTHON)]
+            small = _bytes(here.root, python) <= GRAPH_MAX_BYTES
+            self._graph = shared(str(here.root), python, lambda: built(python, here.lines) if small else empty())
+        return self._graph
 
     def libraries(self) -> str:
         """The installed libraries as a stage is told of them, and how to read one: nothing where none are read."""
@@ -493,19 +520,24 @@ class Source:
         return "".join(kept), tuple(held)
 
     def within(self, path: str, line: int) -> str:
-        """The line that opens the block `line` of `path` stands in: the nearest line above it, in the file as it
-        stands, scrubbed, that is indented less than it. Nothing at the top level, or where the file is not read.
-        Measured live: a real quote from `_approve` was kept under a note about `propose`, and only the block a line
-        stands in shows that."""
+        """The line that opens the definition `line` of `path` stands in, in the file as it stands, scrubbed: the
+        nearest `def` or `class` above it, each step out to a line indented less; where none is, the nearest such line,
+        the block it stands in. Nothing at the top level, or where the file is not read. Measured live: a real quote
+        from `_approve` was kept under a note about `propose`, and only the block a line stands in shows that; then
+        indentation named the nearest `if`, where a person names the function. By the file's own text alone: the
+        code graph named the outer function for a closure (the code review of phase 29)."""
         lines = self._lines(path) if path in self._listed else ""
         if not isinstance(lines, list) or not 1 <= line <= len(lines):
             return ""
-        indent = _indent(lines[line - 1])
+        indent, block = _indent(lines[line - 1]), ""
         for above in reversed(lines[: line - 1]):
             # A line of brackets alone, a C# or Java `{`, opens no block a person would name.
             if any(char.isalnum() for char in above) and _indent(above) < indent:
-                return above.strip()[:WITHIN_MAX_CHARS]
-        return ""
+                text, indent = above.strip()[:WITHIN_MAX_CHARS], _indent(above)
+                if text.startswith(("def ", "async def ", "class ")):
+                    return text
+                block = block or text
+        return block
 
     def _where(self, path: str) -> tuple[_Repository, str]:
         """The repository a path a stage names is in, and the path within it: an installed library's by its scheme."""
@@ -530,7 +562,20 @@ class Source:
         asked = self._canonical(asked.strip())
         if asked not in self._listed and (ranged := _RANGE.fullmatch(asked)) and ranged["path"] in self._listed:
             return ranged["path"], int(ranged["first"]), int(ranged["last"])
+        if asked not in self._listed and _DEFINED in asked:
+            return self._defined(asked)
         return asked, None, None
+
+    def _defined(self, asked: str) -> tuple[str, int | None, int | None]:
+        """One definition named by its file and name, `src/app.py::Reader.read`, read from its first decorator to its
+        last line: the graph finds the lines, and the text read is the file's own. Where the graph knows no such
+        definition (a file that did not parse, another repository's, a library's), the whole file is read: the graph
+        never refuses a read (the code review of phase 29)."""
+        path = asked.partition(_DEFINED)[0]
+        if path not in self._listed:
+            return asked, None, None
+        found = next((one for one in self.graph().symbols if one.id == asked), None)
+        return (path, found.first, found.last) if found else (path, None, None)
 
     def _file(self, asked: str, got: _Round) -> None:
         path, first, last = self._asked(asked)

@@ -625,3 +625,21 @@ def test_plan_on_a_verified_change_names_a_new_change_not_a_revision(tmp_path, c
     assert run(tmp_path, "plan", "passkeys") == 1
     said = capsys.readouterr().err
     assert "--id" not in said and "Propose a new change" in said and fake_provider.requests == []
+
+
+def test_the_plan_is_told_what_imports_and_tests_the_files_the_reading_found(tmp_path, fake_provider) -> None:
+    """A lead from the code graph, which the tasks stage weighs: it reads names and imports, not the code."""
+    from adk_spec.domain.context_md import render_context
+    from adk_spec.domain.model import Statement
+
+    seeded(tmp_path)
+    repository(
+        tmp_path,
+        {"src/app.py": "def login():\n    return password()\n", "tests/test_app.py": "from src.app import login\n"},
+    )
+    found = Statement(kind="touches", path="src/app.py", line=2, quote="return password()", note="Sign-in.")
+    context = render_context("Context: passkeys", at="today", commit=None, statements=[found], read=["src/app.py"])
+    write_text(tmp_path / ".spec/changes/passkeys/context.md", context)
+    assert run(tmp_path, "plan", "passkeys", "--replace", "--no-explore") == 0
+    tasks = sent_to(fake_provider, "You break a change")
+    assert between(tasks, "reach") == "- src/app.py: tested by tests/test_app.py"

@@ -110,6 +110,15 @@ def context_of(text: str) -> str:
     return _cut(text.strip(), CONTEXT_FILE, CONTEXT_FILE_MAX_CHARS)
 
 
+#: What the code graph adds to a stage, short lists all: cut past this, as every input is.
+GRAPH_TEXT_MAX_CHARS = 4_000
+
+
+def graph_text(text: str, name: str) -> str:
+    """A list the code graph gives a stage (ranked files, reach, leads), cut past `GRAPH_TEXT_MAX_CHARS`."""
+    return _cut(text, name, GRAPH_TEXT_MAX_CHARS)
+
+
 def _capped(path: Path, cap: int) -> str:
     """A file a stage reads as it stands, stripped, or nothing where there is none: cut past `cap`, saying so."""
     return _cut(read_text(path).strip() if path.is_file() else "", path.name, cap)

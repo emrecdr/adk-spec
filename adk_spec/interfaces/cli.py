@@ -34,6 +34,7 @@ from ..domain.context_md import (
     PROFILE_SECTIONS,
     SECTIONS,
     drafted_rules,
+    found_paths,
     render_context,
     unknown_count,
     with_answers,
@@ -103,6 +104,7 @@ from ..workspace.context import (
     context_of,
     context_text,
     files_text,
+    graph_text,
     lessons_text,
     living_text,
     profile_text,
@@ -110,6 +112,7 @@ from ..workspace.context import (
 from ..workspace.evidence import evidence_findings, evidence_folded, profile_gone
 from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, committed_text, head, is_repository, resolves
+from ..workspace.graph import reach_text
 from ..workspace.layout import (
     BRIEF_FILE,
     CHANGELOG,
@@ -510,7 +513,11 @@ def _described(workspace: Workspace) -> tuple[list[Any], int]:
         return [], EXIT_USAGE
     print(f"reading   the code, to describe this repository: up to {MAX_CALLS} model calls. --no-explore skips it")
     # No profile and no deltas: a refresh reads the code afresh, not the profile it is about to replace.
-    seed = {RULES_TEXT: constitution_text(workspace), BRIEF_TEXT: DESCRIBE, TREE: source.tree()}
+    seed = {
+        RULES_TEXT: constitution_text(workspace),
+        BRIEF_TEXT: DESCRIBE,
+        TREE: source.tree(),
+    }
     found, failure = _reading(workspace, "init", None, seed, None, source)
     print(f"explored  {_explored_said(found, 0, failure)}")
     if not found.statements:
@@ -1558,6 +1565,7 @@ def _plan_made(
         LESSONS_TEXT,
         LIVING,
         PROFILE_TEXT,
+        REACH,
         RULES_TEXT,
         TREE,
     )
@@ -1584,6 +1592,10 @@ def _plan_made(
         ledger = UsageLedger(workspace.config().max_tokens or None)
     said, context = _read_code(workspace, change_id, seed, ledger, held) if explore else ("", None)
     seed[CONTEXT_TEXT] = context_text(workspace, change_id)
+    # A lead for the tasks: what imports and tests the files the reading found, from the graph its reading built.
+    found = found_paths(seed[CONTEXT_TEXT])
+    if source is not None and any(path.endswith(".py") for path in found):
+        seed[REACH] = graph_text(reach_text(source.graph(), found), "what imports and tests the files found")
     read = [(context, False)] if context else []
 
     def build(ledger: UsageLedger, recorder: Recorder) -> App:

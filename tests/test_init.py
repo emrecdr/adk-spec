@@ -347,3 +347,20 @@ def test_init_with_a_config_that_does_not_read_still_ends_with_its_next_step(tmp
     capsys.readouterr()
     assert run(tmp_path, "init", "--refresh", "--no-explore") == 0
     assert "next      " in capsys.readouterr().out
+
+
+def test_init_shows_the_reading_the_most_imported_files(tmp_path, fake_provider) -> None:
+    """With no request to rank for, the hubs: a hint for the profile, which the model checks against what it read."""
+    from conftest import between, sent_to
+
+    files = {
+        "lib/core.py": "def run():\n    pass\n",
+        "lib/a.py": "from lib.core import run\n",
+        "lib/b.py": "from lib.core import run\n",
+    }
+    repository(tmp_path, {**FILES, **files})
+    reads_the_tests(fake_provider)
+    assert run(tmp_path, "init") == 0
+    scout = sent_to(fake_provider, SCOUT)
+    assert between(scout, "ranked") == "- lib/core.py: imported by 2 files"
+    assert between(sent_to(fake_provider, REVIEW), "leads") == "- Most imported, and not read: lib/core.py"

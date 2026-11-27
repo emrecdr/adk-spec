@@ -11,6 +11,7 @@ name = "adk-spec"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "codegraph" },
     { name = "google-adk" },
     { name = "litellm" },
     { name = "mcp" },
@@ -29,6 +30,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "codegraph", git = "https://github.com/emrecdr/codegraph?rev=c8463feb62e84f8ba7d363383b36c71aa72c962c" },
     { name = "google-adk", specifier = "==2.15.0" },
     { name = "litellm", specifier = "==1.106.2" },
     { name = "mcp", specifier = "==2.3.0" },
@@ -329,6 +331,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/45/37/edbf1b0707709013c
 wheels = [
     { url = "https://files.pythonhosted.org/packages/31/7d/164b7ffc8624fe9efb4221bf9af485d5c1e41b9ae118045d2b6dc5457d8b/click-8.5.1-py3-none-any.whl", hash = "sha256:8bb5376d2006950386f8c6427613334a2acadc5f559cb80e638d00b4df957e37", size = 126163, upload-time = "2026-11-06T17:36:59.287Z" },
 ]
+
+[[package]]
+name = "codegraph"
+version = "0.1.0"
+source = { git = "https://github.com/emrecdr/codegraph?rev=c8463feb62e84f8ba7d363383b36c71aa72c962c#c8463feb62e84f8ba7d363383b36c71aa72c962c" }
 
 [[package]]
 name = "colorama"

@@ -40,8 +40,9 @@ uv run python scripts/dump_instructions.py                   # every stage's ins
 
 CI runs the four gate commands on Windows, Ubuntu and macOS with `PYTHONUTF8=1`. Ruff keeps complexity at 10 and lines
 at 120. Pins: uv resolves with `exclude-newer = "P3D"` (a three-day cooldown on every release). `litellm` is held at
-1.106.2 because `google-adk` 2.15.0 caps it; `login.py` also uses LiteLLM's private Copilot names. Do not raise either
-pin.
+1.106.2 because `google-adk` 2.15.0 caps it; `login.py` also uses LiteLLM's private Copilot names. `codegraph` (the code
+graph, shared with adk-review) is a uv git source pinned by commit: a bump is a reviewed change of the rev, decided with
+adk-review's session. Do not raise either pin.
 
 ## Architecture
 
@@ -57,9 +58,9 @@ without ADK; nothing builds at import except `adk_spec/agent.py`, the shape `adk
 - **workspace**: the `.spec/` tree (`layout.py`), atomic writes (`files.py`), the writer lock (`lock.py`), git and the
   set of repositories a change spans (`git.py`, `source.py`), the project's installed libraries a reading may open
   offline as `python:`/`node:` paths (`installed.py`), the Agent Skill `init` writes into the repository (`skill.py`; a
-  refresh replaces one whose text is in `SHIPPED`), the MCP entry it adds to the root `.mcp.json` (`mcp_setup.py`),
-  config, what stages are given (`context.py`), running the project's tests and other programs (`tests.py`,
-  `process.py`).
+  refresh replaces one whose text is in `SHIPPED`), the MCP entry it adds to the root `.mcp.json` (`mcp_setup.py`), the
+  code graph beside the reading, a hint and leads a stage confirms, never the source of truth (`graph.py`), config, what
+  stages are given (`context.py`), running the project's tests and other programs (`tests.py`, `process.py`).
 - **orchestration**: ADK `Workflow` graphs (`graph.py`), one schema-bound `LlmAgent` per stage (`stages/`), the gate
   after each stage (`gate.py`), the code reading (`explore.py`), plugins every app carries (`plugins.py`: schema
   mismatch, token ledger, scrub), the two provider arms (`models.py`, `settings.py`).

@@ -37,10 +37,11 @@ def survey(*statements: dict, files: tuple[str, ...] = ()) -> dict:
     return {"statements": list(statements), "more_files": list(files), "more_folders": [], "more_searches": []}
 
 
-async def read(root, files: dict[str, str] | None = None):
+async def read(root, files: dict[str, str] | None = None, extra: dict | None = None):
     repository(root, files or FILES)
     held = Source.of(root, exclude=())
     seed = {BRIEF_TEXT: "# Sign in with a passkey\n", DELTAS_TEXT: "", RULES_TEXT: "", TREE: tree_text(held.paths)}
+    seed |= extra or {}
     return await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
 
 
@@ -337,3 +338,25 @@ async def test_a_review_naming_one_unknown_twice_keeps_it_once(tmp_path, fake_pr
     found = explored((await read(tmp_path)).state)
     assert found.unknown[0] == ("Who owns sessions?", "src"), "first named stays first, with where it may be answered"
     assert len(found.unknown) == 8 and found.unknown_over == 1
+
+
+@pytest.mark.asyncio
+async def test_the_scout_is_shown_the_files_the_code_graph_ranks_first(tmp_path, fake_provider) -> None:
+    """Ranked by the reading itself from the brief: a hint beside the tree, never in its place."""
+    await read(tmp_path, {**FILES, "src/auth/passkey.py": "def sign_in_with_passkey(user):\n    return user\n"})
+    (scout,) = sent(fake_provider, SCOUT)
+    assert between(scout, "ranked") == "- src/auth/passkey.py: defines `sign_in_with_passkey`"
+    assert "src/auth/session.py" in between(scout, "tree")
+
+
+@pytest.mark.asyncio
+async def test_the_review_is_given_the_leads_the_code_graph_finds(tmp_path, fake_provider) -> None:
+    """The owner: the graph finds what the reading missed, and the review, which reads it, confirms each or not."""
+    files = {**FILES, "src/auth/passkey.py": "class Passkey:\n    def sign_in(self):\n        pass\n"}
+    fake_provider.answers_when(SURVEY, survey({**APP, "note": "`Passkey.sign_in` and `Passkey.revoke` decide it."}))
+    await read(tmp_path, files)
+    (review,) = sent(fake_provider, REVIEW)
+    assert between(review, "leads") == (
+        "- Ranked first for this change, and not read: src/auth/passkey.py\n"
+        "- Statement 1 names `Passkey.revoke`, which the code defines nowhere"
+    )

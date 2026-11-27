@@ -17,6 +17,8 @@ KEY = "review"
 #: The state keys of a review: the statements kept, numbered, and what the reading asked for and could not read.
 NUMBERED = "numbered"
 NOT_READ = "not_read"
+#: What the code graph suggests checking: files ranked first that no round read, names no code defines.
+LEADS = "graph_leads"
 OPENING = "You review what a reading of a repository's code found for a change. You read no file and plan nothing."
 GUIDE = """\
 Each statement above names a file and a line, the line that opens the block it stands in, its note, and the text it
@@ -24,7 +26,11 @@ quotes, which was found in that file. Dispute a statement only where its quote, 
 show what its note says: a note about one function that rests on a line of another, say. Give its number and why.
 Then name what the change needs to know that no statement establishes: where it plugs in, what it must not break,
 how this repository does such a thing. Ask each as a question, and say where it might be answered.
-Where reading more would answer one, ask for it: a file by its path, a folder to list, or a word to search for.
+Where reading more would answer one, ask for it: a file by its path, one definition by its file and name
+(src/app.py::Reader.read), a folder to list, or a word to search for.
+What the code graph suggests checking comes from names and imports, not from reading: ask to read a file it names only
+where the change needs it, and dispute a statement it doubts only where that statement's own quote and block do not
+show its note.
 Where the answer is in an installed library, ask for its file, python:<path> or node:<path>, its path inside the
 environment as the list of libraries shows, or for the library to list its files. Empty lists are a good answer."""
 
@@ -36,6 +42,7 @@ def build_review() -> LlmAgent:
         section("## The statements kept", "statements", NUMBERED),
         section("## Every file read", "read", READ, optional=True),
         section("## What was asked for and not read", "not read", NOT_READ, optional=True),
+        section("## What the code graph suggests checking", "leads", LEADS, optional=True),
         THE_LIBRARIES,
         THE_BRIEF,
         THE_DELTAS,
