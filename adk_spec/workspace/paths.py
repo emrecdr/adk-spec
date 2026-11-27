@@ -33,6 +33,18 @@ def inside(root: Path, *parts: str) -> Path:
     return path
 
 
+def linked(root: Path, path: str) -> bool:
+    """Whether the file at `path` under `root`, or a folder on the way to it, is a symbolic link or a junction. git
+    lists a tracked file still after its folder was replaced by a link, and read through the link the file is another
+    folder's: one git ignores, or one a person excluded."""
+    at = root
+    for part in path.split("/"):
+        at = at / part
+        if at.is_symlink() or at.is_junction():
+            return True
+    return False
+
+
 def refuse_links(top: Path) -> None:
     """`PathError` naming the first link or junction at or under `top`, said from the folder that holds `top`.
     Found by the audit of 25 November: a link under `.spec` had a command read a file from anywhere and send it to a

@@ -39,13 +39,14 @@ from typing import NamedTuple
 from ..domain.secrets import KEY_WORDS, holds_a_key, scrub_lines
 from ..domain.text import lines_of, normalise, plain, sha256_of
 from ..domain.verify import parts_of_diff
-from .config import ConfigError, load_config
+from .config import Config, ConfigError, load_config
 from .context import tree_text
 from .files import NotTextError, read_text
 from .git import GitError, diffs, grep, head, is_repository, top
 from .git import files as listed_by_git
 from .installed import Environment, environments
 from .layout import CONFIG, ROOT_NAME
+from .paths import linked
 
 #: What one round of reading holds at most. Provisional, as the context limits are, until a live run measures them.
 FILES_A_ROUND = 12
@@ -194,7 +195,7 @@ class _Repository:
     def _read(self, path: str) -> list[str] | str:
         target = self.root / path  # joined only here, and only for a path that was found in git's list
         try:
-            if self._linked(path):
+            if linked(self.root, path):
                 return "a symbolic link is not read"
             if not target.is_file():
                 return "git lists it, and no file is there"
@@ -218,7 +219,11 @@ class _Repository:
             return opened == HOLDS_A_KEY
         target = self.root / path
         try:
-            if self._linked(path) or not target.is_file() or not target.resolve().is_relative_to(self.root.resolve()):
+            if (
+                linked(self.root, path)
+                or not target.is_file()
+                or not target.resolve().is_relative_to(self.root.resolve())
+            ):
                 return False
             if (size := target.stat().st_size) == 0:
                 return False
@@ -234,17 +239,6 @@ class _Repository:
         except OSError, ValueError:
             return False
         return holds_a_key(normalise(data.decode("utf-8", errors="replace")))
-
-    def _linked(self, path: str) -> bool:
-        """Whether the file at `path`, or a folder on the way to it from the root, is a symbolic link or a
-        junction. git lists a tracked file still after its folder was replaced by a link, and read through the
-        link the file is another folder's: one git ignores, or one a person excluded."""
-        at = self.root
-        for part in path.split("/"):
-            at = at / part
-            if at.is_symlink() or at.is_junction():
-                return True
-        return False
 
     def hits(self, term: str, room: int) -> tuple[list[tuple[str, int, str]], bool]:
         """The lines `term` is on, each by its path as a stage is shown it, its number and its scrubbed text: at
@@ -317,6 +311,14 @@ def repositories_named(given: Sequence[str], held: Mapping[str, str]) -> dict[st
     return named
 
 
+def own_config(path: Path) -> Config | None:
+    """A repository's own adk-spec settings, from its `.spec/config.toml`, or none where it is no adk-spec project:
+    what its exclusions are, for the code reading and the evidence check alike. `ConfigError` or `NotTextError` where
+    the file does not read."""
+    own = path / ROOT_NAME / CONFIG
+    return load_config(own) if own.is_file() else None
+
+
 def _other(root: Path, name: str, given: str, folders: set[str], tops: dict[str, Path]) -> _Repository | str:
     """Another repository a change names, read as git lists it with its own exclusions, and given no trust of its
     own; or why it is left out, where it is not on this machine, cannot be read, or belongs to another account.
@@ -350,9 +352,8 @@ def _other(root: Path, name: str, given: str, folders: set[str], tops: dict[str,
             "from there. Name that folder"
         )
     tops[name] = its_top
-    own = path / ROOT_NAME / CONFIG  # its exclusions and its test command are its own, where it is an adk-spec project
     try:
-        held = load_config(own) if own.is_file() else None
+        held = own_config(path)  # its exclusions and its test command are its own, where it is an adk-spec project
         exclude = held.exclude if held else ()
         found = _Repository(name, path, listed_by_git(path, exclude=exclude, trust=False), exclude)
         found.test, found.test_timeout = (held.test, held.test_timeout) if held else ((), 0)

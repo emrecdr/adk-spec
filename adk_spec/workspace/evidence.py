@@ -5,21 +5,22 @@ against the code, so that a requirement whose proving lines are gone from it is 
 from __future__ import annotations
 
 import functools
-import os
+import itertools
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PureWindowsPath
 
 from ..domain.context_md import quoted_statements
 from ..domain.evidence_md import Proof, folded, parse_evidence, render_evidence, suspects
 from ..domain.model import ChangeState, Delta, Finding, Spec
-from ..domain.secrets import scrub_lines
+from ..domain.secrets import holds_a_key, scrub_lines
 from ..domain.text import QUOTE_MIN_CHARS, plain, quoted_at
 from ..domain.validate import finding
-from .config import ConfigError, load_config
+from .config import ConfigError
 from .files import NotTextError, read_text
 from .git import GitError, files, grep
-from .layout import CHANGES, CONFIG, EVIDENCE, PROFILE, ROOT_NAME, SPECS, Workspace
-from .source import FILE_MAX_BYTES, LIBRARY_SCHEMES
+from .layout import CHANGES, EVIDENCE, PROFILE, SPECS, Workspace
+from .paths import linked
+from .source import FILE_MAX_BYTES, LIBRARY_SCHEMES, own_config
 
 #: How many of the files a quote's search names are read whole to find it.
 ELSEWHERE_MAX = 20
@@ -40,24 +41,22 @@ def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Seq
     folder = root if own else root / repository
     if len(plain(quote)) < QUOTE_MIN_CHARS or not _within(folder, repository, path, own=own):  # too short to find
         return None
-    # Only what a reading could be shown: a file git lists, with the repository's own exclusions, through no link.
-    # Found by an outside audit of 171f1c4, and reproduced: any path was read, so an evidence line could learn from
-    # `validate`'s notes whether a guess was in `.git/config`, a CI runner's token, or an ignored `.env`.
+    # Only what a reading could be shown: a file git lists, its repository's exclusions, no link (an outside audit).
     held = tuple(exclude) if own else _their_exclusions(folder)
+    if held is None or linked(folder, path):
+        return None
     try:
-        listed = None if held is None else _listed(folder, held, own)
+        listed = _listed(folder, held, own)
     except GitError:
         return None
-    if listed is None or _linked(folder, path):
-        return None
     if path in listed:
-        if (first := _found(folder / path, quote)) is None:  # past what a reading reads: unknown
+        if (first := _found(folder / path, quote)) is None:  # past what a reading reads, or a key's: unknown
             return None
-        if first:  # read first: a quote that holds asks git nothing
+        if first:  # read first: a quote that holds asks git for no search
             return True
-    elif os.path.lexists(folder / path):  # there, and not listed: ignored, excluded or git's own, never read
+    elif (folder / path).exists(follow_symlinks=False):  # there, and not listed: ignored, excluded or git's own
         return None
-    return _elsewhere(folder, quote, held or (), listed, own=own)
+    return _elsewhere(folder, quote, held, listed, own=own)
 
 
 def _elsewhere(folder: Path, quote: str, exclude: tuple[str, ...], listed: frozenset[str], *, own: bool) -> bool | None:
@@ -68,9 +67,9 @@ def _elsewhere(folder: Path, quote: str, exclude: tuple[str, ...], listed: froze
         hits = grep(folder, term, exclude=exclude, trust=own) if term else []
     except GitError:
         return None
-    named = [one for one in dict.fromkeys(hit.split(":", 1)[0] for hit in hits) if one in listed]
+    named = (one for one in dict.fromkeys(hit.split(":", 1)[0] for hit in hits) if one in listed)
     unknown = False
-    for one in [one for one in named if not _linked(folder, one)][:ELSEWHERE_MAX]:
+    for one in itertools.islice((one for one in named if not linked(folder, one)), ELSEWHERE_MAX):
         if (found := _found(folder / one, quote)) is None:
             unknown = True
         elif found:
@@ -85,24 +84,13 @@ def _listed(folder: Path, exclude: tuple[str, ...], own: bool) -> frozenset[str]
 
 
 def _their_exclusions(folder: Path) -> tuple[str, ...] | None:
-    """Another repository's own exclusions, from its `.spec/config.toml`, none where it has none; None where it does
+    """Another repository's own exclusions, as the code reading takes them (`own_config`); None where its config does
     not read, so that its quotes are unknown rather than looked for in what it keeps out."""
-    config = folder / ROOT_NAME / CONFIG
     try:
-        return load_config(config).exclude if config.is_file() else ()
+        held = own_config(folder)
     except ConfigError, NotTextError, OSError:
         return None
-
-
-def _linked(folder: Path, path: str) -> bool:
-    """Whether the file at `path`, or a folder on the way to it, is a link or a junction: read through, it is another
-    folder's, one git does not list."""
-    at = folder
-    for part in path.split("/"):
-        at = at / part
-        if at.is_symlink() or at.is_junction():
-            return True
-    return False
+    return held.exclude if held else ()
 
 
 def _within(folder: Path, repository: str, path: str, *, own: bool) -> bool:
@@ -129,6 +117,12 @@ def _found(path: Path, quote: str) -> bool | None:
     if stamp.st_size > FILE_MAX_BYTES:
         return None
     if (text := _text(path, stamp.st_mtime_ns, stamp.st_size)) is None:
+        return False
+    if holds_a_key(text):  # withheld from every reading, so no quote is of it
+        return None
+    # A quote with no stand-in's bracket that is not in the text is not in its scrubbed text: the scrub, which costs
+    # four times the search, is spent only to decide a hit.
+    if "[" not in quote and "]" not in quote and quoted_at(quote, text) is None:
         return False
     return quoted_at(quote, _scrubbed(text)) is not None
 

@@ -2002,13 +2002,15 @@ def _tested(workspace: Workspace, source: Source) -> list[TestRun]:
     every = [*asked, *source.tests()]
     if not asked:  # found by the fourth audit: a `met` read as tested, with no test run here
         print(f"tests     none named{' here' if every else ''}: {NO_TEST_COMMAND}")
-    if os.environ.get(TOOL_CALL) == "1":
+    tool = os.environ.get(TOOL_CALL) == "1"
+    if tool:
         _committed_tests(every)
+    keys = PROVIDER_KEYS if tool else ()  # a tool's call runs code an assistant wrote: no provider key for it
+    without = frozenset({*_FROM_ENV_FILE, TOOL_CALL, *keys})
     runs = []
     for name, root, argv, timeout in every:
         print(f"testing   {f'{name}: ' if name else ''}{scrub(' '.join(argv))[0]}")
-        keys = PROVIDER_KEYS if os.environ.get(TOOL_CALL) == "1" else ()  # a tool's call runs an assistant's code
-        done = run_tests(root, argv, timeout=timeout, name=name, without=frozenset({*_FROM_ENV_FILE, TOOL_CALL, *keys}))
+        done = run_tests(root, argv, timeout=timeout, name=name, without=without)
         took = "" if done.seconds is None else f" in {done.seconds:.1f} s"
         print(f"tests     {f'{name} ' if name else ''}{done.outcome}{took}")
         runs.append(done)

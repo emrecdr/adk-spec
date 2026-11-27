@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from conftest import on_the_fake, repository, run, seeded
+from conftest import _git, on_the_fake, repository, run, seeded
 
 from adk_spec.domain.context_md import quoted_statements, render_context
 from adk_spec.domain.model import Statement
@@ -224,8 +224,6 @@ def test_a_quote_moved_into_a_file_past_the_cap_is_unknown_not_gone(tmp_path, mo
 def test_a_quote_is_looked_for_only_in_a_file_git_lists(tmp_path) -> None:
     """Found by an outside audit of 171f1c4, and reproduced: an evidence line could learn whether a string is in
     `.git/config`, which holds a CI runner's token, or in an ignored `.env`, from whether `validate` noted it gone."""
-    from conftest import _git
-
     repository(tmp_path, {"src/a.py": "x = 1\n", ".gitignore": ".env\n"})
     (tmp_path / ".env").write_text("SECRET_TOKEN=abcd1234efgh\n", encoding="utf-8")
     _git(tmp_path, "config", "http.extraheader", "AUTHORIZATION: basic c2VjcmV0dG9rZW4=")
@@ -244,8 +242,6 @@ def test_a_quote_over_a_secret_is_never_matched_against_the_secret(tmp_path) -> 
 
 @pytest.mark.skipif(os.name == "nt", reason="a link needs a privilege on Windows that a test run does not hold")
 def test_a_quote_in_a_file_reached_through_a_link_is_unknown(tmp_path) -> None:
-    from conftest import _git
-
     repository(tmp_path, {"src/a.py": "x = 1\n", ".gitignore": ".env\n"})
     (tmp_path / ".env").write_text("SECRET_TOKEN=abcd1234efgh\n", encoding="utf-8")
     (tmp_path / "src/env").symlink_to(tmp_path / ".env")
@@ -264,3 +260,11 @@ def test_another_repositorys_quote_honours_its_own_exclusions(tmp_path) -> None:
         },
     )
     assert quote_holds(tmp_path / "app", "../api", "secrets/key.txt", "the token value here", ()) is None
+
+
+def test_a_quote_in_a_file_holding_a_private_key_is_unknown(tmp_path) -> None:
+    """Found by the cleanup review of phase 25: a reading withholds such a file whole, so no quote is of it, and the
+    evidence check matched against it all the same."""
+    header = "-----BEGIN RSA " + "PRIVATE KEY-----"
+    repository(tmp_path, {"keys/id_rsa": f"{header}\nMIIEowIBAAKCAQEA7x1yQ9\n", "src/a.py": "x = 1\n"})
+    assert quote_holds(tmp_path, ".", "keys/id_rsa", "MIIEowIBAAKCAQEA7x1yQ9", ()) is None

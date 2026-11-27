@@ -83,7 +83,7 @@ async def run_seeded(app: App, *, state: dict[str, Any], prompt: str) -> Run:
     except TimeoutError:
         failure = f"the run did not finish within {RUN_DEADLINE_S:g} s"
     except Exception as exc:  # noqa: BLE001 -- the engine itself: a reply off its schema, or a provider that raised
-        failure = scrub(f"{type(exc).__name__}: {said(exc)}", cut=True)[0]  # a provider's words, said and kept
+        failure = f"{type(exc).__name__}: {said(exc)}"  # said scrubs a provider's words
     seconds = time.perf_counter() - started
     session = await runner.session_service.get_session(**ids)
     if session is None:
