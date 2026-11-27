@@ -17,6 +17,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from ..domain.text import counted
 from .files import NotTextError, read_text
 from .git import as_globs
 
@@ -125,7 +126,7 @@ class _Gathering:
 
     def made(self, scheme: str, where: str, root: Path) -> Environment:
         if self.past:
-            self.unread.append(f"{self.past} more package{'' if self.past == 1 else 's'}: {_past_the_cap()}")
+            self.unread.append(f"{counted(self.past, 'more package')}: {_past_the_cap()}")
         return Environment(
             scheme, where, root, tuple(self.packages), tuple(sorted(set(self.paths))), tuple(self.unread)
         )

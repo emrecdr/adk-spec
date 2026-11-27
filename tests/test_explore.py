@@ -11,7 +11,7 @@ from adk_spec.orchestration.explore import build_explore_app, explored
 from adk_spec.orchestration.gate import FAILURE
 from adk_spec.orchestration.plugins import UsageLedger
 from adk_spec.orchestration.run import run_seeded
-from adk_spec.orchestration.stages import BRIEF_TEXT, CONSTITUTION, DELTAS_TEXT, TREE
+from adk_spec.orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, RULES_TEXT, TREE
 from adk_spec.workspace import context, source
 from adk_spec.workspace.context import tree_text
 from adk_spec.workspace.source import Source
@@ -40,7 +40,7 @@ def survey(*statements: dict, files: tuple[str, ...] = ()) -> dict:
 async def read(root, files: dict[str, str] | None = None):
     repository(root, files or FILES)
     held = Source.of(root, exclude=())
-    seed = {BRIEF_TEXT: "# Sign in with a passkey\n", DELTAS_TEXT: "", CONSTITUTION: "", TREE: tree_text(held.paths)}
+    seed = {BRIEF_TEXT: "# Sign in with a passkey\n", DELTAS_TEXT: "", RULES_TEXT: "", TREE: tree_text(held.paths)}
     return await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
 
 
@@ -296,7 +296,7 @@ async def test_a_statement_quoting_an_installed_library_is_kept(tmp_path, fake_p
     quoted = {"kind": "exists", "file": "python:httpx/_client.py", "quote": "timeout=5.0", "note": "Five seconds."}
     fake_provider.answers_when(SURVEY, survey(quoted))
     held = Source.of(tmp_path, exclude=(), installed=True)
-    seed = {BRIEF_TEXT: "# Time out slow calls\n", DELTAS_TEXT: "", CONSTITUTION: "", TREE: held.tree()}
+    seed = {BRIEF_TEXT: "# Time out slow calls\n", DELTAS_TEXT: "", RULES_TEXT: "", TREE: held.tree()}
     run = await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
     found = explored(run.state)
     assert [(one.path, one.line) for one in found.statements] == [("python:httpx/_client.py", 2)]
@@ -312,7 +312,7 @@ async def test_the_survey_and_the_review_are_shown_the_libraries_they_may_ask_fo
     repository(tmp_path, {".gitignore": ".venv/\n", "src/app.py": "import httpx\n"})
     python_environment(tmp_path)
     held = Source.of(tmp_path, exclude=(), installed=True)
-    seed = {BRIEF_TEXT: "# Time out slow calls\n", DELTAS_TEXT: "", CONSTITUTION: "", TREE: held.tree()}
+    seed = {BRIEF_TEXT: "# Time out slow calls\n", DELTAS_TEXT: "", RULES_TEXT: "", TREE: held.tree()}
     await run_seeded(build_explore_app(source=held, ledger=UsageLedger()), state=seed, prompt="explore")
     for opening in (SURVEY, REVIEW):
         (told,) = sent(fake_provider, opening)[:1]

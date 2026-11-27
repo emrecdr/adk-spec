@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .orchestration.graph import Known, build_chat_app
 from .orchestration.plugins import UsageLedger
-from .orchestration.stages import CAPABILITIES, CONSTITUTION, LESSONS_TEXT, PROFILE_TEXT
+from .orchestration.stages import CAPABILITIES, LESSONS_TEXT, PROFILE_TEXT, RULES_TEXT
 from .workspace.context import capability_index, constitution_text, lessons_text, profile_text
 from .workspace.files import NotTextError
 from .workspace.layout import Workspace, WorkspaceError
@@ -33,12 +33,12 @@ def _known() -> tuple[Known, dict[str, str]]:
         workspace = Workspace.find(Path.cwd())
     except WorkspaceError:
         return Known(living={}, taken=frozenset()), dict.fromkeys(
-            (CAPABILITIES, CONSTITUTION, LESSONS_TEXT, PROFILE_TEXT), ""
+            (CAPABILITIES, RULES_TEXT, LESSONS_TEXT, PROFILE_TEXT), ""
         )
     specs, _problems = workspace.specs()
     told = {
         CAPABILITIES: capability_index(specs),
-        CONSTITUTION: constitution_text(workspace),  # the repository's rules: refused loudly, as every command does
+        RULES_TEXT: constitution_text(workspace),  # the repository's rules: refused loudly, as every command does
         LESSONS_TEXT: _readable(lessons_text, workspace),
         PROFILE_TEXT: _readable(profile_text, workspace),  # found by the fourth audit: `propose` gave it, the chat not
     }

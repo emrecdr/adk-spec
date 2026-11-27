@@ -27,7 +27,7 @@ REQUEST = "request"
 CAPABILITIES = "capabilities"
 #: The capabilities triage sized a request as touching, for the brief to start from: none where a person named the tier.
 SIZED = "sized"
-CONSTITUTION = "constitution"
+RULES_TEXT = "constitution"
 BRIEF_TEXT = "brief_text"
 LIVING = "living"
 DELTAS_TEXT = "deltas_text"
@@ -73,7 +73,7 @@ def section(heading: str, label: str, key: str, *, optional: bool = False) -> st
 
 
 #: The sections more than one stage reads, each written once.
-RULES = section("## The rules of this repository", "constitution", CONSTITUTION, optional=True)
+RULES = section("## The rules of this repository", "constitution", RULES_TEXT, optional=True)
 LIVING_SPECS = section("## The living specs the change touches", "living", LIVING, optional=True)
 THE_BRIEF = section("## The brief", "brief", BRIEF_TEXT)
 THE_DELTAS = section("## The requirement deltas", "deltas", DELTAS_TEXT, optional=True)

@@ -56,3 +56,20 @@ def test_a_quote_made_plain_is_found_in_its_own_line() -> None:
 
     line = "label = Ta­belle_einstellung"
     assert quoted_at(plain(line), line) == 1 and quoted_at(line, line) == 1
+
+
+def test_a_count_is_said_with_its_noun() -> None:
+    """The audit of 25 November (A4): plurals were written by hand at each line, and their number formats drifted."""
+    from adk_spec.domain.text import counted
+
+    assert [counted(1, "file"), counted(2, "file"), counted(1200, "file")] == ["1 file", "2 files", "1,200 files"]
+    assert counted(0, "more folder") == "0 more folders"
+
+
+def test_the_first_names_are_said_then_how_many_more() -> None:
+    """The audit of 25 November (A4): `, and N more` was spelled with and without its comma."""
+    from adk_spec.domain.text import first_of
+
+    assert first_of(["a", "b"], 3) == "a, b"
+    assert first_of(["a", "b", "c", "d"], 2) == "a, b, and 2 more"
+    assert first_of(["a", "b", "c"], 2, sep="; ") == "a; b, and 1 more"

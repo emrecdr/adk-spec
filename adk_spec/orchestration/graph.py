@@ -37,8 +37,7 @@ from ..domain.model import Brief, Delta, Finding, GrammarError, Spec, Tier
 from ..domain.tasks_md import parse_tasks, render_tasks
 from ..domain.validate import validate_brief, validate_delta, validate_tasks
 from ..workspace.context import ContextTooLargeError, living_text
-from ..workspace.layout import BRIEF as BRIEF_FILE
-from ..workspace.layout import SPEC_FILE, SPECS
+from ..workspace.layout import BRIEF_FILE, SPEC_FILE, SPECS
 from .gate import AGAIN, FAILURE, GIVE_UP, OK, PENDING, SENT_BACK, checked, tries_key
 from .plugins import STAGE_ERROR, Scrub, UsageLedger, roster
 from .stages import BRIEF_TEXT, FINDINGS, LIVING, REQUEST, SIZED, TIER

@@ -62,9 +62,10 @@ def test_a_secret_the_tests_print_is_scrubbed(tmp_path) -> None:
     assert key not in run.tail and "[REDACTED" in run.tail
 
 
-def test_a_run_past_its_time_is_not_held_by_a_process_that_left_its_session(tmp_path) -> None:
+def test_a_run_past_its_time_is_not_held_by_a_process_that_left_its_session(tmp_path, monkeypatch) -> None:
     """A test that starts a server in a session of its own leaves it holding the output: waited for with no limit,
     it kept verify waiting as long as the server lived."""
+    monkeypatch.setattr(process, "DRAIN_S", 0.5)  # the wait is bounded all the same (the audit of 25 November, A8)
     code = (
         "import subprocess, sys, time\n"
         "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True)\n"
@@ -213,6 +214,7 @@ def test_on_windows_a_run_that_ended_is_not_stopped_again(tmp_path, monkeypatch)
     stopped = []
     monkeypatch.setattr(process, "WINDOWS", True)
     monkeypatch.setattr(process, "_stopped", lambda _proc, windows: stopped.append(windows))
+    monkeypatch.setattr(process, "DRAIN_S", 0.2)  # its stop is a stand-in: the run is not waited out (A8)
     run_tests(tmp_path, program(tmp_path, "print('ok')"), timeout=60)
     assert stopped == []
     run_tests(tmp_path, program(tmp_path, "import time\ntime.sleep(2)"), timeout=0.5)

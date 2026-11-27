@@ -13,7 +13,7 @@ from collections.abc import Mapping, Sequence
 
 from .model import Statement, StatementKind
 from .secrets import scrub
-from .text import code_span, plain
+from .text import code_span, counted, plain
 
 #: How the line begins that a reading which ended early carries at its top.
 PARTIAL = "This reading is partial: "
@@ -104,14 +104,14 @@ def _left_out(dropped: int, disputed: int, over: int, unknown_over: int) -> str:
     """What was left out of the statements and the unknowns, and why, or nothing."""
     said = []
     if dropped:
-        said.append(f"{dropped} statement{'' if dropped == 1 else 's'} whose quote was not in the file named")
+        said.append(f"{counted(dropped, 'statement')} whose quote was not in the file named")
     if disputed:
         noun = "" if said else f" statement{'' if disputed == 1 else 's'}"
         said.append(f"{disputed}{noun} the review disputed")
     if over:
-        said.append(f"{over} statement{'' if over == 1 else 's'} past what a reading keeps")
+        said.append(f"{counted(over, 'statement')} past what a reading keeps")
     if unknown_over:
-        said.append(f"{unknown_over} unknown{'' if unknown_over == 1 else 's'} past what a review keeps")
+        said.append(f"{counted(unknown_over, 'unknown')} past what a review keeps")
     return f"Left out: {'; '.join(said)}." if said else ""
 
 

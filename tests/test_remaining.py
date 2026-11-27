@@ -83,7 +83,7 @@ def test_the_next_step_names_three_unmet_requirements_and_counts_the_rest() -> N
     left = {f"REQ-A-00{n}": "unmet" for n in range(1, 6)}
     state = verified(approved("standard"), left, base="c0", diff="sha256:d", at="t")
     said = phrase(state, [], [])
-    assert said.startswith("REQ-A-001, REQ-A-002, REQ-A-003 and 2 more unmet: work from reports/remaining.md")
+    assert said.startswith("REQ-A-001, REQ-A-002, REQ-A-003, and 2 more unmet: work from reports/remaining.md")
     assert said.endswith(f"then run `adk-spec verify {state.id}`")
 
 

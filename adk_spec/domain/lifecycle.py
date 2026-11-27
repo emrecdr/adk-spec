@@ -15,7 +15,7 @@ from typing import Any, Literal
 from .model import PASSED, Approval, ChangeState, Checked, Delta, Finding, GrammarError, Seconded, Spec, Verification
 from .spec_md import fingerprint
 from .tasks_md import parse_tasks, render_tasks
-from .text import sha256_of
+from .text import first_of, sha256_of
 from .validate import UNREAD, finding
 
 #: Findings that block an approval whatever their severity: an open point, or no plan. A base that is missing does
@@ -497,8 +497,7 @@ def _unmet(state: ChangeState) -> Step | None:
     unmet = sorted(req_id for req_id, said in held.verdicts.items() if said != "met")
     if not unmet:
         return None
-    more = len(unmet) - UNMET_NAMED
-    named = ", ".join(unmet[:UNMET_NAMED]) + (f" and {more} more" if more > 0 else "")
+    named = first_of(unmet, UNMET_NAMED)
     last = DEMANDS[state.tier].closing
     return Step("you", f"{named} unmet: work from reports/remaining.md, then run `adk-spec {last} {state.id}`")
 

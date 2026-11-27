@@ -43,7 +43,13 @@ CONFIG, CONSTITUTION, SPECS, CHANGES = "config.toml", "constitution.md", "specs"
 PROFILE = "profile.md"
 #: What every draft of the workspace follows: written by people, and by adk-spec for what a gate sent back.
 LESSONS = "lessons.md"
-STATE, BRIEF, DESIGN, TASKS, SPEC_FILE = "change.json", "brief.md", "design.md", "tasks.md", "spec.md"
+STATE_FILE, BRIEF_FILE, DESIGN_FILE, TASKS_FILE, SPEC_FILE = (
+    "change.json",
+    "brief.md",
+    "design.md",
+    "tasks.md",
+    "spec.md",
+)
 #: The folder of a change's generated reports, which no approval fingerprints.
 REPORTS = "reports"
 #: The approver's view of a change, under its `reports/`.
@@ -57,7 +63,7 @@ EVIDENCE = "evidence.md"
 #: An entry for each archived change, in `.spec/`.
 CHANGELOG = "changelog.md"
 #: What a reading of the repository's code found for a change. Supporting material: no approval covers it.
-CONTEXT = "context.md"
+CONTEXT_FILE = "context.md"
 #: The writer's lock, and the marker a run makes while it takes over a lock left behind: a run's own, ignored by git.
 LOCK, TAKING = ".lock", ".lock.taking"
 #: What `adk-spec init` writes: the sections teams have found a constitution useful for.
@@ -179,7 +185,7 @@ class Workspace:
         return self._holding(self.home / SPECS, SPEC_FILE)
 
     def changes(self) -> list[str]:
-        return self._holding(self.home / CHANGES, STATE)
+        return self._holding(self.home / CHANGES, STATE_FILE)
 
     def specs(self) -> tuple[dict[str, Spec], list[Finding]]:
         """Every living spec that reads, by capability, and the faults of the rest, their paths from the root."""
@@ -208,7 +214,7 @@ class Workspace:
             inside(self.home, SPECS, capability, SPEC_FILE): render_spec(spec) for capability, spec in specs.items()
         }
         if state is not None:
-            written[inside(self.home, CHANGES, state.id, STATE)] = state.model_dump_json(indent=2)
+            written[inside(self.home, CHANGES, state.id, STATE_FILE)] = state.model_dump_json(indent=2)
         for path, text in (files or {}).items():
             written[inside(self.home, *path.split("/"))] = text
         write_all(written)
@@ -228,7 +234,7 @@ class Workspace:
             folder = inside(self.home, CHANGES, change_id)
         except PathError as exc:
             raise WorkspaceError(f"there is no change `{change_id}`: {exc}") from exc
-        if not (folder / STATE).is_file():
+        if not (folder / STATE_FILE).is_file():
             raise WorkspaceError(f"there is no change `{change_id}`. `adk-spec status --all` lists every change")
         return folder
 
@@ -308,7 +314,7 @@ class Workspace:
         folder = self.free(state.id)
         texts = self._placed(folder, files)
         drafted = state.model_copy(update={"drafted": approval_files(files)})
-        texts[folder / STATE] = drafted.model_dump_json(indent=2)
+        texts[folder / STATE_FILE] = drafted.model_dump_json(indent=2)
         try:
             write_all(texts)
         except BaseException:
@@ -325,7 +331,7 @@ class Workspace:
         gone = list(gone)
         held = {name: mark for name, mark in state.drafted.items() if name not in gone}
         drafted = {**held, **approval_files(files)}
-        texts[folder / STATE] = state.model_copy(update={"drafted": drafted}).model_dump_json(indent=2)
+        texts[folder / STATE_FILE] = state.model_copy(update={"drafted": drafted}).model_dump_json(indent=2)
         write_all(texts)
         for path in self._placed(folder, dict.fromkeys(gone, "")):
             path.unlink(missing_ok=True)
@@ -378,18 +384,18 @@ class Workspace:
         far as the file system allows. The paths of `files` as written."""
         texts = self._placed(self._folder(state.id), files) if files else {}
         written = list(texts)
-        texts[inside(self.home, CHANGES, state.id, STATE)] = state.model_dump_json(indent=2)
+        texts[inside(self.home, CHANGES, state.id, STATE_FILE)] = state.model_dump_json(indent=2)
         write_all(texts)
         return written
 
     def _state(self, folder: Path, change_id: str) -> ChangeState:
         """A change's state file alone. `WorkspaceError` where it does not read, or names another change."""
         try:
-            state = ChangeState.model_validate_json(read_text(folder / STATE))
+            state = ChangeState.model_validate_json(read_text(folder / STATE_FILE))
         except (NotTextError, OSError) as exc:  # found by the code review: UTF-16, as PowerShell 5.1's `>` writes
-            raise WorkspaceError(f"{self.shown(folder / STATE)} does not read: {exc}") from exc
+            raise WorkspaceError(f"{self.shown(folder / STATE_FILE)} does not read: {exc}") from exc
         except ValidationError as exc:
-            shown = self.shown(folder / STATE)
+            shown = self.shown(folder / STATE_FILE)
             # A field it does not know is a newer adk-spec's: ignored, it would be dropped by the next save.
             if unknown := [error for error in exc.errors() if error["type"] == "extra_forbidden"]:
                 held = ".".join(str(part) for part in unknown[0]["loc"])
@@ -402,7 +408,7 @@ class Workspace:
             raise WorkspaceError(f"{shown} does not read: `{where}`: {first['msg']}") from exc
         if state.id != change_id:  # a renamed or copied folder: each save would go to the other change's file
             raise WorkspaceError(
-                f"{self.shown(folder / STATE)} names the change `{state.id}`, and its folder is `{change_id}`. "
+                f"{self.shown(folder / STATE_FILE)} names the change `{state.id}`, and its folder is `{change_id}`. "
                 "Make the two the same"
             )
         return state
@@ -416,9 +422,11 @@ class Workspace:
         folder = self._folder(change_id)
         state = self._state(folder, change_id)
         problems: list[Finding] = []
-        raw = _read(folder / BRIEF, str, BRIEF, problems) if (folder / BRIEF).is_file() else None
-        brief = _parsed(raw, parse_brief, BRIEF, problems) if raw is not None else None
-        tasks = _read(folder / TASKS, parse_tasks, TASKS, problems) if (folder / TASKS).is_file() else None
+        raw = _read(folder / BRIEF_FILE, str, BRIEF_FILE, problems) if (folder / BRIEF_FILE).is_file() else None
+        brief = _parsed(raw, parse_brief, BRIEF_FILE, problems) if raw is not None else None
+        tasks = (
+            _read(folder / TASKS_FILE, parse_tasks, TASKS_FILE, problems) if (folder / TASKS_FILE).is_file() else None
+        )
         deltas = {}
         for capability in self._holding(folder / SPECS, SPEC_FILE):
             shown = f"{SPECS}/{capability}/{SPEC_FILE}"
@@ -432,14 +440,14 @@ class Workspace:
                 problems.append(_misplaced(delta.capability, capability, shown))
             else:
                 deltas[capability] = delta
-        design = _read(folder / DESIGN, str, DESIGN, problems) if (folder / DESIGN).is_file() else None
+        design = _read(folder / DESIGN_FILE, str, DESIGN_FILE, problems) if (folder / DESIGN_FILE).is_file() else None
         change = Change(state=state, brief=brief, brief_raw=raw, deltas=deltas, tasks=tasks, design=design)
         return LoadedChange(change, problems)
 
     def approval_texts(self, change_id: str) -> dict[str, str]:
         """The text of each file an approval covers, by its path in the change's folder."""
         folder = self._folder(change_id)
-        paths = [BRIEF, DESIGN, TASKS]
+        paths = [BRIEF_FILE, DESIGN_FILE, TASKS_FILE]
         paths += [f"{SPECS}/{capability}/{SPEC_FILE}" for capability in self._holding(folder / SPECS, SPEC_FILE)]
         return {path: _text_or_bytes(folder / path) for path in paths if (folder / path).is_file()}
 
