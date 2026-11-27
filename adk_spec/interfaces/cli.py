@@ -249,8 +249,8 @@ def _parser() -> _Top:
     init.add_argument(
         "--refresh",
         action="store_true",
-        help="read the code again and rewrite the profile; with --no-explore, write the skill where it is missing or "
-        "holds a text adk-spec wrote",
+        help="read the code again and rewrite the profile, and write the skill where it is missing or holds a text "
+        "adk-spec wrote; with --no-explore, only the skill",
     )
     init.set_defaults(handler=_init)
 

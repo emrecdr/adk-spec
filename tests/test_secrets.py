@@ -396,3 +396,17 @@ def test_a_line_of_key_headers_is_judged_quickly() -> None:
     started = time.perf_counter()
     assert not holds_a_key(text)
     assert time.perf_counter() - started < 0.5
+
+
+def test_a_value_on_the_line_after_its_name_is_hidden_in_a_diff_as_in_a_file() -> None:
+    """Found by the code review of phase 25: a diff's `+` before the value's line broke the match, so the value went
+    to the verify and check models, and a quote of it no longer held in the file, scrubbed whole."""
+    cases = {
+        "tok9abcdefgh": "API_TOKEN=\n  tok9abcdefgh\n",
+        "hunter2abc": '{"password":\n  "hunter2abc"}\n',
+        "hunter2abc9": "db_password:\n\n  hunter2abc9\n",
+    }
+    for value, file in cases.items():
+        diff = "@@ -0,0 +1,3 @@\n" + "".join(f"+{line}\n" for line in file.splitlines())
+        for text in (file, diff):
+            assert value not in scrub_lines(text)[0], text

@@ -17,7 +17,7 @@ from ..domain.text import QUOTE_MIN_CHARS, plain, quoted_at
 from ..domain.validate import finding
 from .config import ConfigError
 from .files import NotTextError, read_text
-from .git import GitError, files, grep
+from .git import GitError, grep, tracked
 from .layout import CHANGES, EVIDENCE, PROFILE, SPECS, Workspace
 from .paths import linked
 from .source import FILE_MAX_BYTES, LIBRARY_SCHEMES, own_config
@@ -26,36 +26,34 @@ from .source import FILE_MAX_BYTES, LIBRARY_SCHEMES, own_config
 ELSEWHERE_MAX = 20
 
 
-def holds(root: Path, proof: Proof, exclude: Sequence[str]) -> bool | None:
+def holds(root: Path, proof: Proof, exclude: Sequence[str] | None) -> bool | None:
     """Whether `proof`'s quote is still in the code, as `quote_holds` says."""
     return quote_holds(root, proof.repository, proof.path, proof.quote, exclude)
 
 
-def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Sequence[str]) -> bool | None:
+def quote_holds(root: Path, repository: str, path: str, quote: str, exclude: Sequence[str] | None) -> bool | None:
     """Whether `quote` is still in the code: in `path`, or else in another file of its repository, so that a moved
     function reads as moved. None where its repository is not there to look in, as another one is not in CI, where
     git refuses the search, outside a repository say, or where the quote is too short to find anywhere. `root` is
     the folder that holds `.spec/`; `repository` is `.` for its own; `exclude`, the person's patterns, apply to its
-    own."""
+    own, and None, where their config does not read, makes its quotes unknown.
+
+    Only a file git tracks is read, with its repository's exclusions and through no link: what a reading could be
+    shown, and what a pull request's author can read already. A path git does not track is looked for as one gone,
+    so that whether a file is there, ignored or untracked, never shows (an outside audit of 171f1c4; the code review
+    of phase 25: a pull request writes its own `.gitignore`)."""
     own = repository == "."
     folder = root if own else root / repository
     if len(plain(quote)) < QUOTE_MIN_CHARS or not _within(folder, repository, path, own=own):  # too short to find
         return None
-    # Only what a reading could be shown: a file git lists, its repository's exclusions, no link (an outside audit).
-    held = tuple(exclude) if own else _their_exclusions(folder)
-    if held is None or linked(folder, path):
-        return None
-    try:
-        listed = _listed(folder, held, own)
-    except GitError:
+    held = (None if exclude is None else tuple(exclude)) if own else _their_exclusions(folder)
+    if held is None or (listed := _listed(folder, held, own)) is None:
         return None
     if path in listed:
-        if (first := _found(folder / path, quote)) is None:  # past what a reading reads, or a key's: unknown
+        if linked(folder, path):
             return None
-        if first:  # read first: a quote that holds asks git for no search
-            return True
-    elif (folder / path).exists(follow_symlinks=False):  # there, and not listed: ignored, excluded or git's own
-        return None
+        if (found := _found(folder / path, quote)) is not False:  # held, or unknown: past the cap, or a key's
+            return found
     return _elsewhere(folder, quote, held, listed, own=own)
 
 
@@ -78,9 +76,13 @@ def _elsewhere(folder: Path, quote: str, exclude: tuple[str, ...], listed: froze
 
 
 @functools.lru_cache(maxsize=8)
-def _listed(folder: Path, exclude: tuple[str, ...], own: bool) -> frozenset[str]:
-    """Every file git lists under `folder`, less `exclude`: what a quote may be looked for in, asked once a command."""
-    return frozenset(files(folder, exclude=exclude, trust=own))
+def _listed(folder: Path, exclude: tuple[str, ...], own: bool) -> frozenset[str] | None:
+    """Every file git tracks under `folder`, less `exclude`: what a quote may be looked for in, asked once a command.
+    None where git refuses, kept too, so that a slow git is waited on once, not once a quote."""
+    try:
+        return frozenset(tracked(folder, exclude=exclude, trust=own))
+    except GitError:
+        return None
 
 
 def _their_exclusions(folder: Path) -> tuple[str, ...] | None:
@@ -202,13 +204,14 @@ def profile_gone(workspace: Workspace) -> tuple[int, int]:
     return held.count(False), len(held)
 
 
-def _excluded(workspace: Workspace) -> tuple[str, ...]:
-    """The person's exclude patterns; none where the config does not read. Found by the code review: read first, a
-    fault in it, or no config at all, stopped `validate` and `status` where no evidence was kept."""
+def _excluded(workspace: Workspace) -> tuple[str, ...] | None:
+    """The person's exclude patterns; None where the config does not read, which makes each quote unknown. Found by
+    the code review: read first, a fault in it, or no config at all, stopped `validate` and `status` where no
+    evidence was kept."""
     try:
         return workspace.config().exclude
     except ConfigError, NotTextError, OSError:
-        return ()
+        return None
 
 
 def evidence_folded(

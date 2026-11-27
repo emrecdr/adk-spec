@@ -221,6 +221,12 @@ def files(root: Path, *, exclude: Sequence[str], trust: bool = True) -> list[str
     return sorted(set(_listed(root, "--cached", "--others", "--exclude-standard", exclude=exclude, trust=trust)))
 
 
+def tracked(root: Path, *, exclude: Sequence[str], trust: bool = True) -> list[str]:
+    """Every file under `root` that git tracks, as `files` lists them, less the files it does not track yet: a list
+    that leaving a file out of a pull request's own `.gitignore` adds nothing to."""
+    return sorted(set(_listed(root, "--cached", exclude=exclude, trust=trust)))
+
+
 #: How many lines of one file a search gives back.
 GREP_A_FILE = 5
 

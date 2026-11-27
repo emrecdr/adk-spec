@@ -408,8 +408,8 @@ each. Later, `validate` and `status` look for those lines in the code. A require
 in its file or anywhere else in the repository, is noted as suspect: a refactor may have broken it. This is a note
 only, and it never fails CI. To clear it, verify a change that keeps the requirement, or delete its lines in a
 reviewed commit. A line from another repository is checked only where that repository is there. A line is looked
-for only in files git lists, with each repository's own exclusions, and in their text as a model is shown it, its
-secrets hidden: never in `.git/`, an ignored file, or a secret's own value.
+for only in files git tracks, with each repository's own exclusions, and in their text as a model is shown it, its
+secrets hidden: never in `.git/`, an untracked file, or a secret's own value. A new file counts once you `git add` it.
 
 It also puts an entry first in `.spec/changelog.md`: the change and the day, then each requirement it added,
 modified and removed. Anything you write below the heading is kept as it is. A changelog with a code fence never

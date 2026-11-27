@@ -281,3 +281,25 @@ def test_a_package_folder_reached_through_a_link_is_not_read(tmp_path) -> None:
     (site / "evil-1.0.dist-info").symlink_to(elsewhere, target_is_directory=True)
     (found,) = environments(root)
     assert [name for name, _version, _tops in found.packages] == ["httpx"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a link needs a privilege on Windows that a test run does not hold")
+def test_a_package_whose_metadata_is_a_link_is_not_read(tmp_path) -> None:
+    """Found by the code review of phase 25: a real `*.dist-info` folder whose METADATA, or a `node_modules` package
+    whose `package.json`, links to another file was read through the link, and its lines given as a package's."""
+    root = _repository(tmp_path / "repository")
+    site = python_environment(root)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "METADATA").write_text("Metadata-Version: 2.4\nName: evil\nVersion: 1.0\n", encoding="utf-8")
+    (elsewhere / "package.json").write_text('{"name": "evil", "version": "1.0.0"}', encoding="utf-8")
+    info = site / "evil-1.0.dist-info"
+    info.mkdir()
+    (info / "METADATA").symlink_to(elsewhere / "METADATA")
+    (info / "RECORD").write_text("evil/__init__.py,sha256=x,1\n", encoding="utf-8")
+    package = root / "node_modules" / "evil"
+    package.mkdir(parents=True)
+    (package / "package.json").symlink_to(elsewhere / "package.json")
+    (package / "index.js").write_text("module.exports = 1\n", encoding="utf-8")
+    names = [name for found in environments(root) for name, _version, _tops in found.packages]
+    assert "evil" not in names and "httpx" in names

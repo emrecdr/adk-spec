@@ -69,7 +69,8 @@ class SchemaMismatch(BasePlugin):
         if llm_response.partial:  # a streamed piece: the whole answer follows it
             return None
         if llm_response.error_code:  # the provider's own verdict, which a cut answer's broken JSON would hide
-            why = f"{ENDED}: {llm_response.error_code}: {llm_response.error_message or 'no reason given'}"
+            said = llm_response.error_message or "no reason given"  # a provider's words, which may echo what was sent
+            why = scrub(f"{ENDED}: {llm_response.error_code}: {said}", cut=True)[0]
             callback_context.state[STAGE_ERROR] = why
             return LlmResponse(
                 error_code=llm_response.error_code, error_message=why, usage_metadata=llm_response.usage_metadata

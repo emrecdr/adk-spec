@@ -13,9 +13,10 @@ a provider's error text reaches a recording unscrubbed; a package folder that is
 
 ## Goals
 
-1. **H1-SEC: evidence reads only what a reading could.** A quote is looked for only in a file git lists for that
+1. **H1-SEC: evidence reads only what a reading could.** A quote is looked for only in a file git tracks for that
    repository, with its own exclusions (another repository's from its own `.spec/config.toml`), through no link on
-   the way, and only in the file's scrubbed text: never a raw secret, nor `.git/`, an ignored file or an excluded one.
+   the way, and only in the file's scrubbed text: never a raw secret, nor `.git/`, an untracked file or an excluded
+   one. A path git does not track is looked for as one gone, so that whether a file is there never shows.
 2. **H2-SEC: a tool call's test run holds no provider key.** Under `SPEC_TOOL_CALL`, the variables adk-spec reads for
    a provider's credentials are dropped from the test run's environment.
 3. **H3-SEC: a provider's error text is scrubbed** before a recording keeps it or a run says it.
@@ -34,8 +35,33 @@ a provider's error text reaches a recording unscrubbed; a package folder that is
 
 ## Calls made in the design (the builder's)
 
-- **The listed files** come from `git.files`, kept per command with the file cache, as `quote_holds` is asked once a
-  proof: one `ls-files` a repository a command.
+- **The listed files** come from `git.tracked` (`ls-files --cached`), kept per command with the file cache, as
+  `quote_holds` is asked once a proof: one `ls-files` a repository a command, a refusal kept too.
 - **A config that does not read** makes another repository's quotes unknown, not read without its exclusions.
 - **The names dropped** are the keys google-genai reads for the Gemini arm, `GOOGLE_API_KEY` and `GEMINI_API_KEY`; the
   Copilot arm keeps its key in a file (see the non-goals).
+
+
+## After the code review
+
+Its review at the highest level found four points to fix before the merge, two older ones and seven small ones,
+each checked in the code:
+
+- **Tracked files alone.** The first build listed what `git ls-files --others --exclude-standard` lists too. A pull
+  request writes its own `.gitignore`: one that leaves a runner's `.env` out of it had the file read, so the oracle
+  stayed open; and a path there but not listed read unknown where a gone one read gone, so whether any file was on
+  the runner showed. Now only tracked files are read, which a pull request's author can read already, and an
+  untracked path is looked for as gone. The cost: a quote in a new file not yet added to git reads gone until it is
+  added, and the note now says "left in the files git tracks". A key's file or one past the cap, unknown, then tells
+  nothing new either.
+- **A value on the line after its name** (older): the scrub hid it in a file, but in a diff the next line opens with
+  `+`, which broke the match, so the value went to the verify and check models, and a quote of it held in no
+  scrubbed file. The space after `:` or `=` now crosses lines with a diff's mark (`_GAP` in `secrets.py`).
+- **A provider's error answer**, given with its code rather than raised, reached the stage's failure in its own
+  words; the guard scrubs it, and a test now gives one.
+- **Small ones fixed:** the own config not reading makes quotes unknown, as another's does; a refused listing is
+  kept for the command; a package's METADATA, RECORD or `package.json` that is a link is not read; `init --refresh`'s
+  help says the skill is written with or without `--no-explore`.
+- **Left:** `git grep`'s output read without `-z`, so a quote moved into a file whose name holds a colon or a quoted
+  character reads gone (older; `grep` is shared with the code reading's line search); the count of packages past the
+  cap may include an excluded one, as reading its name is what the cap saves.

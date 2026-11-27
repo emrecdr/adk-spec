@@ -332,11 +332,25 @@ _HEADER = re.compile(
 )
 #: A value a name alone says is secret, with no vendor's shape: what `named-secrets` weighs. Read by validation, a
 #: URL's query parameter was neither: `?api_key=`, `access_token=` and `password=` reached the model and the report.
+#: The space between a name and its value, across lines too, as YAML puts a value under its key: in a diff, each
+#: line after the first opens with its mark, `+`, `-` or a space, so a value on the next line is hidden there as in
+#: the file (the code review of phase 25: it was sent to a model, and a quote of it then held in no scrubbed file).
+_GAP = r"[^\S\n]*(?:\n[+ -]?[^\S\n]*)*"
+
 _GENERIC = (
     (
         "generic_secret",  # a named value in quotes: code, JSON, YAML
         re.compile(
-            r"(?i)(" + _NAMED + r"[\"']?" + _ANNOTATION + r"\s*[:=]\s*)([\"'])" + _STAND_IN + _QUOTED_VALUE + r"\2"
+            r"(?i)("
+            + _NAMED
+            + r"[\"']?"
+            + _ANNOTATION
+            + r"\s*[:=]"
+            + _GAP
+            + r")([\"'])"
+            + _STAND_IN
+            + _QUOTED_VALUE
+            + r"\2"
         ),
         r"\1\2[REDACTED]\2",
     ),
@@ -350,7 +364,9 @@ _GENERIC = (
         re.compile(
             r"(?im)^([+ -]?[^\S\n]*(?:-[^\S\n]+)?(?:(?:export|env|arg|set)[^\S\n]+)?[\"']?[\w.-]{0,80}?"
             + _NAMED
-            + r"\s*[:=]\s*)(?=[^\s#]*\d)"
+            + r"\s*[:=]"
+            + _GAP
+            + r")(?=[^\s#]*\d)"
             + _STAND_IN
             + _BARE_VALUE
             + r"(?=[\"']?(?:[^\S\n]+#[^\n]*+)?[^\S\n]*$)"

@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from conftest import on_the_fake, repository, run, seeded
+from conftest import _git, on_the_fake, repository, run, seeded
 from test_verify import AFTER, approved_in_a_repository, implemented, verified_in_a_repository
 
 from adk_spec.domain.evidence_md import (
@@ -171,6 +171,7 @@ def test_a_quote_moved_to_another_file_is_not_suspect(tmp_path, capsys) -> None:
     archived(tmp_path)
     write_text(tmp_path / "src/auth.py", AFTER.replace("return passkey(user)", "return login(user)"))
     write_text(tmp_path / "src/login.py", "def login(user):\n    return passkey(user)\n")
+    _git(tmp_path, "add", "src/login.py")  # looked in once git tracks it: the code review of phase 25
     assert "spec.evidence-gone" not in validated(tmp_path, capsys)[1]
 
 

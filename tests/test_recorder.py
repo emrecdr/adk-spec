@@ -147,3 +147,18 @@ def test_a_providers_error_is_scrubbed_before_it_is_kept_or_said(tmp_path, capsy
     said = capsys.readouterr()
     assert key not in (held.calls[-1].error or "") + (held.outcome or "") + said.out + said.err
     assert "[REDACTED" in (held.calls[-1].error or "")
+
+
+def test_a_providers_error_answer_is_scrubbed_before_it_is_kept_or_said(tmp_path, capsys, fake_provider) -> None:
+    """Found by the code review of phase 25: a provider's error answer, not raised but given with its code, reached
+    the stage's failure, so the screen and the recording, in its own words."""
+    from google.adk.models.llm_response import LlmResponse
+
+    key = "AKIA" + "IOSFODNN7EXAMPLE"
+    seeded(tmp_path)
+    fake_provider.answers_when(DELTAS, LlmResponse(error_code="BAD_REQUEST", error_message=f"denied for {key}"))
+    assert run(tmp_path, "propose", REQUEST, "--tier", "lean", "--id", "broken") == 3
+    (held,) = kept(tmp_path)
+    said = capsys.readouterr()
+    assert "BAD_REQUEST" in said.err
+    assert key not in "".join(call.error or "" for call in held.calls) + (held.outcome or "") + said.out + said.err

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 from conftest import _git, on_the_fake, repository, run, seeded
@@ -221,14 +222,20 @@ def test_a_quote_moved_into_a_file_past_the_cap_is_unknown_not_gone(tmp_path, mo
     assert quote_holds(tmp_path, ".", "src/a.py", "def start_session(user):", ()) is None
 
 
-def test_a_quote_is_looked_for_only_in_a_file_git_lists(tmp_path) -> None:
+def test_a_quote_is_looked_for_only_in_a_file_git_tracks(tmp_path) -> None:
     """Found by an outside audit of 171f1c4, and reproduced: an evidence line could learn whether a string is in
-    `.git/config`, which holds a CI runner's token, or in an ignored `.env`, from whether `validate` noted it gone."""
-    repository(tmp_path, {"src/a.py": "x = 1\n", ".gitignore": ".env\n"})
-    (tmp_path / ".env").write_text("SECRET_TOKEN=abcd1234efgh\n", encoding="utf-8")
+    `.git/config`, which holds a CI runner's token, or in a `.env`, from whether `validate` noted it gone. Found by
+    the code review of phase 25: a pull request writes its own `.gitignore`, so a file it leaves out of it was read,
+    and whether a file was there at all showed. Each guess, right or wrong, at a file there or not, reads the same."""
+    repository(tmp_path, {"src/a.py": "x = 1\n"})
+    (tmp_path / ".env").write_text("API_TOKEN=abcdefghijkl\n", encoding="utf-8")  # untracked, and not ignored
     _git(tmp_path, "config", "http.extraheader", "AUTHORIZATION: basic c2VjcmV0dG9rZW4=")
-    for path, guess in ((".env", "SECRET_TOKEN=abcd1234"), (".git/config", "AUTHORIZATION: basic c2Vj")):
-        assert quote_holds(tmp_path, ".", path, guess, ()) is None, path
+    for path, right, wrong in (
+        (".env", "API_TOKEN=abcdefgh", "API_TOKEN=zzzzzzzz"),
+        (".git/config", "AUTHORIZATION: basic c2Vj", "AUTHORIZATION: basic zzzz"),
+    ):
+        answers = {quote_holds(tmp_path, ".", one, guess, ()) for one in (path, "gone.txt") for guess in (right, wrong)}
+        assert answers == {False}, path
 
 
 def test_a_quote_over_a_secret_is_never_matched_against_the_secret(tmp_path) -> None:
@@ -259,7 +266,7 @@ def test_another_repositorys_quote_honours_its_own_exclusions(tmp_path) -> None:
             "secrets/key.txt": "the token value here\n",
         },
     )
-    assert quote_holds(tmp_path / "app", "../api", "secrets/key.txt", "the token value here", ()) is None
+    assert quote_holds(tmp_path / "app", "../api", "secrets/key.txt", "the token value here", ()) is False
 
 
 def test_a_quote_in_a_file_holding_a_private_key_is_unknown(tmp_path) -> None:
@@ -268,3 +275,28 @@ def test_a_quote_in_a_file_holding_a_private_key_is_unknown(tmp_path) -> None:
     header = "-----BEGIN RSA " + "PRIVATE KEY-----"
     repository(tmp_path, {"keys/id_rsa": f"{header}\nMIIEowIBAAKCAQEA7x1yQ9\n", "src/a.py": "x = 1\n"})
     assert quote_holds(tmp_path, ".", "keys/id_rsa", "MIIEowIBAAKCAQEA7x1yQ9", ()) is None
+
+
+def test_a_quote_is_unknown_where_its_own_config_does_not_read(tmp_path) -> None:
+    """Found by the code review of phase 25: with no exclusions read, a quote was looked for in what they keep out;
+    another repository's is unknown in the same case."""
+    repository(tmp_path, {"src/a.py": "def start_session(user):\n"})
+    assert quote_holds(tmp_path, ".", "src/a.py", "def start_session(user):", None) is None
+
+
+def test_a_listing_git_refuses_is_asked_once_a_command(tmp_path, monkeypatch) -> None:
+    """Found by the code review of phase 25: a refusal was not kept, so a slow git was waited on once a quote."""
+    from adk_spec.workspace import evidence
+    from adk_spec.workspace.git import GitError
+
+    asked: list[Path] = []
+
+    def refused(root, **_given):
+        asked.append(root)
+        raise GitError("timed out")
+
+    repository(tmp_path, {"src/a.py": "x = 1\n"})
+    monkeypatch.setattr(evidence, "tracked", refused)
+    for path in ("src/a.py", "src/b.py"):
+        assert quote_holds(tmp_path, ".", path, "def start_session(user):", ()) is None
+    assert len(asked) == 1

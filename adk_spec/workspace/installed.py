@@ -68,7 +68,13 @@ def _excluded(path: str, globs: Sequence[str]) -> bool:
 
 def _folder(path: Path) -> bool:
     """Whether `path` is a folder reached through no link."""
-    return path.is_dir() and not path.is_symlink() and not path.is_junction()
+    return path.is_dir() and not _linked(path)
+
+
+def _linked(path: Path) -> bool:
+    """Whether `path` is itself a link, to a file or a folder: read through, it is another's (an outside audit of
+    171f1c4 for a folder; the code review of phase 25 for a package's METADATA, RECORD or `package.json`)."""
+    return path.is_symlink() or path.is_junction()
 
 
 def _site(root: Path) -> tuple[str, Path] | None:
@@ -136,7 +142,7 @@ def _python(root: Path, globs: Sequence[str]) -> Environment | None:
     where, site = found
     held = _Gathering(site.relative_to(root).as_posix(), globs)
     for info in sorted(site.glob("*.dist-info")):
-        if not _folder(info):  # through a link it is another folder's (an outside audit of 171f1c4)
+        if not _folder(info) or any(_linked(info / one) for one in ("METADATA", "RECORD")):  # another's, through a link
             continue
         if held.full:  # past the cap: counted, never read
             held.past += 1
@@ -223,7 +229,7 @@ def _packages(modules: Path) -> list[tuple[str, Path]]:
         found += [
             (folder.relative_to(modules).as_posix(), folder)
             for folder in inside
-            if _folder(folder) and (folder / "package.json").is_file()
+            if _folder(folder) and (folder / "package.json").is_file() and not _linked(folder / "package.json")
         ]
     return found
 
