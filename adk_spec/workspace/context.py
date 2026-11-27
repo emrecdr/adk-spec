@@ -43,10 +43,11 @@ def capability_index(specs: Mapping[str, Spec]) -> str:
 NEW_CAPABILITY = "(no living spec yet: the change creates this capability)"
 
 
-def living_text(specs: Mapping[str, Spec], capabilities: Iterable[str]) -> str:
+def living_text(specs: Mapping[str, Spec], capabilities: Iterable[str], *, remedy: str | None = None) -> str:
     """The canonical text of each named capability's living spec, whole, under a line naming it; one with no spec
-    yet, which the change creates, is named as new. `ContextTooLargeError` past the limit."""
-    return joined({slug: render_spec(specs[slug]) if slug in specs else NEW_CAPABILITY for slug in capabilities})
+    yet, which the change creates, is named as new. `ContextTooLargeError` past the limit, saying `remedy`."""
+    held = {slug: render_spec(specs[slug]) if slug in specs else NEW_CAPABILITY for slug in capabilities}
+    return joined(held, remedy=remedy) if remedy else joined(held)
 
 
 def joined(

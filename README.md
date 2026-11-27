@@ -533,8 +533,8 @@ base: an assistant that edits the test command cannot have it run, and `--base` 
 runs your project's own test files, which the assistant may have written: that is what verifying the work means. Run
 for a tool, they are not given your provider's key (`GOOGLE_API_KEY`, `GEMINI_API_KEY`).
 
-`adk-spec init` adds the server to `.mcp.json` at your repository's root, which VS Code (GitHub Copilot's agent
-mode) and Claude Code read: commit it with `.spec/`. The entry is the same on every machine, so no path is written
+`adk-spec init` adds the server to `.mcp.json` beside `.spec/`, your repository's root in most projects, which VS
+Code (GitHub Copilot's agent mode) and Claude Code read when you open that folder: commit it with `.spec/`. The entry is the same on every machine, so no path is written
 by hand, on Windows neither:
 
 ```json
@@ -553,7 +553,8 @@ It runs `adk-spec-mcp` from your PATH, which the installed tool puts there: `uv 
 it sees the new PATH. `init` says so where `adk-spec-mcp` is not on PATH. A `.mcp.json` with other servers keeps
 them, and an `adk-spec` entry you wrote is yours and left as it is. Where `.vscode/mcp.json` starts adk-spec already,
 `init` writes no second entry, which VS Code would start twice. In a repository set up before, `adk-spec init
---refresh --no-explore` adds it. Another editor starts the same command, `adk-spec-mcp`, in the repository's folder.
+--refresh --no-explore` adds it. The server works in the folder an editor starts it in, as VS Code and Claude Code
+start it in the one you opened; for an editor that starts it elsewhere, add `"args": ["--root", "<that folder>"]`.
 
 Then, in the chat:
 

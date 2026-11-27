@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from .model import Finding
 from .report_md import place
 from .secrets import scrub
-from .text import flat
+from .text import counted, flat
 
 #: The workflow command each severity is said with.
 LEVELS = {"ERROR": "error", "WARNING": "warning", "INFO": "notice"}
@@ -35,7 +35,9 @@ def annotation_lines(findings: Sequence[Finding]) -> list[str]:
 def step_summary(findings: Sequence[Finding], *, failed: bool) -> str:
     """The run page's summary: whether the gate failed, the counts, and a table of the first `ROWS` findings."""
     count = {level: sum(held.severity == level for held in findings) for level in LEVELS}
-    said = f"{count['ERROR']} errors, {count['WARNING']} warnings, {count['INFO']} notes"
+    said = ", ".join(
+        counted(count[level], noun) for level, noun in (("ERROR", "error"), ("WARNING", "warning"), ("INFO", "note"))
+    )
     lines = ["## adk-spec validate", "", f"**{'failed' if failed else 'passed'}**: {said}", ""]
     if findings:
         lines += ["| Severity | Code | Where | Message |", "| --- | --- | --- | --- |"]

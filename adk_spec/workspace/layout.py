@@ -257,8 +257,10 @@ class Workspace:
         return sorted(entry.name for entry in folder.iterdir()) if folder.is_dir() else []
 
     def new_change(self, change_id: str, tier: Tier, files: Mapping[str, str] | None = None) -> Path:
-        """A new draft change's folder, holding its state file and `files`, each by its path in the folder."""
-        return self.write_change(ChangeState(id=change_id, tier=tier, needs_design=owes_design(tier)), files or {})
+        """A new draft change's folder, holding its state file and `files`, each by its path in the folder: a person's
+        to fill, so none is recorded as drafted, and filling it asks for no lesson (the code review of phase 26)."""
+        state = ChangeState(id=change_id, tier=tier, needs_design=owes_design(tier))
+        return self.write_change(state, files or {}, record=False)
 
     def taken(self, specs: Mapping[str, Spec]) -> set[str]:
         """Every requirement ID that is spoken for: in a living spec of `specs`, retired there, or spelled in a
@@ -307,13 +309,13 @@ class Workspace:
         except PathError as exc:
             raise WorkspaceError(f"the change cannot be written: {exc}") from exc
 
-    def write_change(self, state: ChangeState, files: Mapping[str, str]) -> Path:
+    def write_change(self, state: ChangeState, files: Mapping[str, str], *, record: bool = True) -> Path:
         """A new change made whole: its folder, each of `files` by its path in the folder, and its state, written
-        as one set, each file recorded as drafted. Where the write fails the folder is removed again, so no half-made
-        change is left."""
+        as one set, each file recorded as drafted where `record`. Where the write fails the folder is removed again,
+        so no half-made change is left."""
         folder = self.free(state.id)
         texts = self._placed(folder, files)
-        drafted = state.model_copy(update={"drafted": approval_files(files)})
+        drafted = state.model_copy(update={"drafted": approval_files(files) if record else {}})
         texts[folder / STATE_FILE] = drafted.model_dump_json(indent=2)
         try:
             write_all(texts)

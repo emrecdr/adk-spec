@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+from pathlib import Path
 
 import pytest
 from conftest import run
@@ -80,4 +82,40 @@ def test_an_mcp_json_that_is_a_link_is_not_written_through(tmp_path, capsys) -> 
     (tmp_path / "repo").mkdir()
     (tmp_path / "repo/.mcp.json").symlink_to(elsewhere)
     out = _initialised(tmp_path / "repo", capsys)
-    assert elsewhere.read_text(encoding="utf-8") == "{}" and "skipped   .mcp.json: " in out
+    assert elsewhere.read_text(encoding="utf-8") == "{}" and "skipped   .mcp.json: " in out and "real file" in out
+
+
+def test_the_runs_own_environment_is_not_an_editors_path(tmp_path, capsys, monkeypatch) -> None:
+    """Found by the code review of phase 28: under `uv run`, the checkout's own `.venv` is on PATH, which an editor's
+    PATH does not hold, and the hint was never said."""
+    monkeypatch.setattr(cli, "on_path", lambda name: str(Path(sys.executable).parent / name))
+    assert "adk-spec-mcp is not on PATH" in _initialised(tmp_path, capsys)
+
+
+def test_the_install_named_is_editable_only_from_a_checkout(tmp_path, capsys, monkeypatch) -> None:
+    """Found by the code review of phase 28: installed from a wheel, `--editable` named a site-packages folder."""
+    monkeypatch.setattr(cli, "on_path", lambda _name: None)
+    monkeypatch.setattr(cli, "CHECKOUT", tmp_path / "site-packages")
+    out = _initialised(tmp_path / "repo", capsys)
+    assert "--editable" not in out and "uv tool install" in out
+
+
+def test_an_older_vscode_file_that_does_not_read_is_passed_over(tmp_path, capsys) -> None:
+    """Found by the code review of phase 28: PowerShell 5.1's UTF-16 file was blamed on `.mcp.json`."""
+    (tmp_path / ".vscode").mkdir()
+    (tmp_path / ".vscode/mcp.json").write_bytes('{"servers": {}}'.encode("utf-16"))
+    out = _initialised(tmp_path, capsys)
+    assert _held(tmp_path) == {"mcpServers": {"adk-spec": ENTRY}} and "wrote     .mcp.json" in out
+
+
+def test_an_empty_mcp_json_is_written_and_other_servers_keep_their_letters(tmp_path, capsys) -> None:
+    """Found by the code review of phase 28: an empty file was refused, `{}` was said to hold servers, and the rewrite
+    turned a person's letters into escapes."""
+    empty, other = tmp_path / "empty", tmp_path / "other"
+    empty.mkdir()
+    (empty / ".mcp.json").write_text("  \n", encoding="utf-8")
+    assert "wrote     .mcp.json\n" in _initialised(empty, capsys)
+    other.mkdir()
+    (other / ".mcp.json").write_text('{"mcpServers": {"x": {"env": {"NAME": "Müller"}}}}', encoding="utf-8")
+    _initialised(other, capsys)
+    assert "Müller" in (other / ".mcp.json").read_text(encoding="utf-8")

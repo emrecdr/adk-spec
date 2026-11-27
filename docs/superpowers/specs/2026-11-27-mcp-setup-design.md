@@ -29,3 +29,20 @@ their adk-spec checkout: on Windows a `C:\...` path whose every backslash JSON n
   own entry or file stands, which may start it another way.
 - **The file is written again in canonical JSON** (two spaces) where an entry is added: a `.mcp.json` holds no
   comments, which would not have read.
+
+## After the code review
+
+The one review of phases 26 to 28 found, and the one fix pass after it fixed:
+
+- **Under `uv run`, the PATH hint was silent**: the checkout's own `.venv` is first on that PATH, which an editor's
+  is not. A program found only in the running interpreter's own folder counts as not on PATH; the install named is
+  `--editable <checkout>` only where adk-spec runs from a checkout, `uv tool install` otherwise.
+- **An unreadable `.vscode/mcp.json`** (PowerShell 5.1 writes UTF-16) was reported against `.mcp.json`: it now
+  starts nothing adk-spec can know of, and `.mcp.json` is written.
+- **Smaller:** an empty `.mcp.json` is as none; `{}` is written, not "added beside servers"; a rewrite keeps a
+  person's letters (`ensure_ascii=False`); a link is told to be replaced with a real file. The README says the file
+  stands beside `.spec/`, and how to name the folder for an editor that starts a server elsewhere.
+- **Phase 26's:** `new`'s brief is no draft of adk-spec's, so filling it asks for no lesson; a request triage sized
+  past the cap is told what it can do where no change exists yet (`--tier` among them). **Phase 27's:** the CI
+  summary counts as `validate` does (`1 error`).
+

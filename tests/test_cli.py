@@ -575,6 +575,8 @@ def test_new_writes_a_brief_to_fill_and_ends_on_the_next_step(tmp_path, capsys) 
     assert out.splitlines()[-1].startswith("next      ")
     brief = read_text(tmp_path / ".spec/changes/by-hand/brief.md")
     assert brief.startswith("# By hand\n") and "## Why" in brief and "[NEEDS CLARIFICATION: " in brief
+    # A skeleton is no draft of adk-spec's: filled, it asks the person for no lesson (the code review of phase 26).
+    assert state_of(tmp_path, "by-hand")["drafted"] == {}
     assert run(tmp_path, "validate", "by-hand") == 1
     out = capsys.readouterr().out
     assert "brief.marker-unresolved" in out and "change.missing-brief" not in out

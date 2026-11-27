@@ -305,6 +305,14 @@ def _ended() -> Event:
     return Event(output="ended")
 
 
+#: What a request sized past the cap can do: no change exists yet to name fewer capabilities in (the code review of
+#: phase 26).
+SIZED_PAST = (
+    "Split a capability's spec, ask for a change that touches fewer, or name the tier with --tier, which skips this "
+    "sizing"
+)
+
+
 def _sizing(known: Known) -> Callable[[Context], Event]:
     def sized(ctx: Context) -> Event:
         """The model's tier, and the capabilities it found, which the brief starts from. `none` ends the run with
@@ -314,7 +322,7 @@ def _sizing(known: Known) -> Callable[[Context], Event]:
         chosen = Triage.model_validate(ctx.state[triage_stage.KEY])
         if chosen.tier != "none":
             try:
-                living_text(known.living, chosen.capabilities)
+                living_text(known.living, chosen.capabilities, remedy=SIZED_PAST)
             except ContextTooLargeError as exc:
                 return Event(route=STOP, state={FAILURE: f"context: {exc}"})
         found = {TIER: chosen.tier, SIZED: triage_stage.sized_text(chosen)}

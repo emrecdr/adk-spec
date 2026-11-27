@@ -467,11 +467,18 @@ def _mcp(workspace: Workspace) -> None:
         return
     if done is not None:
         print(f"{done:<10}{shown}{_MCP_WHY[done]}")
-    if done in (None, "wrote", "added") and on_path("adk-spec-mcp") is None:
+    if done in (None, "wrote", "added") and not _editor_finds("adk-spec-mcp"):
         named = f'"{CHECKOUT}"' if " " in str(CHECKOUT) else str(CHECKOUT)
-        print(
-            f"mcp       adk-spec-mcp is not on PATH, so no editor can start it: run uv tool install --editable {named}"
-        )
+        how = f"uv tool install --editable {named}" if (CHECKOUT / "pyproject.toml").is_file() else "uv tool install"
+        print(f"mcp       adk-spec-mcp is not on PATH, so no editor can start it: run {how}")
+
+
+def _editor_finds(name: str) -> bool:
+    """Whether an editor would find the program `name` on PATH: not in this run's own environment, which `uv run`
+    puts first on PATH and an editor's PATH does not hold (the code review of phase 28)."""
+    found = on_path(name)
+    own = os.path.normcase(str(Path(sys.executable).parent))
+    return found is not None and os.path.normcase(str(Path(found).parent)) != own
 
 
 def _unheld(root: Path) -> Path:

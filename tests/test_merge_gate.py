@@ -182,3 +182,9 @@ def test_a_summary_cell_links_no_bare_address_and_mentions_nobody() -> None:
     )
     row = next(line for line in step_summary([held], failed=True).splitlines() if "x.y" in line)
     assert "https://" not in row and "www.evil" not in row and "\\@team" in row and "\\~\\~x" in row, row
+
+
+def test_the_summary_counts_as_validate_does() -> None:
+    """Found by the code review of phase 27: the summary said `1 errors`, where validate's own line says `1 error`."""
+    held = [Finding(severity="ERROR", code="x", message="m", path="p.md")]
+    assert "**failed**: 1 error, 0 warnings, 0 notes" in step_summary(held, failed=True)

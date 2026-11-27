@@ -735,5 +735,6 @@ def test_living_specs_past_the_cap_stop_propose_before_the_reading(
     repository(tmp_path)
     monkeypatch.setattr(context, "CONTEXT_MAX_CHARS", 200)  # the seeded auth spec is past it
     assert proposed(tmp_path, "--id", "big") == 3
-    assert "context: the living specs of auth" in capsys.readouterr().err
+    said = capsys.readouterr().err
+    assert "context: the living specs of auth" in said and "--tier" in said and "in the change" not in said
     assert _order(fake_provider) == [TRIAGE]
