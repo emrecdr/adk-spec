@@ -52,7 +52,7 @@ _SETTLED = {
 _PLAIN = ("--no-color", "--no-ext-diff", "--no-textconv")
 #: The folder's own files, without this package's tree or the skill `init` writes: a pathspec git reads from the
 #: folder it runs in. Found by the code review: listed with the code, the skill's rules read as the code's own.
-_HERE = ("--", ".", f":(exclude,icase){ROOT_NAME}", f":(exclude,icase){'/'.join(SKILL_PARTS[:-1])}")
+_LEFT_OUT = (f":(exclude,icase){ROOT_NAME}", f":(exclude,icase){'/'.join(SKILL_PARTS[:-1])}")
 
 
 class GitError(Exception):
@@ -184,23 +184,29 @@ def head(root: Path, *, trust: bool = True) -> str | None:
     return resolves(root, "HEAD", trust=trust)
 
 
-def label(root: Path, *, exclude: Sequence[str], trust: bool = True) -> str:
-    """What the files under `root` are, as a kept code graph names them (agreed with adk-review, amb #721-#725): the
-    commit checked out, with `+dirty` where a file under `root` differs from it or is not tracked yet, so that a
-    reader never takes a graph of unsaved work for the commit; `working tree` where there is no commit."""
+def committed(root: Path, *, suffixes: Sequence[str], trust: bool = True) -> tuple[str, list[str]] | None:
+    """The commit checked out in `root` and its files under `root` ending in one of `suffixes`, where those are exactly
+    the commit's: none changed or untracked, and none git is told to look past, assume-unchanged or outside a sparse
+    checkout, which `status` does not show (as `committed_text` found). Nothing otherwise. What a kept code graph is
+    labelled by (the code review of phase 30)."""
     commit = head(root, trust=trust)
     if commit is None:
-        return "working tree"
-    changed = git(root, "status", "--porcelain", "--untracked-files=normal", *_here(exclude), trust=trust)
-    return f"{commit}+dirty" if changed.strip() else commit
+        return None
+    spec = _here((), within=[f":(glob)**/*{one}" for one in suffixes])
+    if git(root, "status", "--porcelain", "--untracked-files=normal", *spec, trust=trust).strip():
+        return None
+    tagged = [one for one in git(root, "ls-files", "-v", "-z", *spec, trust=trust).split("\0") if one]
+    if any(one[0] == "S" or one[0].islower() for one in tagged):
+        return None
+    return commit, [one[2:] for one in tagged]
 
 
-def _here(exclude: Sequence[str]) -> tuple[str, ...]:
-    """What limits a git command to the files under the folder it runs in: none of `.spec/`, and none a person
-    excluded. Each of `exclude` is read as a `.gitignore` reads the common patterns, and never as less: `as_globs`
-    says how. Handed to git as written, `*.pem` kept only the top folder's keys out, and `vendor/**` nothing of a
-    `Vendor/` on a system where the two are one folder."""
-    return (*_HERE, *(f":(exclude,glob,icase){one}" for one in as_globs(exclude)))
+def _here(exclude: Sequence[str], within: Sequence[str] = (".",)) -> tuple[str, ...]:
+    """What limits a git command to the files under the folder it runs in, or those of it `within` names: none of
+    `.spec/`, and none a person excluded. Each of `exclude` is read as a `.gitignore` reads the common patterns, and
+    never as less: `as_globs` says how. Handed to git as written, `*.pem` kept only the top folder's keys out, and
+    `vendor/**` nothing of a `Vendor/` on a system where the two are one folder."""
+    return ("--", *within, *_LEFT_OUT, *(f":(exclude,glob,icase){one}" for one in as_globs(exclude)))
 
 
 def as_globs(exclude: Sequence[str]) -> tuple[str, ...]:

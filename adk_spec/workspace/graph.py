@@ -10,14 +10,12 @@ graph's facts: adk-review ranks nothing."""
 from __future__ import annotations
 
 import builtins
-import contextlib
 import math
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from pathlib import Path
 
-from codegraph import Graph, Symbol, build, store
+from codegraph import Graph, Symbol, build
 from codegraph.extract import PYTHON
 from codegraph.model import stem_of
 from codegraph.words import words_of
@@ -111,14 +109,6 @@ def built(paths: Iterable[str], lines: Callable[[str], list[str] | str], *, comm
         if path.endswith(PYTHON) and isinstance(held := lines(path), list):
             sources[path] = "\n".join(held)
     return build(sources, commit=commit)
-
-
-def kept(graph: Graph, root: Path) -> Graph:
-    """`graph`, kept in `<root>/.codegraph/` too, where every tool looks: the owner asked that each tool use the same
-    generated graph. It is a hint for another tool, so a write that fails changes nothing here and says nothing."""
-    with contextlib.suppress(store.StoreError):
-        store.save(graph, root)
-    return graph
 
 
 def shared(root: str, paths: Sequence[str], make: Callable[[], Graph]) -> Graph:

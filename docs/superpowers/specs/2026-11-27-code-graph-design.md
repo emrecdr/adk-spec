@@ -129,8 +129,13 @@ each tool uses the same one. Decided with adk-review's session (amb #721-#732), 
 a reader that takes only a graph this version wrote, up to a cap; `load(commit=)`, None for a graph of another commit
 or of unsaved work, told from the file's first bytes.
 
-adk-spec keeps each graph it builds there, labelled by the commit checked out, `+dirty` where a file under the project
-differs from it or is not tracked yet, and never an empty one, which would say the repository holds no code. A write
-that fails changes nothing and says nothing. adk-spec does not read the kept graph back: building it costs about a
-second, below the 10 MB cap, and a graph another tool built keeps that tool's rules for tests and exclusions.
+adk-spec keeps a graph there only where it is exactly a commit's, as the label promises every reader (its code
+review found a narrower graph passing for the commit's; agreed with adk-review, amb #736): HEAD, no Python file under
+the project changed or untracked, none git is told to look past (assume-unchanged, outside a sparse checkout), and
+every Python file the commit holds there in the graph, none excluded by the person or withheld as a key's, too big or
+not UTF-8. Otherwise it keeps nothing and leaves the kept graph alone, so a graph of unsaved work never replaces a
+commit's. A write that fails says nothing. A known limit: a person who commits or stashes during a model call, after
+the reading cached a file, may leave a graph of the earlier text under the new commit; readers confirm what they take
+from it. adk-spec does not read the kept graph back: building it costs about a second, below the 10 MB cap, and a
+graph another tool built keeps that tool's rules for tests and exclusions.
 

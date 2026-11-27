@@ -3,11 +3,11 @@ ever a hint or a lead a stage confirms by reading (the owner, 27 November 2026: 
 
 from __future__ import annotations
 
+import pytest
 from codegraph import build, store
 from conftest import _git, repository
 
 from adk_spec.domain.model import Statement
-from adk_spec.workspace import graph as layer
 from adk_spec.workspace.graph import ranked, ranked_text, reach_text, undefined
 from adk_spec.workspace.source import Source
 
@@ -131,20 +131,29 @@ def test_the_requests_own_words_rank_never_the_template_around_them() -> None:
     assert [path for path, _reason in found] == ["app/git.py"]
 
 
-def test_the_graph_a_reading_builds_is_kept_where_every_tool_looks_labelled_by_its_commit(
-    tmp_path, monkeypatch
-) -> None:
+def test_a_graph_exactly_a_commits_is_kept_where_every_tool_looks(tmp_path) -> None:
     """The owner: whichever tool builds it, the graph is kept in one place, `.codegraph/` under the project, so each
-    tool uses the same one; labelled as agreed with adk-review (amb #721-#725), the commit, `+dirty` where the work is
-    not committed, so a reader takes it only for the commit it was built from."""
+    tool uses the same one. It is labelled by its commit (agreed with adk-review, amb #721-#736), so only a graph that
+    is exactly the commit's is kept: a narrower one, or one of unsaved work, would pass for it (the code review of
+    phase 30)."""
     commit = repository(tmp_path, FILES)
     graph = Source.of(tmp_path, exclude=()).graph()
     assert graph.commit == commit and store.load(tmp_path) == graph
     assert _git(tmp_path, "status", "--porcelain") == "", "the folder ignores itself"
-    monkeypatch.setattr(layer, "_BUILT", {})
-    (tmp_path / "app/web.py").write_text("from app.engine import Engine\n\nWEB = 1\n", encoding="utf-8")
-    dirty = Source.of(tmp_path, exclude=()).graph()
-    assert dirty.commit == f"{commit}+dirty" and store.load(tmp_path) == dirty
+    (tmp_path / "app/new.py").write_text("NEW = 1\n", encoding="utf-8")
+    assert "app/new.py" in {file.path for file in Source.of(tmp_path, exclude=()).graph().files}
+    assert store.load(tmp_path) == graph, "a graph of unsaved work is not kept, and the commit's stands"
+
+
+@pytest.mark.parametrize(
+    ("extra", "exclude"),
+    [({"app/keys.py": f'KEY = """\n{KEY}"""\n'}, ()), ({}, ("app/store.py",))],
+    ids=["a key's file withheld", "a file the person excluded"],
+)
+def test_a_graph_narrower_than_its_commits_is_not_kept(tmp_path, extra, exclude) -> None:
+    repository(tmp_path, {**FILES, **extra})
+    assert Source.of(tmp_path, exclude=exclude).graph().files
+    assert not (tmp_path / ".codegraph").exists()
 
 
 def test_a_graph_that_cannot_be_kept_changes_nothing_and_says_nothing(tmp_path) -> None:
