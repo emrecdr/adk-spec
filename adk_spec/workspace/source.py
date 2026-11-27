@@ -28,6 +28,7 @@ What cannot be given is left out and named, and is never an error: a reading goe
 
 from __future__ import annotations
 
+import contextlib
 import mmap
 import re
 from collections.abc import Mapping, Sequence
@@ -37,6 +38,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from codegraph import Graph
+from codegraph.extract import PYTHON
 
 from ..domain.secrets import KEY_WORDS, holds_a_key, scrub_lines
 from ..domain.text import counted, lines_of, normalise, plain, sha256_of
@@ -46,7 +48,7 @@ from .context import tree_text
 from .files import NotTextError, read_text
 from .git import GitError, diffs, grep, head, is_repository, top
 from .git import files as listed_by_git
-from .graph import built
+from .graph import GRAPH_MAX_BYTES, built, empty, shared
 from .installed import Environment, environments
 from .layout import CONFIG, ROOT_NAME
 from .paths import linked
@@ -151,6 +153,15 @@ class _Round:
 def _named(asked: str, missing: str) -> str:
     """A model's own word for what it asked, as it may be printed."""
     return plain(asked)[:LINE_MAX_CHARS] or missing
+
+
+def _bytes(root: Path, paths: Sequence[str]) -> int:
+    """How much the files at `paths` under `root` hold, by the file system's word: a file it cannot size counts none."""
+    total = 0
+    for path in paths:
+        with contextlib.suppress(OSError):
+            total += (root / path).stat().st_size
+    return total
 
 
 def _indent(line: str) -> int:
@@ -386,7 +397,6 @@ class Source:
         self.names = tuple(self._others)
         self.missing = tuple(missing)
         self._graph: Graph | None = None
-        self._graphed = False
 
     @classmethod
     def of(
@@ -419,12 +429,14 @@ class Source:
             blocks.append(libraries)
         return "\n".join(blocks)
 
-    def graph(self) -> Graph | None:
+    def graph(self) -> Graph:
         """The code graph of this repository's Python files as a reading may show them, scrubbed, a key's file
-        withheld, built once: a second opinion beside the reading, never in its place (the owner, 27 November 2026).
-        None where it holds no Python file."""
-        if not self._graphed:
-            self._graph, self._graphed = built(self._here.paths, self._here.lines), True
+        withheld: built once a command for the repository, whichever source asks, and empty past `GRAPH_MAX_BYTES` of
+        Python, where the reading runs as before."""
+        if self._graph is None:
+            here, python = self._here, [path for path in self._here.paths if path.endswith(PYTHON)]
+            small = _bytes(here.root, python) <= GRAPH_MAX_BYTES
+            self._graph = shared(str(here.root), python, lambda: built(python, here.lines) if small else empty())
         return self._graph
 
     def libraries(self) -> str:
@@ -508,37 +520,24 @@ class Source:
         return "".join(kept), tuple(held)
 
     def within(self, path: str, line: int) -> str:
-        """The line that opens the block `line` of `path` stands in: the nearest line above it, in the file as it
-        stands, scrubbed, that is indented less than it. Nothing at the top level, or where the file is not read.
-        Measured live: a real quote from `_approve` was kept under a note about `propose`, and only the block a line
-        stands in shows that."""
+        """The line that opens the definition `line` of `path` stands in, in the file as it stands, scrubbed: the
+        nearest `def` or `class` above it, each step out to a line indented less; where none is, the nearest such line,
+        the block it stands in. Nothing at the top level, or where the file is not read. Measured live: a real quote
+        from `_approve` was kept under a note about `propose`, and only the block a line stands in shows that; then
+        indentation named the nearest `if`, where a person names the function. By the file's own text alone: the
+        code graph named the outer function for a closure (the code review of phase 29)."""
         lines = self._lines(path) if path in self._listed else ""
         if not isinstance(lines, list) or not 1 <= line <= len(lines):
             return ""
-        if opening := self._opening(path, line, lines):
-            return opening
-        indent = _indent(lines[line - 1])
+        indent, block = _indent(lines[line - 1]), ""
         for above in reversed(lines[: line - 1]):
             # A line of brackets alone, a C# or Java `{`, opens no block a person would name.
             if any(char.isalnum() for char in above) and _indent(above) < indent:
-                return above.strip()[:WITHIN_MAX_CHARS]
-        return ""
-
-    def _opening(self, path: str, line: int, lines: list[str]) -> str:
-        """The line that opens the definition `line` stands in, by the code graph: the innermost function or class
-        around it, and only where the file's own line there is a definition's, so the graph never decides alone. A
-        quote on that line itself, or on a decorator, stands in the block outside. Measured: indentation named the
-        nearest `if`, where a person names the function."""
-        graph = self.graph() if path in self._here.listed else None
-        around = [] if graph is None else [one for one in graph.symbols if one.path == path and one.kind != "variable"]
-        for symbol in sorted((one for one in around if one.first <= line <= one.last), key=lambda one: -one.first):
-            opens = next(
-                (at for at in range(symbol.first, symbol.head + 1) if not lines[at - 1].lstrip().startswith("@")), 0
-            )
-            text = lines[opens - 1].strip() if 0 < opens < line else ""
-            if text.startswith(("def ", "async def ", "class ")):
-                return text[:WITHIN_MAX_CHARS]
-        return ""
+                text, indent = above.strip()[:WITHIN_MAX_CHARS], _indent(above)
+                if text.startswith(("def ", "async def ", "class ")):
+                    return text
+                block = block or text
+        return block
 
     def _where(self, path: str) -> tuple[_Repository, str]:
         """The repository a path a stage names is in, and the path within it: an installed library's by its scheme."""
@@ -569,21 +568,19 @@ class Source:
 
     def _defined(self, asked: str) -> tuple[str, int | None, int | None]:
         """One definition named by its file and name, `src/app.py::Reader.read`, read from its first decorator to its
-        last line: the graph finds the lines, and the text read is the file's own."""
-        path, _, name = asked.partition(_DEFINED)
-        graph = self.graph() if path in self._here.listed else None
-        found = (
-            next((one for one in graph.symbols if one.path == path and one.qualname == name), None) if graph else None
-        )
-        return (path, found.first, found.last) if found else (asked, None, None)
+        last line: the graph finds the lines, and the text read is the file's own. Where the graph knows no such
+        definition (a file that did not parse, another repository's, a library's), the whole file is read: the graph
+        never refuses a read (the code review of phase 29)."""
+        path = asked.partition(_DEFINED)[0]
+        if path not in self._listed:
+            return asked, None, None
+        found = next((one for one in self.graph().symbols if one.id == asked), None)
+        return (path, found.first, found.last) if found else (path, None, None)
 
     def _file(self, asked: str, got: _Round) -> None:
         path, first, last = self._asked(asked)
         if path not in self._listed:
-            defined = _DEFINED in asked and asked.partition(_DEFINED)[0] in self._listed
-            got.left_out.append(
-                f"{_named(asked, '(no path)')}: {'no such definition' if defined else 'git lists no such file'}"
-            )
+            got.left_out.append(f"{_named(asked, '(no path)')}: git lists no such file")
             return
         lines = self._lines(path)
         if isinstance(lines, str):

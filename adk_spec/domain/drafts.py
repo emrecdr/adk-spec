@@ -212,7 +212,8 @@ class ScoutDraft(BaseModel):
     files: list[str] = Field(
         description=(
             "Paths of files to read, each as the list of the repository's files spells it. A range of lines may "
-            "follow one: src/app.py:120-260. Twelve at most. Empty where the list shows folders and no file."
+            "follow one, src/app.py:120-260, or a definition's name, src/app.py::Reader.read. Twelve at most. Empty "
+            "where the list shows folders and no file."
         )
     )
     folders: list[str] = Field(
@@ -248,8 +249,9 @@ class SurveyDraft(BaseModel):
     )
     more_files: list[str] = Field(
         description=(
-            "Files still worth reading, each by its path, or with a range of lines: src/app.py:260-400. A file "
-            "that was cut is read on from where it stopped when you name it again. Empty where enough was read."
+            "Files still worth reading, each by its path, with a range of lines, src/app.py:260-400, or with a "
+            "definition's name, src/app.py::Reader.read. A file that was cut is read on from where it stopped when "
+            "you name it again. Empty where enough was read."
         )
     )
     more_folders: list[str] = Field(description="Folders still worth listing. Empty where none is.")
@@ -273,7 +275,10 @@ class ReviewDraft(BaseModel):
     disputed: list[DisputeDraft] = Field(description="Each statement its quote does not bear out. Empty where none.")
     unknown: list[UnknownDraft] = Field(description="What is still unknown that matters. Empty where nothing is.")
     more_files: list[str] = Field(
-        description="Files to read to answer an unknown, by path or with a range of lines. Empty where none would."
+        description=(
+            "Files to read to answer an unknown, by path, with a range of lines, or with a definition's name: "
+            "src/app.py::Reader.read. Empty where none would."
+        )
     )
     more_folders: list[str] = Field(description="Folders to list to answer an unknown. Empty where none would.")
     more_searches: list[str] = Field(description="Words to search for to answer an unknown. Empty where none would.")

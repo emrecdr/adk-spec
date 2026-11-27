@@ -48,40 +48,83 @@ def test_with_no_request_the_most_imported_files_come_first() -> None:
     assert ranked_text(found) == "- app/engine.py: imported by 2 files"
 
 
-def test_the_reach_names_who_imports_and_tests_the_files_a_reading_found() -> None:
-    said = reach_text(build(FILES, commit="c"), ["app/engine.py", "app/store.py", "gone.py"])
+def test_the_reach_names_who_imports_and_the_tests_that_import_the_files_a_reading_found() -> None:
+    """A test matched by its name alone is not named: a task's check would rest on the graph alone."""
+    files = {**FILES, "tests/test_store.py": "def test_save(): pass\n"}
+    said = reach_text(build(files, commit="c"), ["app/engine.py", "app/store.py", "gone.py"])
     assert said == "- app/engine.py: imported by app/cli.py, app/web.py; tested by tests/test_engine.py"
 
 
-def test_a_statement_naming_what_the_code_defines_nowhere_is_a_lead() -> None:
-    graph = build({**FILES, "app/agent.py": "from google.adk import LlmAgent\nimport json\n"}, commit="c")
-    note = "`Engine.start` begins it, `Engine.stop` ends it; `LlmAgent` and `json.loads` are a library's, `run` a word"
+def test_a_member_its_class_defines_nowhere_is_a_lead_and_no_other_name_is() -> None:
+    """Only `Class.member`, where the class is this repository's: any other backticked name (an attribute, a parameter,
+    a file) read as defined nowhere (the code review of phase 29). A member a base class defines is defined."""
+    files = {**FILES, "app/fast.py": "from app.engine import Engine\n\nclass Fast(Engine):\n    pass\n"}
+    note = (
+        "`Engine.start` begins it and `Engine.stop` ends it; `Fast.start` is inherited; `self._here`, `change_id`, "
+        "`pyproject.toml`, `LlmAgent.run` and `json.loads` are no class's member here"
+    )
     statements = [
-        Statement(kind="exists", path="app/agent.py", line=1, quote="import json", note=note),
-        Statement(kind="risk", path="app/agent.py", line=1, quote="import json", note="`Nowhere.at_all` may break"),
+        Statement(kind="exists", path="app/cli.py", line=1, quote="x", note=note),
+        Statement(kind="risk", path="app/cli.py", line=1, quote="x", note="`Engine.gone` may break"),
     ]
-    assert undefined(graph, statements) == [(1, "Engine.stop")]
+    assert undefined(build(files, commit="c"), statements) == [(1, "Engine.stop")]
 
 
-def test_a_definition_is_read_by_its_file_and_name(tmp_path) -> None:
+def test_a_definition_is_read_by_its_file_and_name_and_an_unknown_one_whole(tmp_path) -> None:
+    """The graph finds the lines; where it knows no such definition, the file is read whole: it never refuses a read
+    (the code review of phase 29)."""
     repository(tmp_path, FILES)
-    got = Source.of(tmp_path, exclude=()).gathered(["app/engine.py::Engine.start", "app/engine.py::Engine.fly"], [], [])
+    got = Source.of(tmp_path, exclude=()).gathered(["app/engine.py::Engine.start"], [], [])
     assert got.read == ("app/engine.py (lines 2 to 3 of 3)",)
     assert "    def start(self):\n        return 1" in got.shown and "class Engine" not in got.shown
-    assert any("Engine.fly" in one and "no such definition" in one for one in got.left_out)
+    got = Source.of(tmp_path, exclude=()).gathered(["app/engine.py::Engine.fly", "gone.py::f"], [], [])
+    assert got.read == ("app/engine.py (whole)",) and any(
+        "gone.py::f: git lists no such file" in one for one in got.left_out
+    )
 
 
-def test_within_names_the_enclosing_definition_where_the_file_agrees(tmp_path) -> None:
-    """Indentation named the nearest block, an `if`; the graph names the function, and only where the file's own line
-    there is a definition's."""
-    source = "def decide(user):\n    if user:\n        return password()\n    return None\n"
+def test_within_names_the_definition_a_line_stands_in_by_the_files_own_text(tmp_path) -> None:
+    """Indentation named the nearest `if`; a person names the function. The code graph named the outer function for a
+    closure, and the class for a method under a decorator of several lines (the code review of phase 29)."""
+    source = (
+        "def decide(user):\n    if user:\n        return password()\n\n"
+        "def outer():\n    def inner(x):\n        if x:\n            return x\n    return inner\n\n"
+        "class Api:\n    @app.get(\n        '/x',\n    )\n"
+        "    def handle(self, x):\n        if x:\n            return x\n"
+    )
     repository(tmp_path, {"app/auth.py": source, "notes.txt": "a\n  b\n"})
     held = Source.of(tmp_path, exclude=())
     assert held.within("app/auth.py", 3) == "def decide(user):"
-    assert held.within("notes.txt", 2) == "a", "a file the graph does not hold keeps the indentation rule"
+    assert held.within("app/auth.py", 8) == "def inner(x):"
+    assert held.within("app/auth.py", 17) == "def handle(self, x):"
+    assert held.within("notes.txt", 2) == "a", "no definition: the block it stands in, as before"
 
 
-def test_a_dunder_method_shares_no_word_with_a_request() -> None:
-    """Measured on adk-spec: every `__init__` matched "init", and a research script ranked first for "at init"."""
-    files = {**FILES, "app/config.py": "class Config:\n    def __init__(self):\n        pass\n"}
-    assert ranked(build(files, commit="c"), "Write the entry at init") == []
+def test_a_repository_past_the_cap_gets_no_graph_and_one_graph_serves_a_command(tmp_path, monkeypatch) -> None:
+    """Measured by the code review of phase 29: a large tree cost seconds before the first call, and plan built the
+    graph twice."""
+    from adk_spec.workspace import graph, source
+
+    repository(tmp_path, FILES)
+    made = []
+    monkeypatch.setattr(
+        graph, "build", lambda sources, commit: made.append(len(sources)) or build(sources, commit=commit)
+    )
+    first, second = Source.of(tmp_path, exclude=()), Source.of(tmp_path, exclude=())
+    assert first.graph() is second.graph() and made == [len([one for one in FILES if one.endswith(".py")])]
+    repository(tmp_path / "big", FILES)
+    monkeypatch.setattr(source, "GRAPH_MAX_BYTES", 10)
+    assert Source.of(tmp_path / "big", exclude=()).graph().symbols == ()
+
+
+def test_the_requests_own_words_rank_never_the_template_around_them() -> None:
+    """Found by the code review of phase 29: "change" and "request" from adk-spec's own headings ranked `Change`
+    first for every request."""
+    files = {
+        "app/git.py": "def grep_search(term, timeout):\n    pass\n",
+        "app/change.py": "class Change:\n    request = 1\n",
+    }
+    found = ranked(
+        build(files, commit="c"), "# A change is requested\n\n## The request\n\nAdd a timeout to the git grep search"
+    )
+    assert [path for path, _reason in found] == ["app/git.py"]

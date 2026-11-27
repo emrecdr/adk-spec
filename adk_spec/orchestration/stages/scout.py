@@ -17,8 +17,8 @@ GUIDE = """\
 Name what a person would open to learn where this change belongs: the code it would call, extend or change, the
 tests beside that code, and the configuration or documentation that says how this repository does such a thing.
 Name a file by its path exactly as the list below spells it. For part of a long file add a range of lines:
-src/app.py:120-260, or name one definition in it: src/app.py::Reader.read. Where the list shows a folder and not its
-files, name the folder to have it listed, or a word to search for.
+src/app.py:120-260, or one definition of this repository's Python by its file and name: src/app.py::Reader.read.
+Where the list shows a folder and not its files, name the folder to have it listed, or a word to search for.
 The files the code graph ranks first, where given, come from the names the code defines and from its imports, not from
 reading it: a hint beside the list, never in its place.
 An installed library, listed after the files, is worth a file only where the change depends on how it behaves at the

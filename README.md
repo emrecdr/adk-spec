@@ -316,10 +316,11 @@ what the reading left out.
 
 Where your repository holds Python, the reading also has a code graph beside it
 ([codegraph](https://github.com/emrecdr/codegraph), shared with adk-review), built from the same text a reading may be
-shown. It is a second opinion, never the source of truth: the scout sees the files it ranks first for your request
-beside the list of files, and a stage may read one definition by its name (`src/app.py::Reader.read`); the review is
-told of files ranked first that no round read and of names a statement gives that the code defines nowhere; the plan
-is told what imports and tests the files the reading found. Each is a lead a stage confirms by reading.
+shown, and none past 10 MB of Python. It is a second opinion, never the source of truth: the scout sees the files it
+ranks first for your request beside the list of files, and a stage may read one definition by its name
+(`src/app.py::Reader.read`); the review is told of files ranked first that no round read and of a member a statement
+names that its class defines nowhere; the plan is told what imports the files the reading found and which tests import
+them. Each is a lead a stage confirms by reading.
 
 `tasks.md` is the work, test first, each task naming the requirements it serves, its files and how to check it:
 

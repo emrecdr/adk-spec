@@ -22,13 +22,14 @@ from google.adk.plugins.base_plugin import BasePlugin
 from ..domain.convert import to_statements
 from ..domain.drafts import ReviewDraft, ScoutDraft, SurveyDraft
 from ..domain.model import Statement
-from ..domain.text import plain
-from ..workspace.graph import undefined
+from ..domain.text import counted, plain
+from ..workspace.context import graph_text
+from ..workspace.graph import ranked, ranked_text, undefined
 from ..workspace.source import Source, merged
 from .gate import AGAIN, GIVE_UP, OK, checked, tries_key
 from .graph import NONE, SOME, _app, _ended
 from .plugins import UsageLedger
-from .stages import LIBRARIES, RANKED_PATHS
+from .stages import BRIEF_TEXT, DELTAS_TEXT, LIBRARIES, RANKED
 from .stages import review as review_stage
 from .stages import scout as scout_stage
 from .stages import survey as survey_stage
@@ -81,6 +82,9 @@ _OVER = "over"
 _UNKNOWN_OVER = "unknown_over"
 #: What the review leaves: what is still unknown, how many statements it disputed, and how often it ran.
 UNKNOWN = "unknown"
+#: The files the code graph ranked first, by path, and whether they are the most imported, as for `init`.
+_RANKED = "ranked_paths"
+_HUBS = "ranked_hubs"
 DISPUTED = "disputed"
 REVIEWS = "reviews"
 
@@ -252,36 +256,49 @@ def _grounded(ctx: Context, source: Source) -> Event:
     return Event(route=SOME if on else NONE, state=update)
 
 
-def _reviewing(source: Source) -> Callable[[Context], Event]:
-    def to_review(ctx: Context) -> Event:
-        """The review started anew on what was kept, numbered, with what the code graph suggests checking: its own
-        tries, and no answer of the review before. No review where nothing was kept, or where the reviews ran."""
+def _ranking(source: Source) -> Callable[[Context], Event]:
+    def rank(ctx: Context) -> Event:
+        """What the scout is shown beside the tree: the files the code graph ranks first for what is asked, or, where
+        the repository is described as `init` asks, the most imported. A hint, never in the tree's place."""
         state = ctx.state.to_dict()
-        found, reviews = explored(state), state.get(REVIEWS) or 0
-        if not found.statements or reviews >= REVIEW_BUDGET:
-            return Event(route=NONE)
-        anew = {review_stage.KEY: None, tries_key(review_stage.KEY): 0, REVIEWS: reviews + 1}
-        numbered = {
-            review_stage.NUMBERED: _numbered(found.statements),
-            review_stage.NOT_READ: "\n".join(found.left_out),
-        }
-        return Event(
-            route=SOME, state={**anew, **numbered, review_stage.LEADS: _leads(state, found.statements, source)}
-        )
+        brief = state.get(BRIEF_TEXT) or ""
+        hubs = brief == DESCRIBE
+        found = ranked(source.graph(), "" if hubs else f"{brief}\n{state.get(DELTAS_TEXT) or ''}")
+        listed = [path for path, _reason in found]
+        return Event(state={RANKED: graph_text(ranked_text(found), "the ranked files"), _RANKED: listed, _HUBS: hubs})
 
-    return to_review
+    return rank
+
+
+def _to_review(ctx: Context, source: Source) -> Event:
+    """The review started anew on what was kept, numbered, with what the code graph suggests checking: its own tries,
+    and no answer of the review before. No review where nothing was kept, or where the reviews of the budget ran."""
+    state = ctx.state.to_dict()
+    found, reviews = explored(state), state.get(REVIEWS) or 0
+    if not found.statements or reviews >= REVIEW_BUDGET:
+        return Event(route=NONE)
+    anew = {review_stage.KEY: None, tries_key(review_stage.KEY): 0, REVIEWS: reviews + 1}
+    numbered = {
+        review_stage.NUMBERED: _numbered(found.statements),
+        review_stage.NOT_READ: "\n".join(found.left_out),
+        review_stage.LEADS: graph_text(_leads(state, found.statements, source), "what the code graph suggests"),
+    }
+    return Event(route=SOME, state={**anew, **numbered})
 
 
 def _leads(state: Mapping[str, Any], statements: Sequence[Statement], source: Source) -> str:
-    """What the code graph suggests the review check: the files it ranked first for the change that no round read, and
-    the names a statement gives that the code defines nowhere. Leads, which the review weighs by what it read: the
-    graph reads names and imports, never the code (the owner, 27 November 2026)."""
+    """What the code graph suggests the review check: the files it ranked first that no round read, and each member a
+    statement names that its class defines nowhere. Leads the review weighs by what it read: the graph reads names and
+    imports, never the code; and where a Python file did not parse, it knows "at least"."""
     seen = set(state.get(SEEN) or {})
-    unread = [path for path in state.get(RANKED_PATHS) or () if path not in seen]
-    lines = [f"- Ranked first for this change, and not read: {', '.join(unread)}"] if unread else []
+    unread = [path for path in state.get(_RANKED) or () if path not in seen]
+    why = "Most imported" if state.get(_HUBS) else "Ranked first for this change"
+    lines = [f"- {why}, and not read: {', '.join(unread)}"] if unread else []
     graph = source.graph()
-    for number, name in undefined(graph, statements) if graph is not None else ():
-        lines.append(f"- Statement {number} names `{name}`, which the code defines nowhere")
+    floor = sum(1 for one in graph.unparsed() if one.why != "not Python")
+    at_least = f" (of the files that parsed: {counted(floor, 'Python file')} did not)" if floor else ""
+    for number, name in undefined(graph, statements):
+        lines.append(f"- Statement {number} names `{name}`, which the code defines nowhere{at_least}")
     return "\n".join(lines)
 
 
@@ -315,12 +332,15 @@ def build_explore_app(*, source: Source, ledger: UsageLedger, recorder: BasePlug
     then asked once more. At most seven model calls: one scout, four surveys, two reviews. Every way out ends the
     run: what was kept is read from its state by `explored`."""
     first_look, next_look, review_look, grounded = _looking(source)
-    to_review = _reviewing(source)
+
+    def to_review(ctx: Context) -> Event:
+        return _to_review(ctx, source)
+
     scout, scout_gate = scout_stage.build_scout(), checked(scout_stage.KEY, lambda _state: [])
     survey, survey_gate = survey_stage.build_survey(), checked(survey_stage.KEY, lambda _state: [])
     review, review_gate = review_stage.build_review(), checked(review_stage.KEY, lambda _state: [])
     edges: list[Any] = [
-        ("START", scout, scout_gate),
+        ("START", _ranking(source), scout, scout_gate),
         (scout_gate, {OK: first_look, AGAIN: scout, GIVE_UP: _ended}),
         (first_look, {SOME: survey, NONE: _ended}),
         (survey, survey_gate),

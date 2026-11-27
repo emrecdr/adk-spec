@@ -147,6 +147,21 @@ def quoted_statements(text: str) -> list[tuple[str, str]]:
     return found
 
 
+def found_paths(text: str) -> list[str]:
+    """The files the statements of a file `render_context` wrote name, each once, those where the change plugs in
+    first: what a plan is told the reach of (the code review of phase 29: any kind could fill the list first)."""
+    headings = {f"## {section}": kind for kind, section in SECTIONS}
+    kind: str | None = None
+    touches: list[str] = []
+    others: list[str] = []
+    for line in text.split("\n"):
+        if line.startswith("## "):
+            kind = headings.get(line.strip())
+        elif kind is not None and (held := _STATEMENT.match(line)):
+            (touches if kind == "touches" else others).append(held.group("path"))
+    return list(dict.fromkeys([*touches, *others]))
+
+
 def unknown_count(text: str) -> int:
     """How many things a `context.md` lists as still unknown: its lines under that heading."""
     count, under = 0, False

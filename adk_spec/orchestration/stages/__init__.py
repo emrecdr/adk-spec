@@ -37,11 +37,9 @@ CHANGE_FILES = "change_files"
 TIER = "tier"
 #: The state key the repository's files are read from, as paths.
 TREE = "tree"
-#: What the code graph adds beside the reading (the owner, 27 November 2026: a hint and leads, never the source of
-#: truth): the files it ranks first, as a stage is shown them and as their paths; what imports and tests the files a
-#: reading found.
+#: What the code graph adds beside the reading, a hint and leads: the files it ranks first; what imports and tests the
+#: files a reading found.
 RANKED = "ranked"
-RANKED_PATHS = "ranked_paths"
 REACH = "reach"
 #: The state key a change's `context.md` is read from: what a reading of the code found for it.
 CONTEXT_TEXT = "context_text"

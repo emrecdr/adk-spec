@@ -96,3 +96,28 @@ the reading missed, and each finding is a lead the reading confirms before it ch
 2. adk-spec's use of it, on a branch. It merges only once the library has a remote: adk-spec pins it by commit as a
    uv git source, and a local path would break CI, every other machine and the fresh-clone gate. The owner creates
    the remote; no session pushes or creates one without the owner's go-ahead.
+
+## After the review (phase 29)
+
+The one review round (/simplify and /code-review) changed these, each tested:
+
+- **`within` names the definition by the file's own text:** walking out by indentation to the nearest `def` or
+  `class`. The graph named the outer function for a closure (codegraph has no symbol for a function inside one) and
+  the class for a method under a decorator of several lines; the text is exact in both, and the graph adds nothing.
+- **Undefined names only as `Class.member`**, where the class is this repository's and neither it nor a base it
+  inherits defines the member, at most eight, saying "at least" where a Python file did not parse (agreed with
+  adk-review). Any other backticked name read as defined nowhere.
+- **The request's own words rank:** a section's heading is left out and adk-spec's template words are common ones,
+  as "change" and "request" ranked `Change` first for every request; a dunder shares no word.
+- **One graph per command, and none past 10 MB of Python:** a plan that read the code asks for the one its reading
+  built, and no graph is built for a reach with no file to ask about.
+- **The reading ranks for itself:** its first step ranks from its own source and brief, the most imported for
+  `init`, and labels them so for the review; cli holds no graph policy.
+- **The graph never refuses a read:** a definition it does not know is read as its whole file.
+- **The reach names only tests that import a file**, never one matched by its name alone; each graph text a stage is
+  given is cut through `workspace/context.py`, as every input is.
+
+Decided with adk-review's session (the owner's rule, amb #719 to #725): the graph is stored in `.codegraph/` under
+the project root, the owner's request, with safeguards both tools keep, in codegraph v0.2; an import two files answer
+is ambiguous with its candidates listed; adk-review's ancestor rule is ported once merged on its side.
+

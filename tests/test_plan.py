@@ -629,8 +629,6 @@ def test_plan_on_a_verified_change_names_a_new_change_not_a_revision(tmp_path, c
 
 def test_the_plan_is_told_what_imports_and_tests_the_files_the_reading_found(tmp_path, fake_provider) -> None:
     """A lead from the code graph, which the tasks stage weighs: it reads names and imports, not the code."""
-    from conftest import between
-
     from adk_spec.domain.context_md import render_context
     from adk_spec.domain.model import Statement
 
@@ -643,9 +641,5 @@ def test_the_plan_is_told_what_imports_and_tests_the_files_the_reading_found(tmp
     context = render_context("Context: passkeys", at="today", commit=None, statements=[found], read=["src/app.py"])
     write_text(tmp_path / ".spec/changes/passkeys/context.md", context)
     assert run(tmp_path, "plan", "passkeys", "--replace", "--no-explore") == 0
-    tasks = next(
-        text
-        for text in (str(r.config.system_instruction) for r in fake_provider.requests)
-        if text.startswith("You break a change")
-    )
+    tasks = sent_to(fake_provider, "You break a change")
     assert between(tasks, "reach") == "- src/app.py: tested by tests/test_app.py"

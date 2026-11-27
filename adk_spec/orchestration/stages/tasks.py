@@ -47,7 +47,7 @@ Name files by the paths the repository uses. Where a file is new, put it beside 
 Where what the repository already holds is given, name the files it names and follow the conventions it gives.
 Where it lists something as still unknown, do not plan on it as if it were known: a task that depends on it says so.
 What imports and tests the files the reading found comes from the code graph, not from reading: a task that changes such
-a file keeps what imports it working, and names the tests that reach it in its check."""
+a file keeps what imports it working, and names the tests that import it in its check."""
 
 
 def build_tasks() -> LlmAgent:

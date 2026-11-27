@@ -747,7 +747,5 @@ def test_propose_shows_the_scout_the_files_ranked_for_the_request(tmp_path, fake
         {"src/passkey.py": "def sign_in(user):\n    return user\n", "src/app.py": "from src.passkey import sign_in\n"},
     )
     assert proposed(tmp_path, "--tier", "lean", "--id", "ranked") == 0
-    (scout,) = [
-        text for text in (str(r.config.system_instruction) for r in fake_provider.requests) if text.startswith(SCOUT)
-    ]
+    scout = sent_to(fake_provider, SCOUT)
     assert between(scout, "ranked") == "- src/passkey.py: defines `sign_in`\n- src/app.py: imports src/passkey.py"

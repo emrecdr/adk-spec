@@ -342,25 +342,21 @@ async def test_a_review_naming_one_unknown_twice_keeps_it_once(tmp_path, fake_pr
 
 @pytest.mark.asyncio
 async def test_the_scout_is_shown_the_files_the_code_graph_ranks_first(tmp_path, fake_provider) -> None:
-    """A hint beside the tree, never in its place (the owner, 27 November 2026)."""
-    from adk_spec.orchestration.stages import RANKED
-
-    await read(tmp_path, extra={RANKED: "- src/app.py: defines `login`"})
+    """Ranked by the reading itself from the brief: a hint beside the tree, never in its place."""
+    await read(tmp_path, {**FILES, "src/auth/passkey.py": "def sign_in_with_passkey(user):\n    return user\n"})
     (scout,) = sent(fake_provider, SCOUT)
-    assert between(scout, "ranked") == "- src/app.py: defines `login`" and "src/auth/session.py" in between(
-        scout, "tree"
-    )
+    assert between(scout, "ranked") == "- src/auth/passkey.py: defines `sign_in_with_passkey`"
+    assert "src/auth/session.py" in between(scout, "tree")
 
 
 @pytest.mark.asyncio
 async def test_the_review_is_given_the_leads_the_code_graph_finds(tmp_path, fake_provider) -> None:
     """The owner: the graph finds what the reading missed, and the review, which reads it, confirms each or not."""
-    from adk_spec.orchestration.stages import RANKED_PATHS
-
-    fake_provider.answers_when(SURVEY, survey({**APP, "note": "`Session.close` ends it here."}))
-    await read(tmp_path, extra={RANKED_PATHS: ["src/auth/session.py", "src/app.py"]})
+    files = {**FILES, "src/auth/passkey.py": "class Passkey:\n    def sign_in(self):\n        pass\n"}
+    fake_provider.answers_when(SURVEY, survey({**APP, "note": "`Passkey.sign_in` and `Passkey.revoke` decide it."}))
+    await read(tmp_path, files)
     (review,) = sent(fake_provider, REVIEW)
     assert between(review, "leads") == (
-        "- Ranked first for this change, and not read: src/auth/session.py\n"
-        "- Statement 1 names `Session.close`, which the code defines nowhere"
+        "- Ranked first for this change, and not read: src/auth/passkey.py\n"
+        "- Statement 1 names `Passkey.revoke`, which the code defines nowhere"
     )
