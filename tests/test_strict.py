@@ -132,15 +132,13 @@ def test_two_different_names_approve_a_strict_change(tmp_path, capsys, fake_prov
     held = state_of(tmp_path, "ledger")
     assert (held["status"], held["approval"]["by"]) == ("draft", "ana")
     out = capsys.readouterr().out
-    assert (
-        "approved `ledger` once, by ana" in out and "have someone other than ana run `adk-spec approve ledger`" in out
-    )
+    assert "approved  ledger once, by ana" in out and "have someone other than ana run `adk-spec approve ledger`" in out
     assert run(tmp_path, "approve", "ledger", "--by", "ana") != 0
     assert "another name" in capsys.readouterr().err
     assert run(tmp_path, "approve", "ledger", "--by", "ben") == 0
     held = state_of(tmp_path, "ledger")
     assert (held["status"], held["approval"]["by"], held["approval"]["second"]["by"]) == ("approved", "ana", "ben")
-    assert "approved `ledger` by ben, after ana" in capsys.readouterr().out
+    assert "approved  ledger by ben, after ana" in capsys.readouterr().out
 
 
 def test_an_edit_between_the_two_approvals_voids_the_first(tmp_path, fake_provider) -> None:

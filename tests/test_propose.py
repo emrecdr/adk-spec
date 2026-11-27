@@ -574,7 +574,7 @@ def test_read_first_names_context_md_where_something_is_unknown(tmp_path, capsys
     fake_provider.answers_when("You review what a reading", {**CANNED_REVIEW, "unknown": unknown})
     capsys.readouterr()
     assert proposed(tmp_path, "--tier", "lean", "--id", "read") == 0
-    assert "and context.md (1 unknown) first\n" in capsys.readouterr().out
+    assert "and context.md (1 unknown), then reports/review.md (" in capsys.readouterr().out
 
 
 def test_a_model_the_review_cannot_run_on_is_refused_before_any_call(
@@ -722,3 +722,19 @@ def test_the_other_repositories_are_said_before_the_reading_and_once(tmp_path, c
     out = capsys.readouterr().out
     assert out.count("with      api from ../api\n") == 1, out
     assert out.index("with      api") < out.index("explored  "), out
+
+
+def test_living_specs_past_the_cap_stop_propose_before_the_reading(
+    tmp_path, capsys, fake_provider, monkeypatch
+) -> None:
+    """Found by an outside audit of 171f1c4 (H7): the cap on the living specs a change touches was met only at the
+    deltas stage, after minutes of reading the code and the brief were paid for."""
+    from adk_spec.workspace import context
+
+    seeded(tmp_path)
+    repository(tmp_path)
+    monkeypatch.setattr(context, "CONTEXT_MAX_CHARS", 200)  # the seeded auth spec is past it
+    assert proposed(tmp_path, "--id", "big") == 3
+    said = capsys.readouterr().err
+    assert "context: the living specs of auth" in said and "--tier" in said and "in the change" not in said
+    assert _order(fake_provider) == [TRIAGE]

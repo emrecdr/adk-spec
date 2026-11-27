@@ -5,8 +5,21 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Sequence
 
 BOM = "\ufeff"
+
+
+def counted(count: int, noun: str) -> str:
+    """`count` said with its noun, in the one form every line takes: `1 file`, `2 files`, `1,200 files` (the audit of
+    25 November, A4: written by hand at each line, the plurals and their number formats drifted)."""
+    return f"{count:,} {noun}{'' if count == 1 else 's'}"
+
+
+def first_of(names: Sequence[str], shown: int, *, sep: str = ", ") -> str:
+    """The first `shown` of `names`, then how many more: `a, b, and 3 more`."""
+    rest = len(names) - shown
+    return sep.join(names[:shown]) + (f", and {rest:,} more" if rest > 0 else "")
 
 
 def normalise(text: str) -> str:

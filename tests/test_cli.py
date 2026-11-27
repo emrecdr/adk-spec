@@ -75,6 +75,7 @@ def test_status_names_the_next_step_of_each_change(tmp_path, capsys) -> None:
         "status": "draft",
         "actor": "you",
         "next": "run `adk-spec approve passkeys`",
+        "tasks": "",
     }
     assert json.loads(capsys.readouterr().out) == {"changes": [row]}
     assert run(tmp_path, "status") == 0
@@ -561,3 +562,50 @@ def test_inits_help_says_a_refresh_upgrades_an_unedited_skill(capsys) -> None:
     with pytest.raises(SystemExit):
         main(["init", "--help"])
     assert "holds a text adk-spec wrote" in " ".join(capsys.readouterr().out.split())
+
+
+def test_new_writes_a_brief_to_fill_and_ends_on_the_next_step(tmp_path, capsys) -> None:
+    """The audit of 25 November (U10, U13): `new` broke the label column, ended with no next step, and left a person
+    to guess the brief's sections."""
+    run(tmp_path, "init")
+    capsys.readouterr()
+    assert run(tmp_path, "new", "by-hand", "--tier", "lean") == 0
+    out = capsys.readouterr().out
+    assert out.startswith("made      .spec/changes/by-hand, a lean draft\n")
+    assert out.splitlines()[-1].startswith("next      ")
+    brief = read_text(tmp_path / ".spec/changes/by-hand/brief.md")
+    assert brief.startswith("# By hand\n") and "## Why" in brief and "[NEEDS CLARIFICATION: " in brief
+    # A skeleton is no draft of adk-spec's: filled, it asks the person for no lesson (the code review of phase 26).
+    assert state_of(tmp_path, "by-hand")["drafted"] == {}
+    assert run(tmp_path, "validate", "by-hand") == 1
+    out = capsys.readouterr().out
+    assert "brief.marker-unresolved" in out and "change.missing-brief" not in out
+
+
+def test_status_shows_the_tasks_ticked_of_a_change_past_its_draft(tmp_path, capsys) -> None:
+    """The audit of 25 November (U13): `status` said nothing of how far the work had come."""
+    seeded(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0
+    (row,) = [line for line in capsys.readouterr().out.splitlines() if "passkeys" in line]
+    assert "/" not in row, "a draft shows no count"
+    approved(tmp_path)
+    tasks = tmp_path / ".spec/changes/passkeys/tasks.md"
+    text = read_text(tasks)
+    done, total = text.count("- [x] ") + 1, text.count("- [ ] ") + text.count("- [x] ")
+    write_text(tasks, text.replace("- [ ] ", "- [x] ", 1))
+    capsys.readouterr()
+    assert run(tmp_path, "status") == 0
+    (row,) = [line for line in capsys.readouterr().out.splitlines() if "passkeys" in line]
+    assert f" approved  {done}/{total}  " in row
+
+
+def test_archive_says_what_it_folded_and_that_the_specs_are_committed_next(tmp_path, capsys) -> None:
+    """The audit of 25 November (U10): `archived` broke the label column, and the archive ended with no next step."""
+    seeded(tmp_path)
+    approved(tmp_path)
+    capsys.readouterr()
+    assert run(tmp_path, "archive", "passkeys") == 0
+    out = capsys.readouterr().out
+    assert "archived  passkeys: folded into auth\n" in out
+    assert out.splitlines()[-1] == "next      commit .spec/ with the code"

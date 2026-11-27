@@ -34,6 +34,7 @@ from pydantic import Field
 
 from ..domain.model import Tier
 from ..workspace.process import TOOL_CALL, Started, TimedOut, started, stop, waited
+from .cli import EXIT_ENGINE, EXIT_FINDINGS, EXIT_USAGE
 
 #: A tool's parameter that names a change.
 _Change = Annotated[str, Field(description="The change")]
@@ -69,10 +70,10 @@ Then call status and do the step it names: verify, where the change owes a verif
 
 #: What each way a command ends says to an assistant. Found by the fourth audit: exit 1, findings or a refusal, is
 #: the command's answer, and was read as a failure and asked again.
-_ENDINGS = {
-    1: ", which is an answer: act on what it says before calling it again",
-    2: ": refused, by a setting, by git, or for no model set up: put that right before calling again",
-    3: ": the model or its provider failed, or a file could not be read or written",
+_ENDINGS = {  # by the command's own codes (the audit of 25 November, A6: written twice, as literals here)
+    EXIT_FINDINGS: ", which is an answer: act on what it says before calling it again",
+    EXIT_USAGE: ": refused, by a setting, by git, or for no model set up: put that right before calling again",
+    EXIT_ENGINE: ": the model or its provider failed, or a file could not be read or written",
 }
 
 

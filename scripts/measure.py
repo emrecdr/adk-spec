@@ -33,7 +33,7 @@ from adk_spec.domain.text import lines_of, plain
 from adk_spec.interfaces import cli
 from adk_spec.workspace.files import read_text
 from adk_spec.workspace.git import GitError, head
-from adk_spec.workspace.layout import CHANGES, CONTEXT, PROFILE, Workspace, findings_of
+from adk_spec.workspace.layout import CHANGES, CONTEXT_FILE, PROFILE, Workspace, findings_of
 from adk_spec.workspace.runs import listed, read
 
 from .cases import CASES, Case
@@ -102,7 +102,7 @@ def observed(case: Case, root: Path, change: str) -> tuple[list[Seen], list[Seen
         return _stated(workspace.home / PROFILE), [], tokens, seconds
     loaded = workspace.load_change(change)
     if case.command == "plan":
-        return _stated(workspace.home / CHANGES / change / CONTEXT), [], tokens, seconds
+        return _stated(workspace.home / CHANGES / change / CONTEXT_FILE), [], tokens, seconds
     if case.command == "verify":
         verdicts = loaded.change.state.verification.verdicts if loaded.change.state.verification else {}
         return [Seen(f"verdict.{verdict}", req, "", False) for req, verdict in verdicts.items()], [], tokens, seconds

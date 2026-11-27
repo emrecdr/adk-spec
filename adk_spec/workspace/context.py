@@ -14,9 +14,9 @@ from pathlib import Path
 from ..domain.lessons_md import as_read
 from ..domain.model import Spec
 from ..domain.spec_md import render_spec
-from ..domain.text import lines_of
+from ..domain.text import counted, first_of, lines_of
 from .files import read_text
-from .layout import CHANGES, CONSTITUTION, CONTEXT, LESSONS, PROFILE, Workspace, WorkspaceError
+from .layout import CHANGES, CONSTITUTION, CONTEXT_FILE, LESSONS, PROFILE, Workspace, WorkspaceError
 
 #: What a stage may be given of living specs, in characters. Provisional: sized for the smallest model a role may
 #: run on, 128,000 input tokens in the pinned LiteLLM map, until a live run measures it.
@@ -43,10 +43,11 @@ def capability_index(specs: Mapping[str, Spec]) -> str:
 NEW_CAPABILITY = "(no living spec yet: the change creates this capability)"
 
 
-def living_text(specs: Mapping[str, Spec], capabilities: Iterable[str]) -> str:
+def living_text(specs: Mapping[str, Spec], capabilities: Iterable[str], *, remedy: str | None = None) -> str:
     """The canonical text of each named capability's living spec, whole, under a line naming it; one with no spec
-    yet, which the change creates, is named as new. `ContextTooLargeError` past the limit."""
-    return joined({slug: render_spec(specs[slug]) if slug in specs else NEW_CAPABILITY for slug in capabilities})
+    yet, which the change creates, is named as new. `ContextTooLargeError` past the limit, saying `remedy`."""
+    held = {slug: render_spec(specs[slug]) if slug in specs else NEW_CAPABILITY for slug in capabilities}
+    return joined(held, remedy=remedy) if remedy else joined(held)
 
 
 def joined(
@@ -78,7 +79,7 @@ def context_text(workspace: Workspace, change_id: str) -> str:
     """A change's `context.md` as a stage reads it: as the file stands, a person's edits and all, or nothing where
     there is none. One past the cap is cut, and says so. `NotTextError` where the file is no text: it is there, and
     reading it as nothing would also keep the code from being read again."""
-    return _capped(workspace.home / CHANGES / change_id / CONTEXT, CONTEXT_FILE_MAX_CHARS)
+    return _capped(workspace.home / CHANGES / change_id / CONTEXT_FILE, CONTEXT_FILE_MAX_CHARS)
 
 
 #: How much of the repository's `profile.md` a stage is given: as much as of a `context.md`. A reading keeps at most
@@ -106,7 +107,7 @@ def lessons_text(workspace: Workspace) -> str:
 def context_of(text: str) -> str:
     """A reading's text as a stage is given it before it is written as a change's `context.md`: cut as that file
     would be."""
-    return _cut(text.strip(), CONTEXT, CONTEXT_FILE_MAX_CHARS)
+    return _cut(text.strip(), CONTEXT_FILE, CONTEXT_FILE_MAX_CHARS)
 
 
 def _capped(path: Path, cap: int) -> str:
@@ -137,13 +138,10 @@ def tree_text(paths: Sequence[str]) -> str:
     kept = sorted(folders.most_common(TREE_MAX_PATHS))  # the largest, by name
     lines = [f"{len(paths):,} files: too many to list. Each folder, {deep} deep, with the files under it:"]
     if top := sorted(path for path in paths if "/" not in path):
-        rest = len(top) - TOP_FILES_NAMED
-        lines.append(
-            "files at the top: " + ", ".join(top[:TOP_FILES_NAMED]) + (f", and {rest} more" if rest > 0 else "")
-        )
-    lines += [f"{folder}/ ({count:,} file{'' if count == 1 else 's'})" for folder, count in kept]
+        lines.append("files at the top: " + first_of(top, TOP_FILES_NAMED))
+    lines += [f"{folder}/ ({counted(count, 'file')})" for folder, count in kept]
     if more := len(folders) - len(kept):
-        lines.append(f"and {more:,} more folder{'' if more == 1 else 's'}")
+        lines.append(f"and {counted(more, 'more folder')}")
     return "\n".join(lines)
 
 

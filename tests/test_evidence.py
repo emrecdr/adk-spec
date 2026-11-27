@@ -157,11 +157,14 @@ def test_a_living_evidence_file_that_does_not_read_is_left_as_it_is(tmp_path, ca
 
 def test_a_quote_gone_from_the_code_makes_its_requirement_suspect(tmp_path, capsys) -> None:
     archived(tmp_path)
-    strict, _out = validated(tmp_path, capsys, "--strict")
+    strict, out = validated(tmp_path, capsys, "--strict")
+    assert out.splitlines()[-1] == "0 errors, 0 warnings"
     write_text(tmp_path / "src/auth.py", AFTER.replace("return passkey(user)", "return webauthn(user)"))
     code, out = validated(tmp_path, capsys)
     (gone,) = [line for line in out.splitlines() if "spec.evidence-gone" in line]
     assert code == 0 and gone.startswith("INFO") and "REQ-AUTH-004" in gone
+    assert '`adk-spec propose "keep REQ-AUTH-004: its evidence is gone"`' in gone, "the audit of 25 November, C6"
+    assert out.splitlines()[-1] == "0 errors, 0 warnings, 1 note", "the notes it prints are counted (U10)"
     assert validated(tmp_path, capsys, "--strict")[0] == strict, "a suspect is a note: it fails no CI"
     assert run(tmp_path, "status") == 0
     assert "auth: 1 requirement suspect (adk-spec validate lists them)" in capsys.readouterr().out

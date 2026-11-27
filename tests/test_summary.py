@@ -151,7 +151,7 @@ def test_approving_a_verified_change_again_keeps_it_verified_and_names_the_new_a
     verified_in_a_repository(tmp_path)
     capsys.readouterr()
     assert run(tmp_path, "approve", "passkeys", "--by", "bob") == 0
-    assert "approved `passkeys` by bob: " in capsys.readouterr().out
+    assert "approved  passkeys by bob: " in capsys.readouterr().out
     state = state_of(tmp_path)
     assert state["status"] == "verified" and state["verification"] is not None
     assert "Approved by bob." in read_text(tmp_path / SUMMARY)

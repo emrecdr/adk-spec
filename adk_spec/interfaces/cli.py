@@ -24,7 +24,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
 
-from ..domain.brief_md import assumption_count, parse_brief, render_brief
+from ..domain.brief_md import assumption_count, marker_of, parse_brief, render_brief
 from ..domain.changelog_md import changelog_entry, with_entry
 from ..domain.check import nameable, owed, removed, tasked
 from ..domain.ci_md import annotation_lines, step_summary
@@ -91,7 +91,7 @@ from ..domain.secrets import scrub, scrub_lines
 from ..domain.spec_md import render_spec
 from ..domain.summary_md import render_summary
 from ..domain.tasks_md import render_tasks
-from ..domain.text import lines_of, plain, sha256_of
+from ..domain.text import counted, lines_of, plain, sha256_of
 from ..domain.validate import UNREAD, failed, finding, validate_spec
 from ..domain.verify import TestRun, Verdict, grounded, parts_of_diff
 from ..workspace.config import ConfigError, load_config
@@ -110,12 +110,14 @@ from ..workspace.context import (
 from ..workspace.evidence import evidence_findings, evidence_folded, profile_gone
 from ..workspace.files import NotTextError, append_text, read_text
 from ..workspace.git import DIFF_MAX_CHARS, GitError, committed_text, head, is_repository, resolves
-from ..workspace.layout import BRIEF as BRIEF_FILE
 from ..workspace.layout import (
+    BRIEF_FILE,
     CHANGELOG,
     CHANGES,
     CONFIG,
     CONSTITUTION,
+    CONTEXT_FILE,
+    DESIGN_FILE,
     EVIDENCE,
     LESSONS,
     PROFILE,
@@ -125,19 +127,18 @@ from ..workspace.layout import (
     ROOT_NAME,
     SPEC_FILE,
     SPECS,
+    STATE_FILE,
     SUMMARY,
+    TASKS_FILE,
     LoadedChange,
     Workspace,
     WorkspaceError,
     findings_of,
 )
-from ..workspace.layout import CONTEXT as CONTEXT_FILE
-from ..workspace.layout import DESIGN as DESIGN_FILE
-from ..workspace.layout import STATE as STATE_FILE
-from ..workspace.layout import TASKS as TASKS_FILE
 from ..workspace.lock import held as lock_held
+from ..workspace.mcp_setup import MCP_FILE, OLDER_PARTS, write_mcp
 from ..workspace.paths import PathError
-from ..workspace.process import TOOL_CALL
+from ..workspace.process import TOOL_CALL, on_path
 from ..workspace.runs import Recording
 from ..workspace.runs import write as write_run
 from ..workspace.skill import SKILL_PARTS, write_skill
@@ -249,8 +250,8 @@ def _parser() -> _Top:
     init.add_argument(
         "--refresh",
         action="store_true",
-        help="read the code again and rewrite the profile, and write the skill where it is missing or holds a text "
-        "adk-spec wrote; with --no-explore, only the skill",
+        help="read the code again and rewrite the profile, write the skill where it is missing or holds a text "
+        "adk-spec wrote, and add adk-spec to .mcp.json where it has none; with --no-explore, only the last two",
     )
     init.set_defaults(handler=_init)
 
@@ -405,6 +406,7 @@ def _init(args: argparse.Namespace) -> int:
         workspace = Workspace.init(_unheld(Path(args.root).absolute()))
         print(f"made      {workspace.shown(workspace.home)}")
     _skill(workspace)
+    _mcp(workspace)
     code = EXIT_OK
     if not args.no_explore:
         _load_env()
@@ -427,14 +429,56 @@ def _skill(workspace: Workspace) -> None:
     shown = workspace.shown(workspace.root.joinpath(*SKILL_PARTS))
     try:
         done = write_skill(workspace.root)
-    except NotTextError:  # its own message names the path again, at length (the code review of phase 23)
-        print(f"skipped   {shown}: not UTF-8; save it as UTF-8")
-        return
-    except (PathError, OSError) as exc:
-        print(f"skipped   {shown}: {exc.strerror if isinstance(exc, OSError) and exc.strerror else exc}")
+    except (NotTextError, PathError, OSError) as exc:
+        _skipped(shown, exc)
         return
     if done is not None:  # a skill the repository holds already may be its own: said as not adk-spec's, not edited
         print(f"{done:<10}{shown}{': not the text adk-spec wrote' if done == 'kept' else ''}")
+
+
+def _skipped(shown: str, exc: Exception) -> None:
+    """A file `init` could not write, said on one line: never a failed `init` (the code review of phase 23)."""
+    if isinstance(exc, NotTextError):  # its own message names the path again, at length
+        print(f"skipped   {shown}: not UTF-8; save it as UTF-8")
+    else:
+        print(f"skipped   {shown}: {exc.strerror if isinstance(exc, OSError) and exc.strerror else exc}")
+
+
+#: Why `init` did what it did to the repository's `.mcp.json`, said after the file, by what it did.
+_MCP_WHY = {
+    "wrote": "",
+    "added": ": adk-spec beside the servers it held",
+    "kept": ": it names adk-spec already, in words of yours",
+    "skipped": ": it is no JSON object of servers; add adk-spec to it by hand",
+}
+
+
+def _mcp(workspace: Workspace) -> None:
+    """adk-spec's MCP server added to the repository's `.mcp.json`, and the install named where `adk-spec-mcp`,
+    which the entry runs, is not on PATH (the owner's choices, 27 November 2026)."""
+    shown = workspace.shown(workspace.root / MCP_FILE)
+    try:
+        done = write_mcp(workspace.root)
+    except (NotTextError, PathError, OSError) as exc:
+        _skipped(shown, exc)
+        return
+    if done == "elsewhere":
+        print(f"kept      {workspace.shown(workspace.root.joinpath(*OLDER_PARTS))}: it starts adk-spec already")
+        return
+    if done is not None:
+        print(f"{done:<10}{shown}{_MCP_WHY[done]}")
+    if done in (None, "wrote", "added") and not _editor_finds("adk-spec-mcp"):
+        named = f'"{CHECKOUT}"' if " " in str(CHECKOUT) else str(CHECKOUT)
+        how = f"uv tool install --editable {named}" if (CHECKOUT / "pyproject.toml").is_file() else "uv tool install"
+        print(f"mcp       adk-spec-mcp is not on PATH, so no editor can start it: run {how}")
+
+
+def _editor_finds(name: str) -> bool:
+    """Whether an editor would find the program `name` on PATH: not in this run's own environment, which `uv run`
+    puts first on PATH and an editor's PATH does not hold (the code review of phase 28)."""
+    found = on_path(name)
+    own = os.path.normcase(str(Path(sys.executable).parent))
+    return found is not None and os.path.normcase(str(Path(found).parent)) != own
 
 
 def _unheld(root: Path) -> Path:
@@ -459,15 +503,14 @@ def _described(workspace: Workspace) -> tuple[list[Any], int]:
         return [], EXIT_USAGE
     from ..orchestration.explore import DESCRIBE, MAX_CALLS, ROLES
     from ..orchestration.models import require_ready
-    from ..orchestration.stages import BRIEF_TEXT, TREE
-    from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages import BRIEF_TEXT, RULES_TEXT, TREE
 
     if why := require_ready(roles=ROLES):
         print(f"not read  {why}. Once a model is set up, `{PROG} init --refresh` reads the code")
         return [], EXIT_USAGE
     print(f"reading   the code, to describe this repository: up to {MAX_CALLS} model calls. --no-explore skips it")
     # No profile and no deltas: a refresh reads the code afresh, not the profile it is about to replace.
-    seed = {RULES: constitution_text(workspace), BRIEF_TEXT: DESCRIBE, TREE: source.tree()}
+    seed = {RULES_TEXT: constitution_text(workspace), BRIEF_TEXT: DESCRIBE, TREE: source.tree()}
     found, failure = _reading(workspace, "init", None, seed, None, source)
     print(f"explored  {_explored_said(found, 0, failure)}")
     if not found.statements:
@@ -483,15 +526,33 @@ def _drafted(workspace: Workspace, statements: Sequence[Any]) -> None:
     if workspace.drafted(drafted_rules(statements)):
         count = sum(one.kind == "convention" for one in statements)
         shown = workspace.shown(workspace.home / CONSTITUTION)
-        print(f"drafted   {count} rule{'' if count == 1 else 's'} into {shown}: keep, edit or delete each")
+        print(f"drafted   {counted(count, 'rule')} into {shown}: keep, edit or delete each")
 
 
 def _new(args: argparse.Namespace) -> int:
+    """A change written by hand: its state, and a brief to fill, its sections in order and each part to write an
+    open point that `validate` names (the audit of 25 November, U13)."""
     workspace = _workspace(args)
     tier = args.tier or workspace.config().default_tier
-    folder = workspace.new_change(args.id, tier)
-    print(f"made {workspace.shown(folder)}, a {tier} draft: write its brief.md, its deltas and its tasks.md")
+    folder = workspace.new_change(args.id, tier, {BRIEF_FILE: _brief_to_fill(args.id)})
+    print(f"made      {workspace.shown(folder)}, a {tier} draft")
+    _say_next(workspace, args.id, workspace.specs()[0])
     return EXIT_OK
+
+
+def _brief_to_fill(change_id: str) -> str:
+    """The brief `new` writes: every section, those a person must write each holding the question it answers."""
+    return render_brief(
+        Brief(
+            title=change_id.replace("-", " ").capitalize(),
+            why=marker_of("Why is this change needed?"),
+            what_changes=marker_of("What changes, as a person using it sees it?"),
+            non_goals="None.",
+            capabilities=(),
+            impact="None.",
+            assumptions="None.",
+        )
+    )
 
 
 def _prefix(change_id: str) -> str:
@@ -596,21 +657,32 @@ def _living(workspace: Workspace, refused: str) -> dict[str, Spec]:
 
 
 def _say_next(
-    workspace: Workspace, change_id: str, living: dict[str, Spec], *, drift: bool = True, plan: str | None = None
+    workspace: Workspace,
+    change_id: str,
+    living: dict[str, Spec],
+    *,
+    drift: bool = True,
+    plan: str | None = None,
+    first: str | None = None,
 ) -> None:
     """The line every command that changes a change ends on: what comes next, read from the files as they now are.
     Without `drift`, git is not asked whether the work moved: `verify` has just measured it. A `plan` the step names
     is said as `plan` gives it, with the flags this run's plan goes on with: found by the cleanup review, a second
     wording of the step named a plan its holds refused. Where no approval covers the change's files, a person reads
-    it before approving: its view, `reports/review.md`, is written again first."""
+    it before approving: its view, `reports/review.md`, is written again first. What a person reads `first`, where a
+    plan was just drafted, is said on one line with the view (the audit of 25 November, U9)."""
     assessed = _assessed(workspace, change_id, living, drift=drift)
     deltas = assessed.loaded.change.deltas
     # A draft, a strict one approved once among them, or an approved change edited since, owes an approval: its view
     # is written for the person who gives it. Found by the code review: a second approver read the view of before.
     owed = owes_approval(assessed.state, assessed.stale)
-    if owed and deltas and (view := _view_written(workspace, change_id, deltas, living)):
+    view = _view_written(workspace, change_id, deltas, living) if owed and deltas else None
+    if view is not None:
         shown, overlaps = view
-        print(f"review    {shown}: {review_said(deltas, overlaps)}")
+        said = review_said(deltas, overlaps)
+        print(f"read      {first}, then {REPORTS}/{REVIEW} ({said})" if first else f"review    {shown}: {said}")
+    elif first:
+        print(f"read      {first} first")
     phrase = assessed.step.phrase
     print(f"next      {phrase.replace(f'`{PROG} plan {change_id}`', plan) if plan else phrase}")
 
@@ -690,9 +762,10 @@ def _validate(args: argparse.Namespace) -> int:
     if github:
         print(f"::stop-commands::{token}")
     _printed(found)
-    errors = sum(held.severity == "ERROR" for held in found)
-    warnings = sum(held.severity == "WARNING" for held in found)
-    print(f"{errors} error{'' if errors == 1 else 's'}, {warnings} warning{'' if warnings == 1 else 's'}")
+    severities = Counter(held.severity for held in found)
+    notes = severities["INFO"]  # counted where printed (the audit of 25 November, U10)
+    said = f", {counted(notes, 'note')}" if notes else ""
+    print(f"{counted(severities['ERROR'], 'error')}, {counted(severities['WARNING'], 'warning')}{said}")
     if github:
         print(f"::{token}::")
         _annotated(workspace, found, failed=stops)
@@ -746,26 +819,47 @@ def _status(args: argparse.Namespace) -> int:
                 continue
             assessed = _assessed(workspace, change_id, living)
         except WorkspaceError as exc:  # one change that does not read stops no other: it is named, and why
-            rows.append({"id": change_id, "tier": "-", "status": "unread", "actor": "you", "next": str(exc)})
+            rows.append(
+                {"id": change_id, "tier": "-", "status": "unread", "actor": "you", "next": str(exc), "tasks": ""}
+            )
             continue
         state, step = assessed.state, assessed.step
-        row = {"id": change_id, "tier": state.tier, "status": state.status, "actor": step.actor, "next": step.phrase}
-        rows.append(row)
+        rows.append(
+            {
+                "id": change_id,
+                "tier": state.tier,
+                "status": state.status,
+                "actor": step.actor,
+                "next": step.phrase,
+                "tasks": _progress(assessed.loaded.change),  # empty for a draft
+            }
+        )
     if args.json:
         print(json.dumps({"changes": rows}, indent=2))
     elif not rows:
         print(f'no open changes: run {PROG} propose "<what you want>"')
     else:
         width = max(len(row["id"]) for row in rows)
+        ticked = max(len(row["tasks"]) for row in rows)  # a column only where a row has a count
         groups = [(heading, [row for row in rows if row["actor"] == actor]) for actor, heading in GROUPS]
         for at, (heading, held) in enumerate(group for group in groups if group[1]):
             print(("\n" if at else "") + heading)
             for row in held:
-                print(f"  {row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {row['next']}")
+                count = f"{row['tasks']:<{ticked}}  " if ticked else ""
+                print(f"  {row['id']:<{width}}  {row['tier']:<8}  {row['status']:<8}  {count}{row['next']}")
     if not args.json:
         _suspects_said(workspace, living)
         _profile_said(workspace)
     return EXIT_OK
+
+
+def _progress(change: Change) -> str:
+    """How many of a change's tasks are ticked, of how many, once it is past its draft: `3/7`. Empty for a draft, and
+    for a list off its grammar, whose fault `validate` says (the audit of 25 November, U13)."""
+    tasks = [task for group in change.tasks or () for task in group.tasks]
+    if change.state.status == "draft" or not tasks:
+        return ""
+    return f"{sum(task.done for task in tasks)}/{len(tasks)}"
 
 
 def _suspects_said(workspace: Workspace, living: Mapping[str, Spec]) -> None:
@@ -774,14 +868,14 @@ def _suspects_said(workspace: Workspace, living: Mapping[str, Spec]) -> None:
     gone = Counter(held.path for held in evidence_findings(workspace, living) if held.code == "spec.evidence-gone")
     for path, count in sorted(gone.items()):
         capability = Path(path or "").parent.name
-        print(f"{capability}: {count} requirement{'' if count == 1 else 's'} suspect ({PROG} validate lists them)")
+        print(f"{capability}: {counted(count, 'requirement')} suspect ({PROG} validate lists them)")
 
 
 def _profile_said(workspace: Workspace) -> None:
     """One line where quotes of `.spec/profile.md`, which every drafting stage reads, are no longer in the code."""
     gone, looked = profile_gone(workspace)
     if gone:
-        said = f"{gone} of {looked} quote{'' if looked == 1 else 's'}"
+        said = f"{gone} of {counted(looked, 'quote')}"
         print(f"profile: {said} no longer in the code (`{PROG} init --refresh` reads it again)")
 
 
@@ -859,7 +953,7 @@ def _said_check(made: _Checked, state: ChangeState) -> None:
     stopped = blocking(state, made.findings)
     _printed(stopped)
     count = len(made.findings)
-    print(f"checked   {made.report}: {count} finding{'' if count == 1 else 's'}, {len(stopped)} blocking")
+    print(f"checked   {made.report}: {counted(count, 'finding')}, {len(stopped)} blocking")
     if made.dropped:  # found by the fourth audit: said by `check` alone, never by the check `approve` makes
         print(f"note      {left_out(made.dropped)}")
     if made.ledger is not None:
@@ -967,7 +1061,7 @@ def _said_approved(held: ChangeState, by: str, count: int) -> None:
         said = f"once, by {by}"
     else:
         said = f"by {by}" + (f", after {held.approval.by}" if held.approval and held.approval.second else "")
-    print(f"approved `{held.id}` {said}: {count} files recorded")
+    print(f"approved  {held.id} {said}: {counted(count, 'file')} recorded")
 
 
 def _began(workspace: Workspace, state: ChangeState) -> dict[str, str]:
@@ -1032,7 +1126,7 @@ def _archive(args: argparse.Namespace) -> int:
     if (logged := _logged(workspace, args.id, loaded.change.deltas)) is not None:
         files[CHANGELOG] = logged
     workspace.write_specs(merged, state=state.model_copy(update={"status": "archived"}), files=files)
-    print(f"archived `{args.id}`: folded into {', '.join(sorted(merged)) or 'no spec'}")
+    print(f"archived  {args.id}: folded into {', '.join(sorted(merged)) or 'no spec'}")
     for shown in left:
         print(f"kept      {shown}: it would not read or be written, a link or not UTF-8: nothing was added")
     if logged is None:
@@ -1040,6 +1134,7 @@ def _archive(args: argparse.Namespace) -> int:
             f"kept      {workspace.shown(workspace.home / CHANGELOG)}: it would not read or be written, a link, not "
             f"UTF-8 or a code fence never closed: the entry of `{args.id}` was not added, so add it by hand"
         )
+    print("next      commit .spec/ with the code")
     return EXIT_OK
 
 
@@ -1224,7 +1319,7 @@ def _spent(ledger: UsageLedger) -> str:
     if not spent.calls:
         return "nothing"
     ceiling = f", of {ledger.ceiling:,}" if ledger.ceiling else ""
-    return f"{spent.total:,} in {spent.calls} call{'' if spent.calls == 1 else 's'}{ceiling}"
+    return f"{spent.total:,} in {counted(spent.calls, 'call')}{ceiling}"
 
 
 def _propose(args: argparse.Namespace, workspace: Workspace) -> int:
@@ -1456,8 +1551,16 @@ def _plan_made(
         raise UsageError(why)
     from ..orchestration.graph import build_plan_app
     from ..orchestration.plugins import UsageLedger
-    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, LESSONS_TEXT, LIVING, PROFILE_TEXT, TREE
-    from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages import (
+        BRIEF_TEXT,
+        CONTEXT_TEXT,
+        DELTAS_TEXT,
+        LESSONS_TEXT,
+        LIVING,
+        PROFILE_TEXT,
+        RULES_TEXT,
+        TREE,
+    )
     from ..orchestration.stages.design import read_design
     from ..orchestration.stages.tasks import DESIGN_TEXT, read_tasks
 
@@ -1466,7 +1569,7 @@ def _plan_made(
     if not sources_said:
         _said_sources(source, held)
     seed = {
-        RULES: constitution_text(workspace),
+        RULES_TEXT: constitution_text(workspace),
         BRIEF_TEXT: render_brief(brief),
         DELTAS_TEXT: _deltas_text(change),
         LIVING: living_text(specs, sorted(change.deltas)),
@@ -1520,13 +1623,12 @@ def _read_code(
         # A reading that ended early is said each time it is used: nothing else would show that it is no whole one.
         early = PARTIAL in context_text(workspace, change_id)
         return ("kept: context.md is of a reading that ended early. Delete it to read again" if early else ""), None
-    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT
-    from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages import BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT, RULES_TEXT
 
     read = _code_read(
         workspace,
         change_id,
-        {key: seed[key] for key in (RULES, BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT)},
+        {key: seed[key] for key in (RULES_TEXT, BRIEF_TEXT, DELTAS_TEXT, PROFILE_TEXT)},
         ledger,
         repositories,
     )
@@ -1630,8 +1732,8 @@ def _explored_said(found: Explored, others: int, failure: str | None) -> str:
         nothing = "no statement quoted what was read" if found.read else "nothing the scout named could be read"
         return f"nothing: {failure or ('the review disputed every statement' if found.disputed else nothing)}"
     files, kept, dropped = len(found.read), len(found.statements), found.dropped + found.disputed
-    said = f"{files} file{'' if files == 1 else 's'}" + (f" in {others + 1} repositories" if others else "")
-    said += f": {kept} statement{'' if kept == 1 else 's'} kept"
+    said = counted(files, "file") + (f" in {others + 1} repositories" if others else "")
+    said += f": {counted(kept, 'statement')} kept"
     said += f", {dropped} left out" if dropped else ""
     said += f", {len(found.unknown)} unknown" if found.unknown else ""
     return said + (f"; it ended early: {failure}" if failure else "")
@@ -1790,15 +1892,14 @@ def _judged(
     if why := require_ready(roles=("check",)):
         raise UsageError(why)
     from ..orchestration.graph import build_check_app
-    from ..orchestration.stages import CHANGE_FILES, LIVING
-    from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages import CHANGE_FILES, LIVING, RULES_TEXT
     from ..orchestration.stages.check import read_check
 
     # What a model is shown and what its quotes are looked for in are one text: every request is scrubbed of
     # secret shapes, so a quote of a scrubbed line is found only in the scrubbed file.
     texts = {path: scrub_lines(text)[0] for path, text in texts.items()}
     seed = {
-        RULES: constitution_text(workspace),
+        RULES_TEXT: constitution_text(workspace),
         LIVING: living_text(specs, sorted(change.deltas)),
         CHANGE_FILES: files_text(texts),
     }
@@ -2144,8 +2245,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import Known
     from ..orchestration.plugins import UsageLedger
-    from ..orchestration.stages import CAPABILITIES, LESSONS_TEXT, REQUEST, TIER
-    from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages import CAPABILITIES, LESSONS_TEXT, REQUEST, RULES_TEXT, TIER
     from ..orchestration.stages.brief import ANSWERS
     from ..orchestration.stages.brief import KEY as BRIEF_KEY
     from ..orchestration.stages.deltas import KEY as DELTAS_KEY
@@ -2158,7 +2258,7 @@ def _proposed(args: argparse.Namespace, workspace: Workspace, change: Change | N
     known = Known(living=specs, taken=taken, kept=kept_ids(change.deltas) if change else {})
     # One ledger for every run of this command: the count and the ceiling are the command's.
     ledger = UsageLedger(workspace.config().max_tokens or None)
-    seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES: constitution_text(workspace)}
+    seed = {REQUEST: args.request, CAPABILITIES: capability_index(specs), RULES_TEXT: constitution_text(workspace)}
     lessons = _optional(workspace, lessons_text, LESSONS)
     seed |= {LESSONS_TEXT: lessons or "", **_as_it_stands(workspace, change)}
     # A new change's code is read before its brief, and once: the plan keeps what this reading found.
@@ -2216,11 +2316,12 @@ def _open_said(unasked: Sequence[Mapping[str, str]]) -> None:
 
 
 def _plan_command(workspace: Workspace, change_id: str, change: Change | None, no_explore: bool) -> str:
-    """The `plan` that goes on after a stop, with `--no-explore` where the person gave it, the change is revised, or
-    a `context.md` is there to keep. Found by review: said always, it kept a plan from reading where propose's reading
-    wrote nothing. Never with `--replace`: a ticked list is the person's to throw away, as the `kept` line says."""
+    """The `plan` that goes on after a stop, with `--no-explore` where the person gave it or the change is revised,
+    and no `context.md` is there, which makes `plan` skip the reading anyway (the audit of 25 November, U9). Found by
+    review: said always, it kept a plan from reading where propose's reading wrote nothing. Never with `--replace`: a
+    ticked list is the person's to throw away, as the `kept` line says."""
     there = (workspace.home / CHANGES / change_id / CONTEXT_FILE).is_file()
-    flags = " --no-explore" if no_explore or change is not None or there else ""
+    flags = " --no-explore" if (no_explore or change is not None) and not there else ""
     return f"`{PROG} plan {change_id}{flags}`"
 
 
@@ -2270,7 +2371,7 @@ def _then_planned(
             _printed(blocked)
             print("plan      waits: the errors above are fixed first")
         elif waiting:
-            print(f"plan      waits: the brief leaves {count} point{'' if count == 1 else 's'} open")
+            print(f"plan      waits: the brief leaves {counted(count, 'point')} open")
             _open_said(unasked)
         elif review:
             print("plan      waits: the change is read before it is planned")
@@ -2302,8 +2403,7 @@ def _then_planned(
     for path, _replaced in made.written:
         print(f"          {workspace.shown(path)}")
     print(f"tokens    {_spent(ledger)}")
-    print(f"read      {_first_reads(workspace, change_id)} first")
-    _say_next(workspace, change_id, specs)
+    _say_next(workspace, change_id, specs, first=_first_reads(workspace, change_id))
     return EXIT_OK
 
 
@@ -2372,7 +2472,7 @@ def _first_reads(workspace: Workspace, change_id: str) -> str:
     first = [f"{name} ({len(lines_of(texts[name]))} lines)" for name in (BRIEF_FILE, DESIGN_FILE) if name in texts]
     # What the brief assumed is read with it: found live, a standard brief assumed where it might have asked.
     if first and first[0].startswith(BRIEF_FILE) and (assumed := _assumed(texts[BRIEF_FILE])):
-        first[0] = first[0][:-1] + f", {assumed} assumption{'' if assumed == 1 else 's'})"
+        first[0] = first[0][:-1] + f", {counted(assumed, 'assumption')})"
     # What a reading could not establish is read before the plan that was drafted around it.
     if unknown := unknown_count(context_text(workspace, change_id)):
         first.append(f"{CONTEXT_FILE} ({unknown} unknown)")
@@ -2396,13 +2496,21 @@ def _drafts(
     what the reading kept and what the profile says. Facts are adk-spec's to find; decisions are the person's. A
     revision is drafted from the `context.md` its change keeps."""
     from ..orchestration.gate import FAILURE
-    from ..orchestration.stages import BRIEF_TEXT, CONTEXT_TEXT, DELTAS_TEXT, PROFILE_TEXT, REQUEST, SIZED, TIER
-    from ..orchestration.stages import CONSTITUTION as RULES
+    from ..orchestration.stages import (
+        BRIEF_TEXT,
+        CONTEXT_TEXT,
+        DELTAS_TEXT,
+        PROFILE_TEXT,
+        REQUEST,
+        RULES_TEXT,
+        SIZED,
+        TIER,
+    )
     from ..orchestration.stages.triage import read_triage, sized_text
 
     tier = args.tier
     if tier is None:
-        sized = _sized_first(workspace, ledger, recorder, seed)
+        sized = _sized_first(workspace, known, ledger, recorder, seed)
         tier = sized.get(TIER)
         if sized.get(FAILURE) or tier in (None, "none"):
             return sized, None
@@ -2416,7 +2524,7 @@ def _drafts(
     read = None
     if explore:  # aimed by the request, the brief to come
         asked = f"# A change is requested\n\n## The request\n\n{seed[REQUEST].strip()}\n"
-        aim = {RULES: seed[RULES], BRIEF_TEXT: asked, DELTAS_TEXT: "", PROFILE_TEXT: profile}
+        aim = {RULES_TEXT: seed[RULES_TEXT], BRIEF_TEXT: asked, DELTAS_TEXT: "", PROFILE_TEXT: profile}
         read = _code_read(workspace, None, aim, ledger, repositories, say_sources=True)
         if read is not None:
             print(f"explored  {read.said}")
@@ -2427,12 +2535,15 @@ def _drafts(
     return _rounds(args, workspace, known, ledger, recorder, seed, tier), read
 
 
-def _sized_first(workspace: Workspace, ledger: UsageLedger, recorder: Recorder, seed: dict[str, Any]) -> dict[str, Any]:
-    """The request sized alone: its tier under the state's key, or the failure that stopped it."""
+def _sized_first(
+    workspace: Workspace, known: Known, ledger: UsageLedger, recorder: Recorder, seed: dict[str, Any]
+) -> dict[str, Any]:
+    """The request sized alone: its tier under the state's key, or the failure that stopped it, the living specs it
+    names past what a stage is given among them."""
     from ..orchestration.gate import FAILURE
     from ..orchestration.graph import build_triage_app
 
-    run = _ran(build_triage_app(ledger=ledger, recorder=recorder), seed, "propose")
+    run = _ran(build_triage_app(known, ledger=ledger, recorder=recorder), seed, "propose")
     _learned(workspace, run.state)
     return {**run.state, FAILURE: run.state.get(FAILURE) or run.failure}
 

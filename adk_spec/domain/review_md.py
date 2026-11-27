@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 
 from .model import Delta, Requirement, Spec
 from .spec_md import render_requirement
-from .text import longest_backticks
+from .text import first_of, longest_backticks
 
 #: How many overlaps the line a command prints names; the view names every one.
 SAID = 3
@@ -58,8 +58,7 @@ def review_said(deltas: Mapping[str, Delta], overlaps: Mapping[str, Sequence[str
     said = ", ".join(f"{count} {kind}" for kind, count in counts.items() if count) or "no requirement"
     named = [f"{req_id} also changed by {', '.join(others)}" for req_id, others in sorted(overlaps.items())]
     if named:
-        more = f", and {len(named) - SAID} more" if len(named) > SAID else ""
-        said += "; " + "; ".join(named[:SAID]) + more
+        said += "; " + first_of(named, SAID, sep="; ")
     return said
 
 
