@@ -185,3 +185,34 @@ def test_a_quote_too_short_to_look_for_is_unknown(tmp_path) -> None:
     """Found by phase 18's code review: a quote too short to find anywhere read as gone."""
     profiled(tmp_path)
     assert quote_holds(tmp_path, ".", "src/app.py", "x = 1", ()) is None
+
+
+def test_a_file_shared_by_many_quotes_is_read_once(tmp_path, monkeypatch) -> None:
+    """The audit of 25 November (H3): each quote read its file whole again."""
+    from adk_spec.workspace import evidence
+
+    repository(tmp_path, {"src/a.py": "def start_session(user):\n    return user\n"})
+    reads: list[str] = []
+    real = evidence.read_text
+    monkeypatch.setattr(evidence, "read_text", lambda path: reads.append(path.name) or real(path))
+    assert quote_holds(tmp_path, ".", "src/a.py", "def start_session(user):", ())
+    assert quote_holds(tmp_path, ".", "src/a.py", "    return user", ())
+    assert reads.count("a.py") == 1
+
+
+def test_a_quote_in_a_file_past_what_a_reading_reads_is_unknown(tmp_path, monkeypatch) -> None:
+    """The audit of 25 November (H3): a file of any size was read whole for a quote; a reading reads none so large."""
+    from adk_spec.workspace import evidence
+
+    monkeypatch.setattr(evidence, "FILE_MAX_BYTES", 10)
+    repository(tmp_path, {"big.txt": "x" * 100})
+    assert quote_holds(tmp_path, ".", "big.txt", "xxxxxxxxxxxx", ()) is None
+
+
+def test_a_quote_moved_into_a_file_past_the_cap_is_unknown_not_gone(tmp_path, monkeypatch) -> None:
+    """Found by the code review of phase 24: the search of other files read a file past the cap as not holding it."""
+    from adk_spec.workspace import evidence
+
+    monkeypatch.setattr(evidence, "FILE_MAX_BYTES", 60)
+    repository(tmp_path, {"src/a.py": "x = 1\n", "gen/big.py": "def start_session(user):\n" + "#" * 80 + "\n"})
+    assert quote_holds(tmp_path, ".", "src/a.py", "def start_session(user):", ()) is None

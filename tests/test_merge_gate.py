@@ -163,3 +163,22 @@ def test_the_plain_output_is_read_by_github_as_no_command(tmp_path, capsys, monk
     resumed = lines.index(f"::{token}::")
     assert all(not line.startswith("::warning") for line in lines[:resumed])
     assert any(line.startswith("::warning") for line in lines[resumed:])
+
+
+def test_a_summary_cell_holds_no_markdown_of_its_own() -> None:
+    """The audit of 25 November (S9): a folder name or a finding's text from a pull request rendered on the run's
+    page as a link or an image."""
+    held = Finding(
+        severity="ERROR", code="x.y", message="see [here](https://e.example) ![i](https://e/i.png) <b>", path="p.md"
+    )
+    row = next(line for line in step_summary([held], failed=True).splitlines() if "x.y" in line)
+    assert r"see \[here](https&#58;//e.example) !\[i](https&#58;//e/i.png) &lt;b&gt;" in row, row
+
+
+def test_a_summary_cell_links_no_bare_address_and_mentions_nobody() -> None:
+    """Found by the code review of phase 24: GitHub links a bare address, and a mention or a strike still rendered."""
+    held = Finding(
+        severity="ERROR", code="x.y", message="go to https://evil.example or www.evil.example, @team ~~x~~", path="p.md"
+    )
+    row = next(line for line in step_summary([held], failed=True).splitlines() if "x.y" in line)
+    assert "https://" not in row and "www.evil" not in row and "\\@team" in row and "\\~\\~x" in row, row

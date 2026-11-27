@@ -593,15 +593,19 @@ workflow that checks out the pull request's own commit, with its history:
 
 ```yaml
 on: pull_request
+permissions:
+  contents: read  # the gate reads; it writes nothing
 jobs:
   specs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Pinned by commit, the only reference an action cannot move; the tag it was is beside it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}  # the merge with the target would read as drifted work
           fetch-depth: 0  # the history, to compare the work with what was verified
-      - uses: astral-sh/setup-uv@v6
+          persist-credentials: false  # no token is left for the steps after
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - run: uv tool install <where your team keeps adk-spec>  # it is not on PyPI
       - run: adk-spec validate --strict
 ```

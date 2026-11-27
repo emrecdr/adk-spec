@@ -34,6 +34,9 @@ DIFF_MAX_CHARS = 200_000
 #: Past this many files that git neither tracks nor ignores, a diff is refused: a virtual environment or a build
 #: folder nobody ignored would be read file by file as new work.
 UNTRACKED_MAX = 500
+#: Past this many bytes of files git neither tracks nor ignores, a diff is refused by their size, before each is
+#: diffed and held whole: four times what a stage may be given, as such a diff is refused once read anyway.
+UNTRACKED_MAX_BYTES = 4 * DIFF_MAX_CHARS
 #: Settings that change what git prints, reads or runs, fixed for every call. Set through the environment, they
 #: outrank every config file, the repository's own included.
 _SETTLED = {
@@ -255,11 +258,43 @@ def diffs(root: Path, base: str, *, exclude: Sequence[str], prefix: str = "", tr
             f"{len(new):,} files under {root} are neither tracked nor ignored. Add them to git, or ignore what is "
             "no source, such as a virtual environment or a build folder"
         )
+    sizes = {path: _size(root / path) for path in new}
+    if sum(sizes.values()) > UNTRACKED_MAX_BYTES:  # past the limit: what the repository's attributes show as binary
+        for path in _binary(root, list(sizes), trust=trust):
+            sizes[path] = 0
+    if (size := sum(sizes.values())) > UNTRACKED_MAX_BYTES:  # the audit of 25 November, H2
+        raise GitError(
+            f"{size:,} bytes of files under {root} are neither tracked nor ignored, past what a diff is read for. Add "
+            "them to git, or ignore what is no source, such as a data file or a build folder"
+        )
     added = "".join(
         git(root, "diff", *_PLAIN, *named, "--no-index", "--", "/dev/null", path, ok=(0, 1), trust=trust)
         for path in new
     )
     return changed + added, _settled(unmoved + added)
+
+
+def _binary(root: Path, paths: list[str], *, trust: bool) -> list[str]:
+    """Which of `paths` the repository's own `.gitattributes` makes binary, `binary` or `-diff`, so that a diff shows
+    each on one line: asked of git once, where the bytes alone were past the limit (the code review of phase 24)."""
+    said = git(root, "check-attr", "-z", "binary", "diff", "--", *paths, trust=trust).split("\0")
+    held = zip(said[0::3], said[1::3], said[2::3], strict=False)
+    return [path for path, name, value in held if (name, value) in (("binary", "set"), ("diff", "unset"))]
+
+
+def _size(path: Path) -> int:
+    """The bytes a file adds to a diff: what it holds, a link's own; none where it is gone, or where git shows it as
+    binary, on one line, as it does a file whose first 8,000 bytes hold a NUL (the cleanup review of phase 24: an
+    untracked image was counted whole)."""
+    try:
+        if path.is_symlink():
+            return path.lstat().st_size
+        with path.open("rb") as held:
+            if b"\0" in held.read(8000):
+                return 0
+        return path.stat().st_size
+    except OSError:
+        return 0
 
 
 def _settled(text: str) -> str:

@@ -15,7 +15,6 @@ import functools
 import importlib.util
 import json
 import logging
-import os
 import re
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -29,7 +28,7 @@ from google.adk.utils.env_utils import is_enterprise_mode_enabled
 from google.auth.exceptions import GoogleAuthError
 from google.genai import types
 
-from .settings import copilot_token, fallback_name, model_name, model_pick, pin_copilot_dir, provider
+from .settings import copilot_token, fallback_name, model_name, model_pick, pin_copilot_dir, provider, quiet_litellm
 
 #: The Copilot arm's provider, as LiteLLM names it.
 COPILOT = "github_copilot"
@@ -151,8 +150,7 @@ def _litellm():  # unannotated: a checker then knows the module and its typed fl
     """LiteLLM, imported where the Copilot arm needs it and nowhere else. On its own import it reads `.env` unless
     told it runs in production, and fetches a price list unless `LITELLM_LOCAL_MODEL_COST_MAP` is set. It reads
     `GITHUB_COPILOT_TOKEN_DIR` as written, so it is handed the folder readiness and the login read."""
-    os.environ.setdefault("LITELLM_MODE", "PRODUCTION")
-    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")  # the pinned version's own model map
+    quiet_litellm()
     pin_copilot_dir()
     trust_the_system()  # before LiteLLM's import, which keeps the certificate context it makes then
     import litellm
